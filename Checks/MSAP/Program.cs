@@ -29,6 +29,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 Checks.MSAP.JobProgressCheck.Run();
+await Checks.MSAP.CollectionCheck.RunAsync();
 
 var webRoot = Path.GetFullPath("IBSWeb");
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -109,6 +110,70 @@ Check(links.GetPathByAction("Index", "Home", new { area = "MSAP" })?.StartsWith(
 Check(links.GetPathByAction("GetTimeline", "AuditTrail", new { area = "MSAP", id = 1 }) == "/MSAP/AuditTrail/GetTimeline/1", "MSAP audit link is wrong.");
 Check(links.GetPathByAction("Index", "Home", new { area = "User" }) != null, "Base dashboard route is missing.");
 var engine = services.GetRequiredService<IRazorViewEngine>();
+foreach (string emptyAmount in new[] { "", "0.00" })
+{
+    var controller = ActivatorUtilities.CreateInstance<IBSWeb.Areas.MSAP.Controllers.CollectionController>(services);
+    controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { RequestServices = services } };
+    var values = new FormCollection(new Dictionary<string, Microsoft.Extensions.Primitives.StringValues>
+    {
+        ["Date"] = "2026-10-12", ["CustomerId"] = "1", ["CashAmount"] = emptyAmount,
+        ["CheckAmount"] = "100.00", ["WVAT"] = emptyAmount, ["Amount"] = "100.00", ["EWT"] = "0.00"
+    });
+    var provider = new Microsoft.AspNetCore.Mvc.ModelBinding.FormValueProvider(
+        Microsoft.AspNetCore.Mvc.ModelBinding.BindingSource.Form, values, System.Globalization.CultureInfo.InvariantCulture);
+    bool valid = await controller.TryUpdateModelAsync(new IBS.Models.MSAP.ViewModels.CreateCollectionViewModel(), "", provider);
+    Check(valid == (emptyAmount != ""), "Optional payment amounts must bind after blank inputs are submitted as zero.");
+    if (emptyAmount == "")
+    {
+        Check(controller.ModelState.ErrorCount == 2
+            && controller.ModelState["CashAmount"]!.Errors.Count == 1
+            && controller.ModelState["WVAT"]!.Errors.Count == 1, "The two empty-value errors must be attributable to payment amounts.");
+    }
+}
+Console.WriteLine("PASS: MVC binding reproduces two empty payment errors and accepts zero for unused amounts.");
+var bankingView = engine.GetView(null, "/Areas/MSAP/Views/Collection/_Banking.cshtml", false);
+Check(bankingView.Success, "Collection banking partial is missing.");
+foreach (var status in new[] { "For Deposit", "Deposited", "Returned", "Redeposited", "Cleared" })
+{
+    var date = DateOnly.FromDateTime(DateTime.Today);
+    var receipt = new Collection
+    {
+        MsapCollectionId = 1, Date = date, CheckAmount = 100,
+        BankId = status == "Returned" ? 8 : null,
+        DepositDate = status is "Deposited" or "Redeposited" or "Cleared" ? date : null,
+        ReturnedDate = status is "Returned" or "Redeposited" ? date : null,
+        ClearedDate = status == "Cleared" ? date : null
+    };
+    var http = new DefaultHttpContext { RequestServices = services };
+    http.SetEndpoint(new Endpoint(_ => Task.CompletedTask, new EndpointMetadataCollection(), "Collection banking check"));
+    var actionContext = new ActionContext(http, new RouteData(), moduleActions.First(a => a.ControllerName == "Collection"));
+    actionContext.RouteData.Values["area"] = "MSAP";
+    actionContext.RouteData.Values["controller"] = "Collection";
+    actionContext.RouteData.Values["action"] = "Preview";
+    var viewData = new ViewDataDictionary<Collection>(services.GetRequiredService<Microsoft.AspNetCore.Mvc.ModelBinding.IModelMetadataProvider>(), new Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary()) { Model = receipt };
+    viewData["BankingAction"] = status is "For Deposit" or "Returned" ? IBS.Models.MSAP.Enums.CollectionBankingAction.Deposit
+        : IBS.Models.MSAP.Enums.CollectionBankingAction.Clear;
+    viewData["BankAccounts"] = new List<SelectListItem>
+    {
+        new() { Value = "7", Text = "MMSI Bank" },
+        new() { Value = "8", Text = "Another MMSI Bank" }
+    };
+    using var output = new StringWriter();
+    var viewContext = new ViewContext(actionContext, bankingView.View!, viewData,
+        services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), output, new HtmlHelperOptions());
+    await bankingView.View!.RenderAsync(viewContext);
+    var html = output.ToString();
+    if (status is "For Deposit" or "Returned")
+    {
+        string expectedBank = status == "Returned" ? "8" : "7";
+        Check(Regex.IsMatch(html, $"<option value=\"{expectedBank}\" selected(?:=\"selected\")?>"), "Select the saved bank when present, otherwise the first available bank.");
+        Check(html.Contains("id=\"depositBank\"", StringComparison.Ordinal) && html.Contains("Another MMSI Bank", StringComparison.Ordinal), "The bank dropdown must retain all available accounts.");
+        Check(!html.Contains("value=\"Clear\"", StringComparison.Ordinal), "An undeposited or returned receipt must not offer clearing.");
+    }
+    Check(html.Contains("id=\"collectionBankingForm\"", StringComparison.Ordinal), "ModernAlert banking form is missing.");
+    Check(!html.Contains("Collection → Deposit → Clear", StringComparison.Ordinal), "Banking inputs must not render another progress section.");
+}
+Console.WriteLine("PASS: collection banking forms render eligible actions and keep the bank dropdown visible and automatically select the first bank.");
 var progressView = engine.GetView(null, "/Areas/MSAP/Views/VesselSchedule/_ScheduleProgress.cshtml", false);
 Check(progressView.Success, "Schedule progress partial is missing.");
 foreach (var status in new[] { "Tentative", "Confirmed", "In Progress", "Completed", "Cancelled" })
@@ -137,7 +202,7 @@ var jobProgressView = engine.GetView(null, "/Areas/MSAP/Views/Shared/_JobProgres
 Check(jobProgressView.Success, "Shared Job Progress partial is missing.");
 foreach (bool allowed in new[] { false, true })
 {
-    for (int stage = 0; stage <= 9; stage++)
+    for (int stage = 0; stage <= JobProgressCalculator.CompletedStage + 1; stage++)
     {
         var http = new DefaultHttpContext { RequestServices = services };
         http.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(), "Job Progress check"));
@@ -148,9 +213,9 @@ foreach (bool allowed in new[] { false, true })
         var actionContext = new ActionContext(http, new RouteData(), moduleActions.First());
         var model = new IBS.Models.MSAP.ViewModels.JobProgressViewModel
         {
-            Stage = stage == 9 ? 0 : stage, HasSchedule = stage < 2, Guidance = "Attention check",
-            Stopped = stage == 9, IsCancelled = stage == 9,
-            Permission = stage == 8 ? null : IBS.Models.MSAP.Enums.ProcedureEnum.ApproveTariff,
+            Stage = stage == JobProgressCalculator.CompletedStage + 1 ? 0 : stage, HasSchedule = stage < 2, Guidance = "Attention check",
+            Stopped = stage == JobProgressCalculator.CompletedStage + 1, IsCancelled = stage == JobProgressCalculator.CompletedStage + 1,
+            Permission = stage == JobProgressCalculator.CompletedStage ? null : IBS.Models.MSAP.Enums.ProcedureEnum.ApproveTariff,
             WaitingFor = "tariff approval", ActionController = "DispatchTicket", ActionName = "Preview",
             TargetId = 123, ActionLabel = "Review Charges"
         };
@@ -166,6 +231,12 @@ foreach (bool allowed in new[] { false, true })
             model.ActionName = "Index";
             model.JobOrderId = 77;
         }
+        if (stage is JobProgressCalculator.DepositStage or JobProgressCalculator.ClearingStage)
+        {
+            model.BankingCollection = new Collection { MsapCollectionId = 55, CheckAmount = 100 };
+            model.ActionController = "Collection";
+            model.ActionName = "Banking";
+        }
         if (stage == JobProgressCalculator.CollectionStage)
         {
             viewData["JobProgressActionStage"] = stage;
@@ -175,10 +246,10 @@ foreach (bool allowed in new[] { false, true })
             services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), output, new HtmlHelperOptions());
         await jobProgressView.View!.RenderAsync(viewContext);
         string html = output.ToString();
-        Check(Regex.Matches(html, "aria-current=\"step\"").Count == (stage == 9 ? 0 : 1), "Job Progress current stage is wrong.");
-        Check(html.Contains("Fully Collected", StringComparison.Ordinal) && html.Contains("Job Progress", StringComparison.Ordinal), "Job Progress does not show the entire journey.");
-        Check(Regex.Matches(html, "class=\"modern-btn-primary\"").Count == (allowed && stage < 8 ? 1 : 0), "Job Progress must show exactly one permitted next action.");
-        if (!allowed && stage < 8)
+        Check(Regex.Matches(html, "aria-current=\"step\"").Count == (stage == JobProgressCalculator.CompletedStage + 1 ? 0 : 1), "Job Progress current stage is wrong.");
+        Check(html.Contains("Fully Cleared", StringComparison.Ordinal) && html.Contains("Job Progress", StringComparison.Ordinal), "Job Progress does not show the entire journey.");
+        Check(Regex.Matches(html, "class=\"modern-btn-primary\"").Count == (allowed && stage < JobProgressCalculator.CompletedStage ? 1 : 0), "Job Progress must show exactly one permitted next action.");
+        if (!allowed && stage < JobProgressCalculator.CompletedStage)
         {
             Check(html.Contains("Waiting for an authorized user", StringComparison.Ordinal), "Job Progress is missing its role handoff.");
         }
@@ -195,17 +266,22 @@ foreach (bool allowed in new[] { false, true })
             Check(html.Contains("jobOrderId=77", StringComparison.Ordinal) && html.Contains("For%20Posting", StringComparison.Ordinal)
                 && !html.Contains("data-schedule-confirm=\"true\"", StringComparison.Ordinal), "Posting must open the scoped billing list and bypass confirmation.");
         }
+        if (allowed && stage is JobProgressCalculator.DepositStage or JobProgressCalculator.ClearingStage)
+        {
+            Check(html.Contains("data-collection-banking=", StringComparison.Ordinal) && html.Contains("bankingAction=", StringComparison.Ordinal), "Banking actions must open ModernAlert with the chosen operation.");
+            Check(html.Contains("Return Check", StringComparison.Ordinal) == (stage == JobProgressCalculator.ClearingStage), "Only a deposited check can offer a return action.");
+        }
         if (allowed && stage == JobProgressCalculator.CollectionStage)
         {
             Check(html.Contains("disabled", StringComparison.Ordinal), "Collection form must use its designated save action.");
         }
-        if (allowed && stage < 8 && stage != 1 && stage != JobProgressCalculator.TariffStage && stage != JobProgressCalculator.PostingStage && stage != JobProgressCalculator.CollectionStage)
+        if (allowed && stage < JobProgressCalculator.CompletedStage && stage != 1 && stage != JobProgressCalculator.TariffStage && stage != JobProgressCalculator.PostingStage && stage != JobProgressCalculator.CollectionStage && stage < JobProgressCalculator.DepositStage)
         {
             Check(html.Contains("/MSAP/DispatchTicket/Preview/123", StringComparison.Ordinal), "Job Progress next action route is wrong.");
         }
     }
 }
-Console.WriteLine("PASS: shared Job Progress renders all nine stages, cancellation, role handoffs and exactly one permitted next action.");
+Console.WriteLine("PASS: shared Job Progress renders all eleven stages, cancellation, role handoffs and exactly one permitted next action.");
 foreach (var area in new[] { "MSAP", "MSAPAdmin", "MSAPSuperAdmin" })
 {
     foreach (var view in Directory.EnumerateFiles(Path.Combine(webRoot, "Areas", area), "*.cshtml", SearchOption.AllDirectories))

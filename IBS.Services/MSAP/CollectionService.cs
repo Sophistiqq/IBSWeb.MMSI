@@ -1,5 +1,6 @@
 using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
+using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.MasterFile;
 using IBS.Models.MSAP.ViewModels;
 using IBS.Utility.MSAP.Constants;
@@ -25,6 +26,100 @@ namespace IBS.Services.MSAP
             return collection;
         }
 
+        public async Task<List<SelectListItem>> GetBankAccountsAsync(CancellationToken ct)
+        {
+            return (await unitOfWork.BankAccount.GetAllAsync(b => b.Company == MsapConstants.Company_MMSI, ct))
+                .Select(b => new SelectListItem
+                {
+                    Value = b.BankAccountId.ToString(),
+                    Text = $"{b.Bank} {b.AccountNo} {b.AccountName}"
+                }).ToList();
+        }
+
+        public async Task<ServiceResult> UpdateBankingAsync(int id, CollectionBankingAction action, DateOnly date,
+            int? bankId, string username, CancellationToken ct)
+        {
+            try
+            {
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    var collection = await unitOfWork.Collection.GetForUpdateAsync(id, ct)
+                        ?? throw new InvalidOperationException("Collection not found.");
+                    var guard = await GuardClosedPeriodAsync(collection.Date, ct) ?? await GuardClosedPeriodAsync(date, ct);
+                    if (guard != null)
+                    {
+                        throw new InvalidOperationException(guard.Message);
+                    }
+                    if (date == default || date < collection.Date || date > DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()))
+                    {
+                        throw new InvalidOperationException("Use an actual transaction date on or after the collection date, up to today.");
+                    }
+                    if (collection.ClearedDate.HasValue)
+                    {
+                        throw new InvalidOperationException("This collection has already cleared.");
+                    }
+
+                    string description;
+                    switch (action)
+                    {
+                        case CollectionBankingAction.Deposit:
+                            if (collection.DepositDate.HasValue)
+                            {
+                                throw new InvalidOperationException("This collection is already deposited.");
+                            }
+                            if ((collection.CheckAmount > 0 && date < collection.CheckDate) || date < collection.ReturnedDate)
+                            {
+                                throw new InvalidOperationException("Deposit date cannot precede the check date or the last return date.");
+                            }
+                            var bank = bankId.HasValue
+                                ? await unitOfWork.BankAccount.GetAsync(b => b.BankAccountId == bankId.Value && b.Company == MsapConstants.Company_MMSI, ct) : null;
+                            if (bank == null)
+                            {
+                                throw new InvalidOperationException("Select a valid MMSI bank account.");
+                            }
+                            collection.BankId = bank.BankAccountId;
+                            collection.BankAccountName = bank.AccountName;
+                            collection.BankAccountNumber = bank.AccountNo;
+                            collection.DepositDate = date;
+                            description = collection.ReturnedDate.HasValue ? "Redeposit" : "Deposit";
+                            break;
+                        case CollectionBankingAction.ReturnCheck:
+                            if (collection.CheckAmount <= 0 || !collection.DepositDate.HasValue || date < collection.DepositDate)
+                            {
+                                throw new InvalidOperationException("Only a deposited check can be returned, on or after its deposit date.");
+                            }
+                            collection.ReturnedDate = date;
+                            collection.DepositDate = null;
+                            description = "Return check";
+                            break;
+                        case CollectionBankingAction.Clear:
+                            if (!collection.DepositDate.HasValue || date < collection.DepositDate)
+                            {
+                                throw new InvalidOperationException("Record a deposit first. Clearing date cannot precede its deposit date.");
+                            }
+                            collection.ClearedDate = date;
+                            description = "Clear";
+                            break;
+                        default:
+                            throw new InvalidOperationException("Unsupported banking action.");
+                    }
+
+                    collection.EditedBy = username;
+                    collection.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
+                        $"{description} collection #{collection.MsapCollectionNumber} on {date:yyyy-MM-dd}, bank #{collection.BankId}",
+                        "Collection", collection.MsapCollectionId, collection.MsapCollectionNumber), ct);
+                    await unitOfWork.SaveAsync(ct);
+                }, ct);
+                return ServiceResult.Success("Collection banking details updated successfully.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to update collection banking details");
+                return ServiceResult.Failure(ExceptionHelper.GetErrorMessage(ex));
+            }
+        }
+
         private static (decimal Ewt, decimal Wvat, decimal Net) GetSettlementAmounts(Billing billing, Customer customer, decimal gross)
         {
             decimal ewt = customer.WithHoldingTax && billing.BilledTo == MsapConstants.BilledToLocal
@@ -36,6 +131,11 @@ namespace IBS.Services.MSAP
 
         private async Task<Dictionary<int, decimal>> GetSettlementAllocationsAsync(CreateCollectionViewModel model, CancellationToken ct)
         {
+            if (model.Date == default || (model.CheckAmount > 0 &&
+                (!model.CheckDate.HasValue || string.IsNullOrWhiteSpace(model.CheckNumber) || string.IsNullOrWhiteSpace(model.CheckBank))))
+            {
+                throw new InvalidOperationException("Enter a collection date and, for checks, the check date, number and issuing bank.");
+            }
             if (model.BillingPayments == null || model.BillingPayments.Count == 0)
             {
                 throw new InvalidOperationException("Select at least one outstanding billing to collect.");
@@ -203,9 +303,9 @@ namespace IBS.Services.MSAP
                         throw new InvalidOperationException("Customer cannot be changed on an existing collection.");
                     }
 
-                    if (currentModel.IsPrinted)
+                    if (currentModel.IsPrinted || currentModel.DepositDate.HasValue || currentModel.ReturnedDate.HasValue || currentModel.ClearedDate.HasValue)
                     {
-                        throw new InvalidOperationException("Cannot edit a collection that has already been printed.");
+                        throw new InvalidOperationException("Cannot edit a collection after printing or recording a deposit.");
                     }
 
                     var allocations = await GetSettlementAllocationsAsync(viewModel, cancellationToken);
@@ -254,22 +354,10 @@ namespace IBS.Services.MSAP
                     currentModel.CheckDate = viewModel.CheckDate;
                     currentModel.CheckBank = viewModel.CheckBank;
                     currentModel.CheckBranch = viewModel.CheckBranch;
-                    currentModel.BankId = viewModel.BankId;
-                    currentModel.DepositDate = viewModel.DepositDate;
                     currentModel.Amount = viewModel.Amount;
                     currentModel.EWT = viewModel.EWT;
                     currentModel.WVAT = viewModel.WVAT;
                     currentModel.Total = viewModel.Amount + viewModel.EWT + viewModel.WVAT; // Total should be Gross (Cash + EWT + WVAT)
-
-                    if (viewModel.BankId.HasValue)
-                    {
-                        var bank = await unitOfWork.BankAccount.GetAsync(b => b.BankAccountId == viewModel.BankId.Value, cancellationToken);
-                        if (bank != null)
-                        {
-                            currentModel.BankAccountNumber = bank.AccountNo;
-                            currentModel.BankAccountName = bank.AccountName;
-                        }
-                    }
 
                     currentModel.EditedBy = username;
                     currentModel.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
@@ -296,8 +384,7 @@ namespace IBS.Services.MSAP
         {
             return new CreateCollectionViewModel
             {
-                Customers = await unitOfWork.Collection.GetMsapCustomersWithCollectiblesSelectList(0, string.Empty, cancellationToken),
-                BankAccounts = await unitOfWork.GetBankAccountListById(cancellationToken)
+                Customers = await unitOfWork.Collection.GetMsapCustomersWithCollectiblesSelectList(0, string.Empty, cancellationToken)
             };
         }
 
@@ -317,7 +404,6 @@ namespace IBS.Services.MSAP
 
             viewModel.Customers = await unitOfWork.Collection.GetMsapCustomersWithCollectiblesSelectList(id, model.Customer.Type, cancellationToken);
             viewModel.Billings = await GetEditBillingsAsync(model.CustomerId, model.MsapCollectionId, cancellationToken);
-            viewModel.BankAccounts = await unitOfWork.GetBankAccountListById(cancellationToken);
 
             return viewModel;
         }
@@ -423,23 +509,11 @@ namespace IBS.Services.MSAP
                 CheckDate = viewModel.CheckDate,
                 CheckBank = viewModel.CheckBank,
                 CheckBranch = viewModel.CheckBranch,
-                BankId = viewModel.BankId,
                 ReferenceNo = viewModel.ReferenceNo,
                 Remarks = viewModel.Remarks,
-                DepositDate = viewModel.DepositDate,
                 Customer = (await unitOfWork.Customer.GetAsync(c => c.CustomerId == viewModel.CustomerId, cancellationToken))!,
                 Company = MsapConstants.Company_MMSI
             };
-
-            if (viewModel.BankId.HasValue)
-            {
-                var bank = await unitOfWork.BankAccount.GetAsync(b => b.BankAccountId == viewModel.BankId.Value, cancellationToken);
-                if (bank != null)
-                {
-                    model.BankAccountNumber = bank.AccountNo;
-                    model.BankAccountName = bank.AccountName;
-                }
-            }
 
             return model;
         }
@@ -462,10 +536,8 @@ namespace IBS.Services.MSAP
                 CheckDate = model.CheckDate,
                 CheckBank = model.CheckBank,
                 CheckBranch = model.CheckBranch,
-                BankId = model.BankId,
                 ReferenceNo = model.ReferenceNo,
                 Remarks = model.Remarks,
-                DepositDate = model.DepositDate,
             };
         }
 

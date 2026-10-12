@@ -45,6 +45,7 @@
                             <th>DATE DEPOSITED</th>
                             <th class="text-right">AMOUNT</th>
                             <th>CUSTOMER</th>
+                            <th>STATUS</th>
                             <th class="text-center">ACTIONS</th>
                         </tr>
                     </thead>
@@ -62,7 +63,7 @@
 
             let table = $('#paginatedTable').DataTable(ModernTable.config({
                 order: [[0, 'desc']],
-                columnDefs: [{ orderable: false, targets: [6] }],
+                columnDefs: [{ orderable: false, targets: [6, 7] }],
                 ajax: ModernTable.ajax("@Url.Action("GetCollectionList", "Collection", new { area = "MSAP" })"),
                 columns: [
                     {
@@ -97,12 +98,17 @@
                         render: (data) => ModernTable.render.ellipsis(data)
                     },
                     {
+                        data: "paymentStatus",
+                        orderable: false,
+                        defaultContent: "For Deposit"
+                    },
+                    {
                         data: null,
                         orderable: false,
                         className: "text-center",
                         render: (data, type, row) => ModernTable.render.dropdown([
                             { label: 'View Details', icon: 'visibility', url: `${previewUrl}?id=${row.msapCollectionId}` },
-                            { label: 'Edit Record', icon: 'edit', url: `${editUrl}?id=${row.msapCollectionId}`, condition: !row.isMonthClosed }
+                            { label: 'Edit Record', icon: 'edit', url: `${editUrl}?id=${row.msapCollectionId}`, condition: !row.isMonthClosed && !row.isPrinted && !row.depositDate && !row.returnedDate && !row.clearedDate }
                         ])
                     }
                 ]

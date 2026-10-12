@@ -39,8 +39,9 @@ const ModernSelect = {
 
         const $dropdown = $('<div class="modern-select-dropdown"></div>');
 
-        // Append dropdown to body to avoid container clipping
-        $('body').append($dropdown);
+        // Keep modal dropdowns inside the popup's focus boundary.
+        const $popup = $select.closest('.swal2-popup');
+        ($popup.length ? $popup : $('body')).append($dropdown);
 
         if (isSearchable) {
             const $search = $(`

@@ -14,13 +14,19 @@ namespace IBS.Services.MSAP
         public const int BillingStage = 5;
         public const int PostingStage = 6;
         public const int CollectionStage = 7;
+        public const int DepositStage = 8;
+        public const int ClearingStage = 9;
+        public const int CompletedStage = 10;
 
         public static async Task<JobProgressViewModel> LoadAsync(IUnitOfWork unitOfWork, JobOrder? job, VesselSchedule? schedule, CancellationToken ct)
         {
             List<DispatchTicket> tickets = job == null ? [] : (await unitOfWork.DispatchTicket.GetAllAsync(t => t.JobOrderId == job.JobOrderId, ct)).ToList();
             List<int> billingIds = tickets.Where(t => t.BillingId.HasValue).Select(t => t.BillingId!.Value).Distinct().ToList();
             List<Billing> billings = job == null ? [] : (await unitOfWork.Billing.GetAllAsync(b => b.JobOrderId == job.JobOrderId || billingIds.Contains(b.MsapBillingId), ct)).ToList();
-            return Calculate(job, schedule, tickets, billings);
+            List<int> collectionIds = billings.Where(b => b.CollectionId.HasValue).Select(b => b.CollectionId!.Value).Distinct().ToList();
+            IEnumerable<Collection> collections = collectionIds.Count == 0 ? []
+                : await unitOfWork.Collection.GetAllAsync(c => collectionIds.Contains(c.MsapCollectionId), ct);
+            return Calculate(job, schedule, tickets, billings, collections);
         }
 
         public static async Task<List<JobProgressViewModel>> LoadForBillingsAsync(IUnitOfWork unitOfWork, IEnumerable<int> billingIds, CancellationToken ct)
@@ -30,6 +36,15 @@ namespace IBS.Services.MSAP
             IEnumerable<DispatchTicket> tickets = await unitOfWork.DispatchTicket.GetAllAsync(t => t.BillingId.HasValue && ids.Contains(t.BillingId.Value), ct);
             List<int> jobIds = billings.Select(b => b.JobOrderId).Concat(tickets.Select(t => t.JobOrderId))
                 .Where(id => id.HasValue).Select(id => id!.Value).Distinct().OrderBy(id => id).ToList();
+            if (jobIds.Count == 0 && billings.Any())
+            {
+                List<int> collectionIds = billings.Where(b => b.CollectionId.HasValue).Select(b => b.CollectionId!.Value).Distinct().ToList();
+                IEnumerable<Collection> collections = collectionIds.Count == 0 ? []
+                    : await unitOfWork.Collection.GetAllAsync(c => collectionIds.Contains(c.MsapCollectionId), ct);
+                var progress = Calculate(new JobOrder { Status = MsapConstants.JobOrderStatus.Closed }, null, [], billings, collections);
+                progress.JobOrderId = null;
+                return [progress];
+            }
             return await LoadForJobsAsync(unitOfWork, jobIds, ct);
         }
 
@@ -76,7 +91,7 @@ namespace IBS.Services.MSAP
             return null;
         }
 
-        public static JobProgressViewModel Calculate(JobOrder? job, VesselSchedule? schedule, IEnumerable<DispatchTicket> tickets, IEnumerable<Billing> billings)
+        public static JobProgressViewModel Calculate(JobOrder? job, VesselSchedule? schedule, IEnumerable<DispatchTicket> tickets, IEnumerable<Billing> billings, IEnumerable<Collection>? collections = null)
         {
             var result = new JobProgressViewModel { HasSchedule = schedule != null, JobOrderId = job?.JobOrderId, JobOrderNumber = job?.JobOrderNumber };
             List<DispatchTicket> active = tickets.Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted).OrderBy(t => t.DispatchTicketId).ToList();
@@ -220,9 +235,31 @@ namespace IBS.Services.MSAP
                 SetAction(result, "Record Collection", "Collection", "Create", null, ProcedureEnum.CreateCollection, "collection recording");
                 return result;
             }
-            result.Stage = 8;
             result.Billings = bills;
-            result.Guidance = "All active tickets are billed and every linked billing has no outstanding balance. View the completed records below.";
+            List<Collection> receipts = (collections ?? bills.Where(b => b.Collection != null).Select(b => b.Collection!))
+                .Where(c => bills.Any(b => b.CollectionId == c.MsapCollectionId))
+                .DistinctBy(c => c.MsapCollectionId).OrderBy(c => c.MsapCollectionId).ToList();
+            if (bills.Any(b => b.CollectionId.HasValue && receipts.All(c => c.MsapCollectionId != b.CollectionId)))
+            {
+                result.Stage = DepositStage;
+                result.Stopped = true;
+                result.Guidance = "A linked collection receipt is unavailable. Review the collection references before depositing.";
+                return result;
+            }
+            Collection? deposit = receipts.FirstOrDefault(c => !c.DepositDate.HasValue && !c.ClearedDate.HasValue);
+            Collection? clearing = receipts.FirstOrDefault(c => !c.ClearedDate.HasValue);
+            result.BankingCollection = deposit ?? clearing;
+            if (result.BankingCollection != null)
+            {
+                result.Stage = deposit != null ? DepositStage : ClearingStage;
+                string action = deposit != null ? (deposit.ReturnedDate.HasValue ? "Redeposit" : "Record Deposit") : "Apply Clearing Date";
+                result.Guidance = $"Receipt #{result.BankingCollection.MsapCollectionNumber}: {result.BankingCollection.PaymentStatus}. Complete banking for every linked receipt before finishing the job.";
+                SetAction(result, action, "Collection", "Banking", result.BankingCollection.MsapCollectionId,
+                    ProcedureEnum.CreateCollection, deposit != null ? "collection deposit" : "collection clearing");
+                return result;
+            }
+            result.Stage = CompletedStage;
+            result.Guidance = "All active tickets are billed, every linked billing has no outstanding balance, and all collection receipts have cleared.";
             return result;
         }
 

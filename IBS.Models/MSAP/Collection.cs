@@ -93,6 +93,14 @@ namespace IBS.Models.MSAP
         [Column(TypeName = "date")]
         public DateOnly? ClearedDate { get; set; }
 
+        [Column(TypeName = "date")]
+        public DateOnly? ReturnedDate { get; set; }
+
+        [NotMapped]
+        public string PaymentStatus => ClearedDate.HasValue ? "Cleared"
+            : DepositDate.HasValue ? (ReturnedDate.HasValue ? "Redeposited" : "Deposited")
+            : ReturnedDate.HasValue ? "Returned" : "For Deposit";
+
         #region --Objects--
 
         [ForeignKey(nameof(CustomerId))]

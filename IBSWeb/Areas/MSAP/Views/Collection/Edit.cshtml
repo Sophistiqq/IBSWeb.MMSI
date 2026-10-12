@@ -51,10 +51,7 @@
                     </div>
                     <h1 class="modern-headline-lg" data-page-header>Edit Collection Details</h1>
                 </div>
-                <div class="flex gap-2" data-tour-step="11">
-                    <button type="submit" class="modern-btn-primary" id="submitButton">
-                        <span class="material-symbols-outlined">save</span> UPDATE COLLECTION
-                    </button>
+                <div class="flex gap-2">
                     <a class="modern-btn-secondary" asp-action="Index">
                         <span class="material-symbols-outlined">arrow_back</span> BACK
                     </a>
@@ -73,7 +70,7 @@
                             <h2 class="modern-headline-md">1. Collection Information</h2>
                         </div>
                         <div class="modern-card-body" style="gap: 0.5rem;">
-                            <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
+                            <div asp-validation-summary="All" class="text-error mb-2"></div>
 
                             <div class="modern-grid-compact" style="gap: 0.5rem;">
                                 <div class="modern-col-8" data-tour-step="1">
@@ -131,9 +128,16 @@
 
                     <!-- Billing Settlement Table -->
                     <div class="modern-card">
-                        <div class="modern-card-header-info">
-                            <span class="material-symbols-outlined">receipt_long</span>
-                            <h2 class="modern-headline-md">2. Billing Settlement</h2>
+                        <div class="modern-card-header-action flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined">receipt_long</span>
+                                <h2 class="modern-headline-md">2. Billing Settlement</h2>
+                            </div>
+                            <div data-tour-step="11">
+                                <button type="submit" class="modern-btn-primary" id="submitButton">
+                                    <span class="material-symbols-outlined">save</span> UPDATE COLLECTION
+                                </button>
+                            </div>
                         </div>
                         <div class="modern-card-body" data-tour-step="5">
                             <div class="modern-table-container border border-outline-variant">
@@ -224,30 +228,10 @@
                     <div class="modern-card">
                         <div class="modern-card-header-info">
                             <span class="material-symbols-outlined">account_balance</span>
-                            <h2 class="modern-headline-md">4. Deposit & Check Details</h2>
+                            <h2 class="modern-headline-md">4. Check Details</h2>
                         </div>
                         <div class="modern-card-body">
                             <div class="flex flex-column" style="gap: 1rem;">
-                                <div>
-                                    <label class="modern-label">Deposit To Bank</label>
-                                    <div data-tour-step="7">
-                                        <select asp-for="BankId" id="BankId" asp-items="@Model.BankAccounts" class="js-modern-select" data-placeholder="Select Bank Account...">
-                                            <option value="">-- Select Bank --</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div id="bankInfoPanel" class="bg-surface-container-low p-3 rounded-md border border-outline-variant" style="display: none;">
-                                    <div class="modern-grid-compact">
-                                        <div class="modern-col-4 opacity-60 text-xs uppercase font-bold">Bank</div>
-                                        <div class="modern-col-8 text-xs font-bold" id="displayBank"></div>
-                                        <div class="modern-col-4 opacity-60 text-xs uppercase font-bold">Acc #</div>
-                                        <div class="modern-col-8 text-xs font-bold" id="displayAccountNo"></div>
-                                        <div class="modern-col-4 opacity-60 text-xs uppercase font-bold">Name</div>
-                                        <div class="modern-col-8 text-xs font-bold" id="displayAccountName"></div>
-                                    </div>
-                                </div>
-
                                 <div class="modern-grid-compact" data-tour-step="8">
                                     <div class="modern-col-6">
                                         <label class="modern-label">Check #</label>
@@ -257,11 +241,6 @@
                                         <label class="modern-label">Check Date</label>
                                         <input asp-for="CheckDate" id="CheckDate" type="date" value="@(Model.CheckDate.HasValue ? Model.CheckDate.Value.ToString("yyyy-MM-dd") : "")" class="modern-input">
                                     </div>
-                                </div>
-
-                                <div>
-                                    <label class="modern-label">Date Deposited</label>
-                                    <input asp-for="DepositDate" id="DepositDate" type="date" value="@(Model.DepositDate.HasValue ? Model.DepositDate.Value.ToString("yyyy-MM-dd") : "")" class="modern-input" data-tour-step="9">
                                 </div>
 
                                 <div class="modern-grid-compact border-t border-outline-variant pt-3" data-tour-step="10">
@@ -294,17 +273,16 @@
             { step: 4, title: "Remarks (Optional)", text: "Add payment or reconciliation notes that help explain this collection. Leave this blank when there are no additional details to record.", required: false, autoAdvance: false },
             { step: 5, title: "Billing Settlement", text: "Review the bills currently selected for this collection and any other available billings. Tick only the bills this payment settles. Check the billing numbers, gross amounts, EWT, and net amounts; changing selection updates the settlement summary.", required: false, autoAdvance: false },
             { step: 6, title: "Payment Amounts & Withholding", text: "Review Cash Payment, Check Payment, and WVAT Withheld against the payment evidence. Check Settlement Net, Gross Total, Total EWT, and Total Input after every change. Investigate any mismatch before confirming the update.", required: false, autoAdvance: false },
-            { step: 7, title: "Deposit Bank Account", text: "Select the bank account receiving the deposit, when applicable. Review the displayed bank, account number, and account name to avoid recording the payment against the wrong account.", required: false, autoAdvance: false },
-            { step: 8, title: "Check Number & Date", text: "For a check payment, enter the number and date printed on the check. These describe the check itself; the deposit date is entered separately. Leave check details blank when they do not apply.", required: false, autoAdvance: false },
-            { step: 9, title: "Date Deposited", text: "Enter the actual deposit date when the payment has been deposited. Review any prefilled date; leave this blank if there is no deposit date to record yet.", required: false, autoAdvance: false },
+            { step: 8, title: "Check Number & Date", text: "For a check payment, enter the number and date printed on the check. These describe the check itself; the deposit is recorded after saving the receipt. Leave check details blank when they do not apply.", required: false, autoAdvance: false },
             { step: 10, title: "Issuing Bank & Branch", text: "For a check payment, enter the bank and branch that issued the check. These are the payer's check details and may differ from the account receiving the deposit.", required: false, autoAdvance: false },
-            { step: 11, title: "Update Collection", text: "Review the selected bills, payment breakdown, receipt references, and deposit details, then save and confirm. If an amount mismatch prompt appears, review the figures and payment evidence before deciding to proceed.", required: false, autoAdvance: false }
+            { step: 11, title: "Update Collection", text: "Review the selected bills, payment breakdown, receipt references, and check details, then save and confirm. If an amount mismatch prompt appears, review the figures and payment evidence before deciding to proceed.", required: false, autoAdvance: false }
         ];
     </script>
 
     <script>
         $(document).ready(function () {
             let table;
+            const submittedBillingIds = @Html.Raw(Json.Serialize(Model.BillingPayments?.Select(p => p.BillingId)));
             const customerId = $('#customerId').val();
             const collectionId = $('#CollectionId').val();
 
@@ -316,9 +294,6 @@
             if (customerId) {
                 fetchCustomerDetails(customerId);
                 loadBillings(customerId, collectionId);
-            }
-            if ($('#BankId').val()) {
-                handleBankChange();
             }
 
             calculateManualTotal();
@@ -336,7 +311,7 @@
                             className: 'text-center',
                             defaultContent: '',
                             render: function(data, type, row) {
-                                const checked = row.isSelected ? 'checked' : '';
+                                const checked = (submittedBillingIds !== null ? submittedBillingIds.includes(data) : row.isSelected) ? 'checked' : '';
                                 return `<input type="checkbox" class="bill-checkbox form-check-input" value="${data}" data-gross="${row.amount}" data-ewt="${row.ewt}" data-wvat="${row.wvat}" data-net="${row.net}" ${checked} style="width: 18px; height: 18px; cursor: pointer;">`;
                             }
                         },
@@ -385,7 +360,6 @@
                 });
 
                 $("#isUndocumentedCheckbox").on("change", handleCheckboxChange);
-                $('#BankId').on('change', handleBankChange);
 
                 // Row click selects checkbox
                 $('#billingsTable tbody').on('click', 'tr', function(e) {
@@ -400,7 +374,7 @@
                 });
 
                 $('#selectAll').on('change', function() {
-                    $('.bill-checkbox').prop('checked', this.checked);
+                    table.$('.bill-checkbox').prop('checked', this.checked);
                     updateSelectedBillings();
                 });
 
@@ -435,27 +409,6 @@
                 });
             }
 
-            function handleBankChange() {
-                const bankId = $('#BankId').val();
-                if (bankId) {
-                    $.ajax({
-                        url: '@Url.Action("GetBankAccountDetails", "Collection", new { area = "MSAP" })',
-                        type: 'GET',
-                        data: { bankId: bankId },
-                        success: function (response) {
-                            if (response.success) {
-                                $('#bankInfoPanel').show();
-                                $('#displayBank').text(response.bank.bank);
-                                $('#displayAccountNo').text(response.bank.accountNo);
-                                $('#displayAccountName').text(response.bank.accountName);
-                            }
-                        }
-                    });
-                } else {
-                    $('#bankInfoPanel').hide();
-                }
-            }
-
             function handleCheckboxChange() {
                 const $checkbox = $("#isUndocumentedCheckbox");
                 const $inputField = $("#msapCollectionNumber");
@@ -486,6 +439,7 @@
                     success: function (response) {
                         if (response.success) {
                             table.rows.add(response.data).draw();
+                            updateSelectedBillings();
                         }
                     }
                 });
@@ -499,7 +453,7 @@
                     const $hiddenSelect = $('#hiddenBillingsSelect');
                     $hiddenSelect.empty();
 
-                    $('.bill-checkbox:checked').each(function() {
+                    table.$('.bill-checkbox:checked').each(function() {
                         const id = $(this).val();
                         const gross = parseFloat($(this).data('gross'));
                         const ewt = parseFloat($(this).data('ewt'));
@@ -536,6 +490,7 @@
             function calculateManualTotal(triggeredBy) {
                 const cash = parseFloat($('#cashAmount').val()) || 0;
                 const check = parseFloat($('#checkAmount').val()) || 0;
+                $('#CheckNumber, #CheckDate, #CheckBank').prop('required', check > 0);
                 const netToMatch = parseFloat($('#netAmountDisplay').text().replace('₱', '').replace(/,/g, '').trim()) || 0;
 
                 let total = cash + check;
@@ -563,10 +518,16 @@
             }
 
             function areYouSureToUpdate(event) {
+                const form = document.getElementById("myForm");
                 event.preventDefault();
+                $('#cashAmount, #checkAmount, #wvat').each(function () {
+                    if ($(this).val() === '') {
+                        $(this).val('0.00');
+                    }
+                });
                 if (!ModernFormValidator.validate('myForm')) return;
 
-                if ($('.bill-checkbox:checked').length === 0) {
+                if (table.$('.bill-checkbox:checked').length === 0) {
                     ModernAlert.alert("Billing Required", "Select at least one outstanding billing to collect.", "warning");
                     return;
                 }
@@ -576,7 +537,7 @@
 
                 // Append new hidden inputs for BillingPayments
                 let index = 0;
-                $('.bill-checkbox:checked').each(function() {
+                table.$('.bill-checkbox:checked').each(function() {
                     const id = $(this).val();
                     const net = parseFloat($(this).data('net'));
                     $(form).append(`<input type="hidden" name="BillingPayments[${index}].BillingId" value="${id}" />`);

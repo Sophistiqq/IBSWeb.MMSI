@@ -56,9 +56,30 @@ namespace Checks.MSAP
             Check(JobProgressCalculator.Calculate(job, null, [first, second], [bill, split]).Stage == 7, "One paid bill must not complete a partially collected job.");
             split.Status = "Collected";
             split.Balance = 0;
-            Check(JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split]).Stage == 8, "All linked bills must be collected to finish.");
+            Check(JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split]).Stage == JobProgressCalculator.CompletedStage, "All linked bills must be collected to finish.");
             split.Status = "For Collection";
-            Check(JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split]).Stage == 8, "A posted zero-balance bill must not require an impossible collection.");
+            Check(JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split]).Stage == JobProgressCalculator.CompletedStage, "A posted zero-balance bill must not require an impossible collection.");
+            var receipt = new Collection { MsapCollectionId = 1, MsapCollectionNumber = "CR1" };
+            var other = new Collection { MsapCollectionId = 2, MsapCollectionNumber = "CR2" };
+            bill.CollectionId = 1;
+            split.CollectionId = 2;
+            var deposit = JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split], [receipt, other]);
+            Check(deposit.Stage == JobProgressCalculator.DepositStage && deposit.TargetId == 1, "Paid billings must proceed to deposit, not completion.");
+            receipt.DepositDate = new DateOnly(2026, 10, 12);
+            Check(JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split], [receipt, other]).TargetId == 2, "Every collection receipt must be deposited.");
+            other.DepositDate = receipt.DepositDate;
+            Check(JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split], [receipt, other]).Stage == JobProgressCalculator.ClearingStage, "Deposited receipts must proceed to clearing.");
+            receipt.DepositDate = null;
+            receipt.ReturnedDate = new DateOnly(2026, 10, 12);
+            var returned = JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split], [receipt, other]);
+            Check(returned.Stage == JobProgressCalculator.DepositStage && returned.ActionLabel == "Redeposit", "Returned checks must return progress to redeposit.");
+            receipt.DepositDate = receipt.ReturnedDate;
+            receipt.ClearedDate = receipt.DepositDate;
+            Check(JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split], [receipt, other]).TargetId == 2, "Every receipt must clear before completion.");
+            other.ClearedDate = other.DepositDate;
+            Check(JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split], [receipt, other]).Stage == JobProgressCalculator.CompletedStage, "Cleared receipts must complete the job.");
+            Check(JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split], [receipt]).Stopped, "Missing collection references must block completion.");
+            bill.CollectionId = split.CollectionId = null;
             split.Status = "Collected";
             bill.Status = "For Posting";
             first.Status = second.Status = "For Billing";
@@ -76,7 +97,7 @@ namespace Checks.MSAP
             job.Status = "Cancelled";
             var cancelled = JobProgressCalculator.Calculate(job, schedule, [first], []);
             Check(cancelled.Stopped && cancelled.Permission == null, "Cancelled jobs must not expose a next action.");
-            Console.WriteLine("PASS: Job Progress covers planning, mixed tickets, deleted tickets, actual times, rejection, approval, billing, split posting, partial collection, reversal and cancellation.");
+            Console.WriteLine("PASS: Job Progress covers planning, mixed tickets, deleted tickets, actual times, rejection, approval, billing, split posting, partial collection, deposit, clearing, returned checks, multiple receipts, reversal and cancellation.");
         }
 
         private static DispatchTicket Ticket(int id, string status)

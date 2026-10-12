@@ -20,9 +20,12 @@
                 <h1 class="modern-headline-lg">@Model.MsapCollectionNumber</h1>
             </div>
             <div class="flex gap-2">
-                <a asp-action="Edit" asp-route-id="@Model.MsapCollectionId" class="modern-btn-primary">
-                    <span class="material-symbols-outlined">edit</span> EDIT COLLECTION
-                </a>
+                @if (!Model.IsMonthClosed && !Model.IsPrinted && !Model.DepositDate.HasValue && !Model.ReturnedDate.HasValue && !Model.ClearedDate.HasValue)
+                {
+                    <a asp-action="Edit" asp-route-id="@Model.MsapCollectionId" class="modern-btn-primary">
+                        <span class="material-symbols-outlined">edit</span> EDIT COLLECTION
+                    </a>
+                }
                 <a asp-action="Index" class="modern-btn-secondary">
                     <span class="material-symbols-outlined">arrow_back</span> BACK TO LIST
                 </a>
@@ -183,6 +186,14 @@
                                 <p class="modern-label">Check Details</p>
                                 <p class="modern-value-md">#@Model.CheckNumber</p>
                                 <p class="text-xs">Date: @(Model.CheckDate.HasValue ? Model.CheckDate.Value.ToString(MsapConstants.Date_Format) : "--")</p>
+                            </div>
+                            <div class="border-t border-outline-variant pt-3">
+                                <p class="modern-label">Clearing Date</p>
+                                <p class="modern-value-md">@(Model.ClearedDate?.ToString(MsapConstants.Date_Format) ?? "--")</p>
+                            </div>
+                            <div class="border-t border-outline-variant pt-3">
+                                <p class="modern-label">Last Check Return</p>
+                                <p class="modern-value-md">@(Model.ReturnedDate?.ToString(MsapConstants.Date_Format) ?? "--")</p>
                             </div>
                             <div class="border-t border-outline-variant pt-3">
                                 <p class="modern-label">Deposit Date</p>

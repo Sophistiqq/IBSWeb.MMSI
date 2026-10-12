@@ -263,7 +263,7 @@ namespace Checks.MSAP
                 progressBill = await db.MsapBillings.SingleAsync(b => b.MsapBillingId == progressBill.MsapBillingId);
                 settlementSplit = await db.MsapBillings.SingleAsync(b => b.MsapBillingId == settlementSplit.MsapBillingId);
                 Check(progressBill.Balance == 0 && settlementSplit.Balance == 0
-                    && (await JobProgressCalculator.LoadAsync(work, order, booking, default)).Stage == 8,
+                    && (await JobProgressCalculator.LoadAsync(work, order, booking, default)).Stage == JobProgressCalculator.DepositStage,
                     "Split billing remains collectible after receiving the full net payment and withholding VAT.");
                 settlementRequest.MsapCollectionId = settled.Data;
                 Check((await progressCollection.UpdateCollectionAsync(settlementRequest, "check", default)).IsSuccess
@@ -276,7 +276,7 @@ namespace Checks.MSAP
                     "Duplicate collection replaced receipt links or left an extra collection.");
                 var receipt = await progressCollection.GetCollectionByIdAsync(settled.Data, default);
                 var receiptProgress = await JobProgressCalculator.LoadForBillingsAsync(work, receipt!.PaidBills!.Select(b => b.MsapBillingId), default);
-                Check(receiptProgress.Count == 1 && receiptProgress[0].Stage == 8, "Split collection preview lost Job Progress.");
+                Check(receiptProgress.Count == 1 && receiptProgress[0].Stage == JobProgressCalculator.DepositStage, "Split collection preview lost Job Progress.");
                 Check(!(await progressCollection.CreateCollectionAsync(new IBS.Models.MSAP.ViewModels.CreateCollectionViewModel
                 {
                     Date = order.Date, CustomerId = customer.CustomerId, JobOrderId = order.JobOrderId, MsapCollectionNumber = "EMPTY-CR"

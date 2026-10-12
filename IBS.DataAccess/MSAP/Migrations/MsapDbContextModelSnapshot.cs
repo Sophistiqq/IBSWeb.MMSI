@@ -589,6 +589,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("remarks");
 
+                    b.Property<DateOnly?>("ReturnedDate")
+                        .HasColumnType("date")
+                        .HasColumnName("returned_date");
+
                     b.Property<decimal>("Total")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")

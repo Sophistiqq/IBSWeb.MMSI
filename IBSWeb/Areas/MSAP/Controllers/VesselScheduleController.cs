@@ -217,6 +217,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return Json(new { success = false, message = "Review the schedule again before confirming." });
             }
             var result = await scheduleService.ConfirmAsync(id, reviewedAt, User.Identity?.Name ?? "system", ct, allowConflicts);
+            if (result.IsSuccess)
+            {
+                TempData["success"] = result.Message;
+            }
             return Json(new
             {
                 success = result.IsSuccess,

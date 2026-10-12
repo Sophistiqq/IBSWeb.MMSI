@@ -125,7 +125,9 @@ const ModernAlert = {
         text = "Are you sure you want to proceed?",
         confirmText = 'OK',
         cancelText = 'Cancel',
-        icon = 'question'
+        icon = 'question',
+        didOpen,
+        preConfirm
     } = {}) {
         return Swal.fire({
             ...this._baseConfig,
@@ -136,7 +138,9 @@ const ModernAlert = {
             `,
             showCancelButton: true,
             confirmButtonText: confirmText,
-            cancelButtonText: cancelText
+            cancelButtonText: cancelText,
+            didOpen: popup => { this._baseConfig.didOpen?.(popup); didOpen?.(popup); },
+            preConfirm
         });
     },
 

@@ -27,10 +27,7 @@
                     </div>
                     <h1 class="modern-headline-lg" data-page-header>Edit Billing: @Model.MsapBillingNumber</h1>
                 </div>
-                <div class="flex gap-2" data-tour-step="12">
-                    <button type="submit" class="modern-btn-primary" id="submitButton">
-                        <span class="material-symbols-outlined">save</span> SAVE CHANGES
-                    </button>
+                <div class="flex gap-2">
                     <a class="modern-btn-secondary" asp-action="Index">
                         <span class="material-symbols-outlined">arrow_back</span> BACK
                     </a>
@@ -190,9 +187,16 @@
                 <!-- Right Column: Data Entry -->
                 <div class="modern-col-8 flex flex-column" style="gap: 1.5rem;">
                     <div class="modern-card">
-                        <div class="modern-card-header-info">
-                            <span class="material-symbols-outlined">receipt_long</span>
-                            <h2 class="modern-headline-md">3. Job Order & Tickets Selection</h2>
+                        <div class="modern-card-header-action flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined">receipt_long</span>
+                                <h2 class="modern-headline-md">3. Job Order & Tickets Selection</h2>
+                            </div>
+                            <div data-tour-step="12">
+                                <button type="submit" class="modern-btn-primary" id="submitButton">
+                                    <span class="material-symbols-outlined">save</span> SAVE CHANGES
+                                </button>
+                            </div>
                         </div>
                         <div class="modern-card-body">
                             <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>

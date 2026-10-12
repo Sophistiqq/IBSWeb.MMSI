@@ -68,7 +68,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
         public async Task<List<SelectListItem>> GetMsapCustomersWithCollectiblesSelectList(int collectionId, string type, CancellationToken cancellationToken = default)
         {
             var billingsToBeCollected = await _db.MsapBillings
-                .Where(t => (t.Balance > 0 || (collectionId != 0 && t.CollectionId == collectionId)) && t.Status == MsapConstants.BillingStatus.ForCollection)
+                .Where(t => (t.Balance > 0 && t.Status == MsapConstants.BillingStatus.ForCollection) || (collectionId != 0 && t.CollectionId == collectionId))
                 .Include(t => t.Customer)
                 .ToListAsync(cancellationToken);
 

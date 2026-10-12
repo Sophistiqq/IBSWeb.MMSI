@@ -65,7 +65,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [RequireAccess(ProcedureEnum.CreateCollection, "Access denied. You don't have permission to create Collections.")]
         public async Task<IActionResult> Create(CreateCollectionViewModel viewModel, CancellationToken cancellationToken = default)
         {
-            var result = await collectionService.CreateCollectionAsync(viewModel, User.Identity?.Name ?? "System", cancellationToken);
+            var result = ModelState.IsValid
+                ? await collectionService.CreateCollectionAsync(viewModel, User.Identity?.Name ?? "System", cancellationToken)
+                : ServiceResult<int>.Failure("Review the highlighted collection fields.");
 
             if (result.IsSuccess)
             {
@@ -107,7 +109,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [RequireAccess(ProcedureEnum.CreateCollection, "Access denied. You don't have permission to edit Collections.")]
         public async Task<IActionResult> Edit(CreateCollectionViewModel viewModel, CancellationToken cancellationToken = default)
         {
-            var result = await collectionService.UpdateCollectionAsync(viewModel, User.Identity?.Name ?? "System", cancellationToken);
+            var result = ModelState.IsValid
+                ? await collectionService.UpdateCollectionAsync(viewModel, User.Identity?.Name ?? "System", cancellationToken)
+                : ServiceResult.Failure("Review the highlighted collection fields.");
 
             if (result.IsSuccess)
             {
@@ -141,6 +145,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             if (collection != null)
             {
+                collection.IsMonthClosed = await unitOfWork.PostedPeriod.IsMonthClosedAsync(collection.Date.Year, collection.Date.Month, cancellationToken);
                 var bills = await unitOfWork.Billing.GetBillingsByCollectionIdAsync(id, cancellationToken);
                 ViewBag.JobProgressItems = await JobProgressCalculator.LoadForBillingsAsync(unitOfWork, bills.Select(b => b.MsapBillingId), cancellationToken);
                 return View(collection);
@@ -189,6 +194,40 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         #endregion
+
+        [HttpGet]
+        [RequireAccess(ProcedureEnum.CreateCollection, "Access denied. You don't have permission to update Collections.")]
+        public async Task<IActionResult> Banking(int id, CollectionBankingAction bankingAction, CancellationToken ct)
+        {
+            var collection = await collectionService.GetCollectionByIdAsync(id, ct);
+            if (collection == null)
+            {
+                return NotFound();
+            }
+            ViewBag.BankAccounts = await collectionService.GetBankAccountsAsync(ct);
+            ViewBag.BankingAction = bankingAction;
+            return PartialView("_Banking", collection);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.CreateCollection, "Access denied. You don't have permission to update Collections.")]
+        public async Task<IActionResult> Banking(int id, CollectionBankingAction bankingAction, DateOnly date, int? bankId, CancellationToken ct)
+        {
+            var result = ModelState.IsValid
+                ? await collectionService.UpdateBankingAsync(id, bankingAction, date, bankId, User.Identity?.Name ?? "System", ct)
+                : ServiceResult.Failure("Enter a valid transaction date and bank account.");
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                if (result.IsSuccess)
+                {
+                    TempData["success"] = result.Message;
+                }
+                return Json(new { success = result.IsSuccess, message = result.Message });
+            }
+            TempData[result.IsSuccess ? "success" : "error"] = result.Message;
+            return RedirectToAction(nameof(Preview), new { id });
+        }
 
         #region AJAX Endpoints
 

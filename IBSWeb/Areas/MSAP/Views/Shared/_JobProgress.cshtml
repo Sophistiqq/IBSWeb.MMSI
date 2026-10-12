@@ -3,7 +3,11 @@
 @inject IAccessControlService AccessControl
 @model JobProgressViewModel
 @{
-    string[] stages = ["Planning", "Confirmation", "Service", "Tariff", "Approval", "Billing", "Posting", "Collection", "Fully Collected"];
+    string[] stages = ["Planning", "Confirmation", "Service", "Tariff", "Approval", "Billing", "Posting", "Collection", "Deposit", "Clearing", "Fully Cleared"];
+    if (Model.Stage == JobProgressCalculator.DepositStage && Model.BankingCollection?.ReturnedDate.HasValue == true)
+    {
+        stages[JobProgressCalculator.DepositStage] = "Redeposit";
+    }
     string? userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
     bool canAct = !Model.Stopped && Model.Permission.HasValue && userId != null
         && await AccessControl.HasAccessAsync(userId, Model.Permission.Value);
@@ -39,7 +43,7 @@
     </ol>
     <div class="job-progress-next">
         <div>
-            <span class="modern-label">@(Model.Stage == 8 && !Model.Stopped ? "Completed" : "Next Action")</span>
+            <span class="modern-label">@(Model.Stage == JobProgressCalculator.CompletedStage && !Model.Stopped ? "Completed" : "Next Action")</span>
             <p>@Model.Guidance</p>
             @if (Model.Stage == JobProgressCalculator.TariffStage && !Model.Stopped)
             {
@@ -52,7 +56,20 @@
         </div>
         @if (canAct && !string.IsNullOrEmpty(Model.ActionName))
         {
-            @if (Model.Stage == JobProgressCalculator.TariffStage || actionHere)
+            @if (Model.BankingCollection is Collection receipt)
+            {
+                <div class="flex flex-wrap gap-2">
+                    <a asp-area="MSAP" asp-controller="Collection" asp-action="Banking" asp-route-id="@receipt.MsapCollectionId"
+                       asp-route-bankingAction="@(Model.Stage == JobProgressCalculator.DepositStage ? CollectionBankingAction.Deposit : CollectionBankingAction.Clear)"
+                       data-collection-banking="@Model.ActionLabel" class="modern-btn-primary">@Model.ActionLabel</a>
+                    @if (Model.Stage == JobProgressCalculator.ClearingStage && receipt.CheckAmount > 0)
+                    {
+                        <a asp-area="MSAP" asp-controller="Collection" asp-action="Banking" asp-route-id="@receipt.MsapCollectionId"
+                           asp-route-bankingAction="@CollectionBankingAction.ReturnCheck" data-collection-banking="Return Bounced Check" class="modern-btn-secondary">Return Check</a>
+                    }
+                </div>
+            }
+            else if (Model.Stage == JobProgressCalculator.TariffStage || actionHere)
             {
                 <button type="button" class="modern-btn-primary" disabled title="@(actionHere ? "Use the designated action on this screen" : "Use the tariff action on the Dispatch Ticket row")">@Model.ActionLabel</button>
             }

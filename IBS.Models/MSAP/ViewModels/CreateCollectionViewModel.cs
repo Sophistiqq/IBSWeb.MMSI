@@ -36,15 +36,11 @@ namespace IBS.Models.MSAP.ViewModels
 
         public decimal CheckAmount { get; set; }
 
-        public int? BankId { get; set; }
-
         public decimal Amount { get; set; } // Total amount
 
         public decimal EWT { get; set; }
 
         public decimal WVAT { get; set; }
-
-        public DateOnly? DepositDate { get; set; }
 
         [NotMapped]
         public List<string>? ToCollectBillings { get; set; }
@@ -57,8 +53,5 @@ namespace IBS.Models.MSAP.ViewModels
 
         [NotMapped]
         public List<SelectListItem>? Billings { get; set; }
-
-        [NotMapped]
-        public List<SelectListItem>? BankAccounts { get; set; }
     }
 }

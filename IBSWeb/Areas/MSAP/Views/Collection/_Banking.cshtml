@@ -1,0 +1,32 @@
+@model Collection
+@{
+    var action = (CollectionBankingAction)ViewBag.BankingAction;
+    var banks = ViewBag.BankAccounts as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? [];
+    var selectedBank = Model.BankId?.ToString() ?? banks.FirstOrDefault()?.Value ?? "";
+    bool depositing = action == CollectionBankingAction.Deposit;
+    string label = depositing ? (Model.ReturnedDate.HasValue ? "Redeposit Date" : "Deposit Date")
+        : action == CollectionBankingAction.ReturnCheck ? "Return Date" : "Clearing Date";
+    var today = DateTimeHelper.GetCurrentPhilippineTime().ToString("yyyy-MM-dd");
+    var minimumDate = Model.Date;
+    if (depositing && Model.CheckAmount > 0 && Model.CheckDate > minimumDate) { minimumDate = Model.CheckDate.Value; }
+    if (Model.ReturnedDate > minimumDate) { minimumDate = Model.ReturnedDate.Value; }
+    if (Model.DepositDate > minimumDate) { minimumDate = Model.DepositDate.Value; }
+}
+<form asp-action="Banking" asp-controller="Collection" asp-area="MSAP" method="post" id="collectionBankingForm" class="text-left">
+    <input type="hidden" name="id" value="@Model.MsapCollectionId" />
+    <input type="hidden" name="bankingAction" value="@action" />
+    <p class="modern-label mb-3">Receipt #@Model.MsapCollectionNumber</p>
+    @if (depositing)
+    {
+        <label class="modern-label" for="depositBank">MMSI Bank Account</label>
+        <select name="bankId" id="depositBank" class="js-modern-select" required>
+            <option value="">-- Select bank account --</option>
+            @foreach (var bank in banks)
+            {
+                <option value="@bank.Value" selected="@(bank.Value == selectedBank)">@bank.Text</option>
+            }
+        </select>
+    }
+    <label class="modern-label mt-3" for="bankingDate">@label</label>
+    <input name="date" id="bankingDate" type="date" class="modern-input" min="@minimumDate.ToString("yyyy-MM-dd")" max="@today" value="@today" required />
+</form>
