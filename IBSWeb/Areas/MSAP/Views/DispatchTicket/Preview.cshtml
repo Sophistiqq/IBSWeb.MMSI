@@ -20,7 +20,7 @@
                     <span class="modern-label" style="color: var(--on-surface)">@Model.DispatchNumber</span>
                 </div>
                 <div class="flex items-center gap-3">
-                    <h1 class="modern-headline-lg">@Model.DispatchNumber</h1>
+                    <h1 class="modern-headline-lg" data-page-header>@Model.DispatchNumber</h1>
                     <span class="modern-badge @(Model.Status == MsapConstants.DispatchTicketStatus.ForBilling ? "status-billing" : (Model.Status == MsapConstants.DispatchTicketStatus.Disapproved ? "status-error" : "status-tariff"))">@Model.Status</span>
                 </div>
             </div>
@@ -277,6 +277,14 @@
 </div>
 
 @section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '.modern-grid > .modern-col-4 > .modern-card', title: 'Service details', text: 'Review the customer, vessel, location, service, tugboat, and any supporting media attached to this ticket.', interactive: false },
+            { selector: '.dispatch-timeline', title: 'Actual service times', text: 'Departure and arrival are the recorded service times. Check the net duration before reviewing tariff amounts.', interactive: false },
+            { selector: '.modern-grid > .modern-col-8 .modern-table-container', title: 'Tariff summary', text: 'Review dispatch and bunker adjustment rates, discounts, billing amounts, and net revenue. Outsourced tug costs appear when applicable.', interactive: false },
+            { selector: '.financial-summary-card', title: 'Financial totals', text: 'See the ticket’s grand total billing and net revenue. Approval or revision actions appear below when the current status and your access allow them.', interactive: false }
+        ];
+    </script>
     <script>
         $(document).ready(function () {
             // Image Preview

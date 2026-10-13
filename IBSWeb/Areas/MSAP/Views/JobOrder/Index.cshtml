@@ -13,7 +13,7 @@
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
                     <span class="modern-label" style="color: var(--on-surface)">Job Orders</span>
                 </div>
-                <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
+                <h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
             </div>
             <div class="flex gap-2">
                 @if (ViewBag.CanCreate == true)
@@ -60,6 +60,13 @@
 </div>
 
 @section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '.flex-stack', title: 'Job Orders', text: 'Open an existing Job Order below or create a direct order when you have access. Schedules confirmed from Vessel Scheduling create their own Job Orders.', interactive: false },
+            { selector: '#dateFilter', title: 'Filter by date', text: 'Choose an order date to narrow the list. Clear the date to show all orders again.', interactive: false },
+            { selector: '#jobOrdersTable', title: 'Job Order list', text: 'Review the customer, vessel, ticket count, and status. Select an order number or View Details to continue its workflow.', interactive: false }
+        ];
+    </script>
     <script>
         $(document).ready(function () {
             const detailsUrl = '@Url.Action("Details", "JobOrder", new { area = "MSAP" })';

@@ -122,7 +122,7 @@
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
                     <span class="modern-label" style="color: var(--on-surface)">Preview</span>
                 </div>
-                <h1 class="modern-headline-lg">Billing Statement Preview</h1>
+                <h1 class="modern-headline-lg" data-page-header>Billing Statement Preview</h1>
             </div>
             <div class="flex gap-2">
                 <div class="actions-dropdown">
@@ -380,6 +380,16 @@
 </div>
 
 @section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '#actionsBtn', title: 'Print options', text: 'Choose whether to include ticket images or combine bunker adjustment charges before printing. Dot Matrix opens the alternate print format.', interactive: false },
+            { selector: '.billing-statement', title: 'Statement details', text: 'Review the billed party, vessel, voyage, location, and included services before printing or posting.', interactive: false },
+            { selector: '#totalsTable', title: 'Amount due', text: 'Check the statement totals, tax, withholding, and final amount due.', interactive: false }
+        ];
+        if (document.querySelector('.financial-job-progress .job-progress')) {
+            window.IBS_TOUR_STEPS.unshift({ selector: '.financial-job-progress', title: 'Job progress', text: 'Follow each linked Job Order and its next available action through billing, posting, and collection.', interactive: false });
+        }
+    </script>
     <script>
         $(document).ready(function () {
             const $actionsBtn = $('#actionsBtn');

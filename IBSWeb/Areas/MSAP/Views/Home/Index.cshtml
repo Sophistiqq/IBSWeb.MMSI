@@ -24,7 +24,7 @@ else
         <header class="dashboard-header">
             <div>
                 <span class="modern-label">MSAP · Daily workspace</span>
-                <h1 class="modern-headline-lg">Dashboard <span>@day.ToString("ddd, MMM d")</span></h1>
+                <h1 class="modern-headline-lg" data-page-header>Dashboard <span>@day.ToString("ddd, MMM d")</span></h1>
                 <p class="dashboard-muted">Updated @Model.UpdatedAt.ToString("h:mm tt") · Philippine time</p>
             </div>
             <div class="dashboard-actions">
@@ -159,4 +159,22 @@ else
 
 @section Styles {
     <link rel="stylesheet" href="~/msap/css/modern-dashboard.css" asp-append-version="true" />
+}
+@section Scripts {
+    @if (Model.ShowDashboard)
+    {
+        <script>
+            window.IBS_TOUR_STEPS = [
+                { selector: '.dashboard-header', title: 'Daily workspace', text: 'Refresh the dashboard or create a vessel schedule for today. Times shown here use Philippine time.', interactive: false },
+                { selector: '[aria-labelledby="vessel-heading"]', title: 'Today’s vessels', text: 'Review today’s planned windows, statuses, tug assignments, and overlap warnings. Open a vessel or switch to the daily agenda.', interactive: false },
+                { selector: '[aria-labelledby="upcoming-heading"]', title: 'Upcoming vessels', text: 'See the next scheduled visits and open a booking to continue its workflow.', interactive: false }
+            ];
+            if (document.querySelector('.dashboard-pending')) {
+                window.IBS_TOUR_STEPS.splice(1, 0, { selector: '.dashboard-pending', title: 'Pending work', text: 'These counts link to Dispatch Tickets awaiting tariff or approval and billings awaiting posting across all dates.', interactive: false });
+            }
+            if (document.querySelector('[aria-labelledby="finance-heading"]')) {
+                window.IBS_TOUR_STEPS.push({ selector: '[aria-labelledby="finance-heading"]', title: 'Monthly summary', text: 'Review posted billing, valid receipts, dispatches, and vessels served this month. Open the linked lists for details.', interactive: false });
+            }
+        </script>
+    }
 }

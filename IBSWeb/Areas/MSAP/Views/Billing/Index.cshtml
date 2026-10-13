@@ -16,7 +16,7 @@
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
                     <span class="modern-label" style="color: var(--on-surface)">Billing</span>
                 </div>
-                <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
+                <h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
             </div>
             <div class="flex gap-2">
                 @if (ViewBag.JobOrderId != null)
@@ -88,6 +88,19 @@
 </style>
 
 @section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '#filterAll', title: 'Billing stages', text: 'Filter statements waiting for posting, collection, or already collected. A billing must be posted before collection.', interactive: false },
+            { selector: '#dateFilter', title: 'Filter by date', text: 'Choose a billing date to narrow the list.', interactive: false },
+            { selector: '#paginatedTable', title: 'Billing list', text: 'Open a billing number to review the statement. Available actions depend on its status, month close, and your access.', interactive: false }
+        ];
+        if (document.querySelector('.flex-stack .modern-btn-primary')) {
+            window.IBS_TOUR_STEPS.unshift({ selector: '.flex-stack .modern-btn-primary', title: 'Create billing', text: 'Create a statement for eligible approved Dispatch Tickets. The saved billing waits for a separate posting action.', interactive: false });
+        }
+        if (document.querySelector('.financial-job-progress .job-progress')) {
+            window.IBS_TOUR_STEPS.unshift({ selector: '.financial-job-progress', title: 'Job progress', text: 'Review the linked Job Order stage and its next available action before posting or collecting.', interactive: false });
+        }
+    </script>
     <script>
         $(document).ready(function () {
             const previewUrl = '@Url.Action("Preview", "Billing")';

@@ -20,7 +20,7 @@
                     <span class="modern-label" style="color: var(--on-surface)">@Model.JobOrderNumber</span>
                 </div>
                 <div class="flex items-center gap-3">
-                    <h1 class="modern-headline-lg">Job Order #@Model.JobOrderNumber</h1>
+                    <h1 class="modern-headline-lg" data-page-header>Job Order #@Model.JobOrderNumber</h1>
                     <span class="modern-badge @(Model.Status == MsapConstants.JobOrderStatus.Open ? "status-open" : "status-closed")">@MsapConstants.JobOrderStatus.GetDisplayName(Model.Status)</span>
                     @if (booking?.Status == MsapConstants.VesselScheduleStatus.Completed)
                     {
@@ -437,6 +437,19 @@
 </div>
 
 @section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '.job-progress-timeline', title: 'Job stages', text: 'Follow the current stage through service, tariff, approval, billing, posting, collection, and clearing. Direct Job Orders bypass vessel planning and confirmation.', interactive: false },
+            { selector: '.job-progress-next', title: 'Next action', text: 'Read the guidance for the current stage. The action is available here when the workflow and your access allow it; some tariff actions are on the tickets below.', interactive: false },
+            { selector: '.modern-grid > .modern-col-4 > .modern-card', title: 'Order details', text: 'Review the customer, vessel, location, references, and planned schedule. Direct orders can be edited here when their status and access allow it.', interactive: false },
+            { selector: '.modern-grid > .modern-col-8 > .modern-card', title: 'Dispatch Tickets', text: 'Add service tickets when allowed, then review each ticket’s timeline, tugboat, billing amount, and status. Use its Actions menu for the next available step.', interactive: false },
+            { selector: '#timelineAccordion', title: 'Activity timeline', text: 'Expand this section to load the Job Order activity history.', interactive: false },
+            { selector: '.modern-sticky-footer', title: 'Order totals', text: 'See the total ticket count and accumulated billing amount for this Job Order.', interactive: false }
+        ];
+        if (document.querySelector('#selectAll')) {
+            window.IBS_TOUR_STEPS.splice(4, 0, { selector: '#selectAll', title: 'Batch actions', text: 'Select eligible tickets to reveal available batch tariff or approval actions. Review the selected tickets before applying an action.', interactive: false });
+        }
+    </script>
     <script>
         const PageConfig = {
             jobOrderId: @Model.JobOrderId,

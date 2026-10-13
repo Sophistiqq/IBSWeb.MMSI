@@ -3,11 +3,11 @@
 <div class="modern-layout">
     <main class="modern-container schedule-workspace">
         <div class="flex-stack">
-            <div><span class="modern-label">Vessel Schedule</span><h1 class="modern-headline-lg">@ViewData["Title"]</h1>
+            <div><span class="modern-label">Vessel Schedule</span><h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
                 <p class="schedule-muted">Plan the time window, then assign tugboats. All times are Philippine time.</p></div>
             <a asp-action="Day" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary"><span class="material-symbols-outlined">arrow_back</span> Daily schedules</a>
         </div>
-        <section class="modern-card schedule-progress-card" data-status="@Model.Status" aria-labelledby="scheduleProgressTitle">
+        <section class="modern-card schedule-progress-card" data-status="@Model.Status" data-tour-step="1" aria-labelledby="scheduleProgressTitle">
             <div class="schedule-progress-heading">
                 <div><span class="modern-label">Schedule status</span><h2 id="scheduleProgressTitle">@(Model.VesselScheduleId == 0 ? "Save as Tentative" : MsapConstants.VesselScheduleStatus.GetDisplayName(Model.Status))</h2></div>
                 <span class="material-symbols-outlined schedule-progress-emblem" aria-hidden="true">edit_calendar</span>
@@ -31,44 +31,44 @@
                     <div class="modern-card-header-info"><span class="material-symbols-outlined">schedule</span><h2 class="modern-headline-md">Booking details</h2></div>
                     <div class="modern-card-body">
                         <div class="schedule-fields">
-                            <div class="schedule-field schedule-field-wide">
+                            <div class="schedule-field schedule-field-wide" data-tour-step="2">
                                 <label asp-for="CustomerId" class="modern-label"></label>
                                 <select asp-for="CustomerId" asp-items="Model.Customers" class="js-modern-select" required><option value="">Select customer</option></select>
                                 <span asp-validation-for="CustomerId" class="text-error text-xs"></span>
                             </div>
-                            <div class="schedule-field">
+                            <div class="schedule-field" data-tour-step="3">
                                 <label asp-for="VesselId" class="modern-label"></label>
                                 <select asp-for="VesselId" asp-items="Model.Vessels" class="js-modern-select" required><option value="">Select vessel</option></select>
                                 <span asp-validation-for="VesselId" class="text-error text-xs"></span>
                             </div>
-                            <div class="schedule-field">
+                            <div class="schedule-field" data-tour-step="4">
                                 <label asp-for="VoyageNumber" class="modern-label"></label>
                                 <input asp-for="VoyageNumber" class="modern-input" maxlength="50" placeholder="Optional" />
                                 <span asp-validation-for="VoyageNumber" class="text-error text-xs"></span>
                             </div>
-                            <div class="schedule-field">
+                            <div class="schedule-field" data-tour-step="5">
                                 <label asp-for="PortId" class="modern-label"></label>
                                 <select asp-for="PortId" asp-items="Model.Ports" class="js-modern-select" required><option value="">Select port</option></select>
                                 <span asp-validation-for="PortId" class="text-error text-xs"></span>
                             </div>
-                            <div class="schedule-field">
+                            <div class="schedule-field" data-tour-step="6">
                                 <label asp-for="TerminalId" class="modern-label"></label>
                                 <select asp-for="TerminalId" asp-items="Model.Terminals" class="js-modern-select" required><option value="">Select terminal</option></select>
                                 <span asp-validation-for="TerminalId" class="text-error text-xs"></span>
                             </div>
                             <p id="terminalMessage" class="schedule-muted schedule-field-wide" role="status"></p>
-                            <div class="schedule-field">
+                            <div class="schedule-field" data-tour-step="7">
                                 <label asp-for="PlannedStart" class="modern-label"></label>
                                 <input asp-for="PlannedStart" type="datetime-local" asp-format="{0:yyyy-MM-ddTHH:mm}" class="modern-input" min="1900-01-01T00:00" max="9998-12-31T23:59" required />
                                 <span asp-validation-for="PlannedStart" class="text-error text-xs"></span>
                             </div>
-                            <div class="schedule-field">
+                            <div class="schedule-field" data-tour-step="8">
                                 <label asp-for="PlannedEnd" class="modern-label"></label>
                                 <input asp-for="PlannedEnd" type="datetime-local" asp-format="{0:yyyy-MM-ddTHH:mm}" class="modern-input" min="1900-01-01T00:00" max="9998-12-31T23:59" required />
                                 <span asp-validation-for="PlannedEnd" class="text-error text-xs"></span>
                             </div>
                         </div>
-                        <div class="schedule-field">
+                        <div class="schedule-field" data-tour-step="9">
                             <label asp-for="Notes" class="modern-label"></label>
                             <textarea asp-for="Notes" class="modern-input" rows="2" placeholder="Planning instructions or remarks"></textarea>
                         </div>
@@ -76,14 +76,14 @@
                 </section>
                 <section class="modern-card">
                     <div class="modern-card-header-info"><span class="material-symbols-outlined">directions_boat</span><h2 class="modern-headline-md">Tugboat assignments</h2></div>
-                    <div class="modern-card-body">
-                        <div class="schedule-assignment-summary">
+                    <div class="modern-card-body" data-tour-step="12">
+                        <div class="schedule-assignment-summary" data-tour-step="10">
                             <span class="schedule-assigned-count" role="status" aria-live="polite"><strong id="assignedCount">@(Model.SelectedTugboatIds?.Count ?? 0)</strong> assigned</span>
                             <button type="button" id="retryTugBookings" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">refresh</span> Refresh bookings</button>
                         </div>
                         <span asp-validation-for="SelectedTugboatIds" class="text-error text-xs"></span>
                         <div id="selectedTugSummary" class="schedule-selected-tugs" aria-label="Selected tugboats"></div>
-                        <div class="schedule-picker-controls">
+                        <div class="schedule-picker-controls" data-tour-step="11">
                             <label for="tugPickerSearch" class="visually-hidden">Search tug name or number</label>
                             <input type="search" id="tugPickerSearch" class="modern-input" placeholder="Search tug name or number…" />
                             <label for="tugPickerScope" class="visually-hidden">Filter tugboats</label>
@@ -114,17 +114,35 @@
                         <p id="noPickerTugs" class="schedule-muted" hidden>No tugboats match this view.</p>
                         <small class="schedule-muted">Unbooked means no overlapping schedule in this window. Check operational availability before assigning.</small>
                         @if (Model.Tugboats.Count == 0) { <p class="schedule-muted">No tugboats are registered. You can save a tentative plan.</p> }
-                        <details class="schedule-save-guidance">
+                        <details class="schedule-save-guidance" data-tour-step="13">
                             <summary>How assignment checks work</summary>
                             <p class="schedule-muted">Overlaps are checked on save and require two confirmations. Terminal warnings cover the whole terminal, not individual berths.</p>
                         </details>
                     </div>
                 </section>
             </div>
-            <div class="schedule-actions schedule-form-actions">
+            <div class="schedule-actions schedule-form-actions" data-tour-step="14">
                 <button type="submit" class="modern-btn-primary"><span class="material-symbols-outlined">save</span> Save schedule</button>
                 <a asp-action="Day" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">Back to day</a>
             </div>
         </form>
     </main>
 </div>
+<script>
+    window.IBS_TOUR_STEPS = [
+        { step: 1, title: 'Schedule stage', text: 'A new booking saves as Tentative. Confirm it after review to create the Job Order. Adding tugboats to a confirmed booking keeps its confirmation; other changes require review and confirmation again.', interactive: false },
+        { step: 2, title: 'Customer', text: 'Select the customer requesting this vessel service.', required: true, autoAdvance: true },
+        { step: 3, title: 'Vessel', text: 'Choose the vessel for this visit.', required: true, autoAdvance: true },
+        { step: 4, title: 'Voyage number', text: 'Add the voyage reference if one is available.', required: false, autoAdvance: false },
+        { step: 5, title: 'Port', text: 'Choose the service port. Changing the port clears the terminal selection.', required: true, autoAdvance: true },
+        { step: 6, title: 'Terminal', text: 'Choose a terminal within the selected port, then continue.', required: true, autoAdvance: false },
+        { step: 7, title: 'Planned start', text: 'Enter the expected service start in Philippine time.', required: true, autoAdvance: false },
+        { step: 8, title: 'Planned end', text: 'Enter an end later than the start, including the correct date for overnight service. Actual times are recorded on Dispatch Tickets.', required: true, autoAdvance: false },
+        { step: 9, title: 'Planning notes', text: 'Add service instructions or coordination notes when needed.', required: false, autoAdvance: false },
+        { step: 10, title: 'Assignment status', text: 'See how many tugboats are selected and refresh bookings after changing the planned window.', interactive: false },
+        { step: 11, title: 'Find tugboats', text: 'Search by tug name or number and filter by selected, unbooked, or attention needed.', required: false, autoAdvance: false },
+        { step: 12, title: 'Assign tugboats', text: 'Booking check results appear here. Select tugboats from the list; overlaps need review, and operational availability must be checked separately. A tentative plan can be saved without tugboats.', required: false, autoAdvance: false },
+        { step: 13, title: 'Overlap checks', text: 'Expand this guidance to review the overlap rules. Saving a conflicting plan requires two confirmations.', required: false, autoAdvance: false },
+        { step: 14, title: 'Save schedule', text: 'Review the booking and assignments, then save. Open the saved schedule to review its next action.', interactive: true }
+    ];
+</script>

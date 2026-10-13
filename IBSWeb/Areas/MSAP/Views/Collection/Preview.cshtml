@@ -17,7 +17,7 @@
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
                     <span class="modern-label" style="color: var(--on-surface)">@Model.MsapCollectionNumber</span>
                 </div>
-                <h1 class="modern-headline-lg">@Model.MsapCollectionNumber</h1>
+                <h1 class="modern-headline-lg" data-page-header>@Model.MsapCollectionNumber</h1>
             </div>
             <div class="flex gap-2">
                 @if (!Model.IsMonthClosed && !Model.IsPrinted && !Model.DepositDate.HasValue && !Model.ReturnedDate.HasValue && !Model.ClearedDate.HasValue)
@@ -206,3 +206,19 @@
         </div>
     </main>
 </div>
+@section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '.modern-grid > .modern-col-8 > .modern-card:first-child', title: 'Customer information', text: 'Check the payer name and details for this collection.', interactive: false },
+            { selector: '.modern-grid > .modern-col-8 > .modern-card:nth-child(2)', title: 'Paid billings', text: 'Review the billing statements settled by this collection. Open a billing number to inspect its statement.', interactive: false },
+            { selector: '.financial-summary-card', title: 'Collection totals', text: 'See the net collected amount and expanded withholding tax amount.', interactive: false },
+            { selector: '.modern-grid > .modern-col-4 > .modern-card:nth-child(3)', title: 'Deposit information', text: 'Review the bank account, check, deposit, return, and clearing dates as payment moves through banking.', interactive: false }
+        ];
+        if (document.querySelector('.financial-job-progress .job-progress')) {
+            window.IBS_TOUR_STEPS.unshift({ selector: '.financial-job-progress', title: 'Job progress', text: 'Follow each linked Job Order through collection, deposit, clearing, and completion. Use its next action when authorized.', interactive: false });
+        }
+        if (document.querySelector('[data-collection-banking]')) {
+            window.IBS_TOUR_STEPS.push({ selector: '[data-collection-banking]', title: 'Banking action', text: 'Open the available deposit, redeposit, clearing, or return action. Choose the receiving bank for a deposit and review the action date before saving.', interactive: false });
+        }
+    </script>
+}

@@ -17,7 +17,7 @@
         <div class="flex-stack">
             <div>
                 <span class="modern-label">Vessel Schedule · Daily planning</span>
-                <h1 class="modern-headline-lg">@day.ToString("dddd, MMMM d, yyyy")</h1>
+                <h1 class="modern-headline-lg" data-page-header>@day.ToString("dddd, MMMM d, yyyy")</h1>
                 <p class="schedule-muted">Schedules overlapping this day. All times are Philippine time.</p>
             </div>
             <div class="schedule-actions">
@@ -155,6 +155,16 @@
     </main>
 </div>
 @section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '.flex-stack > .schedule-actions', title: 'Calendar and new booking', text: 'Return to the monthly calendar or create a schedule for this day.', interactive: false },
+            { selector: '.schedule-navigation', title: 'Choose a day', text: 'Step through dates or jump directly to a date. Overnight bookings appear on every day they overlap.', interactive: false },
+            { selector: '.schedule-day-summary', title: 'Daily summary', text: 'See the schedule count, active stages, and any overlapping plans that need attention.', interactive: false },
+            { selector: '.schedule-toolbar', title: 'Find a schedule', text: 'Search by vessel, location, voyage, or tugboat and filter the agenda by status.', interactive: false },
+            { selector: '#agendaHeading', title: 'Day agenda', text: 'Open a vessel below to review its booking and next action. Each row shows the planned window, location, assigned tugboat count, and available actions.', interactive: false },
+            { selector: '.schedule-daily-fleet', title: 'Tugboat bookings', text: 'Review which tugboats are booked for this day. Search or switch the filter to see unbooked tugs; confirm operational availability before assigning one.', interactive: false }
+        ];
+    </script>
     <script>
         const cards = [...document.querySelectorAll('[data-schedule]')];
         function filterSchedules() {

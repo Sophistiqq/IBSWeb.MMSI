@@ -13,7 +13,7 @@
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
                     <span class="modern-label" style="color: var(--on-surface)">Collections</span>
                 </div>
-                <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
+                <h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
             </div>
             <div class="flex gap-2">
                 <a asp-area="MSAP" asp-controller="Collection" asp-action="Create" class="modern-btn-primary" data-hotkey="c">
@@ -56,6 +56,13 @@
 </div>
 
 @section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '.flex-stack > .flex > a', title: 'Record collection', text: 'Create a collection to record payment against eligible posted billings.', interactive: false },
+            { selector: '#dateFilter', title: 'Filter by date', text: 'Choose a collection date to narrow the records.', interactive: false },
+            { selector: '#paginatedTable', title: 'Collection records', text: 'Review payment status, amount, customer, and deposit dates. Open a collection number to inspect its billings and banking progress.', interactive: false }
+        ];
+    </script>
     <script>
         $(document).ready(function () {
             const previewUrl = '@Url.Action("Preview", "Collection")';

@@ -14,7 +14,7 @@
         <div class="flex-stack">
             <div>
                 <span class="modern-label">Operations planning</span>
-                <h1 class="modern-headline-lg">Vessel Schedule</h1>
+                <h1 class="modern-headline-lg" data-page-header>Vessel Schedule</h1>
                 <p class="schedule-muted">Plan vessel schedules and tugboat assignments. All times are Philippine time.</p>
             </div>
             <a asp-action="Create" asp-route-date="@today.ToString("yyyy-MM-dd")" class="modern-btn-primary" data-hotkey="c">
@@ -89,3 +89,14 @@
         </div>
     </main>
 </div>
+@section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '.flex-stack > a', title: 'New schedule', text: 'Create a tentative vessel booking for today. You can change the planned dates and assign tugboats on the form.', interactive: false },
+            { selector: '.schedule-stepper', title: 'Browse months', text: 'Move between months or return to the current month to review planned vessel activity.', interactive: false },
+            { selector: '.schedule-date-jump', title: 'Jump to a month', text: 'Choose a specific month when you need to find a booking further ahead or in the past.', interactive: false },
+            { selector: '.schedule-calendar-legend', title: 'Statuses and overlaps', text: 'Colors show each booking stage. An overlap warning flags plans that need review before confirmation.', interactive: false },
+            { selector: '.schedule-calendar', title: 'Open a day', text: 'Select any day to see all schedules and tugboat bookings for that date. Bookings spanning days also appear on each affected day.', interactive: false }
+        ];
+    </script>
+}

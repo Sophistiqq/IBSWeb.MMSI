@@ -346,6 +346,9 @@
             { step: 11, title: "Statement Totals", text: "Review Total Dispatch, Total BAF, and Grand Total against the selected tickets and VAT settings. If a total is wrong, check ticket selection, BAF rates, and the Inclusive setting before saving.", required: false, autoAdvance: false },
             { step: 12, title: "Save Billing Changes", text: "Review the statement and save the changes, then confirm. Billing edits are allowed while the statement is For Posting; posting is a separate action.", required: false, autoAdvance: false }
         ];
+        if (document.querySelector('.financial-job-progress .job-progress')) {
+            window.IBS_TOUR_STEPS.unshift({ selector: '.financial-job-progress', title: 'Job progress', text: 'Review the linked Job Order stage and next available action. Changes to this statement remain separate from posting.', interactive: false });
+        }
     </script>
 
     <script>

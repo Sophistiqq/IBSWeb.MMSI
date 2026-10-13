@@ -19,7 +19,7 @@
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
                     <span class="modern-label" style="color: var(--on-surface)">Dispatch Tickets</span>
                 </div>
-                <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
+                <h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
             </div>
             <div class="flex gap-2">
                 <!-- Add New Button if needed in future -->
@@ -97,6 +97,13 @@
 </style>
 
 @section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '#filterAll', title: 'Ticket status filters', text: 'Choose a status above the registry to focus on tickets waiting for tariff, approval, billing, or other action.', interactive: false },
+            { selector: '#dateFilter', title: 'Filter by date', text: 'Filter tickets by dispatch date. A date range may also be applied from another screen and can be cleared above the registry.', interactive: false },
+            { selector: '#paginatedTable', title: 'Ticket registry', text: 'Review service times, vessel, tugboat, customer, billing link, and status. Open a ticket number to inspect it or use Actions for permitted work.', interactive: false }
+        ];
+    </script>
     <script>
         $(document).ready(function () {
             const previewUrl = '@Url.Action("Preview", "DispatchTicket")';

@@ -11,7 +11,7 @@
         <header class="schedule-details-heading">
             <div class="schedule-details-identity">
                 <span class="modern-label">Vessel Schedule #@Model.VesselScheduleId</span>
-                <h1 class="modern-headline-md">@Model.Vessel.VesselName</h1>
+                <h1 class="modern-headline-md" data-page-header>@Model.Vessel.VesselName</h1>
                 <span class="modern-badge-sm">@MsapConstants.VesselScheduleStatus.GetDisplayName(Model.Status)</span>
                 @if (Model.JobOrderId.HasValue)
                 {
@@ -136,6 +136,20 @@
     </main>
 </div>
 @section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '.schedule-details-identity', title: 'Booking identity', text: 'Check the vessel, schedule number, current status, and linked Job Order when one has been created.', interactive: false },
+            { selector: '.job-progress-timeline', title: 'Job stages', text: 'Follow this booking from planning and confirmation through service, billing, collection, and clearing. The highlighted stage shows where work currently stands.', interactive: false },
+            { selector: '.job-progress-next', title: 'Next action', text: 'Read the current guidance here. An action appears when the booking is ready and your access allows it; confirmation creates the linked Job Order.', interactive: false },
+            { selector: '.schedule-booking-fields', title: 'Booking details', text: 'Review the customer, port, terminal, voyage, and vessel type before confirming the plan.', interactive: false },
+            { selector: '.schedule-planned-window', title: 'Planned window', text: 'These are the expected service times in Philippine time. Actual service times are recorded on Dispatch Tickets.', interactive: false },
+            { selector: '.schedule-booking-tugs', title: 'Assigned tugboats', text: 'Review the tugboats reserved for this booking. Revise the schedule if assignments need to change.', interactive: false },
+            { selector: '.schedule-booking-actions', title: 'Booking actions', text: 'Available actions depend on status and access. Complete service after all actual times are recorded, or expand other actions to revise or cancel an eligible booking.', interactive: false }
+        ];
+        if (document.querySelector('[data-schedule-confirm="true"]')) {
+            window.IBS_TOUR_STEPS.splice(3, 0, { selector: '[data-schedule-confirm="true"]', title: 'Review and confirm', text: 'Open the booking review, verify its details and assigned tugboats, then confirm to create the Job Order.', interactive: false });
+        }
+    </script>
     <script src="~/msap/js/schedule-confirmation.js" asp-append-version="true"></script>
     <script>
         document.querySelectorAll('[data-schedule-action]').forEach(form => {
