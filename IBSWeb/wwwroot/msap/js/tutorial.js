@@ -116,7 +116,7 @@
 
         var computedDisplay = window.getComputedStyle(header).display;
         if (computedDisplay === 'block' || computedDisplay === 'inline') {
-            header.style.display = 'inline-flex';
+            header.style.display = computedDisplay === 'block' ? 'flex' : 'inline-flex';
             header.style.alignItems = 'center';
             header.style.gap = '8px';
         }
