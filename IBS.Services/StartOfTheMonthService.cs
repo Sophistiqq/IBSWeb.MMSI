@@ -7,12 +7,10 @@ using IBS.Utility.Constants;
 using IBS.Utility.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Quartz;
 
 namespace IBS.Services
 {
-    [DisallowConcurrentExecution]
-    public class StartOfTheMonthService : IJob
+    public class StartOfTheMonthService
     {
         private readonly IUnitOfWork _unitOfWork;
 
@@ -28,9 +26,9 @@ namespace IBS.Services
             _dbContext = dbContext;
         }
 
-        public async Task Execute(IJobExecutionContext context)
+        public async Task ExecuteAsync(CancellationToken cancellationToken)
         {
-            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
             try
             {
@@ -43,12 +41,12 @@ namespace IBS.Services
                 await SendNotificationToCNC(previousMonthDate);
                 await ReverseTheJvEntries();
 
-                await transaction.CommitAsync();
+                await transaction.CommitAsync(cancellationToken);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, ex.Message);
-                await transaction.RollbackAsync();
+                await transaction.RollbackAsync(cancellationToken);
                 throw;
             }
         }
