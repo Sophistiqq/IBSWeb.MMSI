@@ -859,6 +859,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                     }
 
                     var displayCashInBankAmount = RoundToFour(cashInBank);
+                    cvh.CheckAmount = displayCashInBankAmount;
 
                     cvDetails.Add(
                     new FilprideCheckVoucherDetail
@@ -1576,6 +1577,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                         }
 
                         var displayCashInBankAmount = RoundToFour(cashInBank);
+                        existingHeaderModel.CheckAmount = displayCashInBankAmount;
 
                         details.Add(
                         new FilprideCheckVoucherDetail
