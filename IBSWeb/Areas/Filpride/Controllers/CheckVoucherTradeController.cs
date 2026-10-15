@@ -1492,8 +1492,37 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 if (apTradeDetail != null)
                 {
                     var displayAppliedAdvanceAmount = Math.Max(0m, appliedAdvanceAmount);
-                    var baseAmount = viewModel.RRs is { Count: > 0 } ? displayAmounts.BaseAmount : rrTotalAmount;
-                    var inputVat = displayAmounts.InputVat;
+                    var baseAmount = viewModel.DefaultPayableAmount;
+                    var isVatable = supplier.VatType == SD.VatType_Vatable;
+                    var isTaxable = supplier.TaxType == SD.TaxType_WithTax;
+                    var netOfVat = isVatable ? DecimalRoundingHelper.ComputeNetOfVat(baseAmount) : baseAmount;
+                    var inputVat = isVatable ? DecimalRoundingHelper.ComputeVatAmount(netOfVat) : 0;
+                    var ewt = isTaxable
+                        ? DecimalRoundingHelper.ComputeEwtAmount(netOfVat, supplier.WithholdingTaxPercent!.Value)
+                        : 0;
+                    var netOfEwt =
+                        DecimalRoundingHelper.ComputeNetOfEwt(baseAmount, ewt);
+
+                    cashInBank = netOfEwt - appliedAdvanceAmount;
+
+                    for (var i = 0; i < viewModel.AccountNumber.Length; i++)
+                    {
+                        var account = viewModel.AccountNumber[i];
+
+                        if (account == _apTradePayableAccountNo
+                            || account == _cashInBankAccountNo
+                            || account == _advancesToSupplierAccountNo)
+                        {
+                            continue;
+                        }
+
+                        cashInBank -= viewModel.Credit[i] - viewModel.Debit[i];
+                    }
+
+                    if (cashInBank < 0m)
+                    {
+                        throw new ArgumentException("Credits exceed the net payable.");
+                    }
 
                     if (existingHeaderModel.CheckVoucherHeaderNo != null)
                     {
@@ -1527,9 +1556,9 @@ namespace IBSWeb.Areas.Filpride.Controllers
                             });
                         }
 
-                        foreach (var withholding in displayAmounts.WithholdingByAccount)
+                        if (isTaxable)
                         {
-                            var withholdingTaxAccountNo = withholding.Key;
+                            var withholdingTaxAccountNo = supplier.WithholdingTaxTitle!.Split(" ", 2)[0];
                             var getWithholdingTaxTitle = await _dbContext.FilprideChartOfAccounts
                                 .FirstOrDefaultAsync(x => x.AccountNumber == withholdingTaxAccountNo, cancellationToken)
                                 ?? throw new ArgumentException($"Account title '{withholdingTaxAccountNo}' not found.");
@@ -1539,7 +1568,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                                 AccountNo = getWithholdingTaxTitle.AccountNumber!,
                                 AccountName = getWithholdingTaxTitle.AccountName,
                                 Debit = 0.00m,
-                                Credit = withholding.Value,
+                                Credit = ewt,
                                 TransactionNo = existingHeaderModel.CheckVoucherHeaderNo,
                                 CheckVoucherHeaderId = existingHeaderModel.CheckVoucherHeaderId,
                                 IsDisplayEntry = true
