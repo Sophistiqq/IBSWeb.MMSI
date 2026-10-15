@@ -6,6 +6,13 @@ and this project adheres to **Semantic Versioning (SemVer)**.
 
 ---
 
+## [v4.1.2] - 2026-10-15
+
+### Fixed
+- Prevented non-trade check voucher payment edits from selecting invoices with a different document type from the saved payment. The validation message directs users to cancel the payment and create a new one when a different document type is needed.
+
+---
+
 ## [v4.1.1] - 2026-10-08
 
 ### Fixed

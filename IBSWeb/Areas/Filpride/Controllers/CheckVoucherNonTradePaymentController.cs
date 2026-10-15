@@ -769,7 +769,8 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 {
                     cv.CheckVoucherHeaderId,
                     cv.InvoiceAmount,
-                    cv.AmountPaid
+                    cv.AmountPaid,
+                    cv.Type
                 })
                 .ToDictionaryAsync(x => x.CheckVoucherHeaderId, cancellationToken);
 
@@ -815,6 +816,15 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 if (existingHeaderModel == null)
                 {
                     return NotFound();
+                }
+
+                if (cvHeaders.Values.Any(invoice => invoice.Type != existingHeaderModel.Type))
+                {
+                    ModelState.AddModelError(
+                        nameof(viewModel.MultipleCvId),
+                        $"Selected invoice vouchers must have the same document type as this payment ({existingHeaderModel.Type}). To change the document type, cancel this payment and create a new one.");
+                    await PopulatePaymentViewModelAsync(viewModel, cancellationToken);
+                    return View(viewModel);
                 }
 
                 var getCVs = await _dbContext.FilprideMultipleCheckVoucherPayments
