@@ -6,6 +6,17 @@ and this project adheres to **Semantic Versioning (SemVer)**.
 
 ---
 
+## [v5.0.0] - 2026-10-15
+
+### Changed
+- **Breaking:** Replaced `POST /jobs/daily-service` and `POST /jobs/start-of-the-month-service` with `POST /api/daily-service` and `POST /api/start-of-the-month-service`. External scheduler targets must use the new URLs.
+- Moved daily and start-of-month endpoint definitions into separate API files, with independent registration in `Program.cs` and processing retained in their existing services.
+- Removed the Quartz job interfaces, execution attributes, and package dependency from the externally triggered processing services.
+- Moved journal voucher amortization and automatic reversals into Admin-only monthly closure. Closing a month prepares entries for the first day of the following month; the anonymous start-of-month endpoint now only creates reminders.
+- Updated NuGet dependencies, including ASP.NET Core and Entity Framework Core, PostgreSQL integration, Google Drive, spreadsheet and PDF generation, and logging configuration packages.
+
+---
+
 ## [v4.1.2] - 2026-10-15
 
 ### Fixed

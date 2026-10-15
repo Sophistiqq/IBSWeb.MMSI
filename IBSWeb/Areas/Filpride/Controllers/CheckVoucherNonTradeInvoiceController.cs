@@ -19,7 +19,6 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore;
-using Quartz.Util;
 
 namespace IBSWeb.Areas.Filpride.Controllers
 {
