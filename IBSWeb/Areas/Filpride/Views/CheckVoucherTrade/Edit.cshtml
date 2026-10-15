@@ -76,11 +76,16 @@
                     </div>
                 </div>
                 <div class="form-group mb-3">
-                    <label asp-for="POSeries" class="control-label">Suppliers PO No.</label>
-                    <select asp-for="POSeries" asp-items="@Model.PONo" class="form-select js-multiple GetRRList" multiple="multiple" style="width:100%" required>
+                    <label asp-for="POSeries" class="control-label">Suppliers PO No. (Optional)</label>
+                    <select asp-for="POSeries" asp-items="@Model.PONo" class="form-select js-multiple GetRRList" multiple="multiple" style="width:100%">
                         <option></option>
                     </select>
                     <span asp-validation-for="POSeries" class="text-danger"></span>
+                </div>
+                <div class="form-group mb-3">
+                    <label asp-for="DefaultPayableAmount" class="control-label"></label><span class="required">*</span>
+                    <input asp-for="DefaultPayableAmount" type="number" min="0.0001" step="0.0001" class="form-control" required />
+                    <span asp-validation-for="DefaultPayableAmount" class="text-danger"></span>
                 </div>
                 <div class="form-floating mb-3">
                     <input asp-for="OldCVNo" type="text" class="form-control" placeholder="" required/>
@@ -647,6 +652,15 @@
                 $(this).find(".subTotalAmountPaid").text(formatNumberToFour(subTotalAmountPaid));
             });
 
+            var hasSelectedRRs = $(".selectCheckbox:checked").length > 0;
+            $("#DefaultPayableAmount").prop("readonly", hasSelectedRRs);
+            if (hasSelectedRRs) {
+                $("#DefaultPayableAmount").val(totalNetOfEWT.toFixed(4));
+            } else {
+                totalNetOfEWT = parseNumber($("#DefaultPayableAmount").val());
+            }
+            $(".totalNetOfEWT").val(formatNumberToFour(totalNetOfEWT));
+
             $(".grandTotalBalance").text(formatNumberToFour(Math.abs($(".grandTotalBalance").data('balance') - totalNetOfEWT)));
 
             var hasAdvances = $("#advancesRow").is(":visible");
@@ -680,7 +694,7 @@
             validateDebitAndCredit();
         }
 
-        $(document).on('input', '#advancesCredit', function () {
+        $(document).on('input', '#advancesCredit, #DefaultPayableAmount', function () {
             updateAmounts();
         });
 
