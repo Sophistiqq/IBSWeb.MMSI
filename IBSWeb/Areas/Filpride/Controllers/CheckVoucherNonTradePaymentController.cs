@@ -185,6 +185,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                     .Where(s =>
                         s.CheckVoucherHeaderNo!.ToLower().Contains(searchValue) == true ||
                         s.Total.ToString().Contains(searchValue) ||
+                        s.CheckAmount.ToString().Contains(searchValue) ||
                         s.Payee!.ToLower().Contains(searchValue) == true ||
                         (hasDate && s.Date == date) ||
                         s.Reference!.ToLower().Contains(searchValue) == true ||
@@ -223,6 +224,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                         x.Reference,
                         x.CheckNo,
                         x.Total,
+                        x.CheckAmount,
                         x.Status,
                         x.VoidedBy,
                         x.CanceledBy,
