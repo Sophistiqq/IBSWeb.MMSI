@@ -796,7 +796,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                     {
                         AccountNo = apTradeDetail.AccountNo,
                         AccountName = apTradeDetail.AccountName,
-                        Debit = baseAmount,
+                        Debit = netOfVat,
                         Credit = 0.00m,
                         TransactionNo = cvh.CheckVoucherHeaderNo,
                         CheckVoucherHeaderId = cvh.CheckVoucherHeaderId,
@@ -1531,7 +1531,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                         {
                             AccountNo = apTradeDetail.AccountNo,
                             AccountName = apTradeDetail.AccountName,
-                            Debit = baseAmount,
+                            Debit = netOfVat,
                             Credit = 0.00m,
                             TransactionNo = existingHeaderModel.CheckVoucherHeaderNo,
                             CheckVoucherHeaderId = existingHeaderModel.CheckVoucherHeaderId,
