@@ -227,6 +227,18 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("ap_other_tug");
 
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<string>("ApprovedByUserId")
+                        .HasColumnType("text")
+                        .HasColumnName("approved_by_user_id");
+
+                    b.Property<int?>("ApprovedRevision")
+                        .HasColumnType("integer")
+                        .HasColumnName("approved_revision");
+
                     b.Property<decimal>("BAFAmount")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
@@ -363,6 +375,12 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("print_wht");
 
+                    b.Property<int>("Revision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("revision");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text")
@@ -412,6 +430,9 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.HasKey("MsapBillingId")
                         .HasName("pk_mmsi_billings");
 
+                    b.HasIndex("ApprovedByUserId")
+                        .HasDatabaseName("ix_mmsi_billings_approved_by_user_id");
+
                     b.HasIndex("CollectionId")
                         .HasDatabaseName("ix_mmsi_billings_crnum");
 
@@ -443,7 +464,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_mmsi_billings_billing_year_number_company");
 
-                    b.ToTable("mmsi_billings", "msap");
+                    b.ToTable("mmsi_billings", "msap", t =>
+                        {
+                            t.HasCheckConstraint("ck_billings_approval_evidence", "revision >= 1 AND ((approved_revision IS NULL AND approved_by_user_id IS NULL AND approved_at IS NULL) OR (approved_revision IS NOT NULL AND approved_revision BETWEEN 1 AND revision AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL))");
+                        });
                 });
 
             modelBuilder.Entity("IBS.Models.MSAP.Collection", b =>
@@ -2348,6 +2372,18 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("VesselScheduleId"));
 
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<string>("ApprovedByUserId")
+                        .HasColumnType("text")
+                        .HasColumnName("approved_by_user_id");
+
+                    b.Property<int?>("ApprovedRevision")
+                        .HasColumnType("integer")
+                        .HasColumnName("approved_revision");
+
                     b.Property<string>("AssignedTugboatIds")
                         .HasColumnType("text")
                         .HasColumnName("assigned_tugboat_ids");
@@ -2401,6 +2437,12 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("required_tug_count");
 
+                    b.Property<int>("Revision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("revision");
+
                     b.Property<bool>("SbmaEnabled")
                         .HasColumnType("boolean")
                         .HasColumnName("sbma_enabled");
@@ -2433,6 +2475,9 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.HasKey("VesselScheduleId")
                         .HasName("pk_mmsi_vessel_schedules");
 
+                    b.HasIndex("ApprovedByUserId")
+                        .HasDatabaseName("ix_mmsi_vessel_schedules_approved_by_user_id");
+
                     b.HasIndex("CustomerId")
                         .HasDatabaseName("ix_mmsi_vessel_schedules_customer_id");
 
@@ -2456,6 +2501,8 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     b.ToTable("mmsi_vessel_schedules", "msap", t =>
                         {
+                            t.HasCheckConstraint("ck_vessel_schedules_approval_evidence", "revision >= 1 AND ((approved_revision IS NULL AND approved_by_user_id IS NULL AND approved_at IS NULL) OR (approved_revision IS NOT NULL AND approved_revision BETWEEN 1 AND revision AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL))");
+
                             t.HasCheckConstraint("ck_vessel_schedules_cos_discount_percent", "cos_discount_percent BETWEEN 0 AND 100");
                         });
                 });
@@ -2633,6 +2680,12 @@ namespace IBS.DataAccess.MSAP.Migrations
 
             modelBuilder.Entity("IBS.Models.MSAP.Billing", b =>
                 {
+                    b.HasOne("IBS.Models.ApplicationUser", "ApprovedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_mmsi_billings_application_user_approved_by_user_id");
+
                     b.HasOne("IBS.Models.MSAP.Collection", "Collection")
                         .WithMany("PaidBills")
                         .HasForeignKey("CollectionId")
@@ -2678,6 +2731,8 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_mmsi_billings_msap_vessels_vesselnum");
+
+                    b.Navigation("ApprovedByUser");
 
                     b.Navigation("Collection");
 
@@ -2966,6 +3021,12 @@ namespace IBS.DataAccess.MSAP.Migrations
 
             modelBuilder.Entity("IBS.Models.MSAP.VesselSchedule", b =>
                 {
+                    b.HasOne("IBS.Models.ApplicationUser", "ApprovedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_mmsi_vessel_schedules_application_user_approved_by_user_id");
+
                     b.HasOne("IBS.Models.MSAP.MasterFile.Customer", "Customer")
                         .WithMany()
                         .HasForeignKey("CustomerId")
@@ -2998,6 +3059,8 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_mmsi_vessel_schedules_mmsi_vessels_vessel_id");
+
+                    b.Navigation("ApprovedByUser");
 
                     b.Navigation("Customer");
 

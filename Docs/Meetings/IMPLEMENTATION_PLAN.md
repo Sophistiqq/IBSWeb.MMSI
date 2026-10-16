@@ -2,7 +2,7 @@
 
 Prepared: 16 October 2026.
 
-Status: implementation started. Phase 0 source trace is recorded; phase 1a adds the three explicit approval permissions. The calendar milestone is complete. Phase 1b adds structural expected-service rows; phase 1c adds customer-default COS discount maintenance and exports; phase 1d stores schedule commercial settings and per-service charging choices/manual values. Ticket linkage, approval evidence/gates, and rate resolution remain subsequent slices. The new schedule/rate/billing workflow is not enabled. Production data has not been changed.
+Status: implementation started. Phase 0 source trace is recorded; phase 1a adds the three explicit approval permissions. The calendar milestone is complete. Phase 1b adds structural expected-service rows; phase 1c adds customer-default COS discount maintenance and exports; phase 1d stores schedule commercial settings and per-service charging choices/manual values; phase 1e adds revision-bound approval evidence to schedule and billing. Ticket linkage, rate resolution, and approval gates remain subsequent slices. The new schedule/rate/billing workflow is not enabled. Production data has not been changed.
 
 Implementation tracking: see [IMPLEMENTATION_BASELINE.md](IMPLEMENTATION_BASELINE.md) for the source trace, accounting boundary, sample reconciliation, and outstanding release prerequisites.
 

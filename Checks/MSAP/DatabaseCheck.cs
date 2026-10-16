@@ -118,6 +118,7 @@ namespace Checks.MSAP
                 }
                 if (approvalsOnly)
                 {
+                    await ApprovalEvidenceCheck.RunAsync(module);
                     return;
                 }
                 var roles = new RoleService(users);

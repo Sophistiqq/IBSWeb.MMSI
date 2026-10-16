@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 using IBS.Models.MSAP.MasterFile;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 
 namespace IBS.Models.MSAP
@@ -90,5 +92,21 @@ namespace IBS.Models.MSAP
         public bool SkipCosDiscount { get; set; }
 
         public bool SbmaEnabled { get; set; }
+
+        [BindNever, JsonIgnore]
+        public int Revision { get; set; } = 1;
+
+        [BindNever, JsonIgnore]
+        public int? ApprovedRevision { get; set; }
+
+        [BindNever, JsonIgnore]
+        public string? ApprovedByUserId { get; set; }
+
+        [BindNever, JsonIgnore]
+        public ApplicationUser? ApprovedByUser { get; set; }
+
+        [BindNever, JsonIgnore]
+        [Column(TypeName = "timestamp without time zone")]
+        public DateTime? ApprovedAt { get; set; }
     }
 }

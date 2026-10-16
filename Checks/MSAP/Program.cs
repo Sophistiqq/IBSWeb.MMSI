@@ -140,6 +140,27 @@ foreach (string customerAction in new[] { "Create", "Edit" })
         && html.Contains("data-val-range-min=\"0\"", StringComparison.Ordinal), "Customer discount field or client validation is missing.");
 }
 Console.WriteLine("PASS: customer create/edit render the default COS discount and client validation.");
+{
+    var controller = ActivatorUtilities.CreateInstance<IBSWeb.Areas.MSAP.Controllers.CollectionController>(services);
+    controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { RequestServices = services } };
+    var values = new FormCollection(new Dictionary<string, Microsoft.Extensions.Primitives.StringValues>
+    {
+        ["Revision"] = "9", ["ApprovedRevision"] = "9", ["ApprovedByUserId"] = "forged-approver", ["ApprovedAt"] = "2030-01-01T07:00:00"
+    });
+    var provider = new Microsoft.AspNetCore.Mvc.ModelBinding.FormValueProvider(
+        Microsoft.AspNetCore.Mvc.ModelBinding.BindingSource.Form, values, System.Globalization.CultureInfo.InvariantCulture);
+    var bill = new Billing();
+    await controller.TryUpdateModelAsync(bill, "", provider);
+    var schedule = new VesselSchedule();
+    await controller.TryUpdateModelAsync(schedule, "", provider);
+    Check(bill.Revision == 1 && bill.ApprovedRevision == null && bill.ApprovedByUserId == null && bill.ApprovedAt == null
+        && schedule.Revision == 1 && schedule.ApprovedRevision == null && schedule.ApprovedByUserId == null && schedule.ApprovedAt == null,
+        "Form binding accepted forged approval evidence.");
+    var jsonBill = JsonSerializer.Deserialize<Billing>("{\"Revision\":9,\"ApprovedRevision\":9,\"ApprovedByUserId\":\"forged-approver\",\"ApprovedAt\":\"2030-01-01T07:00:00\"}")!;
+    Check(jsonBill.Revision == 1 && jsonBill.ApprovedRevision == null && jsonBill.ApprovedByUserId == null && jsonBill.ApprovedAt == null,
+        "JSON binding accepted forged approval evidence.");
+}
+Console.WriteLine("PASS: form/JSON inputs cannot forge revision or approval evidence.");
 foreach (string emptyAmount in new[] { "", "0.00" })
 {
     var controller = ActivatorUtilities.CreateInstance<IBSWeb.Areas.MSAP.Controllers.CollectionController>(services);

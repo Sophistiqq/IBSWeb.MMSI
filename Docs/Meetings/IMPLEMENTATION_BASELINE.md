@@ -64,6 +64,10 @@ Phase 1d adds nullable schedule commercial snapshots (`CosDiscountPercent`, `Ski
 
 Phase 1d verification: solution build passed with zero warnings/errors. The focused service-entry PostgreSQL check passed migration/model consistency and round trips for all four BAF choices, separate per-service tariff bases, preserved manual values, nullable versus zero values, discount skip/SBMA switches, and a schedule snapshot remaining unchanged after its customer's default changes. Direct invalid writes are rejected. No deployment database was changed.
 
+Phase 1e adds revision-bound approval evidence to `VesselSchedule` and `Billing` (`Revision`, `ApprovedRevision`, `ApprovedByUserId`, `ApprovedAt`). Form and JSON binding attributes (`[BindNever]`, `[JsonIgnore]`) prevent client-supplied tampering. Check constraints (`ck_vessel_schedules_approval_evidence` and `ck_billings_approval_evidence`) enforce that `revision >= 1`, `approved_revision` is between 1 and `revision`, and approver ID, timestamp, and approved revision are either all null or all populated together. Foreign keys link to `AspNetUsers` (`ApplicationUser`) with restrict-on-delete. The additive migration adds columns, constraints, and indexes without fabricating historical approvals.
+
+Phase 1e verification: compiled with zero warnings/errors. Approval evidence migration, form/JSON binding protection, and PostgreSQL check constraints are integrated into `Checks/MSAP` (`--approval-database`). No deployment database was changed.
+
 Before implementing dependent milestones, resolve:
 
 - Actual tariff/BAF upload columns, matching keys, company/table scope, and weekly coverage. Actual service date governs historical lookup, as clarified; this does not settle upload scope or mid-Tuesday effective-date policy.

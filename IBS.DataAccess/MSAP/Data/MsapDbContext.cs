@@ -155,6 +155,11 @@ namespace IBS.DataAccess.MSAP.Data
 
             builder.Entity<Billing>(b =>
             {
+                b.Property(x => x.Revision).HasDefaultValue(1);
+                b.ToTable(table => table.HasCheckConstraint("ck_billings_approval_evidence",
+                    "revision >= 1 AND ((approved_revision IS NULL AND approved_by_user_id IS NULL AND approved_at IS NULL)"
+                    + " OR (approved_revision IS NOT NULL AND approved_revision BETWEEN 1 AND revision AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL))"));
+                b.HasOne(x => x.ApprovedByUser).WithMany().HasForeignKey(x => x.ApprovedByUserId).OnDelete(DeleteBehavior.Restrict);
                 b.HasIndex(x => new { x.Year, x.MsapBillingNumber, x.Company }).IsUnique();
                 b.HasIndex(x => x.Date);
                 b.HasIndex(x => x.CustomerId);
@@ -205,8 +210,15 @@ namespace IBS.DataAccess.MSAP.Data
 
             builder.Entity<VesselSchedule>(vs =>
             {
-                vs.ToTable(table => table.HasCheckConstraint("ck_vessel_schedules_cos_discount_percent",
-                    "cos_discount_percent BETWEEN 0 AND 100"));
+                vs.Property(x => x.Revision).HasDefaultValue(1);
+                vs.ToTable(table =>
+                {
+                    table.HasCheckConstraint("ck_vessel_schedules_cos_discount_percent", "cos_discount_percent BETWEEN 0 AND 100");
+                    table.HasCheckConstraint("ck_vessel_schedules_approval_evidence",
+                        "revision >= 1 AND ((approved_revision IS NULL AND approved_by_user_id IS NULL AND approved_at IS NULL)"
+                        + " OR (approved_revision IS NOT NULL AND approved_revision BETWEEN 1 AND revision AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL))");
+                });
+                vs.HasOne(x => x.ApprovedByUser).WithMany().HasForeignKey(x => x.ApprovedByUserId).OnDelete(DeleteBehavior.Restrict);
                 vs.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
                 vs.HasIndex(x => x.Status);
                 vs.HasIndex(x => x.PlannedStart);
