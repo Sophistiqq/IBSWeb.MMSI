@@ -26,7 +26,7 @@ namespace Checks.MSAP
 {
     internal static class SchedulingCheck
     {
-        public static async Task RunAsync(bool calendarOnly = false)
+        public static async Task RunAsync(bool calendarOnly = false, bool serviceEntriesOnly = false)
         {
             foreach (var method in typeof(IBSWeb.Areas.MSAP.Controllers.VesselScheduleController).GetMethods()
                 .Where(m => m.Name is "Confirm" or "Edit" or "Cancel" or "Complete")
@@ -78,6 +78,11 @@ namespace Checks.MSAP
                 var serviceType = new Service { ServiceNumber = "001", ServiceName = "Check Service" };
                 db.AddRange(customer, vessel, port, terminal, tug, serviceType);
                 await db.SaveChangesAsync();
+                if (serviceEntriesOnly)
+                {
+                    await ScheduleServiceEntryCheck.RunAsync(db);
+                    return;
+                }
                 var work = new UnitOfWork(db, shared);
                 var jobs = new JobOrderService(work, NullLogger<JobOrderService>.Instance);
                 var schedules = new VesselScheduleService(work, jobs, NullLogger<VesselScheduleService>.Instance);

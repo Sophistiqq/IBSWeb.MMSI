@@ -43,6 +43,7 @@ namespace IBS.DataAccess.MSAP.Data
         public DbSet<DispatchTicket> MsapDispatchTickets { get; set; }
         public DbSet<JobOrder> MsapJobOrders { get; set; }
         public DbSet<VesselSchedule> MsapVesselSchedules { get; set; }
+        public DbSet<VesselScheduleServiceEntry> MsapVesselScheduleServiceEntries { get; set; }
         public DbSet<TariffRate> MsapTariffRates { get; set; }
 
         public DbSet<CollectionBill> MsapCollectionBills { get; set; }
@@ -92,6 +93,7 @@ namespace IBS.DataAccess.MSAP.Data
             builder.Entity<TugMaster>().ToTable("mmsi_tug_masters");
             builder.Entity<TugboatOwner>().ToTable("mmsi_tugboat_owners");
             builder.Entity<VesselSchedule>().ToTable("mmsi_vessel_schedules");
+            builder.Entity<VesselScheduleServiceEntry>().ToTable("mmsi_vessel_schedule_service_entries");
             builder.Entity<UserAccess>().ToTable("mmsi_user_accesses");
             builder.Entity<MsapPostedPeriod>().ToTable("mmsi_posted_periods");
             builder.Entity<ApplicationUser>().Ignore(u => u.UserNotifications)
@@ -209,6 +211,16 @@ namespace IBS.DataAccess.MSAP.Data
                 vs.HasOne(x => x.Port).WithMany().HasForeignKey(x => x.PortId).OnDelete(DeleteBehavior.Restrict);
                 vs.HasOne(x => x.Terminal).WithMany().HasForeignKey(x => x.TerminalId).OnDelete(DeleteBehavior.Restrict);
                 vs.HasOne(x => x.JobOrder).WithMany().HasForeignKey(x => x.JobOrderId).OnDelete(DeleteBehavior.SetNull);
+            });
+
+            builder.Entity<VesselScheduleServiceEntry>(entry =>
+            {
+                entry.HasOne(x => x.VesselSchedule).WithMany(x => x.ServiceEntries)
+                    .HasForeignKey(x => x.VesselScheduleId).OnDelete(DeleteBehavior.Restrict);
+                entry.HasOne(x => x.Tugboat).WithMany()
+                    .HasForeignKey(x => x.TugboatId).OnDelete(DeleteBehavior.Restrict);
+                entry.HasOne(x => x.Service).WithMany()
+                    .HasForeignKey(x => x.ServiceId).OnDelete(DeleteBehavior.Restrict);
             });
 
             builder.Entity<DispatchTicket>(dt =>

@@ -80,5 +80,7 @@ namespace IBS.Models.MSAP
 
         [Column(TypeName = "timestamp without time zone")]
         public DateTime? EditedDate { get; set; }
+
+        public List<VesselScheduleServiceEntry> ServiceEntries { get; set; } = [];
     }
 }

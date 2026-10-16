@@ -2434,6 +2434,42 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.ToTable("mmsi_vessel_schedules", "msap");
                 });
 
+            modelBuilder.Entity("IBS.Models.MSAP.VesselScheduleServiceEntry", b =>
+                {
+                    b.Property<int>("VesselScheduleServiceEntryId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("vessel_schedule_service_entry_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("VesselScheduleServiceEntryId"));
+
+                    b.Property<int>("ServiceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("service_id");
+
+                    b.Property<int>("TugboatId")
+                        .HasColumnType("integer")
+                        .HasColumnName("tugboat_id");
+
+                    b.Property<int>("VesselScheduleId")
+                        .HasColumnType("integer")
+                        .HasColumnName("vessel_schedule_id");
+
+                    b.HasKey("VesselScheduleServiceEntryId")
+                        .HasName("pk_mmsi_vessel_schedule_service_entries");
+
+                    b.HasIndex("ServiceId")
+                        .HasDatabaseName("ix_mmsi_vessel_schedule_service_entries_service_id");
+
+                    b.HasIndex("TugboatId")
+                        .HasDatabaseName("ix_mmsi_vessel_schedule_service_entries_tugboat_id");
+
+                    b.HasIndex("VesselScheduleId")
+                        .HasDatabaseName("ix_mmsi_vessel_schedule_service_entries_vessel_schedule_id");
+
+                    b.ToTable("mmsi_vessel_schedule_service_entries", "msap");
+                });
+
             modelBuilder.Entity("IBS.Models.Notification", b =>
                 {
                     b.Property<Guid>("NotificationId")
@@ -2921,6 +2957,36 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Navigation("Vessel");
                 });
 
+            modelBuilder.Entity("IBS.Models.MSAP.VesselScheduleServiceEntry", b =>
+                {
+                    b.HasOne("IBS.Models.MSAP.MasterFile.Service", "Service")
+                        .WithMany()
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_mmsi_vessel_schedule_service_entries_mmsi_services_service_");
+
+                    b.HasOne("IBS.Models.MSAP.MasterFile.Tugboat", "Tugboat")
+                        .WithMany()
+                        .HasForeignKey("TugboatId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_mmsi_vessel_schedule_service_entries_mmsi_tugboats_tugboat_");
+
+                    b.HasOne("IBS.Models.MSAP.VesselSchedule", "VesselSchedule")
+                        .WithMany("ServiceEntries")
+                        .HasForeignKey("VesselScheduleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_mmsi_vessel_schedule_service_entries_mmsi_vessel_schedules_");
+
+                    b.Navigation("Service");
+
+                    b.Navigation("Tugboat");
+
+                    b.Navigation("VesselSchedule");
+                });
+
             modelBuilder.Entity("IBS.Models.UserNotification", b =>
                 {
                     b.HasOne("IBS.Models.Notification", "Notification")
@@ -2950,6 +3016,11 @@ namespace IBS.DataAccess.MSAP.Migrations
             modelBuilder.Entity("IBS.Models.MSAP.JobOrder", b =>
                 {
                     b.Navigation("DispatchTickets");
+                });
+
+            modelBuilder.Entity("IBS.Models.MSAP.VesselSchedule", b =>
+                {
+                    b.Navigation("ServiceEntries");
                 });
 #pragma warning restore 612, 618
         }

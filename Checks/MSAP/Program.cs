@@ -381,7 +381,9 @@ if (args.Contains("--database", StringComparer.Ordinal) || args.Contains("--appr
     await Checks.MSAP.DatabaseCheck.RunAsync(storage, services.GetRequiredService<ITempDataDictionaryFactory>(),
         args.Contains("--approval-database", StringComparer.Ordinal));
 }
-if (args.Contains("--scheduling-database", StringComparer.Ordinal) || args.Contains("--calendar-database", StringComparer.Ordinal))
+if (args.Contains("--scheduling-database", StringComparer.Ordinal) || args.Contains("--calendar-database", StringComparer.Ordinal)
+    || args.Contains("--service-entries-database", StringComparer.Ordinal))
 {
-    await Checks.MSAP.SchedulingCheck.RunAsync(args.Contains("--calendar-database", StringComparer.Ordinal));
+    await Checks.MSAP.SchedulingCheck.RunAsync(args.Contains("--calendar-database", StringComparer.Ordinal),
+        args.Contains("--service-entries-database", StringComparer.Ordinal));
 }
