@@ -47,7 +47,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             model.CanCreateDispatch = await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateDispatchTicket);
             model.CanCreateBilling = await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateBilling);
             model.CanCreateCollection = await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateCollection);
-            model.CanCreateJobOrder = await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateJobOrder);
+            model.CanCreateCustomerOrderSlip = await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateCustomerOrderSlip);
             model.CanViewFinance = model.CanViewBilling || model.CanCreateCollection
                 || await accessControl.HasAccessAsync(userId, ProcedureEnum.ViewMaritimeReport);
 

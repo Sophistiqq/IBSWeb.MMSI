@@ -180,10 +180,10 @@ namespace IBS.Services.MSAP
                 {
                     throw new InvalidOperationException("Only posted billings can receive collection. Review and post all billings first.");
                 }
-                if (model.JobOrderId.HasValue && billing.JobOrderId != model.JobOrderId
-                    && await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == model.JobOrderId && t.BillingId == billing.MsapBillingId, ct) == null)
+                if (model.CustomerOrderSlipId.HasValue && billing.CustomerOrderSlipId != model.CustomerOrderSlipId
+                    && await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == model.CustomerOrderSlipId && t.BillingId == billing.MsapBillingId, ct) == null)
                 {
-                    throw new InvalidOperationException("Selected billing does not belong to this Job Order.");
+                    throw new InvalidOperationException("Selected billing does not belong to this COS.");
                 }
                 string? blocker = await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, billing, JobProgressCalculator.CollectionStage, ct);
                 if (blocker != null)
@@ -408,7 +408,7 @@ namespace IBS.Services.MSAP
             return viewModel;
         }
 
-        public async Task<ServiceResult<object>> GetUncollectedBillingsForTableAsync(int customerId, int? collectionId, CancellationToken cancellationToken, int? jobOrderId = null)
+        public async Task<ServiceResult<object>> GetUncollectedBillingsForTableAsync(int customerId, int? collectionId, CancellationToken cancellationToken, int? customerOrderSlipId = null)
         {
             try
             {
@@ -425,11 +425,11 @@ namespace IBS.Services.MSAP
                     billings.AddRange(alreadyCollected);
                 }
 
-                if (jobOrderId.HasValue)
+                if (customerOrderSlipId.HasValue)
                 {
-                    IEnumerable<DispatchTicket> tickets = await unitOfWork.DispatchTicket.GetAllAsync(t => t.JobOrderId == jobOrderId.Value && t.BillingId.HasValue, cancellationToken);
+                    IEnumerable<DispatchTicket> tickets = await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == customerOrderSlipId.Value && t.BillingId.HasValue, cancellationToken);
                     List<int> ids = tickets.Select(t => t.BillingId!.Value).ToList();
-                    billings = billings.Where(b => b.JobOrderId == jobOrderId.Value || ids.Contains(b.MsapBillingId)).ToList();
+                    billings = billings.Where(b => b.CustomerOrderSlipId == customerOrderSlipId.Value || ids.Contains(b.MsapBillingId)).ToList();
                 }
                 var result = billings
                     .DistinctBy(b => b.MsapBillingId)

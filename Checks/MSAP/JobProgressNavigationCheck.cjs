@@ -22,10 +22,10 @@ for (const view of ['Billing/Create', 'Collection/Create', 'Collection/Edit']) {
         fetch: (url, options) => new Promise(resolve => pending.push({url, options, resolve}))
     });
     const container = {
-        dataset: {actionStage: '7', progressUrl: '/MSAP/JobOrder/Progress'},
+        dataset: {actionStage: '7', progressUrl: '/MSAP/CustomerOrderSlip/Progress'},
         replaceChildren() { this.innerHTML = ''; this.textContent = ''; }
     };
-    const first = window.JobProgress.load(container, {jobOrderId: 1});
+    const first = window.JobProgress.load(container, {customerOrderSlipId: 1});
     const second = window.JobProgress.load(container, {billingIds: [7, 8]});
     assert(pending[0].options.signal.aborted, 'Changing selection must cancel the old request.');
     const query = new URL(pending[1].url, 'http://localhost').searchParams;

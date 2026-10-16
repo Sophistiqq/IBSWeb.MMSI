@@ -180,10 +180,10 @@ namespace IBS.Models.MSAP
         [NotMapped]
         public List<DispatchTicket>? PaidDispatchTickets { get; set; }
 
-        public int? JobOrderId { get; set; }
+        public int? CustomerOrderSlipId { get; set; }
 
-        [ForeignKey(nameof(JobOrderId))]
-        public JobOrder? JobOrder { get; set; }
+        [ForeignKey(nameof(CustomerOrderSlipId))]
+        public CustomerOrderSlip? CustomerOrderSlip { get; set; }
 
         [Column("CRNUM")]
         public int? CollectionId { get; set; }

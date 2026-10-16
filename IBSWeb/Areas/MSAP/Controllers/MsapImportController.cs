@@ -51,7 +51,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     TRUNCATE TABLE msap.mmsi_collection_bills RESTART IDENTITY CASCADE;
                     TRUNCATE TABLE msap.mmsi_dispatch_tickets RESTART IDENTITY CASCADE;
                     TRUNCATE TABLE msap.mmsi_billings RESTART IDENTITY CASCADE;
-                    TRUNCATE TABLE msap.mmsi_job_orders RESTART IDENTITY CASCADE;
+                    TRUNCATE TABLE msap.mmsi_customer_order_slips RESTART IDENTITY CASCADE;
                     TRUNCATE TABLE msap.mmsi_collections RESTART IDENTITY CASCADE;
                     TRUNCATE TABLE msap.mmsi_tariff_rates RESTART IDENTITY CASCADE;
                     TRUNCATE TABLE msap.mmsi_principals RESTART IDENTITY CASCADE;

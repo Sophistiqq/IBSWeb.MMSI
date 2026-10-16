@@ -56,9 +56,14 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// </summary>
         [HttpGet]
         [RequireAccess(ProcedureEnum.CreateDispatchTicket, "Access denied. You don't have permission to create Dispatch Tickets.")]
-        public async Task<IActionResult> Create(int jobOrderId, CancellationToken cancellationToken = default)
+        public async Task<IActionResult> Create(int customerOrderSlipId, CancellationToken cancellationToken = default, int? expectedServiceEntryId = null)
         {
-            var viewModel = await dispatchTicketService.PopulateDispatchTicketViewModelAsync(null, jobOrderId, cancellationToken);
+            var viewModel = await dispatchTicketService.PopulateDispatchTicketViewModelAsync(
+                new DispatchTicketViewModel { VesselScheduleServiceEntryId = expectedServiceEntryId }, customerOrderSlipId, cancellationToken);
+            if (expectedServiceEntryId.HasValue && (viewModel.ServiceId == 0 || viewModel.TugBoatId == 0))
+            {
+                return NotFound();
+            }
             return View(viewModel);
         }
 
@@ -83,17 +88,22 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return View(viewModel);
             }
 
+            if (!ModelState.IsValid)
+            {
+                await dispatchTicketService.PopulateDispatchTicketViewModelAsync(viewModel, viewModel.CustomerOrderSlipId, cancellationToken);
+                return View(viewModel);
+            }
             var result = await dispatchTicketService.CreateDispatchTicketAsync(viewModel, imageFile, videoFile, User.Identity?.Name ?? "System", cancellationToken);
 
             if (result.IsSuccess)
             {
                 TempData["success"] = result.Message;
 
-                if (viewModel.JobOrderId.HasValue)
+                if (viewModel.CustomerOrderSlipId.HasValue)
                 {
-                    TempData["PromptAddTicket"] = true;
+                    TempData["PromptAddTicket"] = !viewModel.VesselScheduleServiceEntryId.HasValue;
                     TempData.Remove("success");
-                    return RedirectToAction("Details", "JobOrder", new { id = viewModel.JobOrderId });
+                    return RedirectToAction("Details", "CustomerOrderSlip", new { id = viewModel.CustomerOrderSlipId });
                 }
 
                 return RedirectToAction(nameof(Index));
@@ -172,7 +182,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var viewModel = new TariffViewModel
             {
                 DispatchTicketId = ticket.DispatchTicketId,
-                JobOrderId = ticket.JobOrderId,
+                CustomerOrderSlipId = ticket.CustomerOrderSlipId,
                 CustomerId = ticket.CustomerId,
                 DispatchNumber = ticket.DispatchNumber,
                 COSNumber = ticket.COSNumber,
@@ -237,7 +247,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var model = new DispatchTicket
             {
                 DispatchTicketId = viewModel.DispatchTicketId,
-                JobOrderId = viewModel.JobOrderId,
+                CustomerOrderSlipId = viewModel.CustomerOrderSlipId,
                 CustomerId = viewModel.CustomerId.Value,
                 DispatchRate = viewModel.DispatchRate ?? 0,
                 DispatchDiscount = viewModel.DispatchDiscount ?? 0,
@@ -258,8 +268,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
             if (result.IsSuccess)
             {
                 TempData["success"] = result.Message;
-                return model.JobOrderId.HasValue
-                    ? RedirectToAction("Details", "JobOrder", new { id = model.JobOrderId.Value })
+                return model.CustomerOrderSlipId.HasValue
+                    ? RedirectToAction("Details", "CustomerOrderSlip", new { id = model.CustomerOrderSlipId.Value })
                     : RedirectToAction(nameof(Index), new { filterType });
             }
 
@@ -294,7 +304,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var viewModel = new TariffViewModel
             {
                 DispatchTicketId = ticket.DispatchTicketId,
-                JobOrderId = ticket.JobOrderId,
+                CustomerOrderSlipId = ticket.CustomerOrderSlipId,
                 CustomerId = ticket.CustomerId,
                 DispatchNumber = ticket.DispatchNumber,
                 COSNumber = ticket.COSNumber,
@@ -365,7 +375,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var model = new DispatchTicket
             {
                 DispatchTicketId = viewModel.DispatchTicketId,
-                JobOrderId = viewModel.JobOrderId,
+                CustomerOrderSlipId = viewModel.CustomerOrderSlipId,
                 CustomerId = viewModel.CustomerId.Value,
                 DispatchRate = viewModel.DispatchRate ?? 0,
                 DispatchDiscount = viewModel.DispatchDiscount ?? 0,
@@ -386,8 +396,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
             if (result.IsSuccess)
             {
                 TempData["success"] = result.Message;
-                return model.JobOrderId.HasValue
-                    ? RedirectToAction("Details", "JobOrder", new { id = model.JobOrderId.Value })
+                return model.CustomerOrderSlipId.HasValue
+                    ? RedirectToAction("Details", "CustomerOrderSlip", new { id = model.CustomerOrderSlipId.Value })
                     : RedirectToAction(nameof(Index), new { filterType });
             }
 
@@ -405,7 +415,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpGet]
         [RequireAccess(ProcedureEnum.EditDispatchTicket, "Access denied. You don't have permission to edit Dispatch Tickets.")]
         public async Task<IActionResult> EditTicket(
-            int id, int? jobOrderId, string? filterType, CancellationToken cancellationToken = default)
+            int id, int? customerOrderSlipId, string? filterType, CancellationToken cancellationToken = default)
         {
             ViewBag.FilterType = filterType;
 
@@ -415,15 +425,15 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return NotFound();
             }
 
-            if (!await dispatchTicketService.IsJobOrderEditableAsync(model.JobOrderId, cancellationToken))
+            if (!await dispatchTicketService.IsCustomerOrderSlipEditableAsync(model.CustomerOrderSlipId, cancellationToken))
             {
-                TempData["error"] = "Cannot edit ticket — parent Job Order is cancelled or closed.";
+                TempData["error"] = "Cannot edit ticket — parent COS is cancelled or closed.";
                 return RedirectToAction(nameof(Index), new { filterType });
             }
 
             var viewModel = new DispatchTicketViewModel();
             viewModel.FromEntity(model);
-            viewModel.JobOrderId = jobOrderId ?? model.JobOrderId;
+            viewModel.CustomerOrderSlipId = model.CustomerOrderSlipId;
 
             viewModel.PortId = model.Terminal.Port.PortId;
 
@@ -462,8 +472,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 TempData["success"] = result.Message;
 
-                return viewModel.JobOrderId.HasValue
-                    ? RedirectToAction("Details", "JobOrder", new { id = viewModel.JobOrderId.Value })
+                return viewModel.CustomerOrderSlipId.HasValue
+                    ? RedirectToAction("Details", "CustomerOrderSlip", new { id = viewModel.CustomerOrderSlipId.Value })
                     : RedirectToAction(nameof(Index), new { filterType });
             }
 
@@ -473,7 +483,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             TempData["error"] = result.Message;
-            return RedirectToAction("EditTicket", new { id = viewModel.DispatchTicketId, jobOrderId = viewModel.JobOrderId });
+            return RedirectToAction("EditTicket", new { id = viewModel.DispatchTicketId, customerOrderSlipId = viewModel.CustomerOrderSlipId });
         }
 
         #endregion

@@ -31,7 +31,7 @@
             }
             else
             {
-                <h3 class="wf-label">Cancel this booking</h3><p class="wf-body wf-muted">@(Model.JobOrderId.HasValue ? "Cancels the schedule and its COS together. Records are retained." : "Release the tug bookings and keep this plan on record.")</p>
+                <h3 class="wf-label">Cancel this booking</h3><p class="wf-body wf-muted">@(Model.CustomerOrderSlipId.HasValue ? "Cancels the schedule and its COS together. Records are retained." : "Release the tug bookings and keep this plan on record.")</p>
                 <form asp-action="Cancel" method="post" data-schedule-action="Cancel">
                     <input type="hidden" name="id" value="@Model.VesselScheduleId" />
                     <button type="submit" class="modern-btn-error"><span class="material-symbols-outlined" aria-hidden="true">event_busy</span> Cancel Booking</button>
@@ -43,7 +43,7 @@
     {
         <p class="wf-body wf-muted">@(Model.Status == MsapConstants.VesselScheduleStatus.Completed ? "Service is completed. Tariff, approval, billing, posting and collection can continue." : "This booking is cancelled. Schedule changes are no longer available.")</p>
     }
-    @if (ViewBag.CanEdit == true && Model.Status == MsapConstants.VesselScheduleStatus.Tentative && Model.JobOrderId == null)
+    @if (ViewBag.CanEdit == true && Model.Status == MsapConstants.VesselScheduleStatus.Tentative && Model.CustomerOrderSlipId == null)
     {
         <details class="schedule-delete-option">
             <summary>Created by mistake?</summary>

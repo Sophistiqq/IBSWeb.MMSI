@@ -13,53 +13,54 @@ using Microsoft.AspNetCore.Mvc;
 namespace IBSWeb.Areas.MSAP.Controllers
 {
     /// <summary>
-    /// Controller for managing Job Orders in the MMSI system.
+    /// Controller for managing COS records in the MMSI system.
     /// </summary>
     [Area("MSAP")]
-    public class JobOrderController(
+    [Route("MSAP/COS/[action]/{id?}", Order = 0)]
+    public class CustomerOrderSlipController(
         IUnitOfWork unitOfWork,
-        JobOrderService jobOrderService,
+        CustomerOrderSlipService customerOrderSlipService,
         DispatchTicketService dispatchTicketService,
         ITerminalService terminalService,
         ICloudStorageService cloudStorageService,
         IAccessControlService accessControl,
-        ILogger<JobOrderController> logger) : Controller
+        ILogger<CustomerOrderSlipController> logger) : Controller
     {
         #region Index
 
         /// <summary>
-        /// Displays the list of all Job Orders.
+        /// Displays the list of all COS records.
         /// </summary>
         [RequireAnyAccess(
-            "Access denied. You don't have permission to access Job Orders.",
-            ProcedureEnum.CreateJobOrder,
-            ProcedureEnum.EditJobOrder,
-            ProcedureEnum.DeleteJobOrder,
-            ProcedureEnum.CloseJobOrder)]
+            "Access denied. You don't have permission to access COS records.",
+            ProcedureEnum.CreateCustomerOrderSlip,
+            ProcedureEnum.EditCustomerOrderSlip,
+            ProcedureEnum.DeleteCustomerOrderSlip,
+            ProcedureEnum.CloseCustomerOrderSlip)]
         public async Task<IActionResult> Index()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            ViewBag.CanEdit = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditJobOrder);
-            ViewBag.CanCreate = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateJobOrder);
+            ViewBag.CanEdit = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditCustomerOrderSlip);
+            ViewBag.CanCreate = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateCustomerOrderSlip);
             return View();
         }
 
         /// <summary>
-        /// Returns a paged, filtered, sorted list of Job Orders for DataTables server-side processing.
+        /// Returns a paged, filtered, sorted list of COS records for DataTables server-side processing.
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAnyAccess(
             "Access denied.",
-            ProcedureEnum.CreateJobOrder,
-            ProcedureEnum.EditJobOrder,
-            ProcedureEnum.DeleteJobOrder,
-            ProcedureEnum.CloseJobOrder)]
-        public async Task<IActionResult> GetJobOrderList([FromForm] DataTablesParameters parameters, CancellationToken cancellationToken)
+            ProcedureEnum.CreateCustomerOrderSlip,
+            ProcedureEnum.EditCustomerOrderSlip,
+            ProcedureEnum.DeleteCustomerOrderSlip,
+            ProcedureEnum.CloseCustomerOrderSlip)]
+        public async Task<IActionResult> GetCustomerOrderSlipList([FromForm] DataTablesParameters parameters, CancellationToken cancellationToken)
         {
             try
             {
-                var (data, filtered, total) = await jobOrderService.GetPagedJobOrdersAsync(parameters, cancellationToken);
+                var (data, filtered, total) = await customerOrderSlipService.GetPagedCustomerOrderSlipsAsync(parameters, cancellationToken);
 
                 var closedMonths = (await unitOfWork.PostedPeriod.GetAllAsync(cancellationToken))
                     .Where(p => p.IsClosed)
@@ -80,7 +81,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to get job orders");
+                logger.LogError(ex, "Failed to get COS records");
                 return Json(new { draw = parameters.Draw, error = ex.Message });
             }
         }
@@ -90,28 +91,28 @@ namespace IBSWeb.Areas.MSAP.Controllers
         #region Create
 
         /// <summary>
-        /// Displays the form to create a new Job Order.
+        /// Displays the form to create a new COS.
         /// </summary>
         [HttpGet]
-        [RequireAccess(ProcedureEnum.CreateJobOrder, "Access denied. You don't have permission to create Job Orders.")]
+        [RequireAccess(ProcedureEnum.CreateCustomerOrderSlip, "Access denied. You don't have permission to create COS records.")]
         public async Task<IActionResult> Create(CancellationToken cancellationToken)
         {
-            var viewModel = await jobOrderService.PopulateJobOrderViewModelAsync(null, cancellationToken);
+            var viewModel = await customerOrderSlipService.PopulateCustomerOrderSlipViewModelAsync(null, cancellationToken);
 
             return View(viewModel);
         }
 
         /// <summary>
-        /// Processes the creation of a new Job Order.
+        /// Processes the creation of a new COS.
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.CreateJobOrder, "Access denied. You don't have permission to create Job Orders.")]
-        public async Task<IActionResult> Create(JobOrderViewModel viewModel, CancellationToken cancellationToken)
+        [RequireAccess(ProcedureEnum.CreateCustomerOrderSlip, "Access denied. You don't have permission to create COS records.")]
+        public async Task<IActionResult> Create(CustomerOrderSlipViewModel viewModel, CancellationToken cancellationToken)
         {
-            var jobOrder = MapToEntity(viewModel);
+            var customerOrderSlip = MapToEntity(viewModel);
 
-            var result = await jobOrderService.CreateJobOrderAsync(jobOrder, User.Identity?.Name ?? "Unknown", cancellationToken);
+            var result = await customerOrderSlipService.CreateCustomerOrderSlipAsync(customerOrderSlip, User.Identity?.Name ?? "Unknown", cancellationToken);
 
             if (result.IsSuccess)
             {
@@ -120,7 +121,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             TempData["error"] = result.Message ?? "An error occurred.";
-            await jobOrderService.PopulateJobOrderViewModelAsync(viewModel, cancellationToken);
+            await customerOrderSlipService.PopulateCustomerOrderSlipViewModelAsync(viewModel, cancellationToken);
             return View(viewModel);
         }
 
@@ -129,31 +130,32 @@ namespace IBSWeb.Areas.MSAP.Controllers
         #region Details
 
         /// <summary>
-        /// Displays the details of a specific Job Order.
+        /// Displays the details of a specific COS.
         /// </summary>
         [RequireAnyAccess(
-            "Access denied. You don't have permission to view Job Orders.",
+            "Access denied. You don't have permission to view COS records.",
+            ProcedureEnum.ApproveSchedule,
             ProcedureEnum.CreateDispatchTicket,
             ProcedureEnum.EditDispatchTicket,
             ProcedureEnum.SetTariff,
             ProcedureEnum.ApproveTariff,
             ProcedureEnum.CreateBilling,
             ProcedureEnum.CreateCollection,
-            ProcedureEnum.CreateJobOrder,
-            ProcedureEnum.EditJobOrder,
-            ProcedureEnum.DeleteJobOrder,
-            ProcedureEnum.CloseJobOrder)]
+            ProcedureEnum.CreateCustomerOrderSlip,
+            ProcedureEnum.EditCustomerOrderSlip,
+            ProcedureEnum.DeleteCustomerOrderSlip,
+            ProcedureEnum.CloseCustomerOrderSlip)]
         public async Task<IActionResult> Details(int id, CancellationToken cancellationToken)
         {
-            var jobOrder = await jobOrderService.GetJobOrderByIdAsync(id, cancellationToken);
-            if (jobOrder == null)
+            var customerOrderSlip = await customerOrderSlipService.GetCustomerOrderSlipByIdAsync(id, cancellationToken);
+            if (customerOrderSlip == null)
             {
                 return NotFound();
             }
 
-            var billing = await unitOfWork.Billing.GetAsync(b => b.JobOrderId == id, cancellationToken);
+            var billing = await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == id, cancellationToken);
             ViewData["HasBilling"] = billing != null;
-            ViewBag.HasDispatchTickets = await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == id, cancellationToken) != null;
+            ViewBag.HasDispatchTickets = await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == id, cancellationToken) != null;
             ViewData["BillingNumber"] = billing?.MsapBillingNumber;
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -161,13 +163,17 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ViewBag.CanApproveTariff = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveTariff);
             ViewBag.CanEditTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditDispatchTicket);
             ViewBag.CanDeleteTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteDispatchTicket);
-            ViewBag.CanEditJobOrder = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditJobOrder);
+            ViewBag.CanEditCustomerOrderSlip = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditCustomerOrderSlip);
             ViewBag.CanCreateDispatchTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateDispatchTicket);
-            var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.JobOrderId == id, cancellationToken);
+            var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == id, cancellationToken);
+            if (schedule != null)
+            {
+                schedule = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(schedule.VesselScheduleId, cancellationToken);
+            }
             ViewBag.VesselSchedule = schedule;
-            ViewBag.JobProgress = await JobProgressCalculator.LoadAsync(unitOfWork, jobOrder, schedule, cancellationToken);
+            ViewBag.JobProgress = await JobProgressCalculator.LoadAsync(unitOfWork, customerOrderSlip, schedule, cancellationToken);
 
-            foreach (var ticket in jobOrder.DispatchTickets)
+            foreach (var ticket in customerOrderSlip.DispatchTickets)
             {
                 if (!string.IsNullOrEmpty(ticket.ImageName))
                 {
@@ -181,41 +187,42 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 }
             }
 
-            return View(jobOrder);
+            return View(customerOrderSlip);
         }
 
         #endregion
 
         [RequireAnyAccess(
-            "Access denied. You don't have permission to view Job Orders.",
+            "Access denied. You don't have permission to view COS records.",
+            ProcedureEnum.ApproveSchedule,
             ProcedureEnum.CreateDispatchTicket,
             ProcedureEnum.EditDispatchTicket,
             ProcedureEnum.SetTariff,
             ProcedureEnum.ApproveTariff,
             ProcedureEnum.CreateBilling,
             ProcedureEnum.CreateCollection,
-            ProcedureEnum.CreateJobOrder,
-            ProcedureEnum.EditJobOrder,
-            ProcedureEnum.DeleteJobOrder,
-            ProcedureEnum.CloseJobOrder)]
-        public async Task<IActionResult> Progress(int? jobOrderId, List<int>? billingIds, List<int>? dispatchTicketIds, int? actionStage, CancellationToken cancellationToken)
+            ProcedureEnum.CreateCustomerOrderSlip,
+            ProcedureEnum.EditCustomerOrderSlip,
+            ProcedureEnum.DeleteCustomerOrderSlip,
+            ProcedureEnum.CloseCustomerOrderSlip)]
+        public async Task<IActionResult> Progress(int? customerOrderSlipId, List<int>? billingIds, List<int>? dispatchTicketIds, int? actionStage, CancellationToken cancellationToken)
         {
             ViewData["JobProgressActionStage"] = actionStage;
-            if (jobOrderId.HasValue)
+            if (customerOrderSlipId.HasValue)
             {
-                var job = await unitOfWork.JobOrder.GetAsync(j => j.JobOrderId == jobOrderId.Value, cancellationToken);
+                var job = await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == customerOrderSlipId.Value, cancellationToken);
                 if (job == null)
                 {
                     return NotFound();
                 }
-                var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.JobOrderId == job.JobOrderId, cancellationToken);
+                var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == job.CustomerOrderSlipId, cancellationToken);
                 var progress = await JobProgressCalculator.LoadAsync(unitOfWork, job, schedule, cancellationToken);
                 return PartialView("_JobProgressList", new[] { progress });
             }
             if (dispatchTicketIds is { Count: > 0 })
             {
                 IEnumerable<DispatchTicket> tickets = await unitOfWork.DispatchTicket.GetAllAsync(t => dispatchTicketIds.Contains(t.DispatchTicketId), cancellationToken);
-                IEnumerable<int> jobIds = tickets.Where(t => t.JobOrderId.HasValue).Select(t => t.JobOrderId!.Value);
+                IEnumerable<int> jobIds = tickets.Where(t => t.CustomerOrderSlipId.HasValue).Select(t => t.CustomerOrderSlipId!.Value);
                 return PartialView("_JobProgressList", await JobProgressCalculator.LoadForJobsAsync(unitOfWork, jobIds, cancellationToken));
             }
             return PartialView("_JobProgressList", await JobProgressCalculator.LoadForBillingsAsync(unitOfWork, billingIds ?? [], cancellationToken));
@@ -223,20 +230,20 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.EditJobOrder)]
+        [RequireAccess(ProcedureEnum.EditCustomerOrderSlip)]
         public async Task<IActionResult> Cancel(int id, CancellationToken cancellationToken)
         {
-            var result = await jobOrderService.CancelJobOrderAsync(id, User.Identity?.Name ?? "Unknown", cancellationToken);
+            var result = await customerOrderSlipService.CancelCustomerOrderSlipAsync(id, User.Identity?.Name ?? "Unknown", cancellationToken);
             TempData[result.IsSuccess ? "success" : "error"] = result.Message;
             return RedirectToAction(nameof(Details), new { id });
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.EditJobOrder)]
+        [RequireAccess(ProcedureEnum.EditCustomerOrderSlip)]
         public async Task<IActionResult> CompleteBooking(int id, CancellationToken cancellationToken)
         {
-            var result = await jobOrderService.CompleteBookingAsync(id, User.Identity?.Name ?? "Unknown", cancellationToken);
+            var result = await customerOrderSlipService.CompleteBookingAsync(id, User.Identity?.Name ?? "Unknown", cancellationToken);
             TempData[result.IsSuccess ? "success" : "error"] = result.Message;
             return RedirectToAction(nameof(Details), new { id });
         }
@@ -244,64 +251,64 @@ namespace IBSWeb.Areas.MSAP.Controllers
         #region Edit
 
         /// <summary>
-        /// Displays the form to edit an existing Job Order.
+        /// Displays the form to edit an existing COS.
         /// </summary>
         [HttpGet]
-        [RequireAccess(ProcedureEnum.EditJobOrder, "Access denied. You don't have permission to edit Job Orders.")]
+        [RequireAccess(ProcedureEnum.EditCustomerOrderSlip, "Access denied. You don't have permission to edit COS records.")]
         public async Task<IActionResult> Edit(int id, CancellationToken cancellationToken)
         {
-            var jobOrder = await jobOrderService.GetJobOrderByIdAsync(id, cancellationToken);
-            if (jobOrder == null)
+            var customerOrderSlip = await customerOrderSlipService.GetCustomerOrderSlipByIdAsync(id, cancellationToken);
+            if (customerOrderSlip == null)
             {
                 return NotFound();
             }
 
-            ViewData["JobOrderNumber"] = jobOrder.JobOrderNumber;
+            ViewData["CustomerOrderSlipNumber"] = customerOrderSlip.CustomerOrderSlipNumber;
 
-            string? editError = await jobOrderService.GetEditErrorAsync(jobOrder, cancellationToken);
+            string? editError = await customerOrderSlipService.GetEditErrorAsync(customerOrderSlip, cancellationToken);
             if (editError != null)
             {
                 TempData["error"] = editError;
                 return RedirectToAction(nameof(Details), new { id });
             }
 
-            var viewModel = new JobOrderViewModel
+            var viewModel = new CustomerOrderSlipViewModel
             {
-                JobOrderId = jobOrder.JobOrderId,
-                Date = jobOrder.Date,
-                CustomerId = jobOrder.CustomerId,
-                VesselId = jobOrder.VesselId,
-                PortId = jobOrder.PortId,
-                TerminalId = jobOrder.TerminalId,
-                COSNumber = jobOrder.COSNumber,
-                VoyageNumber = jobOrder.VoyageNumber,
-                PlannedStartTime = jobOrder.PlannedStartTime,
-                PlannedEndTime = jobOrder.PlannedEndTime,
-                Remarks = jobOrder.Remarks
+                CustomerOrderSlipId = customerOrderSlip.CustomerOrderSlipId,
+                Date = customerOrderSlip.Date,
+                CustomerId = customerOrderSlip.CustomerId,
+                VesselId = customerOrderSlip.VesselId,
+                PortId = customerOrderSlip.PortId,
+                TerminalId = customerOrderSlip.TerminalId,
+                COSNumber = customerOrderSlip.COSNumber,
+                VoyageNumber = customerOrderSlip.VoyageNumber,
+                PlannedStartTime = customerOrderSlip.PlannedStartTime,
+                PlannedEndTime = customerOrderSlip.PlannedEndTime,
+                Remarks = customerOrderSlip.Remarks
             };
 
-            await jobOrderService.PopulateJobOrderViewModelAsync(viewModel, cancellationToken);
-            ViewData["HasTickets"] = jobOrder.DispatchTickets.Any();
+            await customerOrderSlipService.PopulateCustomerOrderSlipViewModelAsync(viewModel, cancellationToken);
+            ViewData["HasTickets"] = customerOrderSlip.DispatchTickets.Any();
 
             return View(viewModel);
         }
 
         /// <summary>
-        /// Processes the update of an existing Job Order.
+        /// Processes the update of an existing COS.
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.EditJobOrder, "Access denied. You don't have permission to edit Job Orders.")]
-        public async Task<IActionResult> Edit(JobOrderViewModel viewModel, CancellationToken cancellationToken)
+        [RequireAccess(ProcedureEnum.EditCustomerOrderSlip, "Access denied. You don't have permission to edit COS records.")]
+        public async Task<IActionResult> Edit(CustomerOrderSlipViewModel viewModel, CancellationToken cancellationToken)
         {
-            var jobOrder = MapToEntity(viewModel);
+            var customerOrderSlip = MapToEntity(viewModel);
 
-            var result = await jobOrderService.UpdateJobOrderAsync(jobOrder, User.Identity?.Name ?? "Unknown", cancellationToken);
+            var result = await customerOrderSlipService.UpdateCustomerOrderSlipAsync(customerOrderSlip, User.Identity?.Name ?? "Unknown", cancellationToken);
 
             if (result.IsSuccess)
             {
                 TempData["success"] = result.Message;
-                return RedirectToAction(nameof(Details), new { id = jobOrder.JobOrderId });
+                return RedirectToAction(nameof(Details), new { id = customerOrderSlip.CustomerOrderSlipId });
             }
 
             if (result.Status == ServiceResultStatus.NotFound)
@@ -309,10 +316,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return NotFound();
             }
 
-            var jo = await jobOrderService.GetJobOrderByIdAsync(viewModel.JobOrderId, cancellationToken);
-            ViewData["JobOrderNumber"] = jo?.JobOrderNumber ?? "";
+            var jo = await customerOrderSlipService.GetCustomerOrderSlipByIdAsync(viewModel.CustomerOrderSlipId, cancellationToken);
+            ViewData["CustomerOrderSlipNumber"] = jo?.CustomerOrderSlipNumber ?? "";
             ViewData["HasTickets"] = jo?.DispatchTickets.Any() ?? false;
-            await jobOrderService.PopulateJobOrderViewModelAsync(viewModel, cancellationToken);
+            await customerOrderSlipService.PopulateCustomerOrderSlipViewModelAsync(viewModel, cancellationToken);
             TempData["error"] = result.Message ?? "An error occurred.";
             return View(viewModel);
         }
@@ -325,7 +332,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// Retrieves terminals associated with a specific port. Used for dynamic dropdowns.
         /// </summary>
         [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateJobOrder, ProcedureEnum.EditJobOrder)]
+        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateCustomerOrderSlip, ProcedureEnum.EditCustomerOrderSlip)]
         public async Task<IActionResult> ChangeTerminal(int portId, CancellationToken cancellationToken)
         {
             var list = await terminalService.GetTerminalsByPortAsync(portId, cancellationToken);
@@ -336,7 +343,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// Retrieves detailed information for a specific Dispatch Ticket.
         /// </summary>
         [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateJobOrder, ProcedureEnum.EditJobOrder)]
+        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateCustomerOrderSlip, ProcedureEnum.EditCustomerOrderSlip)]
         public async Task<IActionResult> GetTicketDetails(int id, CancellationToken cancellationToken)
         {
             var details = await dispatchTicketService.GetTicketDetailsAsync(id, cancellationToken);
@@ -352,7 +359,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// Searches for customers matching a search term.
         /// </summary>
         [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateJobOrder, ProcedureEnum.EditJobOrder)]
+        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateCustomerOrderSlip, ProcedureEnum.EditCustomerOrderSlip)]
         public async Task<JsonResult> SearchCustomers(string? term, CancellationToken cancellationToken)
         {
             var result = await unitOfWork.Customer.SearchCustomersDtoAsync(term ?? string.Empty, 10, cancellationToken);
@@ -360,34 +367,34 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         /// <summary>
-        /// Assigns a preferred tugboat to a Job Order.
+        /// Assigns a preferred tugboat to a COS.
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.EditJobOrder)]
-        public async Task<IActionResult> AssignTugboat(int jobOrderId, int tugboatId, CancellationToken cancellationToken)
+        [RequireAnyAccess("Access denied.", ProcedureEnum.EditCustomerOrderSlip)]
+        public async Task<IActionResult> AssignTugboat(int customerOrderSlipId, int tugboatId, CancellationToken cancellationToken)
         {
-            return await HandleTugboatAssignmentAsync(jobOrderId, tugboatId, true, cancellationToken);
+            return await HandleTugboatAssignmentAsync(customerOrderSlipId, tugboatId, true, cancellationToken);
         }
 
         /// <summary>
-        /// Unassigns a tugboat from a Job Order.
+        /// Unassigns a tugboat from a COS.
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.EditJobOrder)]
-        public async Task<IActionResult> UnassignTugboat(int jobOrderId, int tugboatId, CancellationToken cancellationToken)
+        [RequireAnyAccess("Access denied.", ProcedureEnum.EditCustomerOrderSlip)]
+        public async Task<IActionResult> UnassignTugboat(int customerOrderSlipId, int tugboatId, CancellationToken cancellationToken)
         {
-            return await HandleTugboatAssignmentAsync(jobOrderId, tugboatId, false, cancellationToken);
+            return await HandleTugboatAssignmentAsync(customerOrderSlipId, tugboatId, false, cancellationToken);
         }
 
         #endregion
 
-        private static JobOrder MapToEntity(JobOrderViewModel viewModel)
+        private static CustomerOrderSlip MapToEntity(CustomerOrderSlipViewModel viewModel)
         {
-            return new JobOrder
+            return new CustomerOrderSlip
             {
-                JobOrderId = viewModel.JobOrderId,
+                CustomerOrderSlipId = viewModel.CustomerOrderSlipId,
                 Date = viewModel.Date,
                 CustomerId = viewModel.CustomerId,
                 VesselId = viewModel.VesselId,
@@ -401,11 +408,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
             };
         }
 
-        private async Task<IActionResult> HandleTugboatAssignmentAsync(int jobOrderId, int tugboatId, bool isAssign, CancellationToken cancellationToken)
+        private async Task<IActionResult> HandleTugboatAssignmentAsync(int customerOrderSlipId, int tugboatId, bool isAssign, CancellationToken cancellationToken)
         {
             var result = isAssign
-                ? await jobOrderService.AssignTugboatAsync(jobOrderId, tugboatId, User.Identity?.Name ?? "Unknown", cancellationToken)
-                : await jobOrderService.UnassignTugboatAsync(jobOrderId, tugboatId, User.Identity?.Name ?? "Unknown", cancellationToken);
+                ? await customerOrderSlipService.AssignTugboatAsync(customerOrderSlipId, tugboatId, User.Identity?.Name ?? "Unknown", cancellationToken)
+                : await customerOrderSlipService.UnassignTugboatAsync(customerOrderSlipId, tugboatId, User.Identity?.Name ?? "Unknown", cancellationToken);
 
             if (result.IsSuccess)
             {

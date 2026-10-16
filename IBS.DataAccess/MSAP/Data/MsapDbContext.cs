@@ -41,7 +41,7 @@ namespace IBS.DataAccess.MSAP.Data
         public DbSet<Billing> MsapBillings { get; set; }
         public DbSet<Collection> MsapCollections { get; set; }
         public DbSet<DispatchTicket> MsapDispatchTickets { get; set; }
-        public DbSet<JobOrder> MsapJobOrders { get; set; }
+        public DbSet<CustomerOrderSlip> MsapCustomerOrderSlips { get; set; }
         public DbSet<VesselSchedule> MsapVesselSchedules { get; set; }
         public DbSet<VesselScheduleServiceEntry> MsapVesselScheduleServiceEntries { get; set; }
         public DbSet<TariffRate> MsapTariffRates { get; set; }
@@ -78,7 +78,7 @@ namespace IBS.DataAccess.MSAP.Data
         {
             base.OnModelCreating(builder);
             builder.HasDefaultSchema("msap");
-            builder.Entity<JobOrder>().ToTable("mmsi_job_orders");
+            builder.Entity<CustomerOrderSlip>().ToTable("mmsi_customer_order_slips");
             builder.Entity<DispatchTicket>().ToTable("mmsi_dispatch_tickets");
             builder.Entity<Billing>().ToTable("mmsi_billings");
             builder.Entity<Collection>().ToTable("mmsi_collections");
@@ -171,7 +171,7 @@ namespace IBS.DataAccess.MSAP.Data
                 b.HasOne(x => x.Port).WithMany().HasForeignKey(x => x.PortId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(x => x.Terminal).WithMany().HasForeignKey(x => x.TerminalId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(x => x.Principal).WithMany().HasForeignKey(x => x.PrincipalId).OnDelete(DeleteBehavior.Restrict);
-                b.HasOne(x => x.JobOrder).WithMany().HasForeignKey(x => x.JobOrderId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(x => x.CustomerOrderSlip).WithMany().HasForeignKey(x => x.CustomerOrderSlipId).OnDelete(DeleteBehavior.Restrict);
             });
 
             builder.Entity<Collection>(c =>
@@ -189,11 +189,11 @@ namespace IBS.DataAccess.MSAP.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            builder.Entity<JobOrder>(jo =>
+            builder.Entity<CustomerOrderSlip>(jo =>
             {
                 jo.HasIndex(x => x.CustomerId);
                 jo.HasIndex(x => x.Status);
-                jo.HasIndex(x => x.JobOrderNumber);
+                jo.HasIndex(x => x.CustomerOrderSlipNumber);
 
                 jo.HasOne(j => j.Customer).WithMany().HasForeignKey(j => j.CustomerId).OnDelete(DeleteBehavior.Restrict);
                 jo.HasOne(j => j.Vessel).WithMany().HasForeignKey(j => j.VesselId).OnDelete(DeleteBehavior.Restrict);
@@ -227,7 +227,7 @@ namespace IBS.DataAccess.MSAP.Data
                 vs.HasOne(x => x.Vessel).WithMany().HasForeignKey(x => x.VesselId).OnDelete(DeleteBehavior.Restrict);
                 vs.HasOne(x => x.Port).WithMany().HasForeignKey(x => x.PortId).OnDelete(DeleteBehavior.Restrict);
                 vs.HasOne(x => x.Terminal).WithMany().HasForeignKey(x => x.TerminalId).OnDelete(DeleteBehavior.Restrict);
-                vs.HasOne(x => x.JobOrder).WithMany().HasForeignKey(x => x.JobOrderId).OnDelete(DeleteBehavior.SetNull);
+                vs.HasOne(x => x.CustomerOrderSlip).WithMany().HasForeignKey(x => x.CustomerOrderSlipId).OnDelete(DeleteBehavior.SetNull);
             });
 
             builder.Entity<VesselScheduleServiceEntry>(entry =>
@@ -259,7 +259,7 @@ namespace IBS.DataAccess.MSAP.Data
                 });
                 dt.HasIndex(x => x.Status);
                 dt.HasIndex(x => x.CustomerId);
-                dt.HasIndex(x => x.JobOrderId);
+                dt.HasIndex(x => x.CustomerOrderSlipId);
                 dt.HasIndex(x => x.BillingId);
                 dt.HasIndex(x => x.VesselScheduleServiceEntryId);
 
@@ -270,7 +270,7 @@ namespace IBS.DataAccess.MSAP.Data
                 dt.HasOne(x => x.Port).WithMany().HasForeignKey(x => x.PortId).OnDelete(DeleteBehavior.Restrict);
                 dt.HasOne(x => x.Terminal).WithMany().HasForeignKey(x => x.TerminalId).OnDelete(DeleteBehavior.Restrict);
                 dt.HasOne(x => x.Service).WithMany().HasForeignKey(x => x.ServiceId).OnDelete(DeleteBehavior.Restrict);
-                dt.HasOne(x => x.JobOrder).WithMany(j => j.DispatchTickets).HasForeignKey(x => x.JobOrderId).OnDelete(DeleteBehavior.Restrict);
+                dt.HasOne(x => x.CustomerOrderSlip).WithMany(j => j.DispatchTickets).HasForeignKey(x => x.CustomerOrderSlipId).OnDelete(DeleteBehavior.Restrict);
                 dt.HasOne(x => x.Billing).WithMany().HasForeignKey(x => x.BillingId).OnDelete(DeleteBehavior.Restrict);
                 dt.HasOne(x => x.ExpectedServiceEntry)
                     .WithMany(e => e.DispatchTickets)

@@ -9,7 +9,7 @@ const customerHandler = create.slice(create.indexOf('            function handle
 for (const restoringSubmission of [true, false]) {
     let cleared = 0;
     let loaded;
-    const fields = new Map([['#JobOrderId', '9'], ['#CheckNumber', 'CHK-123'], ['#cashAmount', '25']]);
+    const fields = new Map([['#CustomerOrderSlipId', '9'], ['#CheckNumber', 'CHK-123'], ['#cashAmount', '25']]);
     const context = {
         restoringSubmission, customer: {value: 1, name: 'Customer'},
         $: selector => ({

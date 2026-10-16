@@ -31,7 +31,7 @@ namespace IBSWeb.MSAP
                 provider.GetRequiredService<IWebHostEnvironment>().IsDevelopment()
                     ? ActivatorUtilities.CreateInstance<LocalFileStorageService>(provider)
                     : ActivatorUtilities.CreateInstance<CloudStorageService>(provider));
-            services.AddScoped<JobOrderService>();
+            services.AddScoped<CustomerOrderSlipService>();
             services.AddScoped<DispatchTicketService>();
             services.AddScoped<BillingService>();
             services.AddScoped<CollectionService>();

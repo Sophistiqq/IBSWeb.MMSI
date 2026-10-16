@@ -191,7 +191,7 @@ else
     }
 
     DocClasses getDocClass(string docType) => docType switch {
-        "Job Order" => new DocClasses { Marker = "marker-jo", Badge = "badge-jo" },
+        "COS" => new DocClasses { Marker = "marker-jo", Badge = "badge-jo" },
         "Dispatch Ticket" => new DocClasses { Marker = "marker-dt", Badge = "badge-dt" },
         "Tariff" => new DocClasses { Marker = "marker-tariff", Badge = "badge-tariff" },
         "Billing" => new DocClasses { Marker = "marker-billing", Badge = "badge-billing" },
@@ -210,7 +210,7 @@ else
         if (activity.Contains("posted")) return "send";
 
         return item.DocumentType switch {
-            "Job Order" => "assignment",
+            "COS" => "assignment",
             "Dispatch Ticket" => "local_shipping",
             "Tariff" => "payments",
             "Billing" => "receipt_long",

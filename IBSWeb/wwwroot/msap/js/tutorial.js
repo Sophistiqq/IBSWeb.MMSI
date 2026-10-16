@@ -27,17 +27,17 @@
  *   @section Scripts {
  *       <script>
  *           window.IBS_TOUR_STEPS = [
- *               { step: 1, title: "Customer", text: "Select the customer for this job order." },
+ *               { step: 1, title: "Customer", text: "Select the customer for this COS." },
  *               { step: 2, title: "Order Date", text: "Defaults to today. Change if needed." },
  *               { step: 3, title: "Planned Start", text: "Optional start time.", required: false },
- *               { selector: "#confirmCreateBtn", title: "Submit", text: "Click to create job order." }
+ *               { selector: "#confirmCreateBtn", title: "Submit", text: "Click to create COS." }
  *           ];
  *       </script>
  *   }
  *
  * Step C: Add data-page-header attribute to Page Heading (Auto-injects (?) Help Icon):
  * Example:
- *   <h1 class="modern-headline-lg" data-page-header>Create Job Order</h1>
+ *   <h1 class="modern-headline-lg" data-page-header>Create COS</h1>
  *
  * ----------------------------------------------------------------------------
  * 2. STEP CONFIGURATION OPTIONS (window.IBS_TOUR_STEPS)

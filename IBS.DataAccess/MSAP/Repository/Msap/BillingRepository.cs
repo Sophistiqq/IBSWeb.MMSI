@@ -53,7 +53,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Include(b => b.Vessel)
                 .Include(b => b.Customer)
                 .Include(b => b.Principal)
-                .Include(b => b.JobOrder);
+                .Include(b => b.CustomerOrderSlip);
 
             if (filter != null)
             {
@@ -251,17 +251,17 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             return model;
         }
 
-        public async Task<(IEnumerable<Billing> Data, int RecordsFiltered, int TotalRecords)> GetPagedBillingsAsync(DataTablesParameters parameters, CancellationToken cancellationToken, int? jobOrderId = null)
+        public async Task<(IEnumerable<Billing> Data, int RecordsFiltered, int TotalRecords)> GetPagedBillingsAsync(DataTablesParameters parameters, CancellationToken cancellationToken, int? customerOrderSlipId = null)
         {
             IQueryable<Billing> query = dbSet
                 .Include(b => b.Customer)
                 .Include(b => b.Terminal).ThenInclude(b => b.Port)
                 .Include(b => b.Vessel);
 
-            if (jobOrderId.HasValue)
+            if (customerOrderSlipId.HasValue)
             {
-                query = query.Where(b => b.JobOrderId == jobOrderId.Value || _db.Set<DispatchTicket>()
-                    .Any(t => t.JobOrderId == jobOrderId.Value && t.BillingId == b.MsapBillingId));
+                query = query.Where(b => b.CustomerOrderSlipId == customerOrderSlipId.Value || _db.Set<DispatchTicket>()
+                    .Any(t => t.CustomerOrderSlipId == customerOrderSlipId.Value && t.BillingId == b.MsapBillingId));
             }
             int totalRecords = await query.CountAsync(cancellationToken);
 

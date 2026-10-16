@@ -33,7 +33,7 @@
 <div class="modern-layout">
     <form id="myForm" method="post">
         @Html.AntiForgeryToken()
-        <input asp-for="JobOrderId" type="hidden" />
+        <input asp-for="CustomerOrderSlipId" type="hidden" />
         <main class="modern-container">
             <!-- Header -->
             <div class="flex-stack">
@@ -54,7 +54,7 @@
                 </div>
             </div>
 
-            <div id="financialJobProgress" data-progress-url="@Url.Action("Progress", "JobOrder", new { area = "MSAP" })" data-action-stage="7"></div>
+            <div id="financialJobProgress" data-progress-url="@Url.Action("Progress", "CustomerOrderSlip", new { area = "MSAP" })" data-action-stage="7"></div>
 
             <div class="modern-grid">
                 <!-- Left Column: Logistics & Billings (col-8) -->
@@ -422,8 +422,8 @@
                 if (!restoringSubmission) {
                     clearForm();
                 }
-                if (String(customer.value) !== '@Model.CustomerId') $("#JobOrderId").val('');
-                JobProgress.load(document.getElementById("financialJobProgress"), { jobOrderId: $("#JobOrderId").val() });
+                if (String(customer.value) !== '@Model.CustomerId') $("#CustomerOrderSlipId").val('');
+                JobProgress.load(document.getElementById("financialJobProgress"), { customerOrderSlipId: $("#CustomerOrderSlipId").val() });
 
                 $("#CustomerDetailsSection").show().css('display', 'flex');
                 $("#CustomerAddress").text(customer.address || '-');
@@ -470,7 +470,7 @@
                 $.ajax({
                     url: '@Url.Action("GetUncollectedBillingsForTable", "Collection", new { area = "MSAP" })',
                     type: 'GET',
-                    data: { customerId: customerId, jobOrderId: $("#JobOrderId").val() },
+                    data: { customerId: customerId, customerOrderSlipId: $("#CustomerOrderSlipId").val() },
                     success: function (response) {
                         if (response.success) {
                             table.rows.add(response.data).draw();
@@ -481,7 +481,7 @@
                 });
             }
 
-            JobProgress.load(document.getElementById("financialJobProgress"), { jobOrderId: $("#JobOrderId").val() });
+            JobProgress.load(document.getElementById("financialJobProgress"), { customerOrderSlipId: $("#CustomerOrderSlipId").val() });
             let updateTimeout;
             function updateSelectedBillings() {
                 clearTimeout(updateTimeout);
@@ -505,7 +505,7 @@
                         $hiddenSelect.append(`<option value="${id}" selected>${id}</option>`);
                     });
 
-                    JobProgress.load(document.getElementById("financialJobProgress"), { jobOrderId: $("#JobOrderId").val(), billingIds: $hiddenSelect.val() || [] });
+                    JobProgress.load(document.getElementById("financialJobProgress"), { customerOrderSlipId: $("#CustomerOrderSlipId").val(), billingIds: $hiddenSelect.val() || [] });
                     $('#billingsTotal').text(`₱${formatNumber(grossTotal)}`);
                     $('#ewtTotalDisplay').text(`₱${formatNumber(ewtTotal)}`);
                     $('#netAmountDisplay').text(`₱${formatNumber(netTotal)}`);

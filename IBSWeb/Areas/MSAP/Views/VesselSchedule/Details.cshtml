@@ -1,9 +1,9 @@
 @model VesselSchedule
 @{
     var closed = Model.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
-    var pending = !closed && (!Model.JobOrderId.HasValue || Model.ApprovedRevision != Model.Revision || Model.Status == MsapConstants.VesselScheduleStatus.Tentative);
+    var pending = !closed && (!Model.CustomerOrderSlipId.HasValue || Model.ApprovedRevision != Model.Revision || Model.Status == MsapConstants.VesselScheduleStatus.Tentative);
     var canApprove = pending && ViewBag.CanConfirm == true;
-    var reapproval = Model.JobOrderId.HasValue;
+    var reapproval = Model.CustomerOrderSlipId.HasValue;
     ViewData["Title"] = pending ? "Review schedule" : "Schedule details";
     ViewData["IsFullWidth"] = true;
     ViewData["BookingProgressReview"] = pending;
@@ -162,9 +162,9 @@
                     }
                 </section>
             }
-            @if (Model.JobOrderId.HasValue)
+            @if (Model.CustomerOrderSlipId.HasValue)
             {
-                <a asp-controller="JobOrder" asp-action="Details" asp-route-id="@Model.JobOrderId" class="modern-btn-secondary wf-button">Open COS</a>
+                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" class="modern-btn-secondary wf-button">Open COS</a>
             }
             <section class="wf-panel wf-stack schedule-review-actions" aria-labelledby="bookingActionsTitle">
                 <h2 class="wf-section-title" id="bookingActionsTitle">Booking actions</h2>

@@ -16,9 +16,9 @@
     {
         area = "MSAP",
         id = Model.TargetId,
-        jobOrderId = Model.JobOrderId,
+        customerOrderSlipId = Model.CustomerOrderSlipId,
         status = Model.Stage == JobProgressCalculator.PostingStage ? MsapConstants.BillingStatus.ForPosting : null,
-        billingNumber = Model.Stage == JobProgressCalculator.PostingStage && !Model.JobOrderId.HasValue ? Model.Billings.FirstOrDefault()?.MsapBillingNumber : null
+        billingNumber = Model.Stage == JobProgressCalculator.PostingStage && !Model.CustomerOrderSlipId.HasValue ? Model.Billings.FirstOrDefault()?.MsapBillingNumber : null
     });
 }
 <link rel="stylesheet" href="~/msap/css/job-progress.css" asp-append-version="true" />
@@ -36,7 +36,7 @@
                 <span>@stages[index]</span>
                 @if (bypassed)
                 {
-                    <span class="visually-hidden">Skipped for direct Job Order</span>
+                    <span class="visually-hidden">Skipped for direct COS</span>
                 }
             </li>
         }
@@ -47,7 +47,7 @@
             <p>@Model.Guidance</p>
             @if (Model.Stage == JobProgressCalculator.TariffStage && !Model.Stopped)
             {
-                <p class="job-progress-handoff">Use the tariff action on each Dispatch Ticket in the Job Order.</p>
+                <p class="job-progress-handoff">Use the tariff action on each Dispatch Ticket in the COS.</p>
             }
             @if (!canAct && Model.Permission.HasValue && !Model.Stopped)
             {

@@ -113,6 +113,7 @@ var links = services.GetRequiredService<LinkGenerator>();
 Check(links.GetPathByAction("Index", "Home", new { area = "MSAP" })?.StartsWith("/MSAP", StringComparison.Ordinal) == true, "MSAP dashboard link is wrong.");
 Check(links.GetPathByAction("GetTimeline", "AuditTrail", new { area = "MSAP", id = 1 }) == "/MSAP/AuditTrail/GetTimeline/1", "MSAP audit link is wrong.");
 Check(links.GetPathByAction("Index", "Home", new { area = "User" }) != null, "Base dashboard route is missing.");
+Check(links.GetPathByAction("Details", "CustomerOrderSlip", new { area = "MSAP", id = 1 }) == "/MSAP/COS/Details/1", "COS links did not use the renamed route.");
 var engine = services.GetRequiredService<IRazorViewEngine>();
 await Checks.MSAP.ScheduleFormRenderingCheck.RunAsync(services);
 await Checks.MSAP.CalendarRenderingCheck.RunAsync(services, Environment.GetEnvironmentVariable("MSAP_CALENDAR_PREVIEW_DIRECTORY"));
@@ -281,7 +282,7 @@ foreach (bool allowed in new[] { false, true })
         {
             model.ActionController = "Billing";
             model.ActionName = "Index";
-            model.JobOrderId = 77;
+            model.CustomerOrderSlipId = 77;
         }
         if (stage is JobProgressCalculator.DepositStage or JobProgressCalculator.ClearingStage)
         {
@@ -315,7 +316,7 @@ foreach (bool allowed in new[] { false, true })
         }
         if (allowed && stage == JobProgressCalculator.PostingStage)
         {
-            Check(html.Contains("jobOrderId=77", StringComparison.Ordinal) && html.Contains("For%20Posting", StringComparison.Ordinal)
+            Check(html.Contains("customerOrderSlipId=77", StringComparison.Ordinal) && html.Contains("For%20Posting", StringComparison.Ordinal)
                 && !html.Contains("data-schedule-confirm=\"true\"", StringComparison.Ordinal), "Posting must open the scoped billing list and bypass confirmation.");
         }
         if (allowed && stage is JobProgressCalculator.DepositStage or JobProgressCalculator.ClearingStage)

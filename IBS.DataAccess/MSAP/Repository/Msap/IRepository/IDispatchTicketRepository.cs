@@ -14,7 +14,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
 
         Task<IEnumerable<DispatchTicket>> GetDispatchTicketsWithDetailsAsync(DateTime start, DateTime end, CancellationToken cancellationToken = default);
 
-        Task<bool> IsJobOrderEditableAsync(int? jobOrderId, CancellationToken cancellationToken = default);
+        Task<bool> IsCustomerOrderSlipEditableAsync(int? customerOrderSlipId, CancellationToken cancellationToken = default);
 
         Task<DispatchTicketViewModel> GetDispatchTicketSelectLists(DispatchTicketViewModel model, CancellationToken cancellationToken = default);
 

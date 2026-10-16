@@ -7,9 +7,11 @@ namespace IBS.Models.MSAP.ViewModels
 {
     public class DispatchTicketViewModel
     {
-        public int? JobOrderId { get; set; }
+        public int? CustomerOrderSlipId { get; set; }
 
         public int? DispatchTicketId { get; set; }
+
+        public int? VesselScheduleServiceEntryId { get; set; }
 
         public DateOnly Date { get; set; }
 
@@ -79,7 +81,7 @@ namespace IBS.Models.MSAP.ViewModels
 
         public List<SelectListItem>? Customers { get; set; }
 
-        public List<SelectListItem>? JobOrders { get; set; }
+        public List<SelectListItem>? CustomerOrderSlips { get; set; }
 
         #endregion ---Select Lists---
 
@@ -88,6 +90,7 @@ namespace IBS.Models.MSAP.ViewModels
             return new DispatchTicket
             {
                 DispatchTicketId = DispatchTicketId ?? 0,
+                VesselScheduleServiceEntryId = VesselScheduleServiceEntryId,
                 Date = Date,
                 COSNumber = COSNumber,
                 DispatchNumber = DispatchNumber,
@@ -104,7 +107,7 @@ namespace IBS.Models.MSAP.ViewModels
                 VesselId = VesselId,
                 PortId = PortId,
                 Remarks = Remarks,
-                JobOrderId = JobOrderId
+                CustomerOrderSlipId = CustomerOrderSlipId
             };
         }
 
@@ -133,7 +136,8 @@ namespace IBS.Models.MSAP.ViewModels
             VideoSignedUrl = entity.VideoSignedUrl;
             DispatchTicketId = entity.DispatchTicketId;
             Status = entity.Status;
-            JobOrderId = entity.JobOrderId;
+            VesselScheduleServiceEntryId = entity.VesselScheduleServiceEntryId;
+            CustomerOrderSlipId = entity.CustomerOrderSlipId;
         }
     }
 }

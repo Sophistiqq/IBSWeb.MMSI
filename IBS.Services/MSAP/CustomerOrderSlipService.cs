@@ -8,22 +8,22 @@ using Microsoft.Extensions.Logging;
 
 namespace IBS.Services.MSAP
 {
-    public class JobOrderService(IUnitOfWork unitOfWork, ILogger<JobOrderService> logger)
+    public class CustomerOrderSlipService(IUnitOfWork unitOfWork, ILogger<CustomerOrderSlipService> logger)
     {
-        public async Task<IEnumerable<JobOrder>> GetAllJobOrdersAsync(CancellationToken cancellationToken)
+        public async Task<IEnumerable<CustomerOrderSlip>> GetAllCustomerOrderSlipsAsync(CancellationToken cancellationToken)
         {
-            var jobOrders = await unitOfWork.JobOrder.GetAllJobOrdersWithDetailsAsync(cancellationToken);
-            return jobOrders;
+            var customerOrderSlips = await unitOfWork.CustomerOrderSlip.GetAllCustomerOrderSlipsWithDetailsAsync(cancellationToken);
+            return customerOrderSlips;
         }
 
-        public async Task<JobOrder?> GetJobOrderByIdAsync(int id, CancellationToken cancellationToken)
+        public async Task<CustomerOrderSlip?> GetCustomerOrderSlipByIdAsync(int id, CancellationToken cancellationToken)
         {
-            return await unitOfWork.JobOrder.GetJobOrderWithDetailsAsync(id, cancellationToken);
+            return await unitOfWork.CustomerOrderSlip.GetCustomerOrderSlipWithDetailsAsync(id, cancellationToken);
         }
 
-        public async Task<JobOrderViewModel> PopulateJobOrderViewModelAsync(JobOrderViewModel? viewModel, CancellationToken cancellationToken)
+        public async Task<CustomerOrderSlipViewModel> PopulateCustomerOrderSlipViewModelAsync(CustomerOrderSlipViewModel? viewModel, CancellationToken cancellationToken)
         {
-            viewModel ??= new JobOrderViewModel { Date = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()) };
+            viewModel ??= new CustomerOrderSlipViewModel { Date = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()) };
 
             viewModel.Customers = await unitOfWork.GetCustomerListAsyncById(cancellationToken);
 
@@ -61,80 +61,80 @@ namespace IBS.Services.MSAP
             return viewModel;
         }
 
-        public virtual async Task<ServiceResult<int>> CreateJobOrderAsync(JobOrder jobOrder, string username, CancellationToken cancellationToken)
+        public virtual async Task<ServiceResult<int>> CreateCustomerOrderSlipAsync(CustomerOrderSlip customerOrderSlip, string username, CancellationToken cancellationToken)
         {
             try
             {
-                var guard = await GuardClosedPeriodAsync(jobOrder.Date, cancellationToken);
+                var guard = await GuardClosedPeriodAsync(customerOrderSlip.Date, cancellationToken);
                 if (guard != null)
                 {
                     return ServiceResult<int>.Failure(guard.Message!);
                 }
 
-                var timeError = ValidateTimeRange(jobOrder.PlannedStartTime, jobOrder.PlannedEndTime);
+                var timeError = ValidateTimeRange(customerOrderSlip.PlannedStartTime, customerOrderSlip.PlannedEndTime);
                 if (timeError != null)
                 {
                     return ServiceResult<int>.Failure(timeError);
                 }
 
-                jobOrder.Status = MsapConstants.JobOrderStatus.Open;
-                jobOrder.CreatedBy = username;
-                jobOrder.CreatedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                customerOrderSlip.Status = MsapConstants.CustomerOrderSlipStatus.Open;
+                customerOrderSlip.CreatedBy = username;
+                customerOrderSlip.CreatedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    jobOrder.JobOrderNumber = await unitOfWork.JobOrder.GenerateJobOrderNumber(cancellationToken);
-                    await unitOfWork.JobOrder.AddAsync(jobOrder, cancellationToken);
+                    customerOrderSlip.CustomerOrderSlipNumber = await unitOfWork.CustomerOrderSlip.GenerateCustomerOrderSlipNumber(cancellationToken);
+                    await unitOfWork.CustomerOrderSlip.AddAsync(customerOrderSlip, cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
-                    await RecordAuditAsync($"Created Job Order #{jobOrder.JobOrderNumber}", username, cancellationToken, jobOrder.JobOrderId, jobOrder.JobOrderNumber);
+                    await RecordAuditAsync($"Created COS #{customerOrderSlip.CustomerOrderSlipNumber}", username, cancellationToken, customerOrderSlip.CustomerOrderSlipId, customerOrderSlip.CustomerOrderSlipNumber);
                     await unitOfWork.SaveAsync(cancellationToken);
                 }, cancellationToken);
 
-                return ServiceResult<int>.Success(jobOrder.JobOrderId, $"Job Order #{jobOrder.JobOrderNumber} created successfully.");
+                return ServiceResult<int>.Success(customerOrderSlip.CustomerOrderSlipId, $"COS #{customerOrderSlip.CustomerOrderSlipNumber} created successfully.");
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error creating Job Order");
-                return ServiceResult<int>.Failure($"Failed to create Job Order: {ExceptionHelper.GetErrorMessage(ex)}");
+                logger.LogError(ex, "Error creating COS");
+                return ServiceResult<int>.Failure($"Failed to create COS: {ExceptionHelper.GetErrorMessage(ex)}");
             }
         }
 
-        public async Task<string?> GetEditErrorAsync(JobOrder job, CancellationToken ct)
+        public async Task<string?> GetEditErrorAsync(CustomerOrderSlip job, CancellationToken ct)
         {
-            if (job.Status != MsapConstants.JobOrderStatus.Open)
+            if (job.Status != MsapConstants.CustomerOrderSlipStatus.Open)
             {
-                return "Only an Open Job Order can be edited.";
+                return "Only an Open COS can be edited.";
             }
-            if (await unitOfWork.VesselSchedule.GetAsync(s => s.JobOrderId == job.JobOrderId, ct) != null)
+            if (await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == job.CustomerOrderSlipId, ct) != null)
             {
-                return "Edit the vessel schedule instead. Scheduled Job Orders cannot be revised directly.";
+                return "Edit the vessel schedule instead. Scheduled COS records cannot be revised directly.";
             }
-            if (await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == job.JobOrderId, ct) != null)
+            if (await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == job.CustomerOrderSlipId, ct) != null)
             {
-                return "This Job Order already has Dispatch Tickets and cannot be edited.";
+                return "This COS already has Dispatch Tickets and cannot be edited.";
             }
-            if (await unitOfWork.Billing.GetAsync(b => b.JobOrderId == job.JobOrderId, ct) != null)
+            if (await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == job.CustomerOrderSlipId, ct) != null)
             {
-                return "This Job Order already has billing and cannot be edited.";
+                return "This COS already has billing and cannot be edited.";
             }
             var period = await GuardClosedPeriodAsync(job.Date, ct);
             return period?.Message;
         }
 
-        public virtual async Task<ServiceResult> UpdateJobOrderAsync(JobOrder model, string username, CancellationToken cancellationToken)
+        public virtual async Task<ServiceResult> UpdateCustomerOrderSlipAsync(CustomerOrderSlip model, string username, CancellationToken cancellationToken)
         {
             try
             {
-                var result = ServiceResult.Failure("Failed to update Job Order.");
+                var result = ServiceResult.Failure("Failed to update COS.");
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    var jobOrder = await unitOfWork.JobOrder.GetForUpdateAsync(model.JobOrderId, cancellationToken);
-                    if (jobOrder == null)
+                    var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(model.CustomerOrderSlipId, cancellationToken);
+                    if (customerOrderSlip == null)
                     {
-                        result = ServiceResult.Failure("Job Order not found.", ServiceResultStatus.NotFound);
+                        result = ServiceResult.Failure("COS not found.", ServiceResultStatus.NotFound);
                         return;
                     }
-                    string? error = await GetEditErrorAsync(jobOrder, cancellationToken);
+                    string? error = await GetEditErrorAsync(customerOrderSlip, cancellationToken);
                     if (error != null)
                     {
                         result = ServiceResult.Failure(error);
@@ -147,41 +147,41 @@ namespace IBS.Services.MSAP
                         return;
                     }
 
-                    var old = (jobOrder.CustomerId, jobOrder.VesselId, jobOrder.PortId, jobOrder.TerminalId);
+                    var old = (customerOrderSlip.CustomerId, customerOrderSlip.VesselId, customerOrderSlip.PortId, customerOrderSlip.TerminalId);
 
-                    jobOrder.Date = model.Date;
-                    jobOrder.CustomerId = model.CustomerId;
-                    jobOrder.VesselId = model.VesselId;
-                    jobOrder.PortId = model.PortId;
-                    jobOrder.TerminalId = model.TerminalId;
-                    jobOrder.COSNumber = model.COSNumber;
-                    jobOrder.VoyageNumber = model.VoyageNumber;
-                    jobOrder.PlannedStartTime = model.PlannedStartTime;
-                    jobOrder.PlannedEndTime = model.PlannedEndTime;
-                    jobOrder.PreferredTugboatId = model.PreferredTugboatId;
-                    jobOrder.RequiredTugCount = model.RequiredTugCount;
-                    jobOrder.Remarks = model.Remarks;
-                    jobOrder.EditedBy = username;
-                    jobOrder.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                    customerOrderSlip.Date = model.Date;
+                    customerOrderSlip.CustomerId = model.CustomerId;
+                    customerOrderSlip.VesselId = model.VesselId;
+                    customerOrderSlip.PortId = model.PortId;
+                    customerOrderSlip.TerminalId = model.TerminalId;
+                    customerOrderSlip.COSNumber = model.COSNumber;
+                    customerOrderSlip.VoyageNumber = model.VoyageNumber;
+                    customerOrderSlip.PlannedStartTime = model.PlannedStartTime;
+                    customerOrderSlip.PlannedEndTime = model.PlannedEndTime;
+                    customerOrderSlip.PreferredTugboatId = model.PreferredTugboatId;
+                    customerOrderSlip.RequiredTugCount = model.RequiredTugCount;
+                    customerOrderSlip.Remarks = model.Remarks;
+                    customerOrderSlip.EditedBy = username;
+                    customerOrderSlip.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
                     // Cascade updates to related records
-                    await SyncRelatedRecordsAsync(jobOrder, old, cancellationToken);
+                    await SyncRelatedRecordsAsync(customerOrderSlip, old, cancellationToken);
 
-                    await RecordAuditAsync($"Edited Job Order #{jobOrder.JobOrderNumber}", username, cancellationToken, jobOrder.JobOrderId, jobOrder.JobOrderNumber);
+                    await RecordAuditAsync($"Edited COS #{customerOrderSlip.CustomerOrderSlipNumber}", username, cancellationToken, customerOrderSlip.CustomerOrderSlipId, customerOrderSlip.CustomerOrderSlipNumber);
                     await unitOfWork.SaveAsync(cancellationToken);
 
-                    result = ServiceResult.Success($"Job Order #{jobOrder.JobOrderNumber} updated successfully.");
+                    result = ServiceResult.Success($"COS #{customerOrderSlip.CustomerOrderSlipNumber} updated successfully.");
                 }, cancellationToken);
                 return result;
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error updating Job Order {JobOrderId}", model.JobOrderId);
-                return ServiceResult.Failure($"Failed to update Job Order: {ExceptionHelper.GetErrorMessage(ex)}");
+                logger.LogError(ex, "Error updating COS {CustomerOrderSlipId}", model.CustomerOrderSlipId);
+                return ServiceResult.Failure($"Failed to update COS: {ExceptionHelper.GetErrorMessage(ex)}");
             }
         }
 
-        public Task<ServiceResult> CancelJobOrderAsync(int id, string username, CancellationToken ct = default)
+        public Task<ServiceResult> CancelCustomerOrderSlipAsync(int id, string username, CancellationToken ct = default)
         {
             return ChangeBookingStatusAsync(id, MsapConstants.VesselScheduleStatus.Cancelled, username, ct);
         }
@@ -206,25 +206,25 @@ namespace IBS.Services.MSAP
             {
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    // Booking actions always lock the schedule before its Job Order.
-                    var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.JobOrderId == id, ct);
+                    // Booking actions always lock the schedule before its COS.
+                    var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == id, ct);
                     if (schedule != null)
                     {
                         schedule = await unitOfWork.VesselSchedule.GetForUpdateAsync(schedule.VesselScheduleId, ct);
                     }
-                    var job = await unitOfWork.JobOrder.GetForUpdateAsync(id, ct);
+                    var job = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(id, ct);
                     if (job == null)
                     {
-                        result = ServiceResult.Failure("Job Order not found.", ServiceResultStatus.NotFound);
+                        result = ServiceResult.Failure("COS not found.", ServiceResultStatus.NotFound);
                         return;
                     }
-                    if (job.Status == MsapConstants.JobOrderStatus.Cancelled ||
+                    if (job.Status == MsapConstants.CustomerOrderSlipStatus.Cancelled ||
                         schedule?.Status is MsapConstants.VesselScheduleStatus.Cancelled or MsapConstants.VesselScheduleStatus.Completed)
                     {
                         result = ServiceResult.Failure("This booking is already completed or cancelled.", ServiceResultStatus.ValidationError);
                         return;
                     }
-                    var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.JobOrderId == id, ct)).ToList();
+                    var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == id, ct)).ToList();
                     if (status == MsapConstants.VesselScheduleStatus.Cancelled)
                     {
                         var guard = await GuardClosedPeriodAsync(job.Date, ct);
@@ -233,20 +233,21 @@ namespace IBS.Services.MSAP
                             result = guard;
                             return;
                         }
-                        if (job.Status != MsapConstants.JobOrderStatus.Open || tickets.Any(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted || t.BillingId != null)
-                            || await unitOfWork.Billing.GetAsync(b => b.JobOrderId == id, ct) != null)
+                        if (job.Status != MsapConstants.CustomerOrderSlipStatus.Open || tickets.Any(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted || t.BillingId != null)
+                            || await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == id, ct) != null)
                         {
-                            result = ServiceResult.Failure("Cannot cancel this Job Order. Resolve its active Dispatch Tickets and billing first. Posted billing must follow the reversal workflow.", ServiceResultStatus.ValidationError);
+                            result = ServiceResult.Failure("Cannot cancel this COS. Resolve its active Dispatch Tickets and billing first. Posted billing must follow the reversal workflow.", ServiceResultStatus.ValidationError);
                             return;
                         }
-                        job.Status = MsapConstants.JobOrderStatus.Cancelled;
+                        job.Status = MsapConstants.CustomerOrderSlipStatus.Cancelled;
                         job.EditedBy = username;
                         job.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                        await RecordAuditAsync($"Cancelled Job Order #{job.JobOrderNumber}; linked booking cancelled and records retained.", username, ct, id, job.JobOrderNumber);
+                        await RecordAuditAsync($"Cancelled COS #{job.CustomerOrderSlipNumber}; linked booking cancelled and records retained.", username, ct, id, job.CustomerOrderSlipNumber);
                     }
                     else
                     {
-                        if (schedule == null || !CanCompleteService(tickets))
+                        if (schedule == null || !CanCompleteService(tickets)
+                            || (await JobProgressCalculator.LoadAsync(unitOfWork, job, schedule, ct)).Stage < JobProgressCalculator.TariffStage)
                         {
                             result = ServiceResult.Failure("Record valid actual start and end times for all active Dispatch Tickets before completing the vessel booking.", ServiceResultStatus.ValidationError);
                             return;
@@ -257,45 +258,45 @@ namespace IBS.Services.MSAP
                         schedule.Status = status;
                         schedule.EditedBy = username;
                         schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Vessel schedule #{schedule.VesselScheduleId} marked {status} through Job Order #{job.JobOrderNumber}.", "Vessel Schedule", schedule.VesselScheduleId), ct);
+                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Vessel schedule #{schedule.VesselScheduleId} marked {status} through COS #{job.CustomerOrderSlipNumber}.", "Vessel Schedule", schedule.VesselScheduleId), ct);
                     }
                     await unitOfWork.SaveAsync(ct);
                     result = ServiceResult.Success(status == MsapConstants.VesselScheduleStatus.Cancelled
-                        ? "Job Order and linked vessel booking cancelled. Records were retained."
-                        : "Service completed. No more Dispatch Tickets can be added. Tariff, approval, billing, posting and collection can continue through the Job Order.");
+                        ? "COS and linked vessel booking cancelled. Records were retained."
+                        : "Service completed. No more Dispatch Tickets can be added. Tariff, approval, billing, posting and collection can continue through the COS.");
                 }, ct);
                 return result;
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to change booking status for Job Order {Id}", id);
+                logger.LogError(ex, "Failed to change booking status for COS {Id}", id);
                 return ServiceResult.Failure("Failed to update the booking. Please try again.");
             }
         }
 
-        private async Task SyncRelatedRecordsAsync(JobOrder jobOrder, (int CustomerId, int VesselId, int PortId, int TerminalId) old, CancellationToken cancellationToken)
+        private async Task SyncRelatedRecordsAsync(CustomerOrderSlip customerOrderSlip, (int CustomerId, int VesselId, int PortId, int TerminalId) old, CancellationToken cancellationToken)
         {
-            var criticalChanged = jobOrder.CustomerId != old.CustomerId ||
-                                  jobOrder.VesselId != old.VesselId ||
-                                  jobOrder.PortId != old.PortId ||
-                                  jobOrder.TerminalId != old.TerminalId;
+            var criticalChanged = customerOrderSlip.CustomerId != old.CustomerId ||
+                                  customerOrderSlip.VesselId != old.VesselId ||
+                                  customerOrderSlip.PortId != old.PortId ||
+                                  customerOrderSlip.TerminalId != old.TerminalId;
 
             // 1. Update unbilled dispatch tickets
             var tickets = await unitOfWork.DispatchTicket.GetAllAsync(
-                dt => dt.JobOrderId == jobOrder.JobOrderId &&
+                dt => dt.CustomerOrderSlipId == customerOrderSlip.CustomerOrderSlipId &&
                       dt.Status != MsapConstants.DispatchTicketStatus.Billed &&
                       dt.Status != MsapConstants.DispatchTicketStatus.Deleted,
                 cancellationToken);
 
             foreach (var ticket in tickets)
             {
-                ticket.CustomerId = jobOrder.CustomerId;
-                ticket.VesselId = jobOrder.VesselId;
-                ticket.VoyageNumber = jobOrder.VoyageNumber;
-                ticket.COSNumber = jobOrder.COSNumber;
-                ticket.PortId = jobOrder.PortId;
-                ticket.TerminalId = jobOrder.TerminalId;
-                ticket.Date = jobOrder.Date;
+                ticket.CustomerId = customerOrderSlip.CustomerId;
+                ticket.VesselId = customerOrderSlip.VesselId;
+                ticket.VoyageNumber = customerOrderSlip.VoyageNumber;
+                ticket.COSNumber = customerOrderSlip.COSNumber;
+                ticket.PortId = customerOrderSlip.PortId;
+                ticket.TerminalId = customerOrderSlip.TerminalId;
+                ticket.Date = customerOrderSlip.Date;
 
                 if (criticalChanged && ticket.Status is not MsapConstants.DispatchTicketStatus.ForTariff)
                 {
@@ -321,29 +322,29 @@ namespace IBS.Services.MSAP
 
             // 2. Update unposted/uncollected billings
             var billings = await unitOfWork.Billing.GetAllAsync(
-                b => b.JobOrderId == jobOrder.JobOrderId &&
+                b => b.CustomerOrderSlipId == customerOrderSlip.CustomerOrderSlipId &&
                      (b.Status == MsapConstants.BillingStatus.ForPosting || b.Status == MsapConstants.BillingStatus.ForCollection),
                 cancellationToken);
 
             foreach (var billing in billings)
             {
-                billing.CustomerId = jobOrder.CustomerId;
-                billing.VesselId = jobOrder.VesselId;
-                billing.VoyageNumber = jobOrder.VoyageNumber;
-                billing.COSNumber = jobOrder.COSNumber;
-                billing.PortId = jobOrder.PortId;
-                billing.TerminalId = jobOrder.TerminalId;
-                billing.Date = jobOrder.Date;
+                billing.CustomerId = customerOrderSlip.CustomerId;
+                billing.VesselId = customerOrderSlip.VesselId;
+                billing.VoyageNumber = customerOrderSlip.VoyageNumber;
+                billing.COSNumber = customerOrderSlip.COSNumber;
+                billing.PortId = customerOrderSlip.PortId;
+                billing.TerminalId = customerOrderSlip.TerminalId;
+                billing.Date = customerOrderSlip.Date;
             }
         }
 
-        public virtual async Task TryAutoCloseAsync(int jobOrderId, string username, CancellationToken cancellationToken)
+        public virtual async Task TryAutoCloseAsync(int customerOrderSlipId, string username, CancellationToken cancellationToken)
         {
             try
             {
                 var closedStatuses = new[] { MsapConstants.DispatchTicketStatus.Billed, MsapConstants.DispatchTicketStatus.Deleted };
                 var anyUnbilled = await unitOfWork.DispatchTicket.GetAsync(
-                    dt => dt.JobOrderId == jobOrderId && !closedStatuses.Contains(dt.Status),
+                    dt => dt.CustomerOrderSlipId == customerOrderSlipId && !closedStatuses.Contains(dt.Status),
                     cancellationToken) != null;
 
                 if (anyUnbilled)
@@ -351,52 +352,56 @@ namespace IBS.Services.MSAP
                     return;
                 }
 
-                var jobOrder = await unitOfWork.JobOrder.GetAsync(jo => jo.JobOrderId == jobOrderId, cancellationToken);
-                if (jobOrder == null || jobOrder.Status != MsapConstants.JobOrderStatus.Open)
+                var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetAsync(jo => jo.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
+                if (customerOrderSlip == null || customerOrderSlip.Status != MsapConstants.CustomerOrderSlipStatus.Open)
                 {
                     return;
                 }
 
-                jobOrder.Status = MsapConstants.JobOrderStatus.Closed;
-                await RecordAuditAsync($"Auto-closed Job Order #{jobOrder.JobOrderNumber}", username, cancellationToken, jobOrder.JobOrderId, jobOrder.JobOrderNumber);
+                customerOrderSlip.Status = MsapConstants.CustomerOrderSlipStatus.Closed;
+                await RecordAuditAsync($"Auto-closed COS #{customerOrderSlip.CustomerOrderSlipNumber}", username, cancellationToken, customerOrderSlip.CustomerOrderSlipId, customerOrderSlip.CustomerOrderSlipNumber);
                 await unitOfWork.SaveAsync(cancellationToken);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Auto-close failed for Job Order {JobOrderId}", jobOrderId);
+                logger.LogError(ex, "Auto-close failed for COS {CustomerOrderSlipId}", customerOrderSlipId);
                 throw;
             }
         }
 
-        public async Task<(IEnumerable<JobOrder> Data, int RecordsFiltered, int TotalRecords)> GetPagedJobOrdersAsync(DataTablesParameters parameters, CancellationToken cancellationToken)
+        public async Task<(IEnumerable<CustomerOrderSlip> Data, int RecordsFiltered, int TotalRecords)> GetPagedCustomerOrderSlipsAsync(DataTablesParameters parameters, CancellationToken cancellationToken)
         {
-            return await unitOfWork.JobOrder.GetPagedJobOrdersAsync(parameters, cancellationToken);
+            return await unitOfWork.CustomerOrderSlip.GetPagedCustomerOrderSlipsAsync(parameters, cancellationToken);
         }
 
         private async Task RecordAuditAsync(string activity, string username, CancellationToken cancellationToken, int? recordId = null, string? referenceNumber = null)
         {
-            var audit = new AuditTrail(username, activity, "Job Order", recordId, referenceNumber);
+            var audit = new AuditTrail(username, activity, "COS", recordId, referenceNumber);
             await unitOfWork.AuditTrail.AddAsync(audit, cancellationToken);
         }
 
-        public async Task<ServiceResult> AssignTugboatAsync(int jobOrderId, int tugboatId, string username, CancellationToken cancellationToken)
+        public async Task<ServiceResult> AssignTugboatAsync(int customerOrderSlipId, int tugboatId, string username, CancellationToken cancellationToken)
         {
             try
             {
-                var jobOrder = await unitOfWork.JobOrder.GetJobOrderWithDetailsAsync(jobOrderId, cancellationToken);
-                if (jobOrder == null)
+                var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetCustomerOrderSlipWithDetailsAsync(customerOrderSlipId, cancellationToken);
+                if (customerOrderSlip == null)
                 {
-                    return ServiceResult.Failure("Job Order not found.", ServiceResultStatus.NotFound);
+                    return ServiceResult.Failure("COS not found.", ServiceResultStatus.NotFound);
                 }
 
-                if (jobOrder.Status != MsapConstants.JobOrderStatus.Open ||
-                    await unitOfWork.VesselSchedule.GetAsync(s => s.JobOrderId == jobOrderId &&
+                if (await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId && s.ServiceEntries.Count > 0, cancellationToken) != null)
+                {
+                    return ServiceResult.Failure("Revise tugboats and services through the vessel schedule before actual ticket entry.");
+                }
+                if (customerOrderSlip.Status != MsapConstants.CustomerOrderSlipStatus.Open ||
+                    await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId &&
                         (s.Status == MsapConstants.VesselScheduleStatus.Completed || s.Status == MsapConstants.VesselScheduleStatus.Cancelled), cancellationToken) != null)
                 {
                     return ServiceResult.Failure("Cannot change tug assignments for a closed, cancelled or operationally completed booking.");
                 }
 
-                var guard = await GuardClosedPeriodAsync(jobOrder.Date, cancellationToken);
+                var guard = await GuardClosedPeriodAsync(customerOrderSlip.Date, cancellationToken);
                 if (guard != null)
                 {
                     return guard;
@@ -409,24 +414,24 @@ namespace IBS.Services.MSAP
                 }
 
                 // Check if already assigned
-                bool alreadyAssigned = jobOrder.PreferredTugboatId == tugboatId || jobOrder.DispatchTickets.Any(dt => dt.TugBoatId == tugboatId);
+                bool alreadyAssigned = customerOrderSlip.PreferredTugboatId == tugboatId || customerOrderSlip.DispatchTickets.Any(dt => dt.TugBoatId == tugboatId);
                 if (alreadyAssigned)
                 {
-                    return ServiceResult.Failure("Tugboat is already assigned to this Job Order.");
+                    return ServiceResult.Failure("Tugboat is already assigned to this COS.");
                 }
 
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    jobOrder = await unitOfWork.JobOrder.GetForUpdateAsync(jobOrderId, cancellationToken);
-                    var booking = await unitOfWork.VesselSchedule.GetAsync(s => s.JobOrderId == jobOrderId, cancellationToken);
-                    if (jobOrder?.Status != MsapConstants.JobOrderStatus.Open ||
+                    customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(customerOrderSlipId, cancellationToken);
+                    var booking = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
+                    if (customerOrderSlip?.Status != MsapConstants.CustomerOrderSlipStatus.Open ||
                         booking?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
                     {
                         throw new InvalidOperationException("Cannot assign tugs to a closed, cancelled or operationally completed booking.");
                     }
-                    if (jobOrder.PreferredTugboatId == null)
+                    if (customerOrderSlip.PreferredTugboatId == null)
                     {
-                        jobOrder.PreferredTugboatId = tugboatId;
+                        customerOrderSlip.PreferredTugboatId = tugboatId;
                     }
                     else
                     {
@@ -441,15 +446,15 @@ namespace IBS.Services.MSAP
 
                         var ticket = new DispatchTicket
                         {
-                            JobOrderId = jobOrder.JobOrderId,
+                            CustomerOrderSlipId = customerOrderSlip.CustomerOrderSlipId,
                             TugBoatId = tugboatId,
-                            CustomerId = jobOrder.CustomerId,
-                            VesselId = jobOrder.VesselId,
-                            PortId = jobOrder.PortId,
-                            TerminalId = jobOrder.TerminalId,
+                            CustomerId = customerOrderSlip.CustomerId,
+                            VesselId = customerOrderSlip.VesselId,
+                            PortId = customerOrderSlip.PortId,
+                            TerminalId = customerOrderSlip.TerminalId,
                             ServiceId = serviceId,
                             Date = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()),
-                            DispatchNumber = $"P{jobOrder.JobOrderId:X}T{tugboatId:X}",
+                            DispatchNumber = $"P{customerOrderSlip.CustomerOrderSlipId:X}T{tugboatId:X}",
                             Status = MsapConstants.DispatchTicketStatus.ForTariff,
                             CreatedBy = username,
                             CreatedDate = DateTimeHelper.GetCurrentPhilippineTime()
@@ -458,7 +463,7 @@ namespace IBS.Services.MSAP
                         await unitOfWork.DispatchTicket.AddAsync(ticket, cancellationToken);
                     }
 
-                    await RecordAuditAsync($"Assigned tugboat {tugboat.TugboatName} to Job Order #{jobOrder.JobOrderNumber}", username, cancellationToken, jobOrder.JobOrderId, jobOrder.JobOrderNumber);
+                    await RecordAuditAsync($"Assigned tugboat {tugboat.TugboatName} to COS #{customerOrderSlip.CustomerOrderSlipNumber}", username, cancellationToken, customerOrderSlip.CustomerOrderSlipId, customerOrderSlip.CustomerOrderSlipNumber);
                     await unitOfWork.SaveAsync(cancellationToken);
                 }, cancellationToken);
 
@@ -471,24 +476,28 @@ namespace IBS.Services.MSAP
             }
         }
 
-        public async Task<ServiceResult> UnassignTugboatAsync(int jobOrderId, int tugboatId, string username, CancellationToken cancellationToken)
+        public async Task<ServiceResult> UnassignTugboatAsync(int customerOrderSlipId, int tugboatId, string username, CancellationToken cancellationToken)
         {
             try
             {
-                var jobOrder = await unitOfWork.JobOrder.GetJobOrderWithDetailsAsync(jobOrderId, cancellationToken);
-                if (jobOrder == null)
+                var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetCustomerOrderSlipWithDetailsAsync(customerOrderSlipId, cancellationToken);
+                if (customerOrderSlip == null)
                 {
-                    return ServiceResult.Failure("Job Order not found.", ServiceResultStatus.NotFound);
+                    return ServiceResult.Failure("COS not found.", ServiceResultStatus.NotFound);
                 }
 
-                if (jobOrder.Status != MsapConstants.JobOrderStatus.Open ||
-                    await unitOfWork.VesselSchedule.GetAsync(s => s.JobOrderId == jobOrderId &&
+                if (await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId && s.ServiceEntries.Count > 0, cancellationToken) != null)
+                {
+                    return ServiceResult.Failure("Revise tugboats and services through the vessel schedule before actual ticket entry.");
+                }
+                if (customerOrderSlip.Status != MsapConstants.CustomerOrderSlipStatus.Open ||
+                    await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId &&
                         (s.Status == MsapConstants.VesselScheduleStatus.Completed || s.Status == MsapConstants.VesselScheduleStatus.Cancelled), cancellationToken) != null)
                 {
                     return ServiceResult.Failure("Cannot change tug assignments for a closed, cancelled or operationally completed booking.");
                 }
 
-                var guard = await GuardClosedPeriodAsync(jobOrder.Date, cancellationToken);
+                var guard = await GuardClosedPeriodAsync(customerOrderSlip.Date, cancellationToken);
                 if (guard != null)
                 {
                     return guard;
@@ -499,19 +508,19 @@ namespace IBS.Services.MSAP
 
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    var lockedJob = await unitOfWork.JobOrder.GetForUpdateAsync(jobOrderId, cancellationToken);
-                    var booking = await unitOfWork.VesselSchedule.GetAsync(s => s.JobOrderId == jobOrderId, cancellationToken);
-                    if (lockedJob?.Status != MsapConstants.JobOrderStatus.Open ||
+                    var lockedJob = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(customerOrderSlipId, cancellationToken);
+                    var booking = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
+                    if (lockedJob?.Status != MsapConstants.CustomerOrderSlipStatus.Open ||
                         booking?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
                     {
                         throw new InvalidOperationException("Cannot unassign tugs from a closed, cancelled or operationally completed booking.");
                     }
-                    if (jobOrder.PreferredTugboatId == tugboatId)
+                    if (customerOrderSlip.PreferredTugboatId == tugboatId)
                     {
-                        jobOrder.PreferredTugboatId = null;
+                        customerOrderSlip.PreferredTugboatId = null;
                     }
 
-                    var ticketToRemove = jobOrder.DispatchTickets.FirstOrDefault(dt => dt.TugBoatId == tugboatId);
+                    var ticketToRemove = customerOrderSlip.DispatchTickets.FirstOrDefault(dt => dt.TugBoatId == tugboatId);
                     if (ticketToRemove != null)
                     {
                         if (ticketToRemove.Status != MsapConstants.DispatchTicketStatus.ForTariff)
@@ -522,7 +531,7 @@ namespace IBS.Services.MSAP
                         await unitOfWork.DispatchTicket.RemoveAsync(ticketToRemove, cancellationToken);
                     }
 
-                    await RecordAuditAsync($"Unassigned tugboat {tugboatName ?? "Unknown"} from Job Order #{jobOrder.JobOrderNumber}", username, cancellationToken, jobOrder.JobOrderId, jobOrder.JobOrderNumber);
+                    await RecordAuditAsync($"Unassigned tugboat {tugboatName ?? "Unknown"} from COS #{customerOrderSlip.CustomerOrderSlipNumber}", username, cancellationToken, customerOrderSlip.CustomerOrderSlipId, customerOrderSlip.CustomerOrderSlipNumber);
                     await unitOfWork.SaveAsync(cancellationToken);
                 }, cancellationToken);
 
@@ -535,15 +544,15 @@ namespace IBS.Services.MSAP
             }
         }
 
-        public async Task<List<SelectListItem>> GetJobOrderSelectListAsync(CancellationToken cancellationToken)
+        public async Task<List<SelectListItem>> GetCustomerOrderSlipSelectListAsync(CancellationToken cancellationToken)
         {
-            var jobOrders = await unitOfWork.JobOrder.GetAllJobOrdersWithDetailsAsync(cancellationToken);
-            return jobOrders
+            var customerOrderSlips = await unitOfWork.CustomerOrderSlip.GetAllCustomerOrderSlipsWithDetailsAsync(cancellationToken);
+            return customerOrderSlips
                 .Take(100)
                 .Select(j => new SelectListItem
                 {
-                    Value = j.JobOrderId.ToString(),
-                    Text = $"{j.JobOrderNumber} - {j.Vessel.VesselName}"
+                    Value = j.CustomerOrderSlipId.ToString(),
+                    Text = $"{j.CustomerOrderSlipNumber} - {j.Vessel.VesselName}"
                 })
                 .ToList();
         }

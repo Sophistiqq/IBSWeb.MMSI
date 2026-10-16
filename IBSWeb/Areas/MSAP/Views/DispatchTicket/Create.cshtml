@@ -12,7 +12,8 @@
 
 <div class="modern-layout">
     <form id="myForm" method="post" enctype="multipart/form-data">
-        <input asp-for="JobOrderId" type="hidden">
+        <input asp-for="CustomerOrderSlipId" type="hidden">
+        <input asp-for="VesselScheduleServiceEntryId" type="hidden">
         <main class="modern-container">
             <!-- Header -->
             <div class="flex-stack">
@@ -30,9 +31,9 @@
                     <button type="submit" class="modern-btn-primary" id="submitButton">
                         <span class="material-symbols-outlined">save</span> SAVE TICKET
                     </button>
-                    @if (Model.JobOrderId.HasValue)
+                    @if (Model.CustomerOrderSlipId.HasValue)
                     {
-                        <a asp-controller="JobOrder" asp-action="Details" asp-route-id="@Model.JobOrderId.Value" class="modern-btn-secondary">
+                        <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value" class="modern-btn-secondary">
                             <span class="material-symbols-outlined">arrow_back</span> BACK
                         </a>
                     }
@@ -58,7 +59,7 @@
                             <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
                             <div class="modern-grid-compact">
                                 <div class="modern-col-6">
-                                    <label class="modern-label">Date Today <span class="text-error">*</span></label>
+                                    <label class="modern-label">@(Model.VesselScheduleServiceEntryId.HasValue ? "Ticket date" : "Date Today") <span class="text-error">*</span></label>
                                     <input asp-for="Date" type="date" value="@(Model.Date == default ? now.ToString("yyyy-MM-dd") : Model.Date.ToString("yyyy-MM-dd"))" class="modern-input" data-tour-step="1">
                                     <span asp-validation-for="Date" class="text-error text-xs"></span>
                                 </div>
@@ -69,7 +70,7 @@
                                 </div>
                                 <div class="modern-col-6">
                                     <label class="modern-label">COS #</label>
-                                    @if (Model.JobOrderId.HasValue)
+                                    @if (Model.CustomerOrderSlipId.HasValue)
                                     {
                                         <input type="text" class="modern-input" style="background-color: var(--surface-container-low)" value="@(Model.COSNumber ?? "-")" readonly data-tour-step="3">
                                         <input type="hidden" asp-for="COSNumber" />
@@ -81,7 +82,7 @@
                                 </div>
                                 <div class="modern-col-6">
                                     <label class="modern-label">Voyage #</label>
-                                    @if (Model.JobOrderId.HasValue)
+                                    @if (Model.CustomerOrderSlipId.HasValue)
                                     {
                                         <input type="text" class="modern-input" style="background-color: var(--surface-container-low)" value="@(Model.VoyageNumber ?? "-")" readonly data-tour-step="4">
                                         <input type="hidden" asp-for="VoyageNumber" />
@@ -104,7 +105,7 @@
                         <div class="modern-card-body">
                             <div class="mb-2">
                                 <label class="modern-label">Customer <span class="text-error">*</span></label>
-                                @if (Model.JobOrderId.HasValue)
+                                @if (Model.CustomerOrderSlipId.HasValue)
                                 {
                                     <input type="text" class="modern-input" style="background-color: var(--surface-container-low)" value="@(Model.Customers?.FirstOrDefault(c => c.Value == Model.CustomerId.ToString())?.Text ?? "Selected Customer")" readonly data-tour-step="5">
                                     <input type="hidden" asp-for="CustomerId" />
@@ -121,7 +122,7 @@
                             <div class="modern-grid-compact mt-2">
                                 <div class="modern-col-6">
                                     <label class="modern-label">Port <span class="text-error">*</span></label>
-                                    @if (Model.JobOrderId.HasValue)
+                                    @if (Model.CustomerOrderSlipId.HasValue)
                                     {
                                         <input type="text" class="modern-input" style="background-color: var(--surface-container-low)" value="@(Model.Ports?.FirstOrDefault(p => p.Value == Model.PortId.ToString())?.Text ?? "Selected Port")" readonly data-tour-step="6">
                                         <input type="hidden" asp-for="PortId" />
@@ -137,7 +138,7 @@
                                 </div>
                                 <div class="modern-col-6">
                                     <label class="modern-label">Terminal <span class="text-error">*</span> <span id="terminalLoading" class="spinner-border spinner-border-sm text-secondary ms-1" style="display:none;" role="status"></span></label>
-                                    @if (Model.JobOrderId.HasValue)
+                                    @if (Model.CustomerOrderSlipId.HasValue)
                                     {
                                         <input type="text" class="modern-input" style="background-color: var(--surface-container-low)" value="@(Model.Terminals?.FirstOrDefault(t => t.Value == Model.TerminalId.ToString())?.Text ?? "Selected Terminal")" readonly data-tour-step="7">
                                         <input type="hidden" asp-for="TerminalId" />
@@ -153,7 +154,7 @@
                                 </div>
                                 <div class="modern-col-6">
                                     <label class="modern-label">Vessel <span class="text-error">*</span></label>
-                                    @if (Model.JobOrderId.HasValue)
+                                    @if (Model.CustomerOrderSlipId.HasValue)
                                     {
                                         <input type="text" class="modern-input" style="background-color: var(--surface-container-low)" value="@(Model.Vessels?.FirstOrDefault(v => v.Value == Model.VesselId.ToString())?.Text ?? "Selected Vessel")" readonly data-tour-step="8">
                                         <input type="hidden" asp-for="VesselId" />
@@ -172,17 +173,33 @@
                                 <div class="modern-col-6">
                                     <label class="modern-label">Activity/Service Type <span class="text-error">*</span></label>
                                     <div id="ServiceContainer" data-tour-step="9">
-                                        <select asp-for="ServiceId" asp-items="@Model.Services" class="js-modern-select" data-placeholder="-- Select Service --" required>
+                                        @if (Model.VesselScheduleServiceEntryId.HasValue)
+                                        {
+                                            <input type="hidden" name="ServiceId" value="@Model.ServiceId" />
+                                            <input class="modern-input" value="@(Model.Services?.FirstOrDefault(item => item.Value == Model.ServiceId.ToString())?.Text)" readonly aria-label="Approved service" />
+                                        }
+                                        else
+                                        {
+                                            <select asp-for="ServiceId" asp-items="@Model.Services" class="js-modern-select" data-placeholder="-- Select Service --" required>
                                             <option value="">-- Select Service --</option>
                                         </select>
+                                        }
                                     </div>
                                 </div>
                                 <div class="modern-col-6">
                                     <label class="modern-label">Tugboat/Service provider <span class="text-error">*</span></label>
                                     <div id="TugboatContainer" data-tour-step="10">
-                                        <select asp-for="TugBoatId" asp-items="@Model.Tugboats" class="js-modern-select" data-placeholder="-- Select Tugboat --" required>
+                                        @if (Model.VesselScheduleServiceEntryId.HasValue)
+                                        {
+                                            <input type="hidden" name="TugBoatId" value="@Model.TugBoatId" />
+                                            <input class="modern-input" value="@(Model.Tugboats?.FirstOrDefault(item => item.Value == Model.TugBoatId.ToString())?.Text)" readonly aria-label="Approved tugboat" />
+                                        }
+                                        else
+                                        {
+                                            <select asp-for="TugBoatId" asp-items="@Model.Tugboats" class="js-modern-select" data-placeholder="-- Select Tugboat --" required>
                                             <option value="">-- Select Tugboat --</option>
                                         </select>
+                                        }
                                     </div>
                                 </div>
                                 <div class="modern-col-6">
@@ -287,12 +304,12 @@
         window.IBS_TOUR_STEPS = [
             { step: 1, title: "Dispatch Date", text: "Set the date this dispatch ticket is recorded under. Check it against the supporting ticket; the actual start and end of service are entered separately in the timeline.", required: false, autoAdvance: false },
             { step: 2, title: "Dispatch/Mooring Number", text: "Enter the number shown on the dispatch or mooring ticket, up to 20 characters. Check the reference carefully so the service can be traced during pricing, billing, and collection.", required: true, autoAdvance: true },
-            { step: 3, title: @Json.Serialize(Model.JobOrderId.HasValue ? "COS Reference from Job Order" : "COS Reference (Optional)"), text: @Json.Serialize(Model.JobOrderId.HasValue ? "This COS reference is prefilled from the Job Order and is locked on this ticket. Review it against the supporting document. If it needs correction, update the Job Order. Click Next to continue." : "Enter the COS reference from the supporting document if available, or leave it blank. For a ticket linked to a Job Order, this reference is inherited and is changed through the Job Order."), required: false, autoAdvance: false },
-            { step: 4, title: @Json.Serialize(Model.JobOrderId.HasValue ? "Voyage Reference from Job Order" : "Voyage Reference (Optional)"), text: @Json.Serialize(Model.JobOrderId.HasValue ? "This voyage reference is prefilled from the Job Order and is locked here. It identifies the vessel visit for this service. Correct it through the Job Order if needed, then click Next." : "Enter the voyage reference for this vessel visit if available. For Job Order tickets, the voyage reference comes from the Job Order and is read-only here."), required: false, autoAdvance: false },
-            { step: 5, title: @Json.Serialize(Model.JobOrderId.HasValue ? "Customer from Job Order" : "Customer"), text: @Json.Serialize(Model.JobOrderId.HasValue ? "This customer is prefilled from the Job Order. You do not need to select it again, and it cannot be changed on this ticket. Review the name, then click Next." : "Select the customer receiving the service. For a Job Order ticket, the customer is inherited from the order; review the order if that customer needs to change."), required: false, autoAdvance: false },
-            { step: 6, title: @Json.Serialize(Model.JobOrderId.HasValue ? "Port from Job Order" : "Port"), text: @Json.Serialize(Model.JobOrderId.HasValue ? "This port is prefilled from the Job Order and is locked here. Check that it matches the service location. Change the Job Order if the location needs correction, then click Next." : "Select the port where the operation took place. Changing the port reloads its terminals, so check the terminal selection again before saving."), required: false, autoAdvance: false },
-            { step: 7, title: @Json.Serialize(Model.JobOrderId.HasValue ? "Terminal from Job Order" : "Terminal"), text: @Json.Serialize(Model.JobOrderId.HasValue ? "This terminal is prefilled from the Job Order and is locked here. Review it with the port to confirm the service location, then click Next." : "Select the terminal for the operation from the chosen port. Match the location to the supporting ticket; Job Order tickets use the location recorded on the order."), required: false, autoAdvance: false },
-            { step: 8, title: @Json.Serialize(Model.JobOrderId.HasValue ? "Vessel from Job Order" : "Vessel"), text: @Json.Serialize(Model.JobOrderId.HasValue ? "This vessel is prefilled from the Job Order and is locked here. Confirm the vessel name, then click Next to choose the Activity / Service Type for this ticket." : "Select the vessel that received the service. Check the vessel name against the ticket and voyage reference; Job Order tickets inherit the vessel from the order."), required: false, autoAdvance: false },
+            { step: 3, title: @Json.Serialize(Model.CustomerOrderSlipId.HasValue ? "COS Reference from COS" : "COS Reference (Optional)"), text: @Json.Serialize(Model.CustomerOrderSlipId.HasValue ? "This COS reference is prefilled from the COS and is locked on this ticket. Review it against the supporting document. If it needs correction, update the COS. Click Next to continue." : "Enter the COS reference from the supporting document if available, or leave it blank. For a ticket linked to a COS, this reference is inherited and is changed through the COS."), required: false, autoAdvance: false },
+            { step: 4, title: @Json.Serialize(Model.CustomerOrderSlipId.HasValue ? "Voyage Reference from COS" : "Voyage Reference (Optional)"), text: @Json.Serialize(Model.CustomerOrderSlipId.HasValue ? "This voyage reference is prefilled from the COS and is locked here. It identifies the vessel visit for this service. Correct it through the COS if needed, then click Next." : "Enter the voyage reference for this vessel visit if available. For COS tickets, the voyage reference comes from the COS and is read-only here."), required: false, autoAdvance: false },
+            { step: 5, title: @Json.Serialize(Model.CustomerOrderSlipId.HasValue ? "Customer from COS" : "Customer"), text: @Json.Serialize(Model.CustomerOrderSlipId.HasValue ? "This customer is prefilled from the COS. You do not need to select it again, and it cannot be changed on this ticket. Review the name, then click Next." : "Select the customer receiving the service. For a COS ticket, the customer is inherited from the order; review the order if that customer needs to change."), required: false, autoAdvance: false },
+            { step: 6, title: @Json.Serialize(Model.CustomerOrderSlipId.HasValue ? "Port from COS" : "Port"), text: @Json.Serialize(Model.CustomerOrderSlipId.HasValue ? "This port is prefilled from the COS and is locked here. Check that it matches the service location. Change the COS if the location needs correction, then click Next." : "Select the port where the operation took place. Changing the port reloads its terminals, so check the terminal selection again before saving."), required: false, autoAdvance: false },
+            { step: 7, title: @Json.Serialize(Model.CustomerOrderSlipId.HasValue ? "Terminal from COS" : "Terminal"), text: @Json.Serialize(Model.CustomerOrderSlipId.HasValue ? "This terminal is prefilled from the COS and is locked here. Review it with the port to confirm the service location, then click Next." : "Select the terminal for the operation from the chosen port. Match the location to the supporting ticket; COS tickets use the location recorded on the order."), required: false, autoAdvance: false },
+            { step: 8, title: @Json.Serialize(Model.CustomerOrderSlipId.HasValue ? "Vessel from COS" : "Vessel"), text: @Json.Serialize(Model.CustomerOrderSlipId.HasValue ? "This vessel is prefilled from the COS and is locked here. Confirm the vessel name, then click Next to choose the Activity / Service Type for this ticket." : "Select the vessel that received the service. Check the vessel name against the ticket and voyage reference; COS tickets inherit the vessel from the order."), required: false, autoAdvance: false },
             { step: 9, title: "Activity / Service Type", text: "Choose the activity actually performed, such as the applicable dispatch or mooring service. This identifies the service to be priced, so match the selection to the supporting ticket.", required: true, autoAdvance: true },
             { step: 10, title: "Tugboat / Service Provider", text: "Choose the tugboat that performed this service. Check the exact tug name, especially for outsourced services, because ownership affects the expense information entered during tariff setting.", required: true, autoAdvance: true },
             { step: 11, title: "Master on Duty", text: "Select the tug master responsible for this operation. Use the master recorded on the supporting dispatch ticket rather than the person entering the record.", required: true, autoAdvance: true },

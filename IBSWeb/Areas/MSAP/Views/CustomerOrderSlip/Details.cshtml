@@ -1,10 +1,12 @@
-@model IBS.Models.MSAP.JobOrder
+@model IBS.Models.MSAP.CustomerOrderSlip
 
 @{
-    ViewData["Title"] = $"Job Order {Model.JobOrderNumber}";
+    ViewData["Title"] = $"COS {Model.CustomerOrderSlipNumber}";
     ViewData["IsFullWidth"] = true;
     var booking = ViewBag.VesselSchedule as VesselSchedule;
     var bookingClosed = booking?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
+    var pendingServices = booking?.ServiceEntries.Where(entry => !Model.DispatchTickets.Any(t =>
+        t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId)).ToList() ?? new List<VesselScheduleServiceEntry>();
 }
 
 <div class="modern-layout">
@@ -15,13 +17,13 @@
                 <div class="flex items-center gap-2 mb-1">
                     <span class="modern-label">MSAP</span>
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <a class="modern-label" style="text-decoration:none;" asp-action="Index">Job Orders</a>
+                    <a class="modern-label" style="text-decoration:none;" asp-action="Index">COS records</a>
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface)">@Model.JobOrderNumber</span>
+                    <span class="modern-label" style="color: var(--on-surface)">@Model.CustomerOrderSlipNumber</span>
                 </div>
                 <div class="flex items-center gap-3">
-                    <h1 class="modern-headline-lg" data-page-header>Job Order #@Model.JobOrderNumber</h1>
-                    <span class="modern-badge @(Model.Status == MsapConstants.JobOrderStatus.Open ? "status-open" : "status-closed")">@MsapConstants.JobOrderStatus.GetDisplayName(Model.Status)</span>
+                    <h1 class="modern-headline-lg" data-page-header>COS #@Model.CustomerOrderSlipNumber</h1>
+                    <span class="modern-badge @(Model.Status == MsapConstants.CustomerOrderSlipStatus.Open ? "status-open" : "status-closed")">@MsapConstants.CustomerOrderSlipStatus.GetDisplayName(Model.Status)</span>
                     @if (booking?.Status == MsapConstants.VesselScheduleStatus.Completed)
                     {
                         <span class="modern-badge-sm">@MsapConstants.VesselScheduleStatus.GetDisplayName(booking.Status)</span>
@@ -36,15 +38,15 @@
         <partial name="_JobProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
         <!-- Main Grid Layout - Now explicitly using Grid classes for side-by-side -->
         <div class="modern-grid">
-            <!-- Left Column: Job Order Details (col-4) -->
+            <!-- Left Column: COS Details (col-4) -->
             <section class="modern-col-4">
                 <div class="modern-card sticky top-24">
                     <div class="modern-card-header-info">
                         <span class="material-symbols-outlined">info</span>
-                        <h2 class="modern-headline-md">Job Order Details</h2>
-                        @if (ViewBag.CanEditJobOrder == true && booking == null && Model.Status == MsapConstants.JobOrderStatus.Open && ViewBag.HasDispatchTickets != true && !ViewBag.HasBilling)
+                        <h2 class="modern-headline-md">COS Details</h2>
+                        @if (ViewBag.CanEditCustomerOrderSlip == true && booking == null && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && ViewBag.HasDispatchTickets != true && !ViewBag.HasBilling)
                         {
-                            <a asp-action="Edit" asp-route-id="@Model.JobOrderId" class="modern-btn-secondary" title="Edit Job Order" aria-label="Edit Job Order" style="margin-left:auto;padding:.35rem;">
+                            <a asp-action="Edit" asp-route-id="@Model.CustomerOrderSlipId" class="modern-btn-secondary" title="Edit COS" aria-label="Edit COS" style="margin-left:auto;padding:.35rem;">
                                 <span class="material-symbols-outlined" aria-hidden="true">edit</span>
                             </a>
                         }
@@ -121,17 +123,47 @@
                             <span class="material-symbols-outlined text-primary">list_alt</span>
                             <h2 class="modern-headline-md">Dispatch Tickets</h2>
                         </div>
-                        @if (ViewBag.CanCreateDispatchTicket == true && Model.Status == MsapConstants.JobOrderStatus.Open && !bookingClosed && !ViewBag.HasBilling && Model.DispatchTickets.All(t => t.Status != MsapConstants.DispatchTicketStatus.Billed))
+                        @if ((booking == null || booking.ServiceEntries.Count == 0) && ViewBag.CanCreateDispatchTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && !bookingClosed && !ViewBag.HasBilling && Model.DispatchTickets.All(t => t.Status != MsapConstants.DispatchTicketStatus.Billed))
                         {
-                            <a asp-controller="DispatchTicket" asp-action="Create" asp-route-jobOrderId="@Model.JobOrderId" class="modern-btn-primary text-sm"><span class="material-symbols-outlined" aria-hidden="true">add_circle</span> Add Ticket</a>
+                            <a asp-controller="DispatchTicket" asp-action="Create" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-primary text-sm"><span class="material-symbols-outlined" aria-hidden="true">add_circle</span> Add Ticket</a>
                         }
                     </div>
 
+                    @if (pendingServices.Count > 0)
+                    {
+                        <div class="modern-card-body">
+                            <h3 class="modern-headline-md">Expected services · @pendingServices.Count pending</h3>
+                            <p class="modern-label">A dispatch ticket is created when its actual number, dates, times and required details are saved.</p>
+                            <div class="modern-table-container">
+                                <table class="modern-table">
+                                    <thead><tr><th>Tugboat</th><th>Service</th><th>Status</th><th>Action</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var entry in pendingServices)
+                                        {
+                                            <tr>
+                                                <td>@entry.Tugboat.TugboatName</td>
+                                                <td>@entry.Service.ServiceName</td>
+                                                <td>Pending ticket</td>
+                                                <td>
+                                                    @if (ViewBag.CanCreateDispatchTicket == true && !bookingClosed && !ViewBag.HasBilling
+                                                        && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && booking!.ApprovedRevision == booking.Revision)
+                                                    {
+                                                        <a asp-controller="DispatchTicket" asp-action="Create" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId"
+                                                           asp-route-expectedServiceEntryId="@entry.VesselScheduleServiceEntryId" class="modern-btn-secondary">Record ticket</a>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    }
                     @if (ViewBag.HasBilling)
                     {
                         <div style="padding: 0.75rem 1.25rem; background: var(--error-container, #fce4ec); color: var(--on-error-container, #c62828); font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--outline-variant);">
                             <span class="material-symbols-outlined" style="font-size: 18px;">lock</span>
-                            <span>This Job Order has <strong>Billing #@ViewBag.BillingNumber</strong> — modifications are restricted.</span>
+                            <span>This COS has <strong>Billing #@ViewBag.BillingNumber</strong> — modifications are restricted.</span>
                         </div>
                     }
 
@@ -227,9 +259,9 @@
 
                                                     @if (!ViewBag.HasBilling && ticket.Status is "Draft" or "Requested")
                                                     {
-                                                        @if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.JobOrderStatus.Open)
+                                                        @if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open)
                                                         {
-                                                            <a asp-action="EditTicket" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" asp-route-jobOrderId="@Model.JobOrderId" class="modern-dropdown-item">
+                                                            <a asp-action="EditTicket" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-dropdown-item">
                                                                 <span class="material-symbols-outlined">edit</span> Edit Ticket
                                                             </a>
                                                         }
@@ -260,9 +292,9 @@
                                                                 <span class="material-symbols-outlined">delete</span> Delete Ticket
                                                             </button>
                                                         }
-                                                        @if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.JobOrderStatus.Open)
+                                                        @if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open)
                                                         {
-                                                            <a asp-action="EditTicket" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" asp-route-jobOrderId="@Model.JobOrderId" class="modern-dropdown-item">
+                                                            <a asp-action="EditTicket" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-dropdown-item">
                                                                 <span class="material-symbols-outlined">edit</span> Edit Ticket
                                                             </a>
                                                         }
@@ -287,9 +319,9 @@
                                                                 <span class="material-symbols-outlined">edit</span> Edit Tariff
                                                             </a>
                                                         }
-                                                        @if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.JobOrderStatus.Open)
+                                                        @if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open)
                                                         {
-                                                            <a asp-action="EditTicket" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" asp-route-jobOrderId="@Model.JobOrderId" class="modern-dropdown-item">
+                                                            <a asp-action="EditTicket" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-dropdown-item">
                                                                 <span class="material-symbols-outlined">edit</span> Edit Ticket
                                                             </a>
                                                         }
@@ -311,9 +343,9 @@
                                                     }
                                                     else if (!ViewBag.HasBilling && (ticket.Status == "For Billing" || ticket.Status == "Billed"))
                                                     {
-                                                        @if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.JobOrderStatus.Open)
+                                                        @if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open)
                                                         {
-                                                            <a asp-action="EditTicket" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" asp-route-jobOrderId="@Model.JobOrderId" class="modern-dropdown-item">
+                                                            <a asp-action="EditTicket" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-dropdown-item">
                                                                 <span class="material-symbols-outlined">edit</span> Edit Ticket
                                                             </a>
                                                         }
@@ -360,7 +392,7 @@
             </section>
         </div>
 
-        <!-- Job Order Specific Footer - Now in flow and contained -->
+        <!-- COS Specific Footer - Now in flow and contained -->
         <footer class="modern-sticky-footer">
             <div class="flex items-center gap-4">
                 <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:16px">description</span> @Model.DispatchTickets.Count() Total Tickets</span>
@@ -439,12 +471,12 @@
 @section Scripts {
     <script>
         window.IBS_TOUR_STEPS = [
-            { selector: '.job-progress-timeline', title: 'Job stages', text: 'Follow the current stage through service, tariff, approval, billing, posting, collection, and clearing. Direct Job Orders bypass vessel planning and confirmation.', interactive: false },
+            { selector: '.job-progress-timeline', title: 'Job stages', text: 'Follow the current stage through service, tariff, approval, billing, posting, collection, and clearing. Direct COS records bypass vessel planning and confirmation.', interactive: false },
             { selector: '.job-progress-next', title: 'Next action', text: 'Read the guidance for the current stage. The action is available here when the workflow and your access allow it; some tariff actions are on the tickets below.', interactive: false },
             { selector: '.modern-grid > .modern-col-4 > .modern-card', title: 'Order details', text: 'Review the customer, vessel, location, references, and planned schedule. Direct orders can be edited here when their status and access allow it.', interactive: false },
             { selector: '.modern-grid > .modern-col-8 > .modern-card', title: 'Dispatch Tickets', text: 'Add service tickets when allowed, then review each ticket’s timeline, tugboat, billing amount, and status. Use its Actions menu for the next available step.', interactive: false },
-            { selector: '#timelineAccordion', title: 'Activity timeline', text: 'Expand this section to load the Job Order activity history.', interactive: false },
-            { selector: '.modern-sticky-footer', title: 'Order totals', text: 'See the total ticket count and accumulated billing amount for this Job Order.', interactive: false }
+            { selector: '#timelineAccordion', title: 'Activity timeline', text: 'Expand this section to load the COS activity history.', interactive: false },
+            { selector: '.modern-sticky-footer', title: 'Order totals', text: 'See the total ticket count and accumulated billing amount for this COS.', interactive: false }
         ];
         if (document.querySelector('#selectAll')) {
             window.IBS_TOUR_STEPS.splice(4, 0, { selector: '#selectAll', title: 'Batch actions', text: 'Select eligible tickets to reveal available batch tariff or approval actions. Review the selected tickets before applying an action.', interactive: false });
@@ -452,8 +484,8 @@
     </script>
     <script>
         const PageConfig = {
-            jobOrderId: @Model.JobOrderId,
-            jobOrderNumber: '@Model.JobOrderNumber',
+            customerOrderSlipId: @Model.CustomerOrderSlipId,
+            customerOrderSlipNumber: '@Model.CustomerOrderSlipNumber',
             status: '@Model.Status',
             hasTickets: @(Model.DispatchTickets.Any() ? "true" : "false"),
             messages: {
@@ -464,11 +496,11 @@
         };
 
         $(document).ready(function () {
-            @if (TempData["PromptAddTicket"] is true && ViewBag.CanCreateDispatchTicket == true && Model.Status == MsapConstants.JobOrderStatus.Open && !bookingClosed && !ViewBag.HasBilling && Model.DispatchTickets.All(t => t.Status != MsapConstants.DispatchTicketStatus.Billed))
+            @if (TempData["PromptAddTicket"] is true && (booking == null || booking.ServiceEntries.Count == 0) && ViewBag.CanCreateDispatchTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && !bookingClosed && !ViewBag.HasBilling && Model.DispatchTickets.All(t => t.Status != MsapConstants.DispatchTicketStatus.Billed))
             {
                 <text>
                 ModernAlert.confirm({ title: 'Dispatch Ticket saved', text: 'Do you need to add more tickets?', icon: 'question', confirmText: 'Add another ticket', cancelText: 'Continue with existing tickets' })
-                    .then(result => { if (result.isConfirmed) window.location.href = '@Url.Action("Create", "DispatchTicket", new { area = "MSAP", jobOrderId = Model.JobOrderId })'; });
+                    .then(result => { if (result.isConfirmed) window.location.href = '@Url.Action("Create", "DispatchTicket", new { area = "MSAP", customerOrderSlipId = Model.CustomerOrderSlipId })'; });
                 </text>
             }
             $(document).on('click', '.dropdown-trigger', function(e) {
@@ -572,7 +604,7 @@
         });
 
         function loadTimeline() {
-            $.get('@Url.Action("GetTimeline", "AuditTrail", new { area = "MSAP" })', { id: PageConfig.jobOrderId }, function(data) {
+            $.get('@Url.Action("GetTimeline", "AuditTrail", new { area = "MSAP" })', { id: PageConfig.customerOrderSlipId }, function(data) {
                 $('#timelineContainer').html(data);
             }).fail(function() {
                 $('#timelineContainer').html('<div class="text-center py-4 text-danger"><p>Failed to load timeline.</p></div>');

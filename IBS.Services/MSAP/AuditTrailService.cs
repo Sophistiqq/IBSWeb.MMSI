@@ -12,22 +12,22 @@ namespace IBS.Services.MSAP
                 cancellationToken);
         }
 
-        public async Task<IEnumerable<AuditTrail>> GetJobOrderTimelineAsync(int jobOrderId, CancellationToken cancellationToken)
+        public async Task<IEnumerable<AuditTrail>> GetCustomerOrderSlipTimelineAsync(int customerOrderSlipId, CancellationToken cancellationToken)
         {
-            var jobOrder = await unitOfWork.JobOrder.GetAsync(jo => jo.JobOrderId == jobOrderId, cancellationToken);
-            if (jobOrder == null)
+            var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetAsync(jo => jo.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
+            if (customerOrderSlip == null)
             {
                 return Enumerable.Empty<AuditTrail>();
             }
 
-            var joNumber = jobOrder.JobOrderNumber;
+            var joNumber = customerOrderSlip.CustomerOrderSlipNumber;
 
             // 1. Identify all related document identifiers
-            var dispatchTickets = await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.JobOrderId == jobOrderId, cancellationToken);
+            var dispatchTickets = await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
             var dtIds = dispatchTickets.Select(dt => dt.DispatchTicketId).ToList();
             var dtNumbers = dispatchTickets.Select(dt => dt.DispatchNumber).Where(n => !string.IsNullOrEmpty(n)).ToList();
 
-            var billings = await unitOfWork.Billing.GetAllAsync(b => b.JobOrderId == jobOrderId, cancellationToken);
+            var billings = await unitOfWork.Billing.GetAllAsync(b => b.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
             var billingIds = billings.Select(b => b.MsapBillingId).ToList();
             var billingNumbers = billings.Select(b => b.MsapBillingNumber).Where(n => !string.IsNullOrEmpty(n)).ToList();
 
@@ -37,9 +37,9 @@ namespace IBS.Services.MSAP
             // 2. Fetch related audits in segmented batches to avoid massive SQL OR chains that can timeout
             var allAudits = new List<AuditTrail>();
 
-            // Job Order Audits
+            // COS Audits
             allAudits.AddRange(await unitOfWork.AuditTrail.GetAllAsync(a =>
-                a.DocumentType == "Job Order" && (a.RecordId == jobOrderId || a.ReferenceNumber == joNumber || a.Activity.Contains(joNumber)),
+                a.DocumentType == "COS" && (a.RecordId == customerOrderSlipId || a.ReferenceNumber == joNumber || a.Activity.Contains(joNumber)),
                 cancellationToken));
 
             // Dispatch & Tariff Audits

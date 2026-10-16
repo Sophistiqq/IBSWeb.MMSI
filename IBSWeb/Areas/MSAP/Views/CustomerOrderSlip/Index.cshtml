@@ -1,5 +1,5 @@
 @{
-    ViewData["Title"] = "Job Orders";
+    ViewData["Title"] = "COS records";
     ViewData["IsFullWidth"] = true;
 }
 
@@ -11,7 +11,7 @@
                 <div class="flex items-center gap-2 mb-1">
                     <span class="modern-label" style="color: var(--on-surface-variant)">MSAP</span>
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface)">Job Orders</span>
+                    <span class="modern-label" style="color: var(--on-surface)">COS records</span>
                 </div>
                 <h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
             </div>
@@ -20,7 +20,7 @@
                 {
                     <a asp-action="Create" class="modern-btn-primary" data-hotkey="c">
                         <span class="material-symbols-outlined">add_circle</span>
-                        CREATE JOB ORDER
+                        CREATE COS
                     </a>
                 }
             </div>
@@ -31,7 +31,7 @@
             <div class="modern-card-header-action flex justify-between items-center w-full">
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-primary">list_alt</span>
-                    <h2 class="modern-headline-md">Job Order List</h2>
+                    <h2 class="modern-headline-md">COS List</h2>
                 </div>
                 <div class="flex items-center gap-2">
                     <label class="modern-label mb-0" style="color: var(--on-surface-variant)">Filter by Date:</label>
@@ -39,11 +39,11 @@
                 </div>
             </div>
             <div class="modern-card-body">
-                <table class="modern-table" id="jobOrdersTable">
+                <table class="modern-table" id="customerOrderSlipsTable">
                     <thead>
                         <tr>
                             <th>Date</th>
-                            <th>Job Order #</th>
+                            <th>COS #</th>
                             <th>Customer</th>
                             <th>Vessel</th>
                             <th>COS #</th>
@@ -62,26 +62,26 @@
 @section Scripts {
     <script>
         window.IBS_TOUR_STEPS = [
-            { selector: '.flex-stack', title: 'Job Orders', text: 'Open an existing Job Order below or create a direct order when you have access. Schedules confirmed from Vessel Scheduling create their own Job Orders.', interactive: false },
+            { selector: '.flex-stack', title: 'COS records', text: 'Open an existing COS below or create a direct order when you have access. Schedules confirmed from Vessel Scheduling create their own COS records.', interactive: false },
             { selector: '#dateFilter', title: 'Filter by date', text: 'Choose an order date to narrow the list. Clear the date to show all orders again.', interactive: false },
-            { selector: '#jobOrdersTable', title: 'Job Order list', text: 'Review the customer, vessel, ticket count, and status. Select an order number or View Details to continue its workflow.', interactive: false }
+            { selector: '#customerOrderSlipsTable', title: 'COS list', text: 'Review the customer, vessel, ticket count, and status. Select an order number or View Details to continue its workflow.', interactive: false }
         ];
     </script>
     <script>
         $(document).ready(function () {
-            const detailsUrl = '@Url.Action("Details", "JobOrder", new { area = "MSAP" })';
+            const detailsUrl = '@Url.Action("Details", "CustomerOrderSlip", new { area = "MSAP" })';
 
             const urlParams = new URLSearchParams(window.location.search);
             const searchTerm = urlParams.get('q') || '';
 
-            let table = $('#jobOrdersTable').DataTable(ModernTable.config({
+            let table = $('#customerOrderSlipsTable').DataTable(ModernTable.config({
                 order: [[0, 'desc']],
                 search: { search: searchTerm },
                 columnDefs: [
                     { targets: [6, 7, 8], className: 'text-center' },
                     { targets: [8], orderable: false }
                 ],
-                ajax: ModernTable.ajax("@Url.Action("GetJobOrderList", "JobOrder", new { area = "MSAP" })"),
+                ajax: ModernTable.ajax("@Url.Action("GetCustomerOrderSlipList", "CustomerOrderSlip", new { area = "MSAP" })"),
                 columns: [
                     {
                         data: "date",
@@ -89,8 +89,8 @@
                         render: (data) => ModernTable.render.date(data)
                     },
                     {
-                        data: "jobOrderNumber",
-                        render: (data, type, row) => `<a href="${detailsUrl}?id=${row.jobOrderId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${data}</a>`
+                        data: "customerOrderSlipNumber",
+                        render: (data, type, row) => `<a href="${detailsUrl}?id=${row.customerOrderSlipId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${data}</a>`
                     },
                     {
                         data: "customer.customerName",
@@ -112,7 +112,7 @@
                         data: "status",
                         render: (data) => {
                             const cls = data === "Open" ? "status-open" : "status-closed";
-                            return ModernTable.render.badge(data === "Closed" ? "@MsapConstants.JobOrderStatus.GetDisplayName(MsapConstants.JobOrderStatus.Closed)" : data, cls);
+                            return ModernTable.render.badge(data === "Closed" ? "@MsapConstants.CustomerOrderSlipStatus.GetDisplayName(MsapConstants.CustomerOrderSlipStatus.Closed)" : data, cls);
                         }
                     },
                     {
@@ -120,7 +120,7 @@
                         orderable: false,
                         className: "text-center",
                         render: (data, type, row) => ModernTable.render.dropdown([
-                            { label: 'View Details', icon: 'visibility', url: `${detailsUrl}?id=${row.jobOrderId}` }
+                            { label: 'View Details', icon: 'visibility', url: `${detailsUrl}?id=${row.customerOrderSlipId}` }
                         ])
                     }
                 ]

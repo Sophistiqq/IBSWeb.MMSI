@@ -14,8 +14,8 @@ namespace IBS.Models.MSAP.ViewModels
         public string ActionController { get; set; } = string.Empty;
         public string ActionName { get; set; } = string.Empty;
         public int? TargetId { get; set; }
-        public int? JobOrderId { get; set; }
-        public string? JobOrderNumber { get; set; }
+        public int? CustomerOrderSlipId { get; set; }
+        public string? CustomerOrderSlipNumber { get; set; }
         public ProcedureEnum? Permission { get; set; }
         public string WaitingFor { get; set; } = string.Empty;
         public Collection? BankingCollection { get; set; }

@@ -162,9 +162,9 @@ namespace IBS.Models.MSAP
 
         public string? VideoSignedUrl { get; set; }
 
-        public int? JobOrderId { get; set; }
-        [ForeignKey(nameof(JobOrderId))]
-        public JobOrder? JobOrder { get; set; }
+        public int? CustomerOrderSlipId { get; set; }
+        [ForeignKey(nameof(CustomerOrderSlipId))]
+        public CustomerOrderSlip? CustomerOrderSlip { get; set; }
 
         [Column("BILLNUM")]
         public int? BillingId { get; set; }

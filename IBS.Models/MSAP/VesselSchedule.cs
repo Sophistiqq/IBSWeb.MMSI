@@ -66,10 +66,10 @@ namespace IBS.Models.MSAP
         [Column(TypeName = "text")]
         public string? Notes { get; set; }
 
-        public int? JobOrderId { get; set; }
+        public int? CustomerOrderSlipId { get; set; }
 
-        [ForeignKey(nameof(JobOrderId))]
-        public JobOrder? JobOrder { get; set; }
+        [ForeignKey(nameof(CustomerOrderSlipId))]
+        public CustomerOrderSlip? CustomerOrderSlip { get; set; }
 
         [Column(TypeName = "varchar(100)")]
         public string? CreatedBy { get; set; }

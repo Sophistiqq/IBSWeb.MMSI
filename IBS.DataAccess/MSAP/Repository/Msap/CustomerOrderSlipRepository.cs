@@ -6,25 +6,25 @@ using Microsoft.EntityFrameworkCore;
 
 namespace IBS.DataAccess.MSAP.Repository.Msap
 {
-    public class JobOrderRepository(MsapDbContext db): Repository<JobOrder>(db), IJobOrderRepository
+    public class CustomerOrderSlipRepository(MsapDbContext db): Repository<CustomerOrderSlip>(db), ICustomerOrderSlipRepository
     {
         private readonly MsapDbContext _db = db;
 
-        public async Task<IEnumerable<JobOrder>> GetAllJobOrdersWithDetailsAsync(CancellationToken cancellationToken)
+        public async Task<IEnumerable<CustomerOrderSlip>> GetAllCustomerOrderSlipsWithDetailsAsync(CancellationToken cancellationToken)
         {
-            return await _db.MsapJobOrders
+            return await _db.MsapCustomerOrderSlips
                 .Include(j => j.Customer)
                 .Include(j => j.Vessel)
                 .Include(j => j.Port)
                 .Include(j => j.Terminal)
                 .Include(j => j.DispatchTickets.Where(dt => dt.Status != MsapConstants.DispatchTicketStatus.Deleted))
-                .OrderByDescending(j => j.JobOrderNumber)
+                .OrderByDescending(j => j.CustomerOrderSlipNumber)
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<IEnumerable<JobOrder>> GetJobOrdersWithDetailsAsync(DateTime start, DateTime end, CancellationToken cancellationToken)
+        public async Task<IEnumerable<CustomerOrderSlip>> GetCustomerOrderSlipsWithDetailsAsync(DateTime start, DateTime end, CancellationToken cancellationToken)
         {
-            return await _db.MsapJobOrders
+            return await _db.MsapCustomerOrderSlips
                 .Include(j => j.Customer)
                 .Include(j => j.Vessel)
                 .Include(j => j.Port)
@@ -34,9 +34,9 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<JobOrder?> GetJobOrderWithDetailsAsync(int id, CancellationToken cancellationToken)
+        public async Task<CustomerOrderSlip?> GetCustomerOrderSlipWithDetailsAsync(int id, CancellationToken cancellationToken)
         {
-            return await _db.MsapJobOrders
+            return await _db.MsapCustomerOrderSlips
                 .Include(j => j.Customer)
                 .Include(j => j.Vessel)
                 .Include(j => j.Port)
@@ -50,13 +50,13 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                     .ThenInclude(dt => dt.Tugboat)
                 .Include(j => j.DispatchTickets.Where(dt => dt.Status != MsapConstants.DispatchTicketStatus.Deleted))
                     .ThenInclude(dt => dt.TugMaster)
-                .FirstOrDefaultAsync(j => j.JobOrderId == id, cancellationToken);
+                .FirstOrDefaultAsync(j => j.CustomerOrderSlipId == id, cancellationToken);
         }
 
-        public async Task<JobOrder?> GetForUpdateAsync(int id, CancellationToken ct = default)
+        public async Task<CustomerOrderSlip?> GetForUpdateAsync(int id, CancellationToken ct = default)
         {
-            var job = await _db.MsapJobOrders
-                .FromSqlInterpolated($"SELECT * FROM msap.mmsi_job_orders WHERE job_order_id = {id} FOR UPDATE")
+            var job = await _db.MsapCustomerOrderSlips
+                .FromSqlInterpolated($"SELECT * FROM msap.mmsi_customer_order_slips WHERE customer_order_slip_id = {id} FOR UPDATE")
                 .FirstOrDefaultAsync(ct);
             if (job != null)
             {
@@ -65,30 +65,30 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             return job;
         }
 
-        public async Task<string> GenerateJobOrderNumber(CancellationToken cancellationToken)
+        public async Task<string> GenerateCustomerOrderSlipNumber(CancellationToken cancellationToken)
         {
             // Direct creation and schedule confirmation share the same number sequence.
             await _db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(20771001)", cancellationToken);
             var year = DateTime.Now.Year;
-            var lastRecord = await _db.MsapJobOrders
-                .Where(j => j.JobOrderNumber.StartsWith($"JO-{year}"))
-                .OrderByDescending(j => j.JobOrderNumber)
+            var lastRecord = await _db.MsapCustomerOrderSlips
+                .Where(j => j.CustomerOrderSlipNumber.StartsWith($"COS-{year}"))
+                .OrderByDescending(j => j.CustomerOrderSlipNumber)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (lastRecord == null)
             {
-                return $"JO-{year}-0001";
+                return $"COS-{year}-0001";
             }
 
-            var parts = lastRecord.JobOrderNumber.Split('-');
+            var parts = lastRecord.CustomerOrderSlipNumber.Split('-');
             if (parts.Length >= 3 && int.TryParse(parts[2], out int lastNumber))
             {
-                return $"JO-{year}-{(lastNumber + 1):D4}";
+                return $"COS-{year}-{(lastNumber + 1):D4}";
             }
 
-            return $"JO-{year}-0001";
+            return $"COS-{year}-0001";
         }
-        public async Task<List<JobOrder>> SearchBillableJobOrdersAsync(string term, int customerId, int limit, CancellationToken cancellationToken)
+        public async Task<List<CustomerOrderSlip>> SearchBillableCustomerOrderSlipsAsync(string term, int customerId, int limit, CancellationToken cancellationToken)
         {
             var query = dbSet.AsNoTracking()
                 .Where(j => j.CustomerId == customerId &&
@@ -100,7 +100,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             if (!string.IsNullOrWhiteSpace(term))
             {
                 var s = term.ToLower();
-                query = query.Where(j => j.JobOrderNumber.ToLower().Contains(s));
+                query = query.Where(j => j.CustomerOrderSlipNumber.ToLower().Contains(s));
             }
 
             return await query
@@ -109,9 +109,9 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<(IEnumerable<JobOrder> Data, int RecordsFiltered, int TotalRecords)> GetPagedJobOrdersAsync(DataTablesParameters parameters, CancellationToken cancellationToken)
+        public async Task<(IEnumerable<CustomerOrderSlip> Data, int RecordsFiltered, int TotalRecords)> GetPagedCustomerOrderSlipsAsync(DataTablesParameters parameters, CancellationToken cancellationToken)
         {
-            IQueryable<JobOrder> query = dbSet
+            IQueryable<CustomerOrderSlip> query = dbSet
                 .Include(j => j.Customer)
                 .Include(j => j.Vessel)
                 .Include(j => j.Port)
@@ -122,7 +122,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             {
                 var s = parameters.Search.Value.ToLower();
                 query = query.Where(dt =>
-                    dt.JobOrderNumber.ToLower().Contains(s) ||
+                    dt.CustomerOrderSlipNumber.ToLower().Contains(s) ||
                     dt.Customer.CustomerName.ToLower().Contains(s) ||
                     dt.Status.ToLower().Contains(s)
                 );

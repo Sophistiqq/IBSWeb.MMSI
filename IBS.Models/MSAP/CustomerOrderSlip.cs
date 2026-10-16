@@ -4,17 +4,17 @@ using IBS.Models.MSAP.MasterFile;
 
 namespace IBS.Models.MSAP
 {
-    public class JobOrder : BaseEntity
+    public class CustomerOrderSlip : BaseEntity
     {
         [Key]
-        public int JobOrderId { get; set; }
+        public int CustomerOrderSlipId { get; set; }
 
         [Required]
         [Column(TypeName = "varchar(20)")]
-        public string JobOrderNumber { get; set; } = null!;
+        public string CustomerOrderSlipNumber { get; set; } = null!;
 
         [Required]
-        [Display(Name = "Job Order Date")]
+        [Display(Name = "COS Date")]
         public DateOnly Date { get; set; }
 
         [Required]

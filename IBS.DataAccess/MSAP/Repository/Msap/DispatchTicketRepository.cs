@@ -90,15 +90,15 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<bool> IsJobOrderEditableAsync(int? jobOrderId, CancellationToken cancellationToken = default)
+        public async Task<bool> IsCustomerOrderSlipEditableAsync(int? customerOrderSlipId, CancellationToken cancellationToken = default)
         {
-            if (jobOrderId == null)
+            if (customerOrderSlipId == null)
             {
                 return true;
             }
 
-            var jobOrder = await _db.MsapJobOrders.FindAsync(new object[] { jobOrderId.Value }, cancellationToken);
-            return jobOrder?.Status == IBS.Utility.MSAP.Constants.MsapConstants.JobOrderStatus.Open;
+            var customerOrderSlip = await _db.MsapCustomerOrderSlips.FindAsync(new object[] { customerOrderSlipId.Value }, cancellationToken);
+            return customerOrderSlip?.Status == IBS.Utility.MSAP.Constants.MsapConstants.CustomerOrderSlipStatus.Open;
         }
 
         public async Task<DispatchTicketViewModel> GetDispatchTicketSelectLists(DispatchTicketViewModel model, CancellationToken cancellationToken = default)

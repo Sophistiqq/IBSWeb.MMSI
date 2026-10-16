@@ -25,9 +25,9 @@
                 </div>
             </div>
             <div class="flex gap-2">
-                @if (Model.JobOrderId.HasValue)
+                @if (Model.CustomerOrderSlipId.HasValue)
                 {
-                    <a class="modern-btn-secondary" asp-controller="JobOrder" asp-action="Details" asp-route-id="@Model.JobOrderId.Value">
+                    <a class="modern-btn-secondary" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value">
                         <span class="material-symbols-outlined">arrow_back</span> BACK
                     </a>
                 }

@@ -25,7 +25,7 @@
                     <h2 class="modern-headline-md">Workflow Trace</h2>
                 </div>
                 <div class="flex items-center gap-3">
-                    <span class="modern-label" id="traceStatusLabel" style="font-size: 10px;">Select a Job Order to begin</span>
+                    <span class="modern-label" id="traceStatusLabel" style="font-size: 10px;">Select a COS to begin</span>
                     <span class="material-symbols-outlined transition-all" id="traceChevron" style="font-variation-settings: 'FILL' 0, 'wght' 700;">expand_more</span>
                 </div>
             </div>
@@ -35,12 +35,12 @@
                         <!-- Selection Column -->
                         <div class="modern-col-4">
                             <div class="p-3 bg-surface-container-low rounded-md border">
-                                <p class="modern-label mb-3">Target Job Order</p>
-                                <select id="joSelect" class="js-modern-select w-100" data-placeholder="Search Job Order #...">
-                                    <option value="">Search Job Order #...</option>
-                                    @if (ViewBag.JobOrders != null)
+                                <p class="modern-label mb-3">Target COS</p>
+                                <select id="joSelect" class="js-modern-select w-100" data-placeholder="Search COS #...">
+                                    <option value="">Search COS #...</option>
+                                    @if (ViewBag.CustomerOrderSlips != null)
                                     {
-                                        foreach (var item in (IEnumerable<SelectListItem>)ViewBag.JobOrders)
+                                        foreach (var item in (IEnumerable<SelectListItem>)ViewBag.CustomerOrderSlips)
                                         {
                                             <option value="@item.Value">@item.Text</option>
                                         }
@@ -85,7 +85,7 @@
         <!-- Filter Group -->
         <div class="flex flex-wrap gap-2 mb-4">
             <button id="filterAll" class="modern-btn-secondary active">ALL</button>
-            <button id="filterJobOrder" class="modern-btn-secondary">JOB ORDER</button>
+            <button id="filterCustomerOrderSlip" class="modern-btn-secondary">COS</button>
             <button id="filterDispatch" class="modern-btn-secondary">DISPATCH</button>
             <button id="filterTariff" class="modern-btn-secondary">TARIFF</button>
             <button id="filterBilling" class="modern-btn-secondary">BILLING</button>
@@ -171,7 +171,7 @@
                         orderable: false,
                         className: 'text-center',
                         render: function(data, type, row) {
-                            if (row.documentType === "Job Order" && row.recordId) {
+                            if (row.documentType === "COS" && row.recordId) {
                                 return `<button type="button" class="modern-btn-primary" style="padding: 4px 12px; font-size: 11px;" onclick="loadTrace(${row.recordId}, '${row.referenceNumber}')">
                                             <span class="material-symbols-outlined" style="font-size: 16px;">account_tree</span> TRACE
                                         </button>`;
@@ -189,7 +189,7 @@
                 const id = $(this).attr('id');
                 let module = '';
 
-                if (id === 'filterJobOrder') module = "Job Order";
+                if (id === 'filterCustomerOrderSlip') module = "COS";
                 else if (id === 'filterDispatch') module = "Dispatch Ticket";
                 else if (id === 'filterTariff') module = "Tariff";
                 else if (id === 'filterBilling') module = "Billing";
@@ -273,16 +273,16 @@
 
             // Manual sync for ModernSelect if needed
             const $trigger = $select.next('.modern-select-container').find('.selected-text');
-            $trigger.text($select.data('placeholder') || 'Search Job Order #...');
+            $trigger.text($select.data('placeholder') || 'Search COS #...');
 
             $('#traceResult').hide();
             $('#tracePlaceholder').show();
-            $('#traceStatusLabel').text('Select a Job Order to begin');
+            $('#traceStatusLabel').text('Select a COS to begin');
         }
 
         function getBadgeClass(docType) {
             switch(docType) {
-                case "Job Order": return "status-open";
+                case "COS": return "status-open";
                 case "Dispatch Ticket": return "status-billing";
                 case "Tariff": return "status-approval";
                 case "Billing": return "status-billing";

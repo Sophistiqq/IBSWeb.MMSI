@@ -13,7 +13,7 @@ namespace IBS.Services.MSAP
 {
     public class BillingService(
         IUnitOfWork unitOfWork,
-        JobOrderService jobOrderService,
+        CustomerOrderSlipService customerOrderSlipService,
         ILogger<BillingService> logger)
     {
         public async Task<Billing?> GetBillingByIdAsync(int id, CancellationToken cancellationToken)
@@ -31,50 +31,50 @@ namespace IBS.Services.MSAP
                     return ServiceResult<int>.Failure(guard.Message!);
                 }
 
-                if (model.JobOrderId is 0)
+                if (model.CustomerOrderSlipId is 0)
                 {
-                    model.JobOrderId = null;
+                    model.CustomerOrderSlipId = null;
                 }
 
-                if (model.JobOrderId.HasValue)
+                if (model.CustomerOrderSlipId.HasValue)
                 {
-                    var jobOrder = await unitOfWork.JobOrder.GetJobOrderWithDetailsAsync(model.JobOrderId.Value, cancellationToken);
-                    if (jobOrder != null)
+                    var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetCustomerOrderSlipWithDetailsAsync(model.CustomerOrderSlipId.Value, cancellationToken);
+                    if (customerOrderSlip != null)
                     {
                         if (model.CustomerId == 0)
                         {
-                            model.CustomerId = jobOrder.CustomerId;
+                            model.CustomerId = customerOrderSlip.CustomerId;
                         }
 
                         if (model.VesselId == 0)
                         {
-                            model.VesselId = jobOrder.VesselId;
+                            model.VesselId = customerOrderSlip.VesselId;
                         }
 
                         if (model.PortId == 0)
                         {
-                            model.PortId = jobOrder.PortId;
+                            model.PortId = customerOrderSlip.PortId;
                         }
 
                         if (model.TerminalId == 0)
                         {
-                            model.TerminalId = jobOrder.TerminalId;
+                            model.TerminalId = customerOrderSlip.TerminalId;
                         }
 
                         if (string.IsNullOrWhiteSpace(model.VoyageNumber))
                         {
-                            model.VoyageNumber = jobOrder.VoyageNumber;
+                            model.VoyageNumber = customerOrderSlip.VoyageNumber;
                         }
 
                         if (string.IsNullOrWhiteSpace(model.COSNumber))
                         {
-                            model.COSNumber = jobOrder.COSNumber;
+                            model.COSNumber = customerOrderSlip.COSNumber;
                         }
                     }
                 }
 
 
-                string? progressBlocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, model.JobOrderId, JobProgressCalculator.BillingStage, cancellationToken);
+                string? progressBlocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, model.CustomerOrderSlipId, JobProgressCalculator.BillingStage, cancellationToken);
                 if (progressBlocker != null)
                 {
                     return ServiceResult<int>.Failure(progressBlocker);
@@ -143,9 +143,9 @@ namespace IBS.Services.MSAP
                         return ServiceResult<int>.Failure($"Dispatch ticket #{ticketIdStr} not found.");
                     }
 
-                    if (model.JobOrderId.HasValue && dt.JobOrderId != model.JobOrderId)
+                    if (model.CustomerOrderSlipId.HasValue && dt.CustomerOrderSlipId != model.CustomerOrderSlipId)
                     {
-                        return ServiceResult<int>.Failure($"Ticket #{dt.DispatchNumber} does not belong to the selected Job Order.");
+                        return ServiceResult<int>.Failure($"Ticket #{dt.DispatchNumber} does not belong to the selected COS.");
                     }
 
                     if (dt.CustomerId != model.CustomerId)
@@ -153,7 +153,7 @@ namespace IBS.Services.MSAP
                         return ServiceResult<int>.Failure($"Ticket #{dt.DispatchNumber} does not belong to the selected customer.");
                     }
 
-                    string? ticketBlocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, dt.JobOrderId, JobProgressCalculator.BillingStage, cancellationToken);
+                    string? ticketBlocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, dt.CustomerOrderSlipId, JobProgressCalculator.BillingStage, cancellationToken);
                     if (ticketBlocker != null)
                     {
                         return ServiceResult<int>.Failure(ticketBlocker);
@@ -325,9 +325,9 @@ namespace IBS.Services.MSAP
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Posted Billing #{model.MsapBillingNumber}", "Billing", model.MsapBillingId, model.MsapBillingNumber), cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
 
-                    if (model.JobOrderId.HasValue)
+                    if (model.CustomerOrderSlipId.HasValue)
                     {
-                        await jobOrderService.TryAutoCloseAsync(model.JobOrderId.Value, username, cancellationToken);
+                        await customerOrderSlipService.TryAutoCloseAsync(model.CustomerOrderSlipId.Value, username, cancellationToken);
                     }
                 }, cancellationToken);
 
@@ -367,7 +367,7 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Customer not found.");
                 }
 
-                string? progressBlocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, currentModel.JobOrderId, JobProgressCalculator.BillingStage, cancellationToken);
+                string? progressBlocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, currentModel.CustomerOrderSlipId, JobProgressCalculator.BillingStage, cancellationToken);
                 if (progressBlocker != null)
                 {
                     return ServiceResult.Failure(progressBlocker);
@@ -377,7 +377,7 @@ namespace IBS.Services.MSAP
                     foreach (var ticketId in model.ToBillDispatchTickets)
                     {
                         var ticket = await unitOfWork.DispatchTicket.GetAsync(t => t.DispatchTicketId == int.Parse(ticketId), cancellationToken);
-                        string? blocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, ticket?.JobOrderId, JobProgressCalculator.BillingStage, cancellationToken);
+                        string? blocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, ticket?.CustomerOrderSlipId, JobProgressCalculator.BillingStage, cancellationToken);
                         if (blocker != null)
                         {
                             return ServiceResult.Failure(blocker);
@@ -407,9 +407,9 @@ namespace IBS.Services.MSAP
                 currentModel.TerminalId = model.TerminalId;
                 currentModel.VesselId = model.VesselId;
                 currentModel.BilledTo = model.BilledTo;
-                if (model.JobOrderId.HasValue)
+                if (model.CustomerOrderSlipId.HasValue)
                 {
-                    currentModel.JobOrderId = model.JobOrderId;
+                    currentModel.CustomerOrderSlipId = model.CustomerOrderSlipId;
                 }
                 currentModel.IsVatInclusive = model.IsVatInclusive;
                 currentModel.PrintWht = model.PrintWht;
@@ -505,14 +505,14 @@ namespace IBS.Services.MSAP
                 await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Deleted Billing #{model.MsapBillingNumber}", "Billing", model.MsapBillingId, model.MsapBillingNumber), cancellationToken);
                 await unitOfWork.SaveAsync(cancellationToken);
 
-                // Re-open the Job Order if it was auto-closed
-                var jobOrderId = linkedTickets.FirstOrDefault()?.JobOrderId;
-                if (jobOrderId.HasValue)
+                // Re-open the COS if it was auto-closed
+                var customerOrderSlipId = linkedTickets.FirstOrDefault()?.CustomerOrderSlipId;
+                if (customerOrderSlipId.HasValue)
                 {
-                    var jobOrder = await unitOfWork.JobOrder.GetAsync(jo => jo.JobOrderId == jobOrderId.Value, cancellationToken);
-                    if (jobOrder?.Status == MsapConstants.JobOrderStatus.Closed)
+                    var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetAsync(jo => jo.CustomerOrderSlipId == customerOrderSlipId.Value, cancellationToken);
+                    if (customerOrderSlip?.Status == MsapConstants.CustomerOrderSlipStatus.Closed)
                     {
-                        jobOrder.Status = MsapConstants.JobOrderStatus.Open;
+                        customerOrderSlip.Status = MsapConstants.CustomerOrderSlipStatus.Open;
                         await unitOfWork.SaveAsync(cancellationToken);
                     }
                 }
@@ -577,12 +577,12 @@ namespace IBS.Services.MSAP
                         new AuditTrail(username, $"Reversed (unposted) Billing #{billingNumber}", "Billing", billing.MsapBillingId, billingNumber),
                         cancellationToken);
 
-                    if (billing.JobOrderId.HasValue)
+                    if (billing.CustomerOrderSlipId.HasValue)
                     {
-                        var jobOrder = await unitOfWork.JobOrder.GetAsync(jo => jo.JobOrderId == billing.JobOrderId, cancellationToken);
-                        if (jobOrder is { Status: MsapConstants.JobOrderStatus.Closed })
+                        var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetAsync(jo => jo.CustomerOrderSlipId == billing.CustomerOrderSlipId, cancellationToken);
+                        if (customerOrderSlip is { Status: MsapConstants.CustomerOrderSlipStatus.Closed })
                         {
-                            jobOrder.Status = MsapConstants.JobOrderStatus.Open;
+                            customerOrderSlip.Status = MsapConstants.CustomerOrderSlipStatus.Open;
                         }
                     }
 
@@ -598,9 +598,9 @@ namespace IBS.Services.MSAP
             }
         }
 
-        public async Task<(IEnumerable<Billing> Data, int RecordsFiltered, int TotalRecords)> GetPagedBillingsAsync(DataTablesParameters parameters, CancellationToken cancellationToken, int? jobOrderId = null)
+        public async Task<(IEnumerable<Billing> Data, int RecordsFiltered, int TotalRecords)> GetPagedBillingsAsync(DataTablesParameters parameters, CancellationToken cancellationToken, int? customerOrderSlipId = null)
         {
-            return await unitOfWork.Billing.GetPagedBillingsAsync(parameters, cancellationToken, jobOrderId);
+            return await unitOfWork.Billing.GetPagedBillingsAsync(parameters, cancellationToken, customerOrderSlipId);
         }
 
         public async Task<List<object>> SearchPrincipalsAsync(string? term, int customerId, CancellationToken cancellationToken)
@@ -618,35 +618,35 @@ namespace IBS.Services.MSAP
             }).ToList();
         }
 
-        public async Task<List<object>> GetBillableJobOrdersAsync(int customerId, CancellationToken cancellationToken)
+        public async Task<List<object>> GetBillableCustomerOrderSlipsAsync(int customerId, CancellationToken cancellationToken)
         {
-            var result = await unitOfWork.JobOrder.SearchBillableJobOrdersAsync("", customerId, 999, cancellationToken);
+            var result = await unitOfWork.CustomerOrderSlip.SearchBillableCustomerOrderSlipsAsync("", customerId, 999, cancellationToken);
 
             return result.Select(j => (object)new
             {
-                value = j.JobOrderId,
-                name = j.JobOrderNumber,
+                value = j.CustomerOrderSlipId,
+                name = j.CustomerOrderSlipNumber,
                 description = j.Remarks ?? ""
             }).ToList();
         }
 
-        public async Task<ServiceResult<JobOrderBillingDto>> GetDispatchTicketsByJobOrderAsync(int jobOrderId, CancellationToken cancellationToken)
+        public async Task<ServiceResult<CustomerOrderSlipBillingDto>> GetDispatchTicketsByCustomerOrderSlipAsync(int customerOrderSlipId, CancellationToken cancellationToken)
         {
-            var jobOrder = await unitOfWork.JobOrder.GetJobOrderWithDetailsAsync(jobOrderId, cancellationToken);
-            if (jobOrder == null)
+            var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetCustomerOrderSlipWithDetailsAsync(customerOrderSlipId, cancellationToken);
+            if (customerOrderSlip == null)
             {
-                return ServiceResult<JobOrderBillingDto>.Failure("Job Order not found");
+                return ServiceResult<CustomerOrderSlipBillingDto>.Failure("COS not found");
             }
 
-            string? blocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, jobOrderId, JobProgressCalculator.BillingStage, cancellationToken);
+            string? blocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, customerOrderSlipId, JobProgressCalculator.BillingStage, cancellationToken);
             if (blocker != null)
             {
-                return ServiceResult<JobOrderBillingDto>.Failure(blocker);
+                return ServiceResult<CustomerOrderSlipBillingDto>.Failure(blocker);
             }
 
-            var tickets = jobOrder.DispatchTickets
+            var tickets = customerOrderSlip.DispatchTickets
                 .Where(t => t is { Status: MsapConstants.DispatchTicketStatus.ForBilling, BillingId: null })
-                .Select(t => new JobOrderTicketDto
+                .Select(t => new CustomerOrderSlipTicketDto
                 {
                     DispatchTicketId = t.DispatchTicketId,
                     DispatchNo = t.DispatchNumber,
@@ -664,30 +664,30 @@ namespace IBS.Services.MSAP
                     Terminal = t.Terminal?.TerminalName
                 }).ToList();
 
-            return ServiceResult<JobOrderBillingDto>.Success(new JobOrderBillingDto
+            return ServiceResult<CustomerOrderSlipBillingDto>.Success(new CustomerOrderSlipBillingDto
             {
-                Header = new JobOrderHeaderDto
+                Header = new CustomerOrderSlipHeaderDto
                 {
-                    VesselId = jobOrder.VesselId,
-                    PortId = jobOrder.PortId,
-                    TerminalId = jobOrder.TerminalId,
-                    VoyageNumber = jobOrder.VoyageNumber,
-                    COSNumber = jobOrder.COSNumber
+                    VesselId = customerOrderSlip.VesselId,
+                    PortId = customerOrderSlip.PortId,
+                    TerminalId = customerOrderSlip.TerminalId,
+                    VoyageNumber = customerOrderSlip.VoyageNumber,
+                    COSNumber = customerOrderSlip.COSNumber
                 },
                 Tickets = tickets
             });
         }
 
-        public async Task<ServiceResult<JobOrderBillingDto>> GetDispatchTicketsByCustomerAsync(int customerId, CancellationToken cancellationToken)
+        public async Task<ServiceResult<CustomerOrderSlipBillingDto>> GetDispatchTicketsByCustomerAsync(int customerId, CancellationToken cancellationToken)
         {
             var tickets = await unitOfWork.DispatchTicket.GetAllAsync(t =>
                 t.CustomerId == customerId &&
                 t.Status == MsapConstants.DispatchTicketStatus.ForBilling &&
                 t.BillingId == null &&
-                t.JobOrderId == null,
+                t.CustomerOrderSlipId == null,
                 cancellationToken);
 
-            var ticketDtos = tickets.Select(t => new JobOrderTicketDto
+            var ticketDtos = tickets.Select(t => new CustomerOrderSlipTicketDto
             {
                 DispatchTicketId = t.DispatchTicketId,
                 DispatchNo = t.DispatchNumber,
@@ -705,9 +705,9 @@ namespace IBS.Services.MSAP
                 Terminal = t.Terminal?.TerminalName
             }).ToList();
 
-            return ServiceResult<JobOrderBillingDto>.Success(new JobOrderBillingDto
+            return ServiceResult<CustomerOrderSlipBillingDto>.Success(new CustomerOrderSlipBillingDto
             {
-                Header = new JobOrderHeaderDto(),
+                Header = new CustomerOrderSlipHeaderDto(),
                 Tickets = ticketDtos
             });
         }
@@ -841,7 +841,7 @@ namespace IBS.Services.MSAP
                 if (dupBaf != null)
                     return ServiceResult<(int, int)>.Failure($"BAF Billing number '{bafBillingNumber}' already exists.");
 
-                if (model.JobOrderId is 0) model.JobOrderId = null;
+                if (model.CustomerOrderSlipId is 0) model.CustomerOrderSlipId = null;
 
                 if (model.ToBillDispatchTickets == null || !model.ToBillDispatchTickets.Any())
                     return ServiceResult<(int, int)>.Failure("At least one dispatch ticket must be selected.");
@@ -868,11 +868,11 @@ namespace IBS.Services.MSAP
                         return ServiceResult<(int, int)>.Failure($"Dispatch ticket #{idStr} not found.");
 
                     if (dt.Status != MsapConstants.DispatchTicketStatus.ForBilling || dt.BillingId.HasValue
-                        || dt.CustomerId != model.CustomerId || (model.JobOrderId.HasValue && dt.JobOrderId != model.JobOrderId))
+                        || dt.CustomerId != model.CustomerId || (model.CustomerOrderSlipId.HasValue && dt.CustomerOrderSlipId != model.CustomerOrderSlipId))
                     {
                         return ServiceResult<(int, int)>.Failure($"Ticket #{dt.DispatchNumber} is not available for this billing.");
                     }
-                    string? blocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, dt.JobOrderId, JobProgressCalculator.BillingStage, cancellationToken);
+                    string? blocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, dt.CustomerOrderSlipId, JobProgressCalculator.BillingStage, cancellationToken);
                     if (blocker != null)
                     {
                         return ServiceResult<(int, int)>.Failure(blocker);
@@ -905,7 +905,7 @@ namespace IBS.Services.MSAP
                     TerminalId = model.TerminalId,
                     VoyageNumber = model.VoyageNumber,
                     COSNumber = model.COSNumber,
-                    JobOrderId = model.JobOrderId,
+                    CustomerOrderSlipId = model.CustomerOrderSlipId,
                     IsVatable = model.IsVatable,
                     IsVatInclusive = model.IsVatInclusive,
                     PrintWht = model.PrintWht,
@@ -956,7 +956,7 @@ namespace IBS.Services.MSAP
                         TugBoatId = dt.TugBoatId,
                         TugMasterId = dt.TugMasterId,
                         ServiceId = dt.ServiceId,
-                        JobOrderId = dt.JobOrderId,
+                        CustomerOrderSlipId = dt.CustomerOrderSlipId,
                         Status = dt.Status,
                         CreatedBy = username,
                         CreatedDate = now,
@@ -992,7 +992,7 @@ namespace IBS.Services.MSAP
                     TerminalId = model.TerminalId,
                     VoyageNumber = model.VoyageNumber,
                     COSNumber = model.COSNumber,
-                    JobOrderId = model.JobOrderId,
+                    CustomerOrderSlipId = model.CustomerOrderSlipId,
                     IsVatable = model.IsVatable,
                     IsVatInclusive = model.IsVatInclusive,
                     PrintWht = model.PrintWht,

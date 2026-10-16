@@ -39,25 +39,25 @@
                     <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
 
                     <div class="modern-grid">
-                        @* -- Job Order -- *@
+                        @* -- COS -- *@
                         <div class="modern-col-4">
-                            <h3 class="modern-label border-b border-outline-variant pb-2 mb-3" style="color: var(--primary)">Job Order</h3>
+                            <h3 class="modern-label border-b border-outline-variant pb-2 mb-3" style="color: var(--primary)">COS</h3>
                             <div class="flex flex-col gap-2">
                                 <label class="flex items-center gap-2 cursor-pointer">
-                                    <input asp-for="CanCreateJobOrder" class="form-check-input" />
-                                    <span class="text-sm">Create Job Order</span>
+                                    <input asp-for="CanCreateCustomerOrderSlip" class="form-check-input" />
+                                    <span class="text-sm">Create COS</span>
                                 </label>
                                 <label class="flex items-center gap-2 cursor-pointer">
-                                    <input asp-for="CanEditJobOrder" class="form-check-input" />
-                                    <span class="text-sm">Edit Job Order</span>
+                                    <input asp-for="CanEditCustomerOrderSlip" class="form-check-input" />
+                                    <span class="text-sm">Edit COS</span>
                                 </label>
                                 <label class="flex items-center gap-2 cursor-pointer">
-                                    <input asp-for="CanDeleteJobOrder" class="form-check-input" />
-                                    <span class="text-sm">Delete Job Order</span>
+                                    <input asp-for="CanDeleteCustomerOrderSlip" class="form-check-input" />
+                                    <span class="text-sm">Delete COS</span>
                                 </label>
                                 <label class="flex items-center gap-2 cursor-pointer">
-                                    <input asp-for="CanCloseJobOrder" class="form-check-input" />
-                                    <span class="text-sm">Close Job Order</span>
+                                    <input asp-for="CanCloseCustomerOrderSlip" class="form-check-input" />
+                                    <span class="text-sm">Close COS</span>
                                 </label>
                             </div>
                         </div>

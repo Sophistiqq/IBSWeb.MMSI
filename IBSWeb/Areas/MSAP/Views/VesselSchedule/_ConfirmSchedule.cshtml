@@ -2,7 +2,7 @@
 @model VesselSchedule
 @{
     var tugs = (List<string>)ViewBag.AssignedTugboats;
-    var isReapproval = Model.JobOrderId.HasValue;
+    var isReapproval = Model.CustomerOrderSlipId.HasValue;
 }
 <div class="schedule-confirm-review">
     <dl id="bookingReview">
@@ -10,7 +10,7 @@
         <dt>Vessel</dt><dd>@Model.Vessel.VesselName</dd>
         <dt>Location</dt><dd>@Model.Port.PortName / @Model.Terminal.TerminalName</dd>
         <dt>Voyage</dt><dd>@(Model.VoyageNumber ?? "—")</dd>
-        <dt>Planned start / Job Order date</dt><dd>@Model.PlannedStart.ToString("MMM d, yyyy · HH:mm")</dd>
+        <dt>Planned start / COS date</dt><dd>@Model.PlannedStart.ToString("MMM d, yyyy · HH:mm")</dd>
         <dt>Planned end</dt><dd>@Model.PlannedEnd.ToString("MMM d, yyyy · HH:mm")</dd>
         <dt>Assigned tugs</dt><dd>@(tugs.Count == 0 ? "Not assigned" : string.Join(", ", tugs))</dd>
         <dt>Schedule revision</dt><dd>Revision @Model.Revision @(isReapproval ? "(Reapproval)" : "")</dd>
@@ -62,8 +62,8 @@
             <p class="schedule-muted">No specific services defined.</p>
         }
     </div>
-    <p class="schedule-confirm-guidance">@(isReapproval ? $"Reapproval approves Revision {Model.Revision} and confirms the schedule, preserving Job Order {Model.JobOrder?.JobOrderNumber}." : $"Confirmation creates a Job Order using these booking details and approves Revision {Model.Revision}.") All times are Philippine time.</p>
-    <form asp-action="Confirm" asp-controller="VesselSchedule" asp-area="MSAP" method="post" id="confirmSchedule" data-reapproval="@(isReapproval ? "true" : "false")" data-job-order="@(Model.JobOrder?.JobOrderNumber ?? "")">
+    <p class="schedule-confirm-guidance">@(isReapproval ? $"Reapproval approves Revision {Model.Revision} and confirms the schedule, preserving COS {Model.CustomerOrderSlip?.CustomerOrderSlipNumber}." : $"Confirmation creates a COS using these booking details and approves Revision {Model.Revision}.") All times are Philippine time.</p>
+    <form asp-action="Confirm" asp-controller="VesselSchedule" asp-area="MSAP" method="post" id="confirmSchedule" data-reapproval="@(isReapproval ? "true" : "false")" data-customer-order-slip="@(Model.CustomerOrderSlip?.CustomerOrderSlipNumber ?? "")">
         <input type="hidden" name="id" value="@Model.VesselScheduleId" />
         <input type="hidden" name="reviewedAt" value="@((Model.EditedDate ?? Model.CreatedDate).ToString("O"))" />
         <input type="hidden" name="allowConflicts" value="false" />

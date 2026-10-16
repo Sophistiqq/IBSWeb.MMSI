@@ -1,15 +1,12 @@
-@model IBS.Models.MSAP.ViewModels.JobOrderViewModel
+@model IBS.Models.MSAP.ViewModels.CustomerOrderSlipViewModel
 
 @{
-    ViewData["Title"] = "Edit Job Order";
+    ViewData["Title"] = "Create COS";
     ViewData["IsFullWidth"] = true;
-    bool hasTickets = ViewData["HasTickets"] as bool? ?? false;
 }
 
 <div class="modern-layout">
-    <form asp-action="Edit" method="post" id="jobOrderForm">
-        <input type="hidden" asp-for="JobOrderId" />
-
+    <form asp-action="Create" method="post" id="customerOrderSlipForm">
         <main class="modern-container">
             <!-- Header Section -->
             <div class="flex-stack">
@@ -17,36 +14,21 @@
                     <div class="flex items-center gap-2 mb-1">
                         <span class="modern-label">MSAP</span>
                         <span class="material-symbols-outlined text-xs">chevron_right</span>
-                        <a class="modern-label" style="text-decoration:none;" asp-action="Index">Job Orders</a>
+                        <a class="modern-label" style="text-decoration:none;" asp-action="Index">COS records</a>
                         <span class="material-symbols-outlined text-xs">chevron_right</span>
-                        <a class="modern-label" style="text-decoration:none;" asp-action="Details" asp-route-id="@Model.JobOrderId">@ViewData["JobOrderNumber"]</a>
-                        <span class="material-symbols-outlined text-xs">chevron_right</span>
-                        <span class="modern-label" style="color: var(--on-surface)">Edit</span>
+                        <span class="modern-label" style="color: var(--on-surface)">New COS</span>
                     </div>
-                    <h1 class="modern-headline-lg" data-page-header>Edit Job Order</h1>
+                    <h1 class="modern-headline-lg" data-page-header>Create COS</h1>
                 </div>
                 <div class="flex gap-2" data-tour-step="11">
-                    <button type="button" class="modern-btn-primary" id="confirmEditBtn">
-                        <span class="material-symbols-outlined">save</span> Save Changes
+                    <button type="button" class="modern-btn-primary" id="confirmCreateBtn">
+                        <span class="material-symbols-outlined">save</span> Create COS
                     </button>
-                    <a asp-action="Details" asp-route-id="@Model.JobOrderId" class="modern-btn-secondary">
+                    <a asp-action="Index" class="modern-btn-secondary">
                         <span class="material-symbols-outlined">cancel</span> Cancel
                     </a>
                 </div>
             </div>
-
-            @if (hasTickets)
-            {
-                <div class="modern-card" style="background-color: #fff8e1; border-color: #ffe082; color: #856404; margin-bottom: 0.5rem;">
-                    <div class="modern-card-body flex flex-row items-center gap-4">
-                        <span class="material-symbols-outlined" style="font-size: 32px;">warning</span>
-                        <div>
-                            <p class="font-bold text-sm mb-1">Existing Dispatch Tickets Detected</p>
-                            <p class="text-xs mb-0">Changing Vessel, Port, or Terminal may affect consistency with existing tickets. Please review them after saving.</p>
-                        </div>
-                    </div>
-                </div>
-            }
 
             <div class="modern-grid">
                 <!-- Left Column: Primary Logistics & Remarks (col-8) -->
@@ -63,7 +45,7 @@
                                 <div class="modern-col-8">
                                     <label asp-for="CustomerId" class="modern-label">Customer <span class="text-error">*</span></label>
                                     <div id="CustomerContainer" data-tour-step="1">
-                                        <select asp-for="CustomerId" asp-items="@Model.Customers" class="js-modern-select" id="CustomerId" data-placeholder="-- Select Customer --">
+                                        <select asp-for="CustomerId" asp-items="@Model.Customers" class="js-modern-select" id="CustomerId" data-testid="select-CustomerId" data-placeholder="-- Select Customer --">
                                             <option value="">-- Select Customer --</option>
                                         </select>
                                     </div>
@@ -77,25 +59,31 @@
                             </div>
 
                             <div class="modern-grid mt-2">
-                                <div class="modern-col-4" data-tour-step="3">
+                                <div class="modern-col-4">
                                     <label asp-for="VesselId" class="modern-label">Vessel</label>
-                                    <select asp-for="VesselId" asp-items="@Model.Vessels" class="js-modern-select" id="VesselSelect" data-placeholder="-- Select Vessel --">
-                                        <option value="">-- Select Vessel --</option>
-                                    </select>
+                                    <div id="VesselContainer" data-tour-step="3">
+                                        <select asp-for="VesselId" asp-items="@Model.Vessels" class="js-modern-select" id="VesselSelect" data-testid="select-VesselId" data-placeholder="-- Select Vessel --">
+                                            <option value="">-- Select Vessel --</option>
+                                        </select>
+                                    </div>
                                     <span asp-validation-for="VesselId" class="text-error text-xs"></span>
                                 </div>
-                                <div class="modern-col-4" data-tour-step="4">
+                                <div class="modern-col-4">
                                     <label asp-for="PortId" class="modern-label">Port</label>
-                                    <select asp-for="PortId" asp-items="@Model.Ports" class="js-modern-select" id="PortId" data-placeholder="-- Select Port --">
-                                        <option value="">-- Select Port --</option>
-                                    </select>
+                                    <div id="PortContainer" data-tour-step="4">
+                                        <select asp-for="PortId" asp-items="@Model.Ports" class="js-modern-select" id="PortId" data-testid="select-PortId" data-placeholder="-- Select Port --">
+                                            <option value="">-- Select Port --</option>
+                                        </select>
+                                    </div>
                                     <span asp-validation-for="PortId" class="text-error text-xs"></span>
                                 </div>
-                                <div class="modern-col-4" data-tour-step="5">
+                                <div class="modern-col-4">
                                     <label asp-for="TerminalId" class="modern-label">Terminal</label>
-                                    <select asp-for="TerminalId" asp-items="@Model.Terminals" class="js-modern-select" id="TerminalId" data-placeholder="-- Select Terminal --">
-                                        <option value="">-- Select Terminal --</option>
-                                    </select>
+                                    <div id="TerminalContainer" data-tour-step="5">
+                                        <select asp-for="TerminalId" asp-items="@Model.Terminals" class="js-modern-select" id="TerminalId" data-testid="select-TerminalId" data-placeholder="-- Select Terminal --">
+                                            <option value="">-- Select Terminal --</option>
+                                        </select>
+                                    </div>
                                     <span asp-validation-for="TerminalId" class="text-error text-xs"></span>
                                 </div>
                             </div>
@@ -108,7 +96,7 @@
                             <h2 class="modern-headline-md">Remarks</h2>
                         </div>
                         <div class="modern-card-body" style="height: 100%;" data-tour-step="10">
-                            <textarea asp-for="Remarks" class="modern-input" style="height: 100%; min-height: 150px;" placeholder="Additional notes..."></textarea>
+                            <textarea asp-for="Remarks" class="modern-input" style="height: 100%; min-height: 150px;" placeholder="Additional notes or special instructions..."></textarea>
                             <span asp-validation-for="Remarks" class="text-error text-xs"></span>
                         </div>
                     </div>
@@ -167,8 +155,8 @@
 @section Scripts {
     <script>
         window.IBS_TOUR_STEPS = [
-            { step: 1, title: "Customer", text: "Select the customer requesting the tug service. Check the customer name carefully; this identifies the customer on the job order and related dispatch tickets." },
-            { step: 2, title: "Order Date", text: "Review the date this job order is recorded under. Saving a new date also updates the date on related unbilled dispatch tickets. Use the planned schedule fields for expected arrival and departure times.", autoAdvance: false },
+            { step: 1, title: "Customer", text: "Select the customer requesting the tug service. Check the customer name carefully; this identifies the customer on the COS and related dispatch tickets." },
+            { step: 2, title: "Order Date", text: "The order date defaults to today in Philippine time. Set it to the date this COS should be recorded under. The planned arrival and departure times are entered separately.", autoAdvance: false },
             { step: 3, title: "Vessel", text: "Select the vessel that will receive the tug service. Confirm that the vessel name matches the service request before choosing the port and terminal." },
             { step: 4, title: "Port", text: "Select the port where the service will take place. Changing the port clears the selected terminal and loads the terminals for the new port, so select the terminal again." },
             { step: 5, title: "Terminal", text: "Select the terminal within the chosen port where the vessel will be serviced. If the expected terminal is missing, first check that you selected the correct port." },
@@ -177,7 +165,7 @@
             { step: 8, title: "Planned Arrival/Start (Optional)", text: "Enter the expected arrival or service start date and time, if known. This records the planned timing; actual service times are recorded on the dispatch ticket. Leave it blank if the plan is not yet known.", required: false, autoAdvance: false },
             { step: 9, title: "Planned Departure/End (Optional)", text: "Enter the expected departure or service end date and time, if known. When both planned times are entered, the end must be later than the start. Check the date as well as the time for overnight service.", required: false, autoAdvance: false },
             { step: 10, title: "Remarks (Optional)", text: "Add special instructions or details the team needs for this job, such as coordination notes or service requirements. Leave this blank when there are no additional instructions.", required: false, autoAdvance: false },
-            { step: 11, title: "Save Changes", text: "Review your changes before clicking Save Changes and confirming. Changing the customer, vessel, port, or terminal returns affected unbilled tickets to For Tariff and clears their pricing for review. Check related tickets after saving. Cancel returns to Details without saving.", autoAdvance: false }
+            { step: 11, title: "Create COS", text: "Review the customer, vessel, location, references, and planned schedule. Click Create COS, then confirm to save. The new order opens in Details, where you can continue with dispatch tickets. Cancel returns to the list without saving.", autoAdvance: false }
         ];
     </script>
 
@@ -206,7 +194,6 @@
             }
 
             $(".timeline-input").on("change input", validatePlannedTimes);
-            validatePlannedTimes(); // Initial check
 
             // ── Port-Terminal Cascade ──────────────────────────────────────
             $('#PortId').on('change', function () {
@@ -219,7 +206,7 @@
                 if (!portId) return;
 
                 $.ajax({
-                    url: '@Url.Action("ChangeTerminal", "JobOrder")',
+                    url: '@Url.Action("ChangeTerminal", "CustomerOrderSlip")',
                     type: 'GET',
                     data: { portId: portId },
                     success: function (data) {
@@ -234,21 +221,21 @@
                 });
             });
 
-            $('#confirmEditBtn').on('click', confirmEdit);
+            $('#confirmCreateBtn').on('click', confirmCreate);
         });
 
-        function confirmEdit() {
-            if (!ModernFormValidator.validate('jobOrderForm')) return;
+        function confirmCreate() {
+            if (!ModernFormValidator.validate('customerOrderSlipForm')) return;
 
             ModernAlert.confirm({
-                title: 'Save Changes?',
-                text: "Are you sure you want to update this job order?",
+                title: 'Create COS?',
+                text: "Please ensure all details are correct before proceeding.",
                 icon: 'question',
-                confirmText: 'Yes, save'
+                confirmText: 'Yes, create it!'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    ModernAlert.showLoading("Saving changes...");
-                    document.getElementById("jobOrderForm").submit();
+                    ModernAlert.showLoading("Creating COS...");
+                    document.getElementById("customerOrderSlipForm").submit();
                 }
             });
         }

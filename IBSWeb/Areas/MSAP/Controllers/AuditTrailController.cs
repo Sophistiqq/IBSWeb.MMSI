@@ -5,11 +5,11 @@ using Microsoft.AspNetCore.Mvc;
 namespace IBSWeb.Areas.MSAP.Controllers
 {
     [Area("MSAP")]
-    public class AuditTrailController(IAuditTrailService auditTrailService, JobOrderService jobOrderService, ILogger<AuditTrailController> logger): Controller
+    public class AuditTrailController(IAuditTrailService auditTrailService, CustomerOrderSlipService customerOrderSlipService, ILogger<AuditTrailController> logger): Controller
     {
         public async Task<IActionResult> Index(CancellationToken cancellationToken)
         {
-            ViewBag.JobOrders = await jobOrderService.GetJobOrderSelectListAsync(cancellationToken);
+            ViewBag.CustomerOrderSlips = await customerOrderSlipService.GetCustomerOrderSlipSelectListAsync(cancellationToken);
             return View();
         }
 
@@ -31,18 +31,18 @@ namespace IBSWeb.Areas.MSAP.Controllers
         {
             try
             {
-                var timeline = await auditTrailService.GetJobOrderTimelineAsync(id, cancellationToken);
+                var timeline = await auditTrailService.GetCustomerOrderSlipTimelineAsync(id, cancellationToken);
                 return PartialView("_Timeline", timeline);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error fetching timeline for Job Order {JobOrderId}", id);
+                logger.LogError(ex, "Error fetching timeline for COS {CustomerOrderSlipId}", id);
                 return StatusCode(500, "Internal server error while fetching timeline.");
             }
         }
 
         [HttpGet]
-        public async Task<IActionResult> SearchJobOrders(string term, CancellationToken cancellationToken)
+        public async Task<IActionResult> SearchCustomerOrderSlips(string term, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(term))
             {
@@ -56,12 +56,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 Start = 0
             };
 
-            (IEnumerable<JobOrder> data, _, _) = await jobOrderService.GetPagedJobOrdersAsync(parameters, cancellationToken);
+            (IEnumerable<CustomerOrderSlip> data, _, _) = await customerOrderSlipService.GetPagedCustomerOrderSlipsAsync(parameters, cancellationToken);
 
             var result = data.Select(jo => new
             {
-                id = jo.JobOrderId,
-                text = $"{jo.JobOrderNumber} - {jo.Vessel.VesselName}"
+                id = jo.CustomerOrderSlipId,
+                text = $"{jo.CustomerOrderSlipNumber} - {jo.Vessel.VesselName}"
             });
 
             return Json(result);

@@ -19,13 +19,13 @@
                 <h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
             </div>
             <div class="flex gap-2">
-                @if (ViewBag.JobOrderId != null)
+                @if (ViewBag.CustomerOrderSlipId != null)
                 {
-                    <a asp-action="Index" asp-route-jobOrderId="" asp-route-id="" class="modern-btn-secondary">All Billings</a>
+                    <a asp-action="Index" asp-route-customerOrderSlipId="" asp-route-id="" class="modern-btn-secondary">All Billings</a>
                 }
                 @if (ViewBag.CanPost == true && (jobProgress == null || jobProgress.Any(p => p.Stage == JobProgressCalculator.BillingStage && !p.Stopped)))
                 {
-                    <a asp-action="Create" asp-route-jobOrderId="@ViewBag.JobOrderId" class="modern-btn-primary" data-hotkey="c">
+                    <a asp-action="Create" asp-route-customerOrderSlipId="@ViewBag.CustomerOrderSlipId" class="modern-btn-primary" data-hotkey="c">
                         <span class="material-symbols-outlined">add_circle</span>
                         CREATE BILLING
                     </a>
@@ -98,7 +98,7 @@
             window.IBS_TOUR_STEPS.unshift({ selector: '.flex-stack .modern-btn-primary', title: 'Create billing', text: 'Create a statement for eligible approved Dispatch Tickets. The saved billing waits for a separate posting action.', interactive: false });
         }
         if (document.querySelector('.financial-job-progress .job-progress')) {
-            window.IBS_TOUR_STEPS.unshift({ selector: '.financial-job-progress', title: 'Job progress', text: 'Review the linked Job Order stage and its next available action before posting or collecting.', interactive: false });
+            window.IBS_TOUR_STEPS.unshift({ selector: '.financial-job-progress', title: 'Job progress', text: 'Review the linked COS stage and its next available action before posting or collecting.', interactive: false });
         }
     </script>
     <script>
@@ -119,7 +119,7 @@
             let table = $('#paginatedTable').DataTable(ModernTable.config({
                 order: [[0, 'desc']],
                 columnDefs: [{ orderable: false, targets: [8] }],
-                ajax: ModernTable.ajax("@Url.Action("GetBillingList", "Billing", new { area = "MSAP", jobOrderId = ViewBag.JobOrderId })"),
+                ajax: ModernTable.ajax("@Url.Action("GetBillingList", "Billing", new { area = "MSAP", customerOrderSlipId = ViewBag.CustomerOrderSlipId })"),
                 columns: [
                     { data: "date", defaultContent: "" },
                     {

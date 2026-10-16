@@ -6,6 +6,10 @@ Status: implementation started. Phase 0 source trace is recorded; phase 1a adds 
 
 Implementation tracking: see [IMPLEMENTATION_BASELINE.md](IMPLEMENTATION_BASELINE.md) for the source trace, accounting boundary, sample reconciliation, and outstanding release prerequisites.
 
+> Naming clarification (16 October 2026): replace the MSAP JobOrder implementation with CustomerOrderSlip throughout active code, views, permissions, DTOs, routes and schema. Display COS and use `/MSAP/COS/...`; do not retain a JobOrder route or add legacy-data adapters. Current database contents are disposable. Do not reset the user's database unless requested.
+
+> Ticket creation clarification (16 October 2026): approving a schedule creates/approves the COS only. Expected service rows remain pending requirements; create the dispatch ticket when Operations saves its actual ticket number, ticket date, start/end timestamps and required details. Do not insert blank or synthetic dispatch tickets during approval. Every expected service, including subcontractors, must be recorded before service completion or billing.
+
 ## 1. Authority, outcome, and scope
 
 ### Subsequent wireframe decisions — 16 October 2026

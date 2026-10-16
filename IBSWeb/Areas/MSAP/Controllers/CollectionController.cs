@@ -41,18 +41,18 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// </summary>
         [HttpGet]
         [RequireAccess(ProcedureEnum.CreateCollection, "Access denied. You don't have permission to create Collections.")]
-        public async Task<IActionResult> Create(CancellationToken cancellationToken = default, int? jobOrderId = null)
+        public async Task<IActionResult> Create(CancellationToken cancellationToken = default, int? customerOrderSlipId = null)
         {
             var model = await collectionService.PopulateCreateViewModelAsync(cancellationToken);
-            if (jobOrderId.HasValue)
+            if (customerOrderSlipId.HasValue)
             {
-                var job = await unitOfWork.JobOrder.GetAsync(j => j.JobOrderId == jobOrderId.Value, cancellationToken);
+                var job = await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == customerOrderSlipId.Value, cancellationToken);
                 if (job == null)
                 {
                     return NotFound();
                 }
                 model.CustomerId = job.CustomerId;
-                model.JobOrderId = job.JobOrderId;
+                model.CustomerOrderSlipId = job.CustomerOrderSlipId;
             }
             return View(model);
         }
@@ -270,9 +270,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// </summary>
         [HttpGet]
         [RequireAnyAccess(ProcedureEnum.CreateCollection)]
-        public async Task<IActionResult> GetUncollectedBillingsForTable(int customerId, int? collectionId, CancellationToken cancellationToken = default, int? jobOrderId = null)
+        public async Task<IActionResult> GetUncollectedBillingsForTable(int customerId, int? collectionId, CancellationToken cancellationToken = default, int? customerOrderSlipId = null)
         {
-            var result = await collectionService.GetUncollectedBillingsForTableAsync(customerId, collectionId, cancellationToken, jobOrderId);
+            var result = await collectionService.GetUncollectedBillingsForTableAsync(customerId, collectionId, cancellationToken, customerOrderSlipId);
             return Json(new { success = result.IsSuccess, data = result.Data, message = result.Message });
         }
 

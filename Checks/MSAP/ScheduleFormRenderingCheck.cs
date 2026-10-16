@@ -80,7 +80,7 @@ namespace Checks.MSAP
             };
             foreach (bool reapproval in new[] { false, true })
             {
-                schedule.JobOrderId = reapproval ? 7 : null;
+                schedule.CustomerOrderSlipId = reapproval ? 7 : null;
                 var reviewData = new ViewDataDictionary<VesselSchedule>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = schedule };
                 reviewData["AssignedTugboatModels"] = new List<Tugboat> { tug };
                 reviewData["CanConfirm"] = true;
@@ -96,7 +96,7 @@ namespace Checks.MSAP
                 Check(reviewHtml.Contains(reapproval ? "Reapprove schedule" : "Approve schedule", StringComparison.Ordinal), "Review action does not match revision state.");
                 Check(Regex.Matches(reviewHtml, "aria-current=\"step\"").Count == 1 && reviewHtml.Contains("Ready for review", StringComparison.Ordinal), "Review must show COS approval as its single current progress step.");
             }
-            schedule.JobOrderId = null;
+            schedule.CustomerOrderSlipId = null;
             var viewerData = new ViewDataDictionary<VesselSchedule>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = schedule };
             viewerData["AssignedTugboatModels"] = new List<Tugboat> { tug };
             viewerData["CanConfirm"] = false;
@@ -109,11 +109,11 @@ namespace Checks.MSAP
             foreach (string status in new[] { MsapConstants.VesselScheduleStatus.Confirmed, MsapConstants.VesselScheduleStatus.Cancelled })
             {
                 schedule.Status = status;
-                schedule.JobOrderId = status == MsapConstants.VesselScheduleStatus.Confirmed ? 7 : null;
+                schedule.CustomerOrderSlipId = status == MsapConstants.VesselScheduleStatus.Confirmed ? 7 : null;
                 schedule.ApprovedRevision = schedule.Revision;
                 viewerData["CanConfirm"] = true;
-                viewerData["JobProgress"] = JobProgressCalculator.Calculate(schedule.JobOrderId.HasValue
-                    ? new JobOrder { JobOrderId = 7, Status = MsapConstants.JobOrderStatus.Open } : null, schedule, [], []);
+                viewerData["JobProgress"] = JobProgressCalculator.Calculate(schedule.CustomerOrderSlipId.HasValue
+                    ? new CustomerOrderSlip { CustomerOrderSlipId = 7, Status = MsapConstants.CustomerOrderSlipStatus.Open } : null, schedule, [], []);
                 detailsView = engine.GetView(null, "/Areas/MSAP/Views/VesselSchedule/Details.cshtml", false);
                 using var readonlyOutput = new StringWriter();
                 await detailsView.View!.RenderAsync(new ViewContext(context, detailsView.View, viewerData,
@@ -121,6 +121,30 @@ namespace Checks.MSAP
                 Check(!readonlyOutput.ToString().Contains("id=\"confirmSchedule\"", StringComparison.Ordinal)
                     && !readonlyOutput.ToString().Contains("Ready for review", StringComparison.Ordinal), "Approved/closed details still showed pending approval.");
             }
+            schedule.Status = MsapConstants.VesselScheduleStatus.Confirmed;
+            schedule.CustomerOrderSlipId = 7;
+            schedule.ServiceEntries[0].VesselScheduleServiceEntryId = 12;
+            var cos = new CustomerOrderSlip
+            {
+                CustomerOrderSlipId = 7, CustomerOrderSlipNumber = "COS-2026-0001", Status = MsapConstants.CustomerOrderSlipStatus.Open,
+                Customer = schedule.Customer!, Vessel = schedule.Vessel, Port = schedule.Port, Terminal = schedule.Terminal,
+                Date = new DateOnly(2026, 10, 16)
+            };
+            var cosData = new ViewDataDictionary<CustomerOrderSlip>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = cos };
+            cosData["VesselSchedule"] = schedule;
+            cosData["HasBilling"] = false;
+            cosData["CanCreateDispatchTicket"] = true;
+            cosData["CanEditCustomerOrderSlip"] = false;
+            cosData["CanSetTariff"] = false;
+            cosData["CanApproveTariff"] = false;
+            cosData["JobProgress"] = JobProgressCalculator.Calculate(cos, schedule, [], []);
+            var cosView = engine.GetView(null, "/Areas/MSAP/Views/CustomerOrderSlip/Details.cshtml", false);
+            using var cosOutput = new StringWriter();
+            await cosView.View!.RenderAsync(new ViewContext(context, cosView.View, cosData,
+                services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), cosOutput, new HtmlHelperOptions()));
+            Check(cosOutput.ToString().Contains("Expected services", StringComparison.Ordinal)
+                && cosOutput.ToString().Contains("expectedServiceEntryId=12", StringComparison.Ordinal)
+                && cosOutput.ToString().Contains("Pending ticket", StringComparison.Ordinal), "COS omitted pending service requirements or their actual-entry links.");
             Console.WriteLine("PASS: full schedule/revision review renders tug services, manual/zero rates, encoded details, current approval stage and protected approval actions.");
         }
 

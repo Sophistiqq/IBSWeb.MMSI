@@ -3,12 +3,12 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace IBS.Models.MSAP.ViewModels
 {
-    public class JobOrderViewModel
+    public class CustomerOrderSlipViewModel
     {
-        public int JobOrderId { get; set; }
+        public int CustomerOrderSlipId { get; set; }
 
         [Required]
-        [Display(Name = "Job Order Date")]
+        [Display(Name = "COS Date")]
         public DateOnly Date { get; set; }
 
         [Required(ErrorMessage = "Please select a customer")]

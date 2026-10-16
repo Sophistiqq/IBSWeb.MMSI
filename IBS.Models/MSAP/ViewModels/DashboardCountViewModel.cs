@@ -12,7 +12,7 @@ namespace IBS.Models.MSAP.ViewModels
         public bool CanCreateDispatch { get; set; }
         public bool CanCreateBilling { get; set; }
         public bool CanCreateCollection { get; set; }
-        public bool CanCreateJobOrder { get; set; }
+        public bool CanCreateCustomerOrderSlip { get; set; }
         public string? DataError { get; set; }
         public string? ScheduleError { get; set; }
         public Dictionary<string, int> DispatchCounts { get; set; } = [];

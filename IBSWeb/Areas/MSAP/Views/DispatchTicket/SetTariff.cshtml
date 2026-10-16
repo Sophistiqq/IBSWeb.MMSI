@@ -11,7 +11,7 @@
         <input type="hidden" name="filterType" value="@filterType" />
         <input type="hidden" asp-for="DispatchNumber">
         <input asp-for="DispatchTicketId" id="DispatchTicketId" type="hidden" />
-        <input asp-for="JobOrderId" type="hidden" />
+        <input asp-for="CustomerOrderSlipId" type="hidden" />
         <input asp-for="CustomerId" id="CustomerId" type="hidden" />
 
         <main class="modern-container">
@@ -33,9 +33,9 @@
                     <button type="submit" class="modern-btn-primary" id="submitButton">
                         <span class="material-symbols-outlined">check_circle</span> SUBMIT TARIFF
                     </button>
-                    @if (Model.JobOrderId.HasValue)
+                    @if (Model.CustomerOrderSlipId.HasValue)
                     {
-                        <a asp-controller="JobOrder" asp-action="Details" asp-route-id="@Model.JobOrderId.Value" class="modern-btn-secondary">
+                        <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value" class="modern-btn-secondary">
                             <span class="material-symbols-outlined">arrow_back</span> BACK
                         </a>
                     }

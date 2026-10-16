@@ -22,7 +22,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         private static readonly string[] ManualFiles =
         [
             "00-user-login",
-            "01-job-order",
+            "01-customer-order-slip",
             "02-dispatch-ticket",
             "03-billing",
             "04-collection",
@@ -122,7 +122,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 ("index", "Overview", null),
                 ("user-login", "User Login", null),
-                ("job-order", "Job Order", null),
+                ("customer-order-slip", "COS", null),
                 ("dispatch-ticket", "Dispatch Ticket", null),
                 ("billing", "Billing", null),
                 ("collection", "Collection", null),

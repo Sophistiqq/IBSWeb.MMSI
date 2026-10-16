@@ -111,7 +111,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
-        [RequireAccess(ProcedureEnum.EditJobOrder)]
+        [RequireAccess(ProcedureEnum.EditCustomerOrderSlip)]
         public async Task<IActionResult> Edit(int id, CancellationToken ct)
         {
             var entity = await scheduleService.GetByIdAsync(id, ct);
@@ -126,9 +126,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return RedirectToAction(nameof(Details), new { id });
             }
 
-            var hasTickets = (entity.JobOrderId.HasValue && await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == entity.JobOrderId.Value, ct) != null)
+            var hasTickets = (entity.CustomerOrderSlipId.HasValue && await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == entity.CustomerOrderSlipId.Value, ct) != null)
                 || (entity.ServiceEntries.Count > 0 && await unitOfWork.DispatchTicket.GetAsync(t => entity.ServiceEntries.Select(e => (int?)e.VesselScheduleServiceEntryId).Contains(t.VesselScheduleServiceEntryId), ct) != null);
-            var hasBilling = entity.JobOrderId.HasValue && await unitOfWork.Billing.GetAsync(b => b.JobOrderId == entity.JobOrderId.Value, ct) != null;
+            var hasBilling = entity.CustomerOrderSlipId.HasValue && await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == entity.CustomerOrderSlipId.Value, ct) != null;
             if (hasTickets || hasBilling)
             {
                 TempData["error"] = "Cannot edit schedule once actual tickets or billing exist.";
@@ -142,7 +142,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.EditJobOrder)]
+        [RequireAccess(ProcedureEnum.EditCustomerOrderSlip)]
         public async Task<IActionResult> Edit(VesselScheduleViewModel vm, CancellationToken ct)
         {
             if (ModelState.IsValid)
@@ -179,24 +179,25 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return NotFound();
             }
             await SetActionPermissionsAsync();
-            var job = schedule.JobOrderId.HasValue
-                ? await unitOfWork.JobOrder.GetAsync(j => j.JobOrderId == schedule.JobOrderId.Value, ct)
+            var job = schedule.CustomerOrderSlipId.HasValue
+                ? await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == schedule.CustomerOrderSlipId.Value, ct)
                 : null;
             ViewBag.JobProgress = await JobProgressCalculator.LoadAsync(unitOfWork, job, schedule, ct);
 
-            var hasTickets = (schedule.JobOrderId.HasValue && await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == schedule.JobOrderId.Value, ct) != null)
+            var hasTickets = (schedule.CustomerOrderSlipId.HasValue && await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == schedule.CustomerOrderSlipId.Value, ct) != null)
                 || (schedule.ServiceEntries.Count > 0 && await unitOfWork.DispatchTicket.GetAsync(t => schedule.ServiceEntries.Select(e => (int?)e.VesselScheduleServiceEntryId).Contains(t.VesselScheduleServiceEntryId), ct) != null);
-            bool hasBilling = schedule.JobOrderId.HasValue && await unitOfWork.Billing.GetAsync(b => b.JobOrderId == schedule.JobOrderId, ct) != null;
-            bool hasActiveTickets = schedule.JobOrderId.HasValue && await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == schedule.JobOrderId
+            bool hasBilling = schedule.CustomerOrderSlipId.HasValue && await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct) != null;
+            bool hasActiveTickets = schedule.CustomerOrderSlipId.HasValue && await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == schedule.CustomerOrderSlipId
                 && (t.Status != MsapConstants.DispatchTicketStatus.Deleted || t.BillingId != null), ct) != null;
 
             ViewBag.HasDispatchTickets = hasTickets;
             var closed = schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
             ViewBag.CanRevise = !closed && ViewBag.CanEdit == true && !hasTickets && !hasBilling
-                && (job == null || job.Status == MsapConstants.JobOrderStatus.Open);
+                && (job == null || job.Status == MsapConstants.CustomerOrderSlipStatus.Open);
             ViewBag.CanComplete = job != null && !closed
-                && JobOrderService.CanCompleteService(await unitOfWork.DispatchTicket.GetAllAsync(t => t.JobOrderId == job.JobOrderId, ct));
-            ViewBag.CanCancel = schedule.JobOrderId == null || (job?.Status == MsapConstants.JobOrderStatus.Open && !hasActiveTickets && !hasBilling);
+                && ((JobProgressViewModel)ViewBag.JobProgress).Stage >= JobProgressCalculator.TariffStage
+                && CustomerOrderSlipService.CanCompleteService(await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == job.CustomerOrderSlipId, ct));
+            ViewBag.CanCancel = schedule.CustomerOrderSlipId == null || (job?.Status == MsapConstants.CustomerOrderSlipStatus.Open && !hasActiveTickets && !hasBilling);
             return View(schedule);
         }
 
@@ -204,7 +205,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewBag.CanConfirm = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveSchedule);
-            ViewBag.CanEdit = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditJobOrder);
+            ViewBag.CanEdit = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditCustomerOrderSlip);
         }
 
         [HttpGet]
@@ -216,7 +217,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 return NotFound();
             }
-            if ((schedule.JobOrderId.HasValue && schedule.ApprovedRevision == schedule.Revision)
+            if ((schedule.CustomerOrderSlipId.HasValue && schedule.ApprovedRevision == schedule.Revision)
                 || schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
             {
                 return RedirectToAction(nameof(Details), new { id });
@@ -246,13 +247,13 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 success = result.IsSuccess,
                 message = result.Message,
                 requiresConflictAcknowledgement = !allowConflicts && result.Message?.StartsWith("Overlapping plans:", StringComparison.Ordinal) == true,
-                redirectUrl = result.IsSuccess ? Url.Action("Details", "JobOrder", new { area = "MSAP", id = result.Data }) : null
+                redirectUrl = result.IsSuccess ? Url.Action("Details", "CustomerOrderSlip", new { area = "MSAP", id = result.Data }) : null
             });
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.EditJobOrder)]
+        [RequireAccess(ProcedureEnum.EditCustomerOrderSlip)]
         public async Task<IActionResult> Cancel(int id, CancellationToken ct)
         {
             return await ChangeStatusAsync(id, MsapConstants.VesselScheduleStatus.Cancelled, ct);
@@ -260,7 +261,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.EditJobOrder)]
+        [RequireAccess(ProcedureEnum.EditCustomerOrderSlip)]
         public async Task<IActionResult> Complete(int id, CancellationToken ct)
         {
             return await ChangeStatusAsync(id, MsapConstants.VesselScheduleStatus.Completed, ct);

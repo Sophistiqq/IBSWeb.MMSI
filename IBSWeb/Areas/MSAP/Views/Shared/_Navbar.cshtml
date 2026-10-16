@@ -32,10 +32,10 @@
             ProcedureEnum.ApproveTariff,
             ProcedureEnum.CreateBilling,
             ProcedureEnum.CreateCollection,
-            ProcedureEnum.CreateJobOrder,
-            ProcedureEnum.EditJobOrder,
-            ProcedureEnum.DeleteJobOrder,
-            ProcedureEnum.CloseJobOrder);
+            ProcedureEnum.CreateCustomerOrderSlip,
+            ProcedureEnum.EditCustomerOrderSlip,
+            ProcedureEnum.DeleteCustomerOrderSlip,
+            ProcedureEnum.CloseCustomerOrderSlip);
     }
 
     async Task<bool> ModernHasMsapImportAccess()
@@ -100,7 +100,7 @@
                                 <div>
                                     <div class="mnav-section-label">Operations</div>
                                     <div class="mnav-link-list">
-                                        @if (await ModernHasAnyAccess(ProcedureEnum.CreateJobOrder, ProcedureEnum.EditJobOrder, ProcedureEnum.DeleteJobOrder, ProcedureEnum.CloseJobOrder))
+                                        @if (await ModernHasAnyAccess(ProcedureEnum.CreateCustomerOrderSlip, ProcedureEnum.EditCustomerOrderSlip, ProcedureEnum.DeleteCustomerOrderSlip, ProcedureEnum.CloseCustomerOrderSlip))
                                         {
                                             <a class="mnav-mega-link"
                                                asp-area="MSAP" asp-controller="VesselSchedule" asp-action="Index"
@@ -112,12 +112,12 @@
                                                 </div>
                                             </a>
                                             <a class="mnav-mega-link"
-                                               asp-area="MSAP" asp-controller="JobOrder" asp-action="Index"
+                                               asp-area="MSAP" asp-controller="CustomerOrderSlip" asp-action="Index"
                                                role="menuitem">
                                                 <span class="material-symbols-outlined">assignment</span>
                                                 <div>
-                                                    <div class="mnav-link-title">Job Orders</div>
-                                                    <div class="mnav-link-sub">Create &amp; track job orders</div>
+                                                    <div class="mnav-link-title">COS records</div>
+                                                    <div class="mnav-link-sub">Create &amp; track COS records</div>
                                                 </div>
                                             </a>
                                         }
@@ -297,10 +297,10 @@
                                             </div>
                                         </a>
                                         <a class="mnav-mega-link"
-                                           asp-area="MSAPSuperAdmin" asp-controller="Data" asp-action="Index" asp-route-table="JobOrder"
+                                           asp-area="MSAPSuperAdmin" asp-controller="Data" asp-action="Index" asp-route-table="CustomerOrderSlip"
                                            role="menuitem">
                                             <span class="material-symbols-outlined">assignment</span>
-                                            <div><div class="mnav-link-title">Job Orders</div></div>
+                                            <div><div class="mnav-link-title">COS records</div></div>
                                         </a>
                                         <a class="mnav-mega-link"
                                            asp-area="MSAPSuperAdmin" asp-controller="Data" asp-action="Index" asp-route-table="DispatchTicket"

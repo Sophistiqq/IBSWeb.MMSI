@@ -27,7 +27,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
         {
             return await _db.MsapVesselSchedules
                 .Include(s => s.Customer)
-                .Include(s => s.JobOrder)
+                .Include(s => s.CustomerOrderSlip)
                 .Include(s => s.Vessel)
                 .Include(s => s.Port)
                 .Include(s => s.Terminal)
@@ -43,7 +43,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
         {
             var query = _db.MsapVesselSchedules
                 .Include(s => s.Customer)
-                .Include(s => s.JobOrder)
+                .Include(s => s.CustomerOrderSlip)
                 .Include(s => s.Vessel)
                 .Include(s => s.Port)
                 .Include(s => s.Terminal)

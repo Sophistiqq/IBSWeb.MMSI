@@ -33,10 +33,10 @@ async function scenario(confirmations, results) {
     return {requests, errors, window};
 }
 (async () => {
-    const success = await scenario([true], [{success: true, redirectUrl: '/MSAP/JobOrder/Details/7'}]);
+    const success = await scenario([true], [{success: true, redirectUrl: '/MSAP/CustomerOrderSlip/Details/7'}]);
     assert.equal(success.requests.length, 1);
     assert.equal(success.requests[0].body.get('allowConflicts'), 'false');
-    assert.equal(success.window.location.href, '/MSAP/JobOrder/Details/7');
+    assert.equal(success.window.location.href, '/MSAP/CustomerOrderSlip/Details/7');
     const cancelled = await scenario([false], []);
     assert.equal(cancelled.requests.length, 0);
     const overlaps = await scenario([true, true, true], [{requiresConflictAcknowledgement: true, message: '<Overlap>'}, {success: true, redirectUrl: '/approved'}]);

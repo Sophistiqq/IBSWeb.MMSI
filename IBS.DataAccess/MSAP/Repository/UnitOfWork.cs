@@ -66,7 +66,7 @@ namespace IBS.DataAccess.MSAP.Repository
         #region --MSAP
 
         public IMsapRepository Msap { get; }
-        public IJobOrderRepository JobOrder { get; }
+        public ICustomerOrderSlipRepository CustomerOrderSlip { get; }
         public IDispatchTicketRepository DispatchTicket { get; }
         public IBillingRepository Billing { get; }
         public ICollectionRepository Collection { get; }
@@ -118,7 +118,7 @@ namespace IBS.DataAccess.MSAP.Repository
             Billing = new BillingRepository(_db);
             Collection = new CollectionRepository(_db);
             DispatchTicket = new DispatchTicketRepository(_db);
-            JobOrder = new JobOrderRepository(_db);
+            CustomerOrderSlip = new CustomerOrderSlipRepository(_db);
             Report = new ReportRepository(_db);
             Msap = new MsapRepository(_db);
             Port = new PortRepository(_db);

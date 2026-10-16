@@ -82,7 +82,7 @@ namespace Checks.MSAP
             reloaded.ServiceEntries.Add(new VesselScheduleServiceEntry { TugboatId = tug.TugboatId, ServiceId = service.ServiceId });
             await db.SaveChangesAsync();
             Check(await db.MsapVesselScheduleServiceEntries.CountAsync() == 5 && !await db.MsapDispatchTickets.AnyAsync()
-                && !await db.MsapJobOrders.AnyAsync(), "Repeated services were lost or planning created operational tickets/COS.");
+                && !await db.MsapCustomerOrderSlips.AnyAsync(), "Repeated services were lost or planning created operational tickets/COS.");
 
             foreach (FormattableString invalidWrite in new FormattableString[]
             {

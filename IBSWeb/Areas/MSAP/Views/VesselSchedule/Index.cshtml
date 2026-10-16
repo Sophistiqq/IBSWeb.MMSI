@@ -115,7 +115,7 @@
                 </div>
                 <div class="schedule-preview-state">
                     <span>@MsapConstants.VesselScheduleStatus.GetDisplayName(entry.Status)</span>
-                    <small>@(entry.JobOrderId.HasValue ? "Job order linked" : "No job order yet")</small>
+                    <small>@(entry.CustomerOrderSlipId.HasValue ? "COS linked" : "No COS yet")</small>
                 </div>
                 <dl>
                     <dt>Customer</dt>

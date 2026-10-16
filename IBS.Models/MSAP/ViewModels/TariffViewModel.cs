@@ -6,7 +6,7 @@ namespace IBS.Models.MSAP.ViewModels
     {
         public int DispatchTicketId { get; set; }
 
-        public int? JobOrderId { get; set; }
+        public int? CustomerOrderSlipId { get; set; }
 
         public int? CustomerId { get; set; }
 

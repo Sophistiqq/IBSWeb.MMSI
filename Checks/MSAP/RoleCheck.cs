@@ -34,7 +34,7 @@ namespace Checks.MSAP
             Check((await users.AddClaimAsync(user, new Claim("Company", "Filpride"))).Succeeded, "Cannot prepare the shared company claim.");
             var principal = new ClaimsPrincipal(new ClaimsIdentity(
                 [new Claim(ClaimTypes.NameIdentifier, user.Id), new Claim(ClaimTypes.Role, "Admin")], "check"));
-            var permission = new UserAccess { UserId = user.Id, UserName = user.UserName, CanCreateJobOrder = true };
+            var permission = new UserAccess { UserId = user.Id, UserName = user.UserName, CanCreateCustomerOrderSlip = true };
             await work.UserAccess.AddAsync(permission);
             await work.SaveAsync();
 
@@ -49,7 +49,7 @@ namespace Checks.MSAP
             Check((await users.RemoveFromRoleAsync(user, "Admin")).Succeeded, "Cannot prepare ordinary shared user check.");
             Check(await HasRoleAsync(users, principal, MsapRoles.User)
                 && !await HasRoleAsync(users, principal, MsapRoles.Admin), "Stored role changes were ignored in favor of cookie roles.");
-            Check(await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateJobOrder)
+            Check(await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateCustomerOrderSlip)
                 && !await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateBilling),
                 "The default MSAP User does not retain its procedure permissions.");
             await CheckApprovalsAsync(users, work, user.Id, false);
@@ -58,7 +58,7 @@ namespace Checks.MSAP
             {
                 Id = permission.Id,
                 UserId = permission.UserId,
-                CanCreateJobOrder = true,
+                CanCreateCustomerOrderSlip = true,
                 CanApproveSchedule = true,
                 CanApproveRateUpload = true,
                 CanApproveFinalBilling = true
@@ -83,7 +83,7 @@ namespace Checks.MSAP
                 "Cannot assign MSAP User.");
             Check(await HasRoleAsync(users, principal, MsapRoles.User), "Shared login cannot use its MSAP role.");
             Check(!await HasRoleAsync(users, principal, MsapRoles.Admin), "MSAP User inherited Filpride Admin.");
-            Check(await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateJobOrder)
+            Check(await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateCustomerOrderSlip)
                 && !await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateBilling),
                 "MSAP User procedure permissions were not enforced.");
 

@@ -20,31 +20,32 @@ namespace IBS.Services.MSAP
             return await unitOfWork.DispatchTicket.GetDispatchTicketWithDetailsAsync(id, cancellationToken);
         }
 
-        public async Task<DispatchTicketViewModel> PopulateDispatchTicketViewModelAsync(DispatchTicketViewModel? viewModel, int? jobOrderId, CancellationToken cancellationToken)
+        public async Task<DispatchTicketViewModel> PopulateDispatchTicketViewModelAsync(DispatchTicketViewModel? viewModel, int? customerOrderSlipId, CancellationToken cancellationToken)
         {
             viewModel ??= new DispatchTicketViewModel();
 
-            if (jobOrderId.HasValue)
+            if (customerOrderSlipId.HasValue)
             {
-                var jobOrder = await unitOfWork.JobOrder.GetAsync(j => j.JobOrderId == jobOrderId.Value, cancellationToken);
-                if (jobOrder != null)
+                var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == customerOrderSlipId.Value, cancellationToken);
+                if (customerOrderSlip != null)
                 {
-                    viewModel.JobOrderId = jobOrderId;
-                    viewModel.CustomerId = jobOrder.CustomerId;
-                    viewModel.VesselId = jobOrder.VesselId;
-                    viewModel.PortId = jobOrder.PortId;
-                    viewModel.TerminalId = jobOrder.TerminalId;
-                    viewModel.VoyageNumber = jobOrder.VoyageNumber;
-                    viewModel.COSNumber = jobOrder.COSNumber;
-                    viewModel.Date = jobOrder.Date;
+                    viewModel.CustomerOrderSlipId = customerOrderSlipId;
+                    viewModel.CustomerId = customerOrderSlip.CustomerId;
+                    viewModel.VesselId = customerOrderSlip.VesselId;
+                    viewModel.PortId = customerOrderSlip.PortId;
+                    viewModel.TerminalId = customerOrderSlip.TerminalId;
+                    viewModel.VoyageNumber = customerOrderSlip.VoyageNumber;
+                    viewModel.COSNumber = customerOrderSlip.COSNumber;
+                    viewModel.Date = viewModel.VesselScheduleServiceEntryId.HasValue
+                        ? viewModel.Date == default ? DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()) : viewModel.Date
+                        : customerOrderSlip.Date;
                 }
             }
 
-            viewModel = await unitOfWork.DispatchTicket.GetDispatchTicketSelectLists(viewModel, cancellationToken);
-            viewModel.Customers = await unitOfWork.GetCustomerListAsyncById(cancellationToken);
-            if (viewModel.JobOrderId.HasValue)
+            viewModel = await PopulateSelectListsAsync(viewModel, cancellationToken);
+            if (viewModel.CustomerOrderSlipId.HasValue)
             {
-                List<int>? assigned = await GetAssignedTugboatsAsync(viewModel.JobOrderId.Value, cancellationToken);
+                List<int>? assigned = await GetAssignedTugboatsAsync(viewModel.CustomerOrderSlipId.Value, cancellationToken);
                 if (assigned != null)
                 {
                     viewModel.Tugboats = viewModel.Tugboats?.Where(t => int.TryParse(t.Value, out int id) && assigned.Contains(id)).ToList();
@@ -54,9 +55,9 @@ namespace IBS.Services.MSAP
             return viewModel;
         }
 
-        private async Task<List<int>?> GetAssignedTugboatsAsync(int jobOrderId, CancellationToken ct)
+        private async Task<List<int>?> GetAssignedTugboatsAsync(int customerOrderSlipId, CancellationToken ct)
         {
-            var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.JobOrderId == jobOrderId, ct);
+            var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId, ct);
             return schedule == null ? null : JsonSerializer.Deserialize<List<int>>(schedule.AssignedTugboatIds ?? "[]") ?? [];
         }
 
@@ -64,25 +65,48 @@ namespace IBS.Services.MSAP
         {
             try
             {
-                if (!viewModel.JobOrderId.HasValue)
+                if (!viewModel.CustomerOrderSlipId.HasValue)
                 {
-                    return ServiceResult<int>.Failure("Dispatch tickets must be created under a Job Order.");
+                    return ServiceResult<int>.Failure("Dispatch tickets must be created under a COS.");
                 }
 
-                if (!await IsJobOrderEditableAsync(viewModel.JobOrderId, cancellationToken))
+                if (!await IsCustomerOrderSlipEditableAsync(viewModel.CustomerOrderSlipId, cancellationToken))
                 {
-                    return ServiceResult<int>.Failure("Cannot add ticket — parent Job Order is cancelled or closed.");
+                    return ServiceResult<int>.Failure("Cannot add ticket — parent COS is cancelled or closed.");
                 }
 
-                if (viewModel.JobOrderId.HasValue && await unitOfWork.DispatchTicket.GetAsync(dt => dt.JobOrderId == viewModel.JobOrderId && dt.Status == MsapConstants.DispatchTicketStatus.Billed, cancellationToken) != null)
+                if (viewModel.CustomerOrderSlipId.HasValue && await unitOfWork.DispatchTicket.GetAsync(dt => dt.CustomerOrderSlipId == viewModel.CustomerOrderSlipId && dt.Status == MsapConstants.DispatchTicketStatus.Billed, cancellationToken) != null)
                 {
-                    return ServiceResult<int>.Failure("Cannot add ticket — Job Order already has billed tickets.");
+                    return ServiceResult<int>.Failure("Cannot add ticket — COS already has billed tickets.");
                 }
 
-                List<int>? assignedTugs = await GetAssignedTugboatsAsync(viewModel.JobOrderId.Value, cancellationToken);
+                List<int>? assignedTugs = await GetAssignedTugboatsAsync(viewModel.CustomerOrderSlipId.Value, cancellationToken);
                 if (assignedTugs != null && !assignedTugs.Contains(viewModel.TugBoatId))
                 {
                     return ServiceResult<int>.Failure("Choose a tugboat assigned to this vessel schedule.");
+                }
+
+                var scheduled = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == viewModel.CustomerOrderSlipId, cancellationToken);
+                if (scheduled != null)
+                {
+                    scheduled = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(scheduled.VesselScheduleId, cancellationToken);
+                }
+                if (scheduled?.ServiceEntries.Count > 0 || viewModel.VesselScheduleServiceEntryId.HasValue)
+                {
+                    var expected = scheduled?.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == viewModel.VesselScheduleServiceEntryId);
+                    if (expected == null || expected.TugboatId != viewModel.TugBoatId || expected.ServiceId != viewModel.ServiceId)
+                    {
+                        return ServiceResult<int>.Failure("Choose an expected service from this COS before recording its ticket.");
+                    }
+                    if (scheduled!.ApprovedRevision != scheduled.Revision || scheduled.Status == MsapConstants.VesselScheduleStatus.Tentative)
+                    {
+                        return ServiceResult<int>.Failure("Approve the current schedule revision before recording actual tickets.");
+                    }
+                    var actualError = await ValidateExpectedActualAsync(viewModel, cancellationToken);
+                    if (actualError != null)
+                    {
+                        return ServiceResult<int>.Failure(actualError);
+                    }
                 }
 
                 var model = viewModel.ToEntity();
@@ -107,18 +131,18 @@ namespace IBS.Services.MSAP
                 model.CreatedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
                 // Logic from Repository.AddAsync
-                if (model.JobOrderId.HasValue)
+                if (model.CustomerOrderSlipId.HasValue)
                 {
-                    var jobOrder = await unitOfWork.JobOrder.GetJobOrderWithDetailsAsync(model.JobOrderId.Value, cancellationToken);
-                    if (jobOrder != null)
+                    var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetCustomerOrderSlipWithDetailsAsync(model.CustomerOrderSlipId.Value, cancellationToken);
+                    if (customerOrderSlip != null)
                     {
-                        model.CustomerId = jobOrder.CustomerId;
-                        model.VesselId = jobOrder.VesselId;
-                        model.PortId = jobOrder.PortId;
-                        model.TerminalId = jobOrder.TerminalId;
-                        model.VoyageNumber = jobOrder.VoyageNumber;
-                        model.COSNumber = jobOrder.COSNumber;
-                        model.Date = jobOrder.Date;
+                        model.CustomerId = customerOrderSlip.CustomerId;
+                        model.VesselId = customerOrderSlip.VesselId;
+                        model.PortId = customerOrderSlip.PortId;
+                        model.TerminalId = customerOrderSlip.TerminalId;
+                        model.VoyageNumber = customerOrderSlip.VoyageNumber;
+                        model.COSNumber = customerOrderSlip.COSNumber;
+                        model.Date = model.VesselScheduleServiceEntryId.HasValue ? viewModel.Date : customerOrderSlip.Date;
                     }
                 }
 
@@ -149,14 +173,35 @@ namespace IBS.Services.MSAP
 
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    var parent = await unitOfWork.JobOrder.GetForUpdateAsync(model.JobOrderId!.Value, cancellationToken);
-                    var booking = await unitOfWork.VesselSchedule.GetAsync(s => s.JobOrderId == model.JobOrderId, cancellationToken);
-                    if (parent?.Status != MsapConstants.JobOrderStatus.Open ||
+                    if (scheduled != null)
+                    {
+                        await unitOfWork.VesselSchedule.GetForUpdateAsync(scheduled.VesselScheduleId, cancellationToken);
+                    }
+                    var parent = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(model.CustomerOrderSlipId!.Value, cancellationToken);
+                    var booking = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == model.CustomerOrderSlipId, cancellationToken);
+                    if (parent?.Status != MsapConstants.CustomerOrderSlipStatus.Open ||
                         booking?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
                     {
                         throw new InvalidOperationException("Cannot add a ticket to a closed, cancelled or operationally completed booking.");
                     }
-                    List<int>? currentTugs = await GetAssignedTugboatsAsync(model.JobOrderId.Value, cancellationToken);
+                    if (booking != null)
+                    {
+                        booking = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(booking.VesselScheduleId, cancellationToken);
+                    }
+                    if (booking?.ServiceEntries.Count > 0 || model.VesselScheduleServiceEntryId.HasValue)
+                    {
+                        var expected = booking?.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == model.VesselScheduleServiceEntryId);
+                        if (expected == null || expected.TugboatId != model.TugBoatId || expected.ServiceId != model.ServiceId
+                            || booking!.ApprovedRevision != booking.Revision || booking.Status == MsapConstants.VesselScheduleStatus.Tentative)
+                        {
+                            throw new InvalidOperationException("The expected service changed or requires reapproval. Reload the COS before recording its ticket.");
+                        }
+                        if (await unitOfWork.DispatchTicket.GetAsync(t => t.VesselScheduleServiceEntryId == model.VesselScheduleServiceEntryId, cancellationToken) != null)
+                        {
+                            throw new InvalidOperationException("A ticket has already been recorded for this expected service.");
+                        }
+                    }
+                    List<int>? currentTugs = await GetAssignedTugboatsAsync(model.CustomerOrderSlipId.Value, cancellationToken);
                     if (currentTugs != null && !currentTugs.Contains(model.TugBoatId))
                     {
                         throw new InvalidOperationException("Choose a tugboat assigned to this vessel schedule.");
@@ -167,7 +212,14 @@ namespace IBS.Services.MSAP
                     model.TerminalId = parent.TerminalId;
                     model.VoyageNumber = parent.VoyageNumber;
                     model.COSNumber = parent.COSNumber;
-                    model.Date = parent.Date;
+                    model.Date = model.VesselScheduleServiceEntryId.HasValue ? viewModel.Date : parent.Date;
+                    if (model.VesselScheduleServiceEntryId.HasValue)
+                    {
+                        var duration = model.DateArrived!.Value.ToDateTime(model.TimeArrived!.Value)
+                            - model.DateLeft!.Value.ToDateTime(model.TimeLeft!.Value);
+                        model.RawDurationMinutes = (int)duration.TotalMinutes;
+                        model.RawDurationHours = (decimal)duration.TotalHours;
+                    }
                     await unitOfWork.DispatchTicket.AddAsync(model, cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Create dispatch ticket #{model.DispatchNumber}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
@@ -187,9 +239,45 @@ namespace IBS.Services.MSAP
         {
             try
             {
-                if (!await IsTicketJobOrderEditableAsync(viewModel.DispatchTicketId!.Value, cancellationToken))
+                var ticket = await unitOfWork.DispatchTicket.GetAsync(t => t.DispatchTicketId == viewModel.DispatchTicketId, cancellationToken);
+                if (ticket?.VesselScheduleServiceEntryId == null)
                 {
-                    return ServiceResult.Failure("Cannot edit ticket — parent Job Order is cancelled or closed.");
+                    return await UpdateDispatchTicketCoreAsync(viewModel, imageFile, videoFile, username, cancellationToken);
+                }
+                var result = ServiceResult.Failure("The approved COS is required before completing this ticket.");
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == ticket.CustomerOrderSlipId, cancellationToken);
+                    if (schedule == null)
+                    {
+                        return;
+                    }
+                    schedule = await unitOfWork.VesselSchedule.GetForUpdateAsync(schedule.VesselScheduleId, cancellationToken);
+                    var job = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(ticket.CustomerOrderSlipId!.Value, cancellationToken);
+                    if (job?.Status != MsapConstants.CustomerOrderSlipStatus.Open || schedule == null
+                        || schedule.ApprovedRevision != schedule.Revision
+                        || schedule.Status is not (MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress or MsapConstants.VesselScheduleStatus.Completed))
+                    {
+                        return;
+                    }
+                    result = await UpdateDispatchTicketCoreAsync(viewModel, imageFile, videoFile, username, cancellationToken);
+                }, cancellationToken);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to update expected service ticket {Id}", viewModel.DispatchTicketId);
+                return ServiceResult.Failure("Failed to update the ticket. Refresh the COS and try again.");
+            }
+        }
+
+        private async Task<ServiceResult> UpdateDispatchTicketCoreAsync(DispatchTicketViewModel viewModel, IFormFile? imageFile, IFormFile? videoFile, string username, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (!await IsTicketCustomerOrderSlipEditableAsync(viewModel.DispatchTicketId!.Value, cancellationToken))
+                {
+                    return ServiceResult.Failure("Cannot edit ticket — parent COS is cancelled or closed.");
                 }
 
                 var currentModel = await unitOfWork.DispatchTicket.GetAsync(dt => dt.DispatchTicketId == viewModel.DispatchTicketId, cancellationToken);
@@ -204,9 +292,25 @@ namespace IBS.Services.MSAP
                     return guard;
                 }
 
-                if (currentModel.JobOrderId.HasValue && await unitOfWork.DispatchTicket.GetAsync(dt => dt.JobOrderId == currentModel.JobOrderId && dt.Status == MsapConstants.DispatchTicketStatus.Billed, cancellationToken) != null)
+                if (currentModel.CustomerOrderSlipId.HasValue && await unitOfWork.DispatchTicket.GetAsync(dt => dt.CustomerOrderSlipId == currentModel.CustomerOrderSlipId && dt.Status == MsapConstants.DispatchTicketStatus.Billed, cancellationToken) != null)
                 {
-                    return ServiceResult.Failure("Cannot edit ticket — Job Order already has billed tickets.");
+                    return ServiceResult.Failure("Cannot edit ticket — COS already has billed tickets.");
+                }
+
+                if (currentModel.VesselScheduleServiceEntryId.HasValue)
+                {
+                    if (viewModel.CustomerOrderSlipId != currentModel.CustomerOrderSlipId || viewModel.TugBoatId != currentModel.TugBoatId
+                        || viewModel.ServiceId != currentModel.ServiceId || viewModel.CustomerId != currentModel.CustomerId
+                        || viewModel.VesselId != currentModel.VesselId || viewModel.PortId != currentModel.PortId
+                        || viewModel.TerminalId != currentModel.TerminalId)
+                    {
+                        return ServiceResult.Failure("The ticket must retain its approved COS, tugboat, service and booking details.");
+                    }
+                    var actualError = await ValidateExpectedActualAsync(viewModel, cancellationToken);
+                    if (actualError != null)
+                    {
+                        return ServiceResult.Failure(actualError);
+                    }
                 }
 
                 var originalTotalHours = currentModel.TotalHours;
@@ -298,9 +402,19 @@ namespace IBS.Services.MSAP
                 currentModel.TugMasterId = viewModel.TugMasterId;
                 currentModel.VesselId = viewModel.VesselId;
                 currentModel.Remarks = viewModel.Remarks;
-                currentModel.JobOrderId = viewModel.JobOrderId;
+                currentModel.CustomerOrderSlipId = viewModel.CustomerOrderSlipId;
                 currentModel.EditedBy = username;
                 currentModel.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+
+                if (currentModel.VesselScheduleServiceEntryId.HasValue)
+                {
+                    var duration = currentModel.DateArrived!.Value.ToDateTime(currentModel.TimeArrived!.Value)
+                        - currentModel.DateLeft!.Value.ToDateTime(currentModel.TimeLeft!.Value);
+                    currentModel.RawDurationMinutes = (int)duration.TotalMinutes;
+                    currentModel.RawDurationHours = (decimal)duration.TotalHours;
+                    currentModel.COSNumber = (await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == currentModel.CustomerOrderSlipId, cancellationToken))!.COSNumber;
+                    currentModel.Date = viewModel.Date;
+                }
 
                 // Smart Reset Logic: Only reset tariff if critical fields changed
                 var criticalFieldsChanged = changes.Any(c =>
@@ -354,9 +468,9 @@ namespace IBS.Services.MSAP
         {
             try
             {
-                if (!await IsTicketJobOrderEditableAsync(model.DispatchTicketId, cancellationToken))
+                if (!await IsTicketCustomerOrderSlipEditableAsync(model.DispatchTicketId, cancellationToken))
                 {
-                    return ServiceResult.Failure("Cannot set/edit tariff — parent Job Order is cancelled or closed.");
+                    return ServiceResult.Failure("Cannot set/edit tariff — parent COS is cancelled or closed.");
                 }
 
                 var currentModel = await unitOfWork.DispatchTicket.GetAsync(dt => dt.DispatchTicketId == model.DispatchTicketId, cancellationToken);
@@ -380,7 +494,7 @@ namespace IBS.Services.MSAP
                         : "Only tickets in 'For Tariff' status can have a tariff set.");
                 }
 
-                string? progressBlocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, currentModel.JobOrderId, JobProgressCalculator.TariffStage, cancellationToken);
+                string? progressBlocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, currentModel.CustomerOrderSlipId, JobProgressCalculator.TariffStage, cancellationToken);
                 if (progressBlocker != null)
                 {
                     return ServiceResult.Failure(progressBlocker);
@@ -490,9 +604,9 @@ namespace IBS.Services.MSAP
         {
             try
             {
-                if (!await IsTicketJobOrderEditableAsync(id, cancellationToken))
+                if (!await IsTicketCustomerOrderSlipEditableAsync(id, cancellationToken))
                 {
-                    return ServiceResult.Failure("Cannot approve tariff — parent Job Order is cancelled or closed.");
+                    return ServiceResult.Failure("Cannot approve tariff — parent COS is cancelled or closed.");
                 }
 
                 var model = await unitOfWork.DispatchTicket.GetAsync(dt => dt.DispatchTicketId == id, cancellationToken);
@@ -512,7 +626,7 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Only tickets in 'For Approval' status can be approved.");
                 }
 
-                string? blocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, model.JobOrderId, JobProgressCalculator.ApprovalStage, cancellationToken);
+                string? blocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, model.CustomerOrderSlipId, JobProgressCalculator.ApprovalStage, cancellationToken);
                 if (blocker != null)
                 {
                     return ServiceResult.Failure(blocker);
@@ -538,9 +652,9 @@ namespace IBS.Services.MSAP
         {
             try
             {
-                if (!await IsTicketJobOrderEditableAsync(id, cancellationToken))
+                if (!await IsTicketCustomerOrderSlipEditableAsync(id, cancellationToken))
                 {
-                    return ServiceResult.Failure("Cannot revoke approval because the parent Job Order is not open.");
+                    return ServiceResult.Failure("Cannot revoke approval because the parent COS is not open.");
                 }
 
                 var ticket = await unitOfWork.DispatchTicket.GetAsync(dt => dt.DispatchTicketId == id, cancellationToken);
@@ -580,9 +694,9 @@ namespace IBS.Services.MSAP
         {
             try
             {
-                if (!await IsTicketJobOrderEditableAsync(id, cancellationToken))
+                if (!await IsTicketCustomerOrderSlipEditableAsync(id, cancellationToken))
                 {
-                    return ServiceResult.Failure("Cannot disapprove tariff — parent Job Order is cancelled or closed.");
+                    return ServiceResult.Failure("Cannot disapprove tariff — parent COS is cancelled or closed.");
                 }
 
                 if (string.IsNullOrWhiteSpace(reason) || reason.Length < 10)
@@ -652,11 +766,11 @@ namespace IBS.Services.MSAP
 
                 foreach (var ticket in toApprove)
                 {
-                    if (!await IsTicketJobOrderEditableAsync(ticket.DispatchTicketId, cancellationToken))
+                    if (!await IsTicketCustomerOrderSlipEditableAsync(ticket.DispatchTicketId, cancellationToken))
                     {
-                        return ServiceResult.Failure("Cannot approve tariff — parent Job Order is cancelled or closed.");
+                        return ServiceResult.Failure("Cannot approve tariff — parent COS is cancelled or closed.");
                     }
-                    string? blocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, ticket.JobOrderId, JobProgressCalculator.ApprovalStage, cancellationToken);
+                    string? blocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, ticket.CustomerOrderSlipId, JobProgressCalculator.ApprovalStage, cancellationToken);
                     if (blocker != null)
                     {
                         return ServiceResult.Failure(blocker);
@@ -726,7 +840,7 @@ namespace IBS.Services.MSAP
 
                 var now = DateTimeHelper.GetCurrentPhilippineTime();
 
-                foreach (var jobId in tickets.Select(t => t.JobOrderId).Distinct())
+                foreach (var jobId in tickets.Select(t => t.CustomerOrderSlipId).Distinct())
                 {
                     string? blocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, jobId, JobProgressCalculator.TariffStage, cancellationToken);
                     if (blocker != null)
@@ -804,9 +918,9 @@ namespace IBS.Services.MSAP
         {
             try
             {
-                if (!await IsTicketJobOrderEditableAsync(id, cancellationToken))
+                if (!await IsTicketCustomerOrderSlipEditableAsync(id, cancellationToken))
                 {
-                    return ServiceResult.Failure("Cannot delete ticket — parent Job Order is closed or cancelled.");
+                    return ServiceResult.Failure("Cannot delete ticket — parent COS is closed or cancelled.");
                 }
 
                 var model = await unitOfWork.DispatchTicket.GetAsync(dt => dt.DispatchTicketId == id, cancellationToken);
@@ -819,6 +933,11 @@ namespace IBS.Services.MSAP
                 if (guard != null)
                 {
                     return guard;
+                }
+
+                if (model.VesselScheduleServiceEntryId.HasValue)
+                {
+                    return ServiceResult.Failure("Required service tickets cannot be deleted. Revise the booking before actual ticket entry, or cancel the COS.");
                 }
 
                 if (model.Status != MsapConstants.DispatchTicketStatus.ForTariff &&
@@ -847,9 +966,9 @@ namespace IBS.Services.MSAP
         {
             try
             {
-                if (!await IsTicketJobOrderEditableAsync(id, cancellationToken))
+                if (!await IsTicketCustomerOrderSlipEditableAsync(id, cancellationToken))
                 {
-                    return ServiceResult.Failure("Cannot restore ticket — parent Job Order is closed or cancelled.");
+                    return ServiceResult.Failure("Cannot restore ticket — parent COS is closed or cancelled.");
                 }
 
                 var model = await unitOfWork.DispatchTicket.GetAsync(dt => dt.DispatchTicketId == id, cancellationToken);
@@ -871,11 +990,11 @@ namespace IBS.Services.MSAP
 
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    if (model.JobOrderId.HasValue)
+                    if (model.CustomerOrderSlipId.HasValue)
                     {
-                        var parent = await unitOfWork.JobOrder.GetForUpdateAsync(model.JobOrderId.Value, cancellationToken);
-                        var booking = await unitOfWork.VesselSchedule.GetAsync(s => s.JobOrderId == model.JobOrderId, cancellationToken);
-                        if (parent?.Status != MsapConstants.JobOrderStatus.Open ||
+                        var parent = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(model.CustomerOrderSlipId.Value, cancellationToken);
+                        var booking = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == model.CustomerOrderSlipId, cancellationToken);
+                        if (parent?.Status != MsapConstants.CustomerOrderSlipStatus.Open ||
                             booking?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
                         {
                             throw new InvalidOperationException("Cannot restore a ticket under a closed, cancelled or operationally completed booking.");
@@ -1016,15 +1135,15 @@ namespace IBS.Services.MSAP
             return ServiceResult<object>.Success(new { Exists = false });
         }
 
-        public async Task<bool> IsJobOrderEditableAsync(int? jobOrderId, CancellationToken cancellationToken)
+        public async Task<bool> IsCustomerOrderSlipEditableAsync(int? customerOrderSlipId, CancellationToken cancellationToken)
         {
-            return await unitOfWork.DispatchTicket.IsJobOrderEditableAsync(jobOrderId, cancellationToken);
+            return await unitOfWork.DispatchTicket.IsCustomerOrderSlipEditableAsync(customerOrderSlipId, cancellationToken);
         }
 
-        private async Task<bool> IsTicketJobOrderEditableAsync(int dispatchTicketId, CancellationToken cancellationToken)
+        private async Task<bool> IsTicketCustomerOrderSlipEditableAsync(int dispatchTicketId, CancellationToken cancellationToken)
         {
             var ticket = await unitOfWork.DispatchTicket.GetAsync(dt => dt.DispatchTicketId == dispatchTicketId, cancellationToken);
-            return ticket != null && await IsJobOrderEditableAsync(ticket.JobOrderId, cancellationToken);
+            return ticket != null && await IsCustomerOrderSlipEditableAsync(ticket.CustomerOrderSlipId, cancellationToken);
         }
 
         public async Task<List<SelectListItem>> GetCustomerSelectListAsync(CancellationToken cancellationToken)
@@ -1044,6 +1163,17 @@ namespace IBS.Services.MSAP
 
         public async Task<DispatchTicketViewModel> PopulateSelectListsAsync(DispatchTicketViewModel viewModel, CancellationToken cancellationToken)
         {
+            if (viewModel.VesselScheduleServiceEntryId.HasValue && viewModel.CustomerOrderSlipId.HasValue)
+            {
+                var booking = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == viewModel.CustomerOrderSlipId, cancellationToken);
+                var details = booking == null ? null : await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(booking.VesselScheduleId, cancellationToken);
+                var entry = details?.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == viewModel.VesselScheduleServiceEntryId);
+                if (entry != null)
+                {
+                    viewModel.TugBoatId = entry.TugboatId;
+                    viewModel.ServiceId = entry.ServiceId;
+                }
+            }
             viewModel = await unitOfWork.DispatchTicket.GetDispatchTicketSelectLists(viewModel, cancellationToken);
             viewModel.Customers = await unitOfWork.GetCustomerListAsyncById(cancellationToken);
             return viewModel;
@@ -1091,6 +1221,31 @@ namespace IBS.Services.MSAP
                 totalBilling = ticket.TotalBilling.ToString("N2"),
                 totalNetRevenue = ticket.TotalNetRevenue.ToString("N2")
             };
+        }
+
+        private async Task<string?> ValidateExpectedActualAsync(DispatchTicketViewModel model, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(model.DispatchNumber) || model.DispatchNumber.Trim().Length > 20
+                || !model.DateLeft.HasValue || !model.DateArrived.HasValue || !model.TimeLeft.HasValue || !model.TimeArrived.HasValue)
+            {
+                return "Enter the actual ticket number and complete start and end dates/times.";
+            }
+            var start = model.DateLeft.Value.ToDateTime(model.TimeLeft.Value);
+            var end = model.DateArrived.Value.ToDateTime(model.TimeArrived.Value);
+            if (end <= start || end > DateTimeHelper.GetCurrentPhilippineTime())
+            {
+                return "Actual end must be after start and cannot be in the future.";
+            }
+            if (!model.TugMasterId.HasValue || await unitOfWork.TugMaster.GetAsync(t => t.TugMasterId == model.TugMasterId, ct) == null)
+            {
+                return "Choose a valid tug master for the actual service.";
+            }
+            if (model.Date == default)
+            {
+                return "Enter the actual ticket date.";
+            }
+            return (await GuardClosedPeriodAsync(model.DateLeft.Value, ct))?.Message
+                ?? (await GuardClosedPeriodAsync(model.Date, ct))?.Message;
         }
 
         private async Task<ServiceResult?> GuardClosedPeriodAsync(DateOnly date, CancellationToken ct)

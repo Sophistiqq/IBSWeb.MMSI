@@ -60,7 +60,7 @@
                 </div>
             </div>
 
-            <div id="financialJobProgress" data-progress-url="@Url.Action("Progress", "JobOrder", new { area = "MSAP" })" data-action-stage="5"></div>
+            <div id="financialJobProgress" data-progress-url="@Url.Action("Progress", "CustomerOrderSlip", new { area = "MSAP" })" data-action-stage="5"></div>
 
             <div class="modern-grid">
                 <!-- Left Column: Metadata & Selection (Workflow Step 1) -->
@@ -225,7 +225,7 @@
                         <div class="modern-card-header-action flex justify-between items-center">
                             <div class="flex items-center gap-2">
                                 <span class="material-symbols-outlined">receipt_long</span>
-                                <h2 class="modern-headline-md">3. Job Order & Tickets Selection</h2>
+                                <h2 class="modern-headline-md">3. COS & Tickets Selection</h2>
                             </div>
                             <div data-tour-step="12">
                                 <button type="submit" class="modern-btn-primary" id="submitButton">
@@ -236,24 +236,24 @@
                         <div class="modern-card-body">
                             <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
 
-                            <!-- Job Order Selection -->
+                            <!-- COS Selection -->
                             <div class="mb-4" data-tour-step="2">
                                 <div class="flex items-center justify-between mb-1">
-                                    <label class="modern-label mb-0">Target Job Order</label>
+                                    <label class="modern-label mb-0">Target COS</label>
                                     <div class="flex items-center gap-2">
                                         <input type="checkbox" id="legacyToggle" class="form-check-input" style="width: 16px; height: 16px; cursor: pointer;">
                                         <label for="legacyToggle" class="text-xs font-bold opacity-70 cursor-pointer">LEGACY (NO JO)</label>
                                     </div>
                                 </div>
-                                <div id="jobOrderSearchContainer">
-                                    <select asp-for="JobOrderId" class="js-modern-select" id="JobOrderSelect" data-placeholder="-- Select Job Order --" disabled>
-                                        <option value="">-- Select Job Order --</option>
+                                <div id="customerOrderSlipSearchContainer">
+                                    <select asp-for="CustomerOrderSlipId" class="js-modern-select" id="CustomerOrderSlipSelect" data-placeholder="-- Select COS --" disabled>
+                                        <option value="">-- Select COS --</option>
                                     </select>
-                                    <p class="text-xs opacity-60 mt-1">Available tickets will be filtered based on the selected Job Order above.</p>
+                                    <p class="text-xs opacity-60 mt-1">Available tickets will be filtered based on the selected COS above.</p>
                                 </div>
                                 <div id="legacyNotice" class="p-3 bg-surface-container-low rounded-md border border-outline-variant flex items-center gap-2" style="display: none;">
                                     <span class="material-symbols-outlined text-warning">info</span>
-                                    <p class="text-xs mb-0">Legacy mode enabled. Displaying all unbilled tickets without an associated Job Order for this customer.</p>
+                                    <p class="text-xs mb-0">Legacy mode enabled. Displaying all unbilled tickets without an associated COS for this customer.</p>
                                 </div>
                             </div>
 
@@ -281,7 +281,7 @@
                                         <tr class="text-muted">
                                             <td colspan="11" class="text-center py-5">
                                                 <span class="material-symbols-outlined opacity-20" style="font-size: 48px;">info</span>
-                                                <p class="mt-2">Please select a customer first to load available Job Orders.</p>
+                                                <p class="mt-2">Please select a customer first to load available COS records.</p>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -347,16 +347,16 @@
     <script src="~/msap/js/job-progress.js" asp-append-version="true"></script>
     <script>
         window.IBS_TOUR_STEPS = [
-            { step: 1, title: "Customer & Billing Recipient", text: "Select the customer to load their eligible Job Orders and billing defaults. Review the displayed address, TIN, terms, and tax details. If BILL TO PRINCIPAL is available and required, tick it and select the intended principal.", required: false, autoAdvance: false },
-            { step: 2, title: "Job Order / Legacy Tickets", text: "Select the Job Order whose services are being billed. Its details and eligible tickets load below. Use LEGACY (NO JO) only for tickets without a Job Order; these are loaded for the selected customer and their billing details must be reviewed manually.", required: false, autoAdvance: false },
+            { step: 1, title: "Customer & Billing Recipient", text: "Select the customer to load their eligible COS records and billing defaults. Review the displayed address, TIN, terms, and tax details. If BILL TO PRINCIPAL is available and required, tick it and select the intended principal.", required: false, autoAdvance: false },
+            { step: 2, title: "COS / Legacy Tickets", text: "Select the COS whose services are being billed. Its details and eligible tickets load below. Use LEGACY (NO JO) only for tickets without a COS; these are loaded for the selected customer and their billing details must be reviewed manually.", required: false, autoAdvance: false },
             { step: 3, title: "Dispatch Tickets", text: "Review each dispatch number, tug, service, duration, and charge. Loaded tickets start selected. Tick only the tickets to include, or clear the ones being left for another statement. Only the selected tickets contribute to the statement totals.", required: false, autoAdvance: false },
             { step: 4, title: "BAF Adjustment per Ticket", text: "Review the BAF charge for each selected ticket. You can adjust its rate and choose Per Hour or Per Move in this table. Per Hour uses the ticket duration; Per Move applies the rate once. Check the updated ticket and statement totals.", required: false, autoAdvance: false },
             { step: 5, title: "Billing Number", text: "Enter the billing number from the document. Click the DOCUMENTED badge to switch to UNDOCUMENTED only when appropriate; the number field is then disabled and a number is generated when saved.", required: false, autoAdvance: false },
             { step: 6, title: "VAT, Inclusive & WHT", text: "Review the tax settings against the customer or principal details. VAT marks a vatable statement; INC means the charges already include VAT. For vatable charges with INC off, VAT is added to the total. WHT controls whether withholding is printed on the statement.", required: false, autoAdvance: false },
             { step: 7, title: "Billing Date", text: "Set the date the billing statement should be recorded under. Confirm it against the document and reporting period; this date is separate from the service times on dispatch tickets.", required: false, autoAdvance: false },
-            { step: 8, title: "Voyage Reference", text: "Review the voyage reference identifying this vessel visit. It is filled from the Job Order and locked for linked billings; in legacy mode, enter the reference needed for the statement.", required: false, autoAdvance: false },
+            { step: 8, title: "Voyage Reference", text: "Review the voyage reference identifying this vessel visit. It is filled from the COS and locked for linked billings; in legacy mode, enter the reference needed for the statement.", required: false, autoAdvance: false },
             { step: 9, title: "COS Reference", text: "Review or enter the COS reference for this statement when available. Match it to the supporting documents so the billing can be traced to the correct service.", required: false, autoAdvance: false },
-            { step: 10, title: "Port, Terminal & Vessel", text: "Check that the location and vessel describe the services being billed. Job Order values are filled automatically and locked. In legacy mode, select them manually; changing the port reloads the terminal choices.", required: false, autoAdvance: false },
+            { step: 10, title: "Port, Terminal & Vessel", text: "Check that the location and vessel describe the services being billed. COS values are filled automatically and locked. In legacy mode, select them manually; changing the port reloads the terminal choices.", required: false, autoAdvance: false },
             { step: 11, title: "Statement Totals", text: "Review Total Dispatch, Total BAF, and Grand Total against the selected tickets and VAT settings. If a total is wrong, check ticket selection, BAF rates, and the Inclusive setting before saving.", required: false, autoAdvance: false },
             { step: 12, title: "Submit Billing", text: "Review all details, then click SUBMIT BILLING and confirm. The statement is created as For Posting and must be posted separately before collection. If a separate BAF billing number is requested, review the two billing references before confirming the split.", required: false, autoAdvance: false }
         ];
@@ -366,14 +366,14 @@
     <script>
         $(document).ready(function () {
             let currentCustomerId = null;
-            let initialJobOrderId = @System.Text.Json.JsonSerializer.Serialize(Model.JobOrderId);
+            let initialCustomerOrderSlipId = @System.Text.Json.JsonSerializer.Serialize(Model.CustomerOrderSlipId);
             let currentCustomer = null;
             let currentPrincipal = null;
             let currentTerminalName = null; //  track for PHIL-CEB split detection
             setupEventListeners();
             handleCheckboxChange();
 
-            //  Lock/unlock JO-derived selects (ModernSelect trigger) while keeping native select enabled for form POST
+            //  Lock/unlock COS-derived selects (ModernSelect trigger) while keeping native select enabled for form POST
             function lockSelect(id, val) {
                 $(id).val(val).trigger('change');
                 $(id).next('.modern-select-container').find('.modern-select-trigger')
@@ -458,18 +458,18 @@
                 const isChecked = $(this).is(":checked");
                 if (isChecked) {
                     unlockHeaderFields();
-                    $("#jobOrderSearchContainer").hide();
+                    $("#customerOrderSlipSearchContainer").hide();
                     $("#legacyNotice").show();
-                    $jobOrderSelect.val('').trigger('change');
+                    $customerOrderSlipSelect.val('').trigger('change');
                     $("#selectAllTickets").prop("disabled", false);
 
                     if (currentCustomerId) {
                         await fetchTicketsByCustomer();
                     }
                 } else {
-                    $("#jobOrderSearchContainer").show();
+                    $("#customerOrderSlipSearchContainer").show();
                     $("#legacyNotice").hide();
-                    $ticketsTableBody.html('<tr><td colspan="11" class="text-center py-5 opacity-60 italic">Select a Job Order to view available tickets</td></tr>');
+                    $ticketsTableBody.html('<tr><td colspan="11" class="text-center py-5 opacity-60 italic">Select a COS to view available tickets</td></tr>');
                     $dispatchSelect.empty();
                     $("#selectAllTickets").prop("disabled", true);
                     rebuildBafTable();
@@ -614,45 +614,45 @@
                 handleCheckboxChange();
 
                 unlockHeaderFields();
-                $jobOrderSelect.val('').prop('disabled', false);
-                populateJobOrderSelect();
+                $customerOrderSlipSelect.val('').prop('disabled', false);
+                populateCustomerOrderSlipSelect();
             }
 
-            // ── Job Order select → load tickets ─────────────────────────────
+            // ── COS select → load tickets ─────────────────────────────
             const $ticketsTableBody = $("#ticketsTable tbody");
             const $dispatchSelect = $("#DispatchTicketSelect");
-            const $jobOrderSelect = $("#JobOrderSelect");
+            const $customerOrderSlipSelect = $("#CustomerOrderSlipSelect");
 
-            async function populateJobOrderSelect() {
+            async function populateCustomerOrderSlipSelect() {
                 if (!currentCustomerId) return;
-                $jobOrderSelect.empty().append('<option value="">-- Select Job Order --</option>').prop('disabled', false);
+                $customerOrderSlipSelect.empty().append('<option value="">-- Select COS --</option>').prop('disabled', false);
                 try {
-                    const res = await fetch(`@Url.Action("GetBillableJobOrders", "Billing", new { area = "MSAP" })?customerId=${encodeURIComponent(currentCustomerId)}`);
+                    const res = await fetch(`@Url.Action("GetBillableCustomerOrderSlips", "Billing", new { area = "MSAP" })?customerId=${encodeURIComponent(currentCustomerId)}`);
                     const data = await res.json();
                     if (Array.isArray(data)) {
-                        data.forEach(jo => $jobOrderSelect.append($('<option>').val(jo.value).text(jo.name)));
+                        data.forEach(jo => $customerOrderSlipSelect.append($('<option>').val(jo.value).text(jo.name)));
                     }
-                    if (initialJobOrderId && $jobOrderSelect.find('option').toArray().some(option => option.value === String(initialJobOrderId))) {
-                        $jobOrderSelect.val(String(initialJobOrderId));
+                    if (initialCustomerOrderSlipId && $customerOrderSlipSelect.find('option').toArray().some(option => option.value === String(initialCustomerOrderSlipId))) {
+                        $customerOrderSlipSelect.val(String(initialCustomerOrderSlipId));
                     }
-                    initialJobOrderId = null;
-                    $jobOrderSelect.trigger('change');
+                    initialCustomerOrderSlipId = null;
+                    $customerOrderSlipSelect.trigger('change');
                 } catch {
-                    console.error('Failed to load job orders');
+                    console.error('Failed to load COS records');
                 }
             }
 
-            $jobOrderSelect.on('change', async function () {
+            $customerOrderSlipSelect.on('change', async function () {
                 const joId = $(this).val();
-                JobProgress.load(document.getElementById("financialJobProgress"), { jobOrderId: joId });
+                JobProgress.load(document.getElementById("financialJobProgress"), { customerOrderSlipId: joId });
                 if (!joId) {
-                    $ticketsTableBody.html('<tr><td colspan="11" class="text-center py-5 opacity-60 italic">Select a Job Order to view available tickets</td></tr>');
+                    $ticketsTableBody.html('<tr><td colspan="11" class="text-center py-5 opacity-60 italic">Select a COS to view available tickets</td></tr>');
                     $dispatchSelect.empty();
                     rebuildBafTable();
                     return;
                 }
                 try {
-                    const res = await fetch(`@Url.Action("GetDispatchTicketsByJobOrder", "Billing", new { area = "MSAP" })?jobOrderId=${encodeURIComponent(joId)}`);
+                    const res = await fetch(`@Url.Action("GetDispatchTicketsByCustomerOrderSlip", "Billing", new { area = "MSAP" })?customerOrderSlipId=${encodeURIComponent(joId)}`);
                     const response = await res.json();
                     if (response.success) {
                         if (response.header) lockHeaderFields(response.header);
@@ -674,7 +674,7 @@
                 $("#selectAllTickets").prop("disabled", false);
 
                 if (!tickets?.length) {
-                    $ticketsTableBody.html('<tr><td colspan="11" class="text-center py-5 opacity-60 italic">No tickets available for billing in this job order</td></tr>');
+                    $ticketsTableBody.html('<tr><td colspan="11" class="text-center py-5 opacity-60 italic">No tickets available for billing in this COS</td></tr>');
                     rebuildBafTable();
                     return;
                 }
@@ -728,7 +728,7 @@
             }
 
             function rebuildBafTable() {
-                if (!$jobOrderSelect.val()) {
+                if (!$customerOrderSlipSelect.val()) {
                     JobProgress.load(document.getElementById("financialJobProgress"), { dispatchTicketIds: $dispatchSelect.val() || [] });
                 }
                 const $body = $("#bafTableBody");

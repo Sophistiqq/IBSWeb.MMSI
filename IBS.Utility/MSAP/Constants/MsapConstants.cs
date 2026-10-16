@@ -50,7 +50,7 @@ namespace IBS.Utility.MSAP.Constants
 
         #endregion Format string
 
-        public static class JobOrderStatus
+        public static class CustomerOrderSlipStatus
         {
             public const string Open = "Open";
             public const string Closed = "Closed";

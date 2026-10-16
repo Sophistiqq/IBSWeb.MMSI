@@ -25,11 +25,11 @@ namespace IBS.Services.MSAP
             "CollectionId", "Collection", "CollectionNumber",
         ];
 
-        public string[] SupportedTables => ["JobOrder", "DispatchTicket", "Billing", "Collection"];
+        public string[] SupportedTables => ["CustomerOrderSlip", "DispatchTicket", "Billing", "Collection"];
 
         public string DisplayName(string table) => table switch
         {
-            "JobOrder" => "Job Orders",
+            "CustomerOrderSlip" => "COS records",
             "DispatchTicket" => "Dispatch Tickets",
             "Billing" => "Billings",
             "Collection" => "Collections",
@@ -38,7 +38,7 @@ namespace IBS.Services.MSAP
 
         public string IdColumn(string table) => table switch
         {
-            "JobOrder" => "JobOrderId",
+            "CustomerOrderSlip" => "CustomerOrderSlipId",
             "DispatchTicket" => "DispatchTicketId",
             "Billing" => "MsapBillingId",
             "Collection" => "MsapCollectionId",
@@ -47,7 +47,7 @@ namespace IBS.Services.MSAP
 
         public string ReferenceColumn(string table) => table switch
         {
-            "JobOrder" => "JobOrderNumber",
+            "CustomerOrderSlip" => "CustomerOrderSlipNumber",
             "DispatchTicket" => "DispatchNumber",
             "Billing" => "MsapBillingNumber",
             "Collection" => "MsapCollectionNumber",
@@ -58,10 +58,10 @@ namespace IBS.Services.MSAP
         {
             return table switch
             {
-                "JobOrder" =>
+                "CustomerOrderSlip" =>
                 [
-                    new("JobOrderId", "ID"),
-                    new("JobOrderNumber", "Job Order #"),
+                    new("CustomerOrderSlipId", "ID"),
+                    new("CustomerOrderSlipNumber", "COS #"),
                     new("Date", "Date"),
                     new("Status", "Status"),
                     new("CustomerId", "Customer"),
@@ -145,9 +145,9 @@ namespace IBS.Services.MSAP
         {
             return table switch
             {
-                "JobOrder" =>
+                "CustomerOrderSlip" =>
                 [
-                    new("JobOrderNumber", "Job Order #", "string", true),
+                    new("CustomerOrderSlipNumber", "COS #", "string", true),
                     new("Date", "Date", "date", true),
                     new("Status", "Status", "select", true,
                         Options: [new("Open", "Open"), new("Closed", "Closed")]),
@@ -191,7 +191,7 @@ namespace IBS.Services.MSAP
                     new("TotalNetRevenue", "Net Revenue", "number"),
                     new("ApOtherTugs", "AP Other Tugs", "number"),
                     new("Remarks", "Remarks", "textarea"),
-                    new("JobOrderId", "Job Order", "select_lookup", LookupKey: "JobOrder"),
+                    new("CustomerOrderSlipId", "COS", "select_lookup", LookupKey: "CustomerOrderSlip"),
                 ],
 
                 "Billing" =>
@@ -216,7 +216,7 @@ namespace IBS.Services.MSAP
                     new("VoyageNumber", "Voyage #", "string"),
                     new("COSNumber", "COS #", "string"),
                     new("ApOtherTug", "AP Other Tug", "number"),
-                    new("JobOrderId", "Job Order", "select_lookup", LookupKey: "JobOrder"),
+                    new("CustomerOrderSlipId", "COS", "select_lookup", LookupKey: "CustomerOrderSlip"),
                     new("PrincipalId", "Principal", "select_lookup", LookupKey: "Principal"),
                 ],
 
@@ -257,15 +257,15 @@ namespace IBS.Services.MSAP
 
             switch (table)
             {
-                case "JobOrder":
+                case "CustomerOrderSlip":
                 {
-                    System.Linq.Expressions.Expression<Func<JobOrder, bool>>? filter = string.IsNullOrWhiteSpace(search) ? null : j =>
-                        j.JobOrderNumber.ToLower().Contains(search) ||
+                    System.Linq.Expressions.Expression<Func<CustomerOrderSlip, bool>>? filter = string.IsNullOrWhiteSpace(search) ? null : j =>
+                        j.CustomerOrderSlipNumber.ToLower().Contains(search) ||
                         (j.COSNumber != null && j.COSNumber.ToLower().Contains(search)) ||
                         (j.VoyageNumber != null && j.VoyageNumber.ToLower().Contains(search)) ||
                         (j.Remarks != null && j.Remarks.ToLower().Contains(search));
-                    var (items, total) = await unitOfWork.JobOrder.GetPagedAsync(filter, sortColumn, sortDir, skip, take, ct);
-                    return (items.Select(MapJobOrder), total);
+                    var (items, total) = await unitOfWork.CustomerOrderSlip.GetPagedAsync(filter, sortColumn, sortDir, skip, take, ct);
+                    return (items.Select(MapCustomerOrderSlip), total);
                 }
                 case "DispatchTicket":
                 {
@@ -302,7 +302,7 @@ namespace IBS.Services.MSAP
         {
             return table switch
             {
-                "JobOrder" => MapJobOrder(await unitOfWork.JobOrder.GetAsync(j => j.JobOrderId == id, ct)),
+                "CustomerOrderSlip" => MapCustomerOrderSlip(await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == id, ct)),
                 "DispatchTicket" => MapDispatchTicket(await unitOfWork.DispatchTicket.GetAsync(d => d.DispatchTicketId == id, ct)),
                 "Billing" => MapBilling(await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == id, ct)),
                 "Collection" => MapCollection(await unitOfWork.Collection.GetAsync(c => c.MsapCollectionId == id, ct)),
@@ -326,7 +326,7 @@ namespace IBS.Services.MSAP
                 {
                     result = table switch
                     {
-                        "JobOrder" => await SaveJobOrderAsync(id, changes, username, ct),
+                        "CustomerOrderSlip" => await SaveCustomerOrderSlipAsync(id, changes, username, ct),
                         "DispatchTicket" => await SaveDispatchTicketAsync(id, changes, username, ct),
                         "Billing" => await SaveBillingAsync(id, changes, username, ct),
                         "Collection" => await SaveCollectionAsync(id, changes, username, ct),
@@ -348,10 +348,10 @@ namespace IBS.Services.MSAP
             }
         }
 
-        private async Task<ServiceResult> SaveJobOrderAsync(int id, Dictionary<string, string> changes, string username, CancellationToken ct)
+        private async Task<ServiceResult> SaveCustomerOrderSlipAsync(int id, Dictionary<string, string> changes, string username, CancellationToken ct)
         {
-            var entity = await unitOfWork.JobOrder.GetAsync(j => j.JobOrderId == id, ct);
-            return await ApplyChangesAsync(entity, entity?.JobOrderNumber, "Job Order", id, changes, username, ct);
+            var entity = await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == id, ct);
+            return await ApplyChangesAsync(entity, entity?.CustomerOrderSlipNumber, "COS", id, changes, username, ct);
         }
 
         private async Task<ServiceResult> SaveDispatchTicketAsync(int id, Dictionary<string, string> changes, string username, CancellationToken ct)
@@ -387,8 +387,8 @@ namespace IBS.Services.MSAP
                     .Select(t => new SelectListItem($"{t.TugboatName} ({t.TugboatNumber})", t.TugboatId.ToString())).ToList(),
                 "Service" => (await unitOfWork.Service.GetAllAsync(null, ct))
                     .Select(s => new SelectListItem(s.ServiceName, s.ServiceId.ToString())).ToList(),
-                "JobOrder" => (await unitOfWork.JobOrder.GetAllAsync(null, ct))
-                    .Select(j => new SelectListItem(j.JobOrderNumber, j.JobOrderId.ToString())).ToList(),
+                "CustomerOrderSlip" => (await unitOfWork.CustomerOrderSlip.GetAllAsync(null, ct))
+                    .Select(j => new SelectListItem(j.CustomerOrderSlipNumber, j.CustomerOrderSlipId.ToString())).ToList(),
                 "Principal" => (await unitOfWork.Principal.GetAllAsync(null, ct))
                     .Select(p => new SelectListItem(p.PrincipalName, p.PrincipalId.ToString())).ToList(),
                 "BankAccount" => (await unitOfWork.BankAccount.GetAllAsync(null, ct))
@@ -537,7 +537,7 @@ namespace IBS.Services.MSAP
 
         // --- Entity-to-Dictionary mappers ---
 
-        private static Dictionary<string, object?> MapJobOrder(JobOrder? j)
+        private static Dictionary<string, object?> MapCustomerOrderSlip(CustomerOrderSlip? j)
         {
             if (j == null)
             {
@@ -546,8 +546,8 @@ namespace IBS.Services.MSAP
 
             return new()
             {
-                ["JobOrderId"] = j.JobOrderId,
-                ["JobOrderNumber"] = j.JobOrderNumber,
+                ["CustomerOrderSlipId"] = j.CustomerOrderSlipId,
+                ["CustomerOrderSlipNumber"] = j.CustomerOrderSlipNumber,
                 ["Date"] = j.Date.ToString("yyyy-MM-dd"),
                 ["Status"] = j.Status,
                 ["CustomerId"] = j.CustomerId,
@@ -602,7 +602,7 @@ namespace IBS.Services.MSAP
                 ["TotalNetRevenue"] = d.TotalNetRevenue,
                 ["ApOtherTugs"] = d.ApOtherTugs,
                 ["Remarks"] = d.Remarks,
-                ["JobOrderId"] = d.JobOrderId,
+                ["CustomerOrderSlipId"] = d.CustomerOrderSlipId,
                 ["CreatedBy"] = d.CreatedBy,
                 ["CreatedDate"] = d.CreatedDate.ToString("yyyy-MM-dd HH:mm"),
             };
@@ -639,7 +639,7 @@ namespace IBS.Services.MSAP
                 ["VoyageNumber"] = b.VoyageNumber,
                 ["COSNumber"] = b.COSNumber,
                 ["ApOtherTug"] = b.ApOtherTug,
-                ["JobOrderId"] = b.JobOrderId,
+                ["CustomerOrderSlipId"] = b.CustomerOrderSlipId,
                 ["PrincipalId"] = b.PrincipalId,
                 ["CreatedBy"] = b.CreatedBy,
                 ["CreatedDate"] = b.CreatedDate.ToString("yyyy-MM-dd HH:mm"),

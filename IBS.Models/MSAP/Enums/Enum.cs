@@ -14,10 +14,10 @@ namespace IBS.Models.MSAP.Enums
         DeleteBilling,
         ReverseBilling,
         CreateCollection,
-        CreateJobOrder,
-        EditJobOrder,
-        DeleteJobOrder,
-        CloseJobOrder,
+        CreateCustomerOrderSlip,
+        EditCustomerOrderSlip,
+        DeleteCustomerOrderSlip,
+        CloseCustomerOrderSlip,
 
         #endregion -- MSAP Workflow --
 

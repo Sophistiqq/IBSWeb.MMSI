@@ -11,7 +11,7 @@ namespace IBS.Services.MSAP
 {
     public class VesselScheduleService(
         IUnitOfWork unitOfWork,
-        JobOrderService jobOrderService,
+        CustomerOrderSlipService customerOrderSlipService,
         ILogger<VesselScheduleService> logger) : IVesselScheduleService
     {
         public async Task<ServiceResult<VesselScheduleBoardViewModel>> GetCalendarAsync(VesselScheduleBoardViewModel filters, CancellationToken ct = default)
@@ -97,7 +97,7 @@ namespace IBS.Services.MSAP
             try
             {
                 model.Status = MsapConstants.VesselScheduleStatus.Tentative;
-                model.JobOrderId = null;
+                model.CustomerOrderSlipId = null;
                 model.Revision = 1;
                 model.ApprovedRevision = null;
                 model.ApprovedByUserId = null;
@@ -161,18 +161,18 @@ namespace IBS.Services.MSAP
                         return;
                     }
 
-                    JobOrder? job = null;
-                    if (existing.JobOrderId.HasValue)
+                    CustomerOrderSlip? job = null;
+                    if (existing.CustomerOrderSlipId.HasValue)
                     {
-                        job = await unitOfWork.JobOrder.GetForUpdateAsync(existing.JobOrderId.Value, ct);
+                        job = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(existing.CustomerOrderSlipId.Value, ct);
                         if (job == null)
                         {
-                            result = ServiceResult.Failure("Linked Job Order not found.", ServiceResultStatus.NotFound);
+                            result = ServiceResult.Failure("Linked COS not found.", ServiceResultStatus.NotFound);
                             return;
                         }
-                        if (job.Status != MsapConstants.JobOrderStatus.Open)
+                        if (job.Status != MsapConstants.CustomerOrderSlipStatus.Open)
                         {
-                            result = ServiceResult.Failure("This booking already has service records or billing, or its Job Order is no longer open. Schedule revision is only available before Dispatch Tickets or billing exist.", ServiceResultStatus.ValidationError);
+                            result = ServiceResult.Failure("This booking already has service records or billing, or its COS is no longer open. Schedule revision is only available before Dispatch Tickets or billing exist.", ServiceResultStatus.ValidationError);
                             return;
                         }
                         var oldPeriodClosed = await unitOfWork.PostedPeriod.IsMonthClosedAsync(job.Date.Year, job.Date.Month, ct);
@@ -184,19 +184,19 @@ namespace IBS.Services.MSAP
                         }
                     }
 
-                    var existingTickets = existing.JobOrderId.HasValue
-                        ? (await unitOfWork.DispatchTicket.GetAllAsync(t => t.JobOrderId == existing.JobOrderId.Value, ct)).ToList()
+                    var existingTickets = existing.CustomerOrderSlipId.HasValue
+                        ? (await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == existing.CustomerOrderSlipId.Value, ct)).ToList()
                         : [];
                     var entryIds = existing.ServiceEntries.Select(e => e.VesselScheduleServiceEntryId).ToList();
                     var entryTickets = entryIds.Count > 0
                         ? (await unitOfWork.DispatchTicket.GetAllAsync(t => t.VesselScheduleServiceEntryId.HasValue && entryIds.Contains(t.VesselScheduleServiceEntryId.Value), ct)).ToList()
                         : [];
                     bool hasTickets = existingTickets.Count > 0 || entryTickets.Count > 0;
-                    bool hasBilling = existing.JobOrderId.HasValue && await unitOfWork.Billing.GetAsync(b => b.JobOrderId == existing.JobOrderId.Value, ct) != null;
+                    bool hasBilling = existing.CustomerOrderSlipId.HasValue && await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == existing.CustomerOrderSlipId.Value, ct) != null;
 
                     if (hasTickets || hasBilling)
                     {
-                        result = ServiceResult.Failure("This booking already has service records or billing, or its Job Order is no longer open. Schedule revision is only available before Dispatch Tickets or billing exist.", ServiceResultStatus.ValidationError);
+                        result = ServiceResult.Failure("This booking already has service records or billing, or its COS is no longer open. Schedule revision is only available before Dispatch Tickets or billing exist.", ServiceResultStatus.ValidationError);
                         return;
                     }
 
@@ -216,9 +216,9 @@ namespace IBS.Services.MSAP
                         return;
                     }
 
-                    if (existing.JobOrderId.HasValue && job != null)
+                    if (existing.CustomerOrderSlipId.HasValue && job != null)
                     {
-                        // Revision-aware reapproval: preserve the existing COS/JobOrder identity while incrementing revision and requiring reapproval
+                        // Revision-aware reapproval: preserve the existing COS/CustomerOrderSlip identity while incrementing revision and requiring reapproval
                         existing.Revision += 1;
                         existing.Status = MsapConstants.VesselScheduleStatus.Tentative;
 
@@ -237,12 +237,12 @@ namespace IBS.Services.MSAP
                         job.EditedBy = username;
                         job.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
                         await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
-                            $"Updated Job Order #{job.JobOrderNumber} for revised vessel schedule #{existing.VesselScheduleId} (Revision {existing.Revision}).", "Job Order", job.JobOrderId, job.JobOrderNumber), ct);
+                            $"Updated COS #{job.CustomerOrderSlipNumber} for revised vessel schedule #{existing.VesselScheduleId} (Revision {existing.Revision}).", "COS", job.CustomerOrderSlipId, job.CustomerOrderSlipNumber), ct);
                     }
                     else
                     {
                         existing.Status = MsapConstants.VesselScheduleStatus.Tentative;
-                        existing.JobOrderId = null;
+                        existing.CustomerOrderSlipId = null;
                     }
 
                     existing.CustomerId = model.CustomerId;
@@ -302,9 +302,9 @@ namespace IBS.Services.MSAP
 
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Updated vessel schedule #{model.VesselScheduleId} (Revision {existing.Revision}). Overlap override: {allowConflicts}", "Vessel Schedule", model.VesselScheduleId), ct);
                     await unitOfWork.SaveAsync(ct);
-                    result = ServiceResult.Success(existing.JobOrderId.HasValue
+                    result = ServiceResult.Success(existing.CustomerOrderSlipId.HasValue
                         ? $"Schedule updated (Revision {existing.Revision}). Reapproval is required before ticket entry."
-                        : "Schedule updated. Review and confirm the booking before creating its Job Order.");
+                        : "Schedule updated. Review and confirm the booking before creating its COS.");
                 }, ct);
 
                 return result;
@@ -336,9 +336,9 @@ namespace IBS.Services.MSAP
                     }
 
                     // Idempotent repeated confirmation check
-                    if (schedule.JobOrderId.HasValue && schedule.ApprovedRevision == schedule.Revision)
+                    if (schedule.CustomerOrderSlipId.HasValue && schedule.ApprovedRevision == schedule.Revision)
                     {
-                        result = ServiceResult<int>.Success(schedule.JobOrderId.Value, "This schedule is already confirmed.");
+                        result = ServiceResult<int>.Success(schedule.CustomerOrderSlipId.Value, "This schedule is already confirmed.");
                         return;
                     }
 
@@ -357,25 +357,25 @@ namespace IBS.Services.MSAP
                         return;
                     }
 
-                    if (!schedule.JobOrderId.HasValue)
+                    if (!schedule.CustomerOrderSlipId.HasValue)
                     {
-                        var created = await jobOrderService.CreateJobOrderAsync(BuildJobOrder(schedule), username, ct);
+                        var created = await customerOrderSlipService.CreateCustomerOrderSlipAsync(BuildCustomerOrderSlip(schedule), username, ct);
                         if (!created.IsSuccess)
                         {
-                            result = ServiceResult<int>.Failure(created.Message ?? "Job Order creation failed.", created.Status);
+                            result = ServiceResult<int>.Failure(created.Message ?? "COS creation failed.", created.Status);
                             throw new InvalidOperationException(result.Message);
                         }
-                        schedule.JobOrderId = created.Data;
+                        schedule.CustomerOrderSlipId = created.Data;
                     }
                     else
                     {
-                        // Preserve existing JobOrder identity and sync details
-                        var job = await unitOfWork.JobOrder.GetForUpdateAsync(schedule.JobOrderId.Value, ct);
-                        if (job?.Status != MsapConstants.JobOrderStatus.Open
-                            || await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == schedule.JobOrderId, ct) != null
-                            || await unitOfWork.Billing.GetAsync(b => b.JobOrderId == schedule.JobOrderId, ct) != null)
+                        // Preserve existing CustomerOrderSlip identity and sync details
+                        var job = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(schedule.CustomerOrderSlipId.Value, ct);
+                        if (job?.Status != MsapConstants.CustomerOrderSlipStatus.Open
+                            || await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct) != null
+                            || await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct) != null)
                         {
-                            result = ServiceResult<int>.Failure("Cannot reapprove a booking once tickets or billing exist, or its Job Order is closed.", ServiceResultStatus.ValidationError);
+                            result = ServiceResult<int>.Failure("Cannot reapprove a booking once tickets or billing exist, or its COS is closed.", ServiceResultStatus.ValidationError);
                             return;
                         }
                         if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(job.Date.Year, job.Date.Month, ct))
@@ -383,7 +383,7 @@ namespace IBS.Services.MSAP
                             result = ServiceResult<int>.Failure("Cannot reapprove a booking in a closed period.", ServiceResultStatus.ValidationError);
                             return;
                         }
-                        var updatedJob = BuildJobOrder(schedule);
+                        var updatedJob = BuildCustomerOrderSlip(schedule);
                         job.CustomerId = updatedJob.CustomerId;
                         job.VesselId = updatedJob.VesselId;
                         job.PortId = updatedJob.PortId;
@@ -412,9 +412,9 @@ namespace IBS.Services.MSAP
                     schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
-                        $"Confirmed vessel schedule #{id} revision #{schedule.Revision}; linked Job Order #{schedule.JobOrderId}. Overlap override: {allowConflicts}", "Vessel Schedule", id), ct);
+                        $"Confirmed vessel schedule #{id} revision #{schedule.Revision}; linked COS #{schedule.CustomerOrderSlipId}. Overlap override: {allowConflicts}", "Vessel Schedule", id), ct);
                     await unitOfWork.SaveAsync(ct);
-                    result = ServiceResult<int>.Success(schedule.JobOrderId.Value, "Schedule confirmed and Job Order created successfully.");
+                    result = ServiceResult<int>.Success(schedule.CustomerOrderSlipId.Value, "Schedule confirmed and COS created successfully.");
                 }, ct);
                 return result;
             }
@@ -443,16 +443,16 @@ namespace IBS.Services.MSAP
                         return;
                     }
                     if (schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled
-                        || (status == MsapConstants.VesselScheduleStatus.Completed && schedule.JobOrderId == null))
+                        || (status == MsapConstants.VesselScheduleStatus.Completed && schedule.CustomerOrderSlipId == null))
                     {
                         result = ServiceResult.Failure("This schedule cannot make that transition.", ServiceResultStatus.ValidationError);
                         return;
                     }
-                    if (schedule.JobOrderId.HasValue)
+                    if (schedule.CustomerOrderSlipId.HasValue)
                     {
                         result = status == MsapConstants.VesselScheduleStatus.Cancelled
-                            ? await jobOrderService.CancelJobOrderAsync(schedule.JobOrderId.Value, username, ct)
-                            : await jobOrderService.CompleteBookingAsync(schedule.JobOrderId.Value, username, ct);
+                            ? await customerOrderSlipService.CancelCustomerOrderSlipAsync(schedule.CustomerOrderSlipId.Value, username, ct)
+                            : await customerOrderSlipService.CompleteBookingAsync(schedule.CustomerOrderSlipId.Value, username, ct);
                         if (!result.IsSuccess)
                         {
                             throw new InvalidOperationException(result.Message);
@@ -475,10 +475,10 @@ namespace IBS.Services.MSAP
             }
         }
 
-        private static JobOrder BuildJobOrder(VesselSchedule schedule)
+        private static CustomerOrderSlip BuildCustomerOrderSlip(VesselSchedule schedule)
         {
             var tugs = JsonSerializer.Deserialize<List<int>>(schedule.AssignedTugboatIds ?? "[]") ?? [];
-            return new JobOrder
+            return new CustomerOrderSlip
             {
                 Date = DateOnly.FromDateTime(schedule.PlannedStart),
                 CustomerId = schedule.CustomerId!.Value,
@@ -506,9 +506,9 @@ namespace IBS.Services.MSAP
                     {
                         return;
                     }
-                    if (existing.Status != MsapConstants.VesselScheduleStatus.Tentative || existing.JobOrderId != null)
+                    if (existing.Status != MsapConstants.VesselScheduleStatus.Tentative || existing.CustomerOrderSlipId != null)
                     {
-                        result = ServiceResult.Failure("Only tentative schedules without a Job Order can be deleted. Cancel an active schedule to retain its history.", ServiceResultStatus.ValidationError);
+                        result = ServiceResult.Failure("Only tentative schedules without a COS can be deleted. Cancel an active schedule to retain its history.", ServiceResultStatus.ValidationError);
                         return;
                     }
                     if (existing.ServiceEntries.Count > 0)

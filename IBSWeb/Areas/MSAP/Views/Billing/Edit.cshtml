@@ -3,7 +3,7 @@
 @{
     ViewData["Title"] = "Billing - Edit";
     ViewData["IsFullWidth"] = true;
-    var hasJobOrder = Model.JobOrderId.HasValue;
+    var hasCustomerOrderSlip = Model.CustomerOrderSlipId.HasValue;
 }
 
 <div class="modern-layout">
@@ -190,7 +190,7 @@
                         <div class="modern-card-header-action flex justify-between items-center">
                             <div class="flex items-center gap-2">
                                 <span class="material-symbols-outlined">receipt_long</span>
-                                <h2 class="modern-headline-md">3. Job Order & Tickets Selection</h2>
+                                <h2 class="modern-headline-md">3. COS & Tickets Selection</h2>
                             </div>
                             <div data-tour-step="12">
                                 <button type="submit" class="modern-btn-primary" id="submitButton">
@@ -201,24 +201,24 @@
                         <div class="modern-card-body">
                             <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
 
-                            <!-- Job Order Selection -->
+                            <!-- COS Selection -->
                             <div class="mb-4" data-tour-step="2">
                                 <div class="flex items-center justify-between mb-1">
-                                    <label class="modern-label mb-0">Add More Tickets (Search Job Order)</label>
+                                    <label class="modern-label mb-0">Add More Tickets (Search COS)</label>
                                     <div class="flex items-center gap-2">
                                         <input type="checkbox" id="legacyToggle" class="form-check-input" style="width: 16px; height: 16px; cursor: pointer;">
                                         <label for="legacyToggle" class="text-xs font-bold opacity-70 cursor-pointer">LEGACY (NO JO)</label>
                                     </div>
                                 </div>
-                                <div id="jobOrderSearchContainer">
-                                    <select asp-for="JobOrderId" class="js-modern-select" id="JobOrderSelect" data-placeholder="-- Select Job Order --">
-                                        <option value="">-- Select Job Order --</option>
+                                <div id="customerOrderSlipSearchContainer">
+                                    <select asp-for="CustomerOrderSlipId" class="js-modern-select" id="CustomerOrderSlipSelect" data-placeholder="-- Select COS --">
+                                        <option value="">-- Select COS --</option>
                                     </select>
-                                    <p class="text-xs opacity-60 mt-1">Select a Job Order to replace the available tickets above.</p>
+                                    <p class="text-xs opacity-60 mt-1">Select a COS to replace the available tickets above.</p>
                                 </div>
                                 <div id="legacyNotice" class="p-3 bg-surface-container-low rounded-md border border-outline-variant flex items-center gap-2" style="display: none;">
                                     <span class="material-symbols-outlined text-warning">info</span>
-                                    <p class="text-xs mb-0">Legacy mode enabled. Click the button below to load all unbilled tickets without a Job Order.</p>
+                                    <p class="text-xs mb-0">Legacy mode enabled. Click the button below to load all unbilled tickets without a COS.</p>
                                     <button type="button" class="modern-btn-secondary py-1 px-3 ml-auto" style="height: 28px; font-size: 10px;" id="loadLegacyTicketsBtn">LOAD TICKETS</button>
                                 </div>
                             </div>
@@ -229,7 +229,7 @@
                                     <thead>
                                         <tr>
                                             <th class="text-center" style="width: 48px;">
-                                                <input type="checkbox" id="selectAllTickets" class="form-check-input" style="width: 18px; height: 18px; cursor: pointer;" @(Model.PaidDispatchTickets?.Any() == true ? "checked" : "") @(hasJobOrder ? "disabled" : "")>
+                                                <input type="checkbox" id="selectAllTickets" class="form-check-input" style="width: 18px; height: 18px; cursor: pointer;" @(Model.PaidDispatchTickets?.Any() == true ? "checked" : "") @(hasCustomerOrderSlip ? "disabled" : "")>
                                             </th>
                                             <th>DISPATCH #</th>
                                             <th>TUGBOAT</th>
@@ -252,7 +252,7 @@
                                                     data-dispatch-rate="@ticket.DispatchRate" data-baf-rate="@ticket.BAFRate" data-hours="@ticket.TotalHours"
                                                     data-baf-charge-type="@ticket.BAFChargeType">
                                                     <td class="text-center">
-                                                        <input type="checkbox" class="form-check-input ticket-checkbox" value="@ticket.DispatchTicketId" checked @(hasJobOrder ? "disabled" : "") style="width: 18px; height: 18px; cursor: pointer;">
+                                                        <input type="checkbox" class="form-check-input ticket-checkbox" value="@ticket.DispatchTicketId" checked @(hasCustomerOrderSlip ? "disabled" : "") style="width: 18px; height: 18px; cursor: pointer;">
                                                     </td>
                                                     <td class="font-bold">@ticket.DispatchNumber</td>
                                                     <td>@(ticket.Tugboat?.TugboatName ?? "N/A")</td>
@@ -334,20 +334,20 @@
     <script>
         window.IBS_TOUR_STEPS = [
             { step: 1, title: "Customer & Billing Recipient", text: "Review the customer already assigned to this billing; the customer is read-only during editing. If BILL TO PRINCIPAL is available, use it only when the statement should be addressed to a principal, then choose that principal and review its displayed details.", required: false, autoAdvance: false },
-            { step: 2, title: "Job Order / Legacy Tickets", text: "For a Job Order billing, the linked order is locked. For a legacy billing, use LEGACY (NO JO) and LOAD TICKETS to find more eligible tickets for this customer. Review the ticket list after loading or changing a source.", required: false, autoAdvance: false },
-            { step: 3, title: "Dispatch Tickets", text: "Review the dispatch numbers, tugs, services, hours, and amounts included in the statement. Job Order ticket selections are locked; in legacy mode, tick the tickets to include. Check the selected total before saving.", required: false, autoAdvance: false },
+            { step: 2, title: "COS / Legacy Tickets", text: "For a COS billing, the linked order is locked. For a legacy billing, use LEGACY (NO JO) and LOAD TICKETS to find more eligible tickets for this customer. Review the ticket list after loading or changing a source.", required: false, autoAdvance: false },
+            { step: 3, title: "Dispatch Tickets", text: "Review the dispatch numbers, tugs, services, hours, and amounts included in the statement. COS ticket selections are locked; in legacy mode, tick the tickets to include. Check the selected total before saving.", required: false, autoAdvance: false },
             { step: 4, title: "BAF Adjustment per Ticket", text: "Review the BAF rate for each selected ticket and change it only when the agreed charge needs correction. Editing retains the existing BAF charging basis; review the recalculated amounts and totals after changing a rate.", required: false, autoAdvance: false },
             { step: 5, title: "Billing Number", text: "The existing billing number is read-only on this screen. Check that you are editing the intended statement before changing its details.", required: false, autoAdvance: false },
             { step: 6, title: "VAT, Inclusive & WHT", text: "Review the tax settings against the customer or principal details. VAT marks a vatable statement; INC means the charges already include VAT. For vatable charges with INC off, VAT is added to the total. WHT controls whether withholding is printed on the statement.", required: false, autoAdvance: false },
             { step: 7, title: "Billing Date", text: "Set the date the billing statement should be recorded under. Confirm it against the document and reporting period; this date is separate from the service times on dispatch tickets.", required: false, autoAdvance: false },
-            { step: 8, title: "Voyage Reference", text: "Review the voyage reference identifying this vessel visit. It is filled from the Job Order and locked for linked billings; in legacy mode, enter the reference needed for the statement.", required: false, autoAdvance: false },
+            { step: 8, title: "Voyage Reference", text: "Review the voyage reference identifying this vessel visit. It is filled from the COS and locked for linked billings; in legacy mode, enter the reference needed for the statement.", required: false, autoAdvance: false },
             { step: 9, title: "COS Reference", text: "Review or enter the COS reference for this statement when available. Match it to the supporting documents so the billing can be traced to the correct service.", required: false, autoAdvance: false },
-            { step: 10, title: "Port, Terminal & Vessel", text: "Check that the location and vessel describe the services being billed. Job Order values are filled automatically and locked. In legacy mode, select them manually; changing the port reloads the terminal choices.", required: false, autoAdvance: false },
+            { step: 10, title: "Port, Terminal & Vessel", text: "Check that the location and vessel describe the services being billed. COS values are filled automatically and locked. In legacy mode, select them manually; changing the port reloads the terminal choices.", required: false, autoAdvance: false },
             { step: 11, title: "Statement Totals", text: "Review Total Dispatch, Total BAF, and Grand Total against the selected tickets and VAT settings. If a total is wrong, check ticket selection, BAF rates, and the Inclusive setting before saving.", required: false, autoAdvance: false },
             { step: 12, title: "Save Billing Changes", text: "Review the statement and save the changes, then confirm. Billing edits are allowed while the statement is For Posting; posting is a separate action.", required: false, autoAdvance: false }
         ];
         if (document.querySelector('.financial-job-progress .job-progress')) {
-            window.IBS_TOUR_STEPS.unshift({ selector: '.financial-job-progress', title: 'Job progress', text: 'Review the linked Job Order stage and next available action. Changes to this statement remain separate from posting.', interactive: false });
+            window.IBS_TOUR_STEPS.unshift({ selector: '.financial-job-progress', title: 'Job progress', text: 'Review the linked COS stage and next available action. Changes to this statement remain separate from posting.', interactive: false });
         }
     </script>
 
@@ -375,7 +375,7 @@
             const $ticketsTableBody = $("#ticketsTable tbody");
             const $ticketInputs = $("#DispatchTicketInputs");
 
-            //  Lock/unlock JO-derived ModernSelect triggers (keeps native select enabled for form POST)
+            //  Lock/unlock COS-derived ModernSelect triggers (keeps native select enabled for form POST)
             function lockTrigger(id) {
                 $(id).next('.modern-select-container').find('.modern-select-trigger')
                     .css('pointer-events', 'none').removeAttr('tabindex').addClass('disabled');
@@ -385,14 +385,14 @@
                     .css('pointer-events', '').attr('tabindex', '0').removeClass('disabled');
             }
             // Server already rendered the selected values — no need to set them via JS
-            @if (hasJobOrder)
+            @if (hasCustomerOrderSlip)
             {
                 <text>
                 $('#VoyageNumber').prop('readonly', true);
                 lockTrigger('#PortSelect');
                 lockTrigger('#TerminalSelect');
                 lockTrigger('#VesselId');
-                lockTrigger('#JobOrderSelect');
+                lockTrigger('#CustomerOrderSlipSelect');
                 </text>
             }
 
@@ -440,14 +440,14 @@
             function handleLegacyToggleChange() {
                 const isChecked = $(this).is(":checked");
                 if (isChecked) {
-                    $("#jobOrderSearchContainer").hide();
+                    $("#customerOrderSlipSearchContainer").hide();
                     $("#legacyNotice").show();
-                    $jobOrderSelect.val('').trigger('change');
+                    $customerOrderSlipSelect.val('').trigger('change');
                 } else {
-                    $("#jobOrderSearchContainer").show();
+                    $("#customerOrderSlipSearchContainer").show();
                     $("#legacyNotice").hide();
-                    if ($jobOrderSelect.val()) {
-                        fetchTicketsByJobOrderId($jobOrderSelect.val());
+                    if ($customerOrderSlipSelect.val()) {
+                        fetchTicketsByCustomerOrderSlipId($customerOrderSlipSelect.val());
                     }
                 }
             }
@@ -505,34 +505,34 @@
 
 
             function fillDataOnStartup() {
-                const initialJobOrderId = '@Model.JobOrderId';
-                const initialJobOrderText = '@(ViewData["CurrentJobOrderNumber"] ?? "")';
+                const initialCustomerOrderSlipId = '@Model.CustomerOrderSlipId';
+                const initialCustomerOrderSlipText = '@(ViewData["CurrentCustomerOrderSlipNumber"] ?? "")';
 
-                if (!initialJobOrderId) {
-                    // Legacy billing (no Job Order): enable legacy toggle
+                if (!initialCustomerOrderSlipId) {
+                    // Legacy billing (no COS): enable legacy toggle
                     $("#legacyToggle").prop("checked", true);
-                    $("#jobOrderSearchContainer").hide();
+                    $("#customerOrderSlipSearchContainer").hide();
                     $("#legacyNotice").show();
                     // Only auto-fetch if server rendered NO tickets at all
                     if (!$ticketsTableBody.find('tr[data-ticket-id]').length) {
                         fetchTicketsByCustomer(true);
                     }
                 } else {
-                    populateJobOrderSelect().then(() => {
-                        if (initialJobOrderId && !$jobOrderSelect.find(`option[value="${initialJobOrderId}"]`).length) {
-                            $jobOrderSelect.append(`<option value="${initialJobOrderId}">${initialJobOrderText}</option>`);
+                    populateCustomerOrderSlipSelect().then(() => {
+                        if (initialCustomerOrderSlipId && !$customerOrderSlipSelect.find(`option[value="${initialCustomerOrderSlipId}"]`).length) {
+                            $customerOrderSlipSelect.append(`<option value="${initialCustomerOrderSlipId}">${initialCustomerOrderSlipText}</option>`);
                         }
-                        $jobOrderSelect.val(initialJobOrderId).trigger('change');
+                        $customerOrderSlipSelect.val(initialCustomerOrderSlipId).trigger('change');
                     });
 
-                    // Auto-fetch tickets if JobOrder is set but server rendered none (e.g. after reversal)
-                    if (initialJobOrderId && !$ticketsTableBody.find('tr[data-ticket-id]').length) {
-                        fetchTicketsByJobOrderId(initialJobOrderId);
+                    // Auto-fetch tickets if CustomerOrderSlip is set but server rendered none (e.g. after reversal)
+                    if (initialCustomerOrderSlipId && !$ticketsTableBody.find('tr[data-ticket-id]').length) {
+                        fetchTicketsByCustomerOrderSlipId(initialCustomerOrderSlipId);
                     }
                 }
 
                 // Initialize hidden inputs for server-rendered tickets.
-                // Include checked, disabled JO-linked tickets via hidden inputs for submission.
+                // Include checked, disabled COS-linked tickets via hidden inputs for submission.
                 $ticketsTableBody.find('.ticket-checkbox').each(function () {
                     if ($(this).prop('checked')) {
                         const tid = $(this).val();
@@ -595,27 +595,27 @@
                 }
             });
 
-            // ── Job Order select → load tickets ─────────────────────────────
-            const $jobOrderSelect = $("#JobOrderSelect");
+            // ── COS select → load tickets ─────────────────────────────
+            const $customerOrderSlipSelect = $("#CustomerOrderSlipSelect");
 
-            async function populateJobOrderSelect() {
+            async function populateCustomerOrderSlipSelect() {
                 if (!currentCustomerId) return;
-                $jobOrderSelect.empty().append('<option value="">-- Select Job Order --</option>').prop('disabled', false);
+                $customerOrderSlipSelect.empty().append('<option value="">-- Select COS --</option>').prop('disabled', false);
                 try {
-                    const res = await fetch(`@Url.Action("GetBillableJobOrders", "Billing", new { area = "MSAP" })?customerId=${encodeURIComponent(currentCustomerId)}`);
+                    const res = await fetch(`@Url.Action("GetBillableCustomerOrderSlips", "Billing", new { area = "MSAP" })?customerId=${encodeURIComponent(currentCustomerId)}`);
                     const data = await res.json();
                     if (Array.isArray(data)) {
-                        data.forEach(jo => $jobOrderSelect.append($('<option>').val(jo.value).text(jo.name)));
+                        data.forEach(jo => $customerOrderSlipSelect.append($('<option>').val(jo.value).text(jo.name)));
                     }
-                    $jobOrderSelect.trigger('change');
+                    $customerOrderSlipSelect.trigger('change');
                 } catch {
-                    console.error('Failed to load job orders');
+                    console.error('Failed to load COS records');
                 }
             }
 
-            async function fetchTicketsByJobOrderId(jobOrderId) {
+            async function fetchTicketsByCustomerOrderSlipId(customerOrderSlipId) {
                 try {
-                    const res = await fetch(`@Url.Action("GetDispatchTicketsByJobOrder", "Billing", new { area = "MSAP" })?jobOrderId=${encodeURIComponent(jobOrderId)}`);
+                    const res = await fetch(`@Url.Action("GetDispatchTicketsByCustomerOrderSlip", "Billing", new { area = "MSAP" })?customerOrderSlipId=${encodeURIComponent(customerOrderSlipId)}`);
                     const response = await res.json();
                     if (response.success) {
                         renderTicketsTable(response.tickets, true);
@@ -625,10 +625,10 @@
                 }
             }
 
-            $jobOrderSelect.on('change', function () {
+            $customerOrderSlipSelect.on('change', function () {
                 const val = $(this).val();
                 if (val) {
-                    fetchTicketsByJobOrderId(val);
+                    fetchTicketsByCustomerOrderSlipId(val);
                 }
             });
 
@@ -695,7 +695,7 @@
             function rebuildBafTable() {
                 const $body = $("#bafTableBody");
                 $body.empty();
-                // Include checked JO-linked tickets even when their checkboxes are disabled.
+                // Include checked COS-linked tickets even when their checkboxes are disabled.
                 $ticketsTableBody.find('.ticket-checkbox').each(function () {
                     if (!$(this).prop('checked')) return;
                     const $ticketRow = $(this).closest('tr');
@@ -785,7 +785,7 @@
             function areYouSureToBill(event) {
                 event.preventDefault();
                 if (!ModernFormValidator.validate('myForm')) return;
-                // Check for at least one checked ticket, including disabled ones (JO-linked).
+                // Check for at least one checked ticket, including disabled ones (COS-linked).
                 const checkedCount = $('#ticketsTable .ticket-checkbox').filter(function () {
                     return $(this).prop('checked');
                 }).length;
@@ -811,7 +811,7 @@
                         if (key !== 'ToBillDispatchTickets') params.append(key, val);
                     }
                     // Use DispatchTicketInputs hidden fields as the source of truth.
-                    // This handles both disabled (JO-linked) and normal checkboxes,
+                    // This handles both disabled (COS-linked) and normal checkboxes,
                     // since fillDataOnStartup() and the change handler keep them in sync.
                     $ticketInputs.find('input[name="ToBillDispatchTickets"]').each(function () {
                         params.append('ToBillDispatchTickets', $(this).val());

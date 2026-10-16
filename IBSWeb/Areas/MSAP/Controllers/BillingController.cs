@@ -37,18 +37,18 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ProcedureEnum.EditBilling,
             ProcedureEnum.DeleteBilling,
             ProcedureEnum.ReverseBilling)]
-        public async Task<IActionResult> Index(string filterType, CancellationToken cancellationToken, int? jobOrderId = null)
+        public async Task<IActionResult> Index(string filterType, CancellationToken cancellationToken, int? customerOrderSlipId = null)
         {
             ViewBag.FilterType = filterType;
-            ViewBag.JobOrderId = jobOrderId;
-            if (jobOrderId.HasValue)
+            ViewBag.CustomerOrderSlipId = customerOrderSlipId;
+            if (customerOrderSlipId.HasValue)
             {
-                var job = await unitOfWork.JobOrder.GetAsync(j => j.JobOrderId == jobOrderId.Value, cancellationToken);
+                var job = await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == customerOrderSlipId.Value, cancellationToken);
                 if (job == null)
                 {
                     return NotFound();
                 }
-                var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.JobOrderId == job.JobOrderId, cancellationToken);
+                var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == job.CustomerOrderSlipId, cancellationToken);
                 ViewBag.JobProgressItems = new[] { await JobProgressCalculator.LoadAsync(unitOfWork, job, schedule, cancellationToken) };
             }
             ViewData["JobProgressActionStage"] = JobProgressCalculator.PostingStage;
@@ -69,18 +69,18 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// </summary>
         [HttpGet]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to create Billings.")]
-        public async Task<IActionResult> Create(CancellationToken cancellationToken, int? jobOrderId = null)
+        public async Task<IActionResult> Create(CancellationToken cancellationToken, int? customerOrderSlipId = null)
         {
             var model = new Billing();
-            if (jobOrderId.HasValue)
+            if (customerOrderSlipId.HasValue)
             {
-                var job = await unitOfWork.JobOrder.GetAsync(j => j.JobOrderId == jobOrderId.Value, cancellationToken);
+                var job = await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == customerOrderSlipId.Value, cancellationToken);
                 if (job == null)
                 {
                     return NotFound();
                 }
                 model.CustomerId = job.CustomerId;
-                model.JobOrderId = job.JobOrderId;
+                model.CustomerOrderSlipId = job.CustomerOrderSlipId;
             }
             model = await billingService.PopulateBillingSelectListsAsync(model, cancellationToken);
             return View(model);
@@ -92,7 +92,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to create Billings.")]
-        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,IsUndocumented,Date,VoyageNumber,COSNumber,PortId,TerminalId,VesselId,IsVatable,IsVatInclusive,PrintWht,JobOrderId,ToBillDispatchTickets,BafRates,BafChargeTypes")] Billing model, CancellationToken cancellationToken)
+        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,IsUndocumented,Date,VoyageNumber,COSNumber,PortId,TerminalId,VesselId,IsVatable,IsVatInclusive,PrintWht,CustomerOrderSlipId,ToBillDispatchTickets,BafRates,BafChargeTypes")] Billing model, CancellationToken cancellationToken)
         {
             try
             {
@@ -104,7 +104,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 if (result.IsSuccess)
                 {
                     var msg = model.IsUndocumented ? $"Created. Billing No: {model.MsapBillingNumber}" : "Billing created successfully.";
-                    return Json(new { success = true, message = msg, redirectUrl = model.JobOrderId.HasValue ? Url.Action(nameof(Index), new { jobOrderId = model.JobOrderId }) : Url.Action(nameof(Preview), new { id = result.Data }) });
+                    return Json(new { success = true, message = msg, redirectUrl = model.CustomerOrderSlipId.HasValue ? Url.Action(nameof(Index), new { customerOrderSlipId = model.CustomerOrderSlipId }) : Url.Action(nameof(Preview), new { id = result.Data }) });
                 }
 
                 return Json(new { success = false, message = result.Message });
@@ -149,10 +149,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             model = await billingService.PopulateTicketListsAsync(model, cancellationToken);
 
-            if (model.JobOrderId.HasValue)
+            if (model.CustomerOrderSlipId.HasValue)
             {
-                var jobOrder = await unitOfWork.JobOrder.GetAsync(jo => jo.JobOrderId == model.JobOrderId.Value, cancellationToken);
-                ViewData["CurrentJobOrderNumber"] = jobOrder?.JobOrderNumber;
+                var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetAsync(jo => jo.CustomerOrderSlipId == model.CustomerOrderSlipId.Value, cancellationToken);
+                ViewData["CurrentCustomerOrderSlipNumber"] = customerOrderSlip?.CustomerOrderSlipNumber;
             }
 
             ViewData["HasPrincipal"] = model.CustomerPrincipal is { Count: > 0 };
@@ -175,7 +175,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.EditBilling, "Access denied. You don't have permission to edit Billings.")]
-        public async Task<IActionResult> Edit([Bind("MsapBillingId,Date,IsUndocumented,BilledTo,VoyageNumber,COSNumber,CustomerId,PrincipalId,VesselId,PortId,TerminalId,ToBillDispatchTickets,JobOrderId,IsVatable,IsVatInclusive,PrintWht,BafRates")] Billing model, IFormFile? file, CancellationToken cancellationToken)
+        public async Task<IActionResult> Edit([Bind("MsapBillingId,Date,IsUndocumented,BilledTo,VoyageNumber,COSNumber,CustomerId,PrincipalId,VesselId,PortId,TerminalId,ToBillDispatchTickets,CustomerOrderSlipId,IsVatable,IsVatInclusive,PrintWht,BafRates")] Billing model, IFormFile? file, CancellationToken cancellationToken)
         {
             try
             {
@@ -183,7 +183,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
                 if (result.IsSuccess)
                 {
-                    return Json(new { success = true, message = result.Message ?? "Entry edited successfully!", redirectUrl = model.JobOrderId.HasValue ? Url.Action(nameof(Index), new { jobOrderId = model.JobOrderId }) : Url.Action(nameof(Preview), new { id = model.MsapBillingId }) });
+                    return Json(new { success = true, message = result.Message ?? "Entry edited successfully!", redirectUrl = model.CustomerOrderSlipId.HasValue ? Url.Action(nameof(Index), new { customerOrderSlipId = model.CustomerOrderSlipId }) : Url.Action(nameof(Preview), new { id = model.MsapBillingId }) });
                 }
 
                 if (result.Status == ServiceResultStatus.NotFound)
@@ -222,7 +222,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 TempData["error"] = result.Message;
             }
 
-            return RedirectToAction(nameof(Index), new { jobOrderId = progress.Count == 1 ? progress[0].JobOrderId : null });
+            return RedirectToAction(nameof(Index), new { customerOrderSlipId = progress.Count == 1 ? progress[0].CustomerOrderSlipId : null });
         }
 
         #endregion
@@ -248,7 +248,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             List<JobProgressViewModel> progress = await JobProgressCalculator.LoadForBillingsAsync(unitOfWork, [id], cancellationToken);
             return progress.Count == 1
-                ? RedirectToAction(nameof(Index), new { jobOrderId = progress[0].JobOrderId })
+                ? RedirectToAction(nameof(Index), new { customerOrderSlipId = progress[0].CustomerOrderSlipId })
                 : RedirectToAction(nameof(Preview), new { id });
         }
 
@@ -275,7 +275,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             List<JobProgressViewModel> progress = await JobProgressCalculator.LoadForBillingsAsync(unitOfWork, [id], cancellationToken);
             return progress.Count == 1
-                ? RedirectToAction(nameof(Index), new { jobOrderId = progress[0].JobOrderId })
+                ? RedirectToAction(nameof(Index), new { customerOrderSlipId = progress[0].CustomerOrderSlipId })
                 : RedirectToAction(nameof(Preview), new { id });
         }
 
@@ -493,11 +493,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to access Billings.")]
-        public async Task<IActionResult> GetBillingList([FromForm] DataTablesParameters parameters, CancellationToken cancellationToken, int? jobOrderId = null)
+        public async Task<IActionResult> GetBillingList([FromForm] DataTablesParameters parameters, CancellationToken cancellationToken, int? customerOrderSlipId = null)
         {
             try
             {
-                var (data, filtered, total) = await billingService.GetPagedBillingsAsync(parameters, cancellationToken, jobOrderId);
+                var (data, filtered, total) = await billingService.GetPagedBillingsAsync(parameters, cancellationToken, customerOrderSlipId);
 
                 var closedMonths = (await unitOfWork.PostedPeriod.GetAllAsync(cancellationToken))
                     .Where(p => p.IsClosed)
@@ -568,24 +568,24 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         /// <summary>
-        /// Gets all billable Job Orders for a customer (used to populate JO modern-select).
+        /// Gets all billable COS records for a customer (used to populate JO modern-select).
         /// </summary>
         [HttpGet]
         [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
-        public async Task<JsonResult> GetBillableJobOrders(int customerId, CancellationToken cancellationToken)
+        public async Task<JsonResult> GetBillableCustomerOrderSlips(int customerId, CancellationToken cancellationToken)
         {
-            var result = await billingService.GetBillableJobOrdersAsync(customerId, cancellationToken);
+            var result = await billingService.GetBillableCustomerOrderSlipsAsync(customerId, cancellationToken);
             return Json(result);
         }
 
         /// <summary>
-        /// Retrieves unbilled 'For Billing' tickets associated with a specific Job Order.
+        /// Retrieves unbilled 'For Billing' tickets associated with a specific COS.
         /// </summary>
         [HttpGet]
         [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
-        public async Task<JsonResult> GetDispatchTicketsByJobOrder(int jobOrderId, CancellationToken cancellationToken)
+        public async Task<JsonResult> GetDispatchTicketsByCustomerOrderSlip(int customerOrderSlipId, CancellationToken cancellationToken)
         {
-            var result = await billingService.GetDispatchTicketsByJobOrderAsync(jobOrderId, cancellationToken);
+            var result = await billingService.GetDispatchTicketsByCustomerOrderSlipAsync(customerOrderSlipId, cancellationToken);
 
             if (result is { IsSuccess: true, Data: not null })
             {
@@ -612,7 +612,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         /// <summary>
-        /// Retrieves unbilled tickets for a customer that have no job order.
+        /// Retrieves unbilled tickets for a customer that have no COS.
         /// </summary>
         [HttpGet]
         [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
@@ -668,7 +668,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to create Billings.")]
         public async Task<IActionResult> CreatePhilCebSplit(
-            [Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,VoyageNumber,COSNumber,PortId,TerminalId,VesselId,IsVatable,IsVatInclusive,PrintWht,JobOrderId,ToBillDispatchTickets,BafRates")] Billing model,
+            [Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,VoyageNumber,COSNumber,PortId,TerminalId,VesselId,IsVatable,IsVatInclusive,PrintWht,CustomerOrderSlipId,ToBillDispatchTickets,BafRates")] Billing model,
             string bafBillingNumber,
             CancellationToken cancellationToken)
         {
@@ -681,7 +681,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
                 if (result.IsSuccess)
                 {
-                    return Json(new { success = true, message = result.Message, redirectUrl = model.JobOrderId.HasValue ? Url.Action(nameof(Index), new { jobOrderId = model.JobOrderId }) : Url.Action(nameof(Preview), new { id = result.Data.Item1 }) });
+                    return Json(new { success = true, message = result.Message, redirectUrl = model.CustomerOrderSlipId.HasValue ? Url.Action(nameof(Index), new { customerOrderSlipId = model.CustomerOrderSlipId }) : Url.Action(nameof(Preview), new { id = result.Data.Item1 }) });
                 }
 
                 return Json(new { success = false, message = result.Message });

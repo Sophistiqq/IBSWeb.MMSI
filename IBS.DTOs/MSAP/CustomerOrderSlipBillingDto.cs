@@ -1,12 +1,12 @@
 namespace IBS.DTOs.MSAP
 {
-    public class JobOrderBillingDto
+    public class CustomerOrderSlipBillingDto
     {
-        public JobOrderHeaderDto Header { get; set; } = new();
-        public List<JobOrderTicketDto> Tickets { get; set; } = new();
+        public CustomerOrderSlipHeaderDto Header { get; set; } = new();
+        public List<CustomerOrderSlipTicketDto> Tickets { get; set; } = new();
     }
 
-    public class JobOrderHeaderDto
+    public class CustomerOrderSlipHeaderDto
     {
         public int VesselId { get; set; }
 
@@ -25,7 +25,7 @@ namespace IBS.DTOs.MSAP
         public bool PrintWht { get; set; }
     }
 
-    public class JobOrderTicketDto
+    public class CustomerOrderSlipTicketDto
     {
         public int DispatchTicketId { get; set; }
         public string DispatchNo { get; set; } = string.Empty;

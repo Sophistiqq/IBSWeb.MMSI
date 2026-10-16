@@ -50,10 +50,10 @@ namespace IBS.Services.MSAP
                 ProcedureEnum.DeleteBilling => userAccess.CanDeleteBilling,
                 ProcedureEnum.ReverseBilling => userAccess.CanReverseBilling,
                 ProcedureEnum.CreateCollection => userAccess.CanCreateCollection,
-                ProcedureEnum.CreateJobOrder => userAccess.CanCreateJobOrder,
-                ProcedureEnum.EditJobOrder => userAccess.CanEditJobOrder,
-                ProcedureEnum.DeleteJobOrder => userAccess.CanDeleteJobOrder,
-                ProcedureEnum.CloseJobOrder => userAccess.CanCloseJobOrder,
+                ProcedureEnum.CreateCustomerOrderSlip => userAccess.CanCreateCustomerOrderSlip,
+                ProcedureEnum.EditCustomerOrderSlip => userAccess.CanEditCustomerOrderSlip,
+                ProcedureEnum.DeleteCustomerOrderSlip => userAccess.CanDeleteCustomerOrderSlip,
+                ProcedureEnum.CloseCustomerOrderSlip => userAccess.CanCloseCustomerOrderSlip,
                 ProcedureEnum.ApproveSchedule => userAccess.CanApproveSchedule,
                 ProcedureEnum.ApproveRateUpload => userAccess.CanApproveRateUpload,
                 ProcedureEnum.ApproveFinalBilling => userAccess.CanApproveFinalBilling,
@@ -150,10 +150,10 @@ namespace IBS.Services.MSAP
                 if (existing.CanDeleteBilling != model.CanDeleteBilling) changes.Add($"Delete Billing: {existing.CanDeleteBilling} → {model.CanDeleteBilling}");
                 if (existing.CanReverseBilling != model.CanReverseBilling) changes.Add($"Reverse Billing: {existing.CanReverseBilling} → {model.CanReverseBilling}");
                 if (existing.CanCreateCollection != model.CanCreateCollection) changes.Add($"Create Collection: {existing.CanCreateCollection} → {model.CanCreateCollection}");
-                if (existing.CanCreateJobOrder != model.CanCreateJobOrder) changes.Add($"Create JO: {existing.CanCreateJobOrder} → {model.CanCreateJobOrder}");
-                if (existing.CanEditJobOrder != model.CanEditJobOrder) changes.Add($"Edit JO: {existing.CanEditJobOrder} → {model.CanEditJobOrder}");
-                if (existing.CanDeleteJobOrder != model.CanDeleteJobOrder) changes.Add($"Delete JO: {existing.CanDeleteJobOrder} → {model.CanDeleteJobOrder}");
-                if (existing.CanCloseJobOrder != model.CanCloseJobOrder) changes.Add($"Close JO: {existing.CanCloseJobOrder} → {model.CanCloseJobOrder}");
+                if (existing.CanCreateCustomerOrderSlip != model.CanCreateCustomerOrderSlip) changes.Add($"Create JO: {existing.CanCreateCustomerOrderSlip} → {model.CanCreateCustomerOrderSlip}");
+                if (existing.CanEditCustomerOrderSlip != model.CanEditCustomerOrderSlip) changes.Add($"Edit JO: {existing.CanEditCustomerOrderSlip} → {model.CanEditCustomerOrderSlip}");
+                if (existing.CanDeleteCustomerOrderSlip != model.CanDeleteCustomerOrderSlip) changes.Add($"Delete JO: {existing.CanDeleteCustomerOrderSlip} → {model.CanDeleteCustomerOrderSlip}");
+                if (existing.CanCloseCustomerOrderSlip != model.CanCloseCustomerOrderSlip) changes.Add($"Close JO: {existing.CanCloseCustomerOrderSlip} → {model.CanCloseCustomerOrderSlip}");
                 if (existing.CanApproveSchedule != model.CanApproveSchedule)
                 {
                     changes.Add($"Approve Schedule: {existing.CanApproveSchedule} → {model.CanApproveSchedule}");
@@ -191,10 +191,10 @@ namespace IBS.Services.MSAP
                     existing.CanDeleteBilling = model.CanDeleteBilling;
                     existing.CanReverseBilling = model.CanReverseBilling;
                     existing.CanCreateCollection = model.CanCreateCollection;
-                    existing.CanCreateJobOrder = model.CanCreateJobOrder;
-                    existing.CanEditJobOrder = model.CanEditJobOrder;
-                    existing.CanDeleteJobOrder = model.CanDeleteJobOrder;
-                    existing.CanCloseJobOrder = model.CanCloseJobOrder;
+                    existing.CanCreateCustomerOrderSlip = model.CanCreateCustomerOrderSlip;
+                    existing.CanEditCustomerOrderSlip = model.CanEditCustomerOrderSlip;
+                    existing.CanDeleteCustomerOrderSlip = model.CanDeleteCustomerOrderSlip;
+                    existing.CanCloseCustomerOrderSlip = model.CanCloseCustomerOrderSlip;
                     existing.CanApproveSchedule = model.CanApproveSchedule;
                     existing.CanApproveRateUpload = model.CanApproveRateUpload;
                     existing.CanApproveFinalBilling = model.CanApproveFinalBilling;

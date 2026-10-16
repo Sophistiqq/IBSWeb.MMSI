@@ -37,13 +37,13 @@ namespace IBS.Models.MSAP.MasterFile
 
         public bool CanCreateCollection { get; set; }
 
-        public bool CanCreateJobOrder { get; set; }
+        public bool CanCreateCustomerOrderSlip { get; set; }
 
-        public bool CanEditJobOrder { get; set; }
+        public bool CanEditCustomerOrderSlip { get; set; }
 
-        public bool CanDeleteJobOrder { get; set; }
+        public bool CanDeleteCustomerOrderSlip { get; set; }
 
-        public bool CanCloseJobOrder { get; set; }
+        public bool CanCloseCustomerOrderSlip { get; set; }
 
         public bool CanApproveSchedule { get; set; }
 
