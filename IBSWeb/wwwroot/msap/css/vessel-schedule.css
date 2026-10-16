@@ -623,6 +623,18 @@
 .schedule-panel-record .schedule-panel-heading > strong {
     font-size: .95rem;
 }
+.schedule-panel-tugs {
+    display: grid;
+    gap: 4px;
+    margin: 12px 0;
+}
+.schedule-panel-tugs .schedule-muted {
+    margin: 0;
+    font-size: .7rem;
+}
+.schedule-panel-tugs > strong {
+    font-weight: 600;
+}
 .schedule-panel-record .schedule-status {
     padding: 0;
     background: transparent;

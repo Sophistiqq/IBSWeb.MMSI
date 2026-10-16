@@ -41,7 +41,11 @@
             <article class="schedule-panel-record">
                 <div class="schedule-panel-heading"><strong>@schedule.Vessel.VesselName</strong><span class="schedule-status" data-status="@schedule.Status">@MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status)</span></div>
                 <p>@schedule.PlannedStart.ToString("MMM d HH:mm") – @schedule.PlannedEnd.ToString("MMM d HH:mm") · @schedule.Terminal.TerminalName</p>
-                <p class="schedule-muted">@(ids.Count == 0 ? "No tugs assigned" : string.Join(", ", ids.Select(id => names.GetValueOrDefault(id, $"Unknown tug #{id}")))) · @ids.Count / @schedule.RequiredTugCount assigned</p>
+                <div class="schedule-panel-tugs">
+                    <span class="schedule-muted">Assigned tugboats</span>
+                    <strong>@(ids.Count == 0 ? "No tugs assigned" : string.Join(", ", ids.Select(id => names.GetValueOrDefault(id, $"Unknown tug #{id}"))))</strong>
+                    <small class="schedule-muted">@ids.Count of @schedule.RequiredTugCount assigned</small>
+                </div>
                 @if (conflicts.Contains(schedule.VesselScheduleId))
                 {
                     <p class="schedule-panel-warning">Overlap needs review</p>
