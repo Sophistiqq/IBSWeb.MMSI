@@ -654,6 +654,10 @@
     text-align: left;
     font-weight: 400;
     font-size: .75rem;
+    text-decoration: none;
+}
+.schedule-panel-record .schedule-tug-booking:hover {
+    background: var(--surface-container-high);
 }
 .schedule-panel-create {
     display: flex;
