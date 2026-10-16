@@ -52,5 +52,13 @@ namespace IBS.Models.MSAP.Enums
         ViewMaritimeReport,
 
         #endregion -- Reports --
+
+        #region -- Individual Workflow Approvals --
+
+        ApproveSchedule = 22,
+        ApproveRateUpload = 23,
+        ApproveFinalBilling = 24,
+
+        #endregion -- Individual Workflow Approvals --
     }
 }

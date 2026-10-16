@@ -22,7 +22,7 @@ namespace IBS.Services.MSAP
             string? role = await roleService.GetUserRoleAsync(id);
             if (role is MsapRoles.Admin or MsapRoles.SuperAdmin)
             {
-                return true;
+                return procedure is not (ProcedureEnum.ApproveSchedule or ProcedureEnum.ApproveRateUpload or ProcedureEnum.ApproveFinalBilling);
             }
 
             if (role != MsapRoles.User)
@@ -54,6 +54,9 @@ namespace IBS.Services.MSAP
                 ProcedureEnum.EditJobOrder => userAccess.CanEditJobOrder,
                 ProcedureEnum.DeleteJobOrder => userAccess.CanDeleteJobOrder,
                 ProcedureEnum.CloseJobOrder => userAccess.CanCloseJobOrder,
+                ProcedureEnum.ApproveSchedule => userAccess.CanApproveSchedule,
+                ProcedureEnum.ApproveRateUpload => userAccess.CanApproveRateUpload,
+                ProcedureEnum.ApproveFinalBilling => userAccess.CanApproveFinalBilling,
                 ProcedureEnum.AccessTreasury => userAccess.CanAccessTreasury,
                 ProcedureEnum.CreateDisbursement => userAccess.CanCreateDisbursement,
                 ProcedureEnum.ManageMsapImport => userAccess.CanManageMsapImport,
@@ -151,6 +154,18 @@ namespace IBS.Services.MSAP
                 if (existing.CanEditJobOrder != model.CanEditJobOrder) changes.Add($"Edit JO: {existing.CanEditJobOrder} → {model.CanEditJobOrder}");
                 if (existing.CanDeleteJobOrder != model.CanDeleteJobOrder) changes.Add($"Delete JO: {existing.CanDeleteJobOrder} → {model.CanDeleteJobOrder}");
                 if (existing.CanCloseJobOrder != model.CanCloseJobOrder) changes.Add($"Close JO: {existing.CanCloseJobOrder} → {model.CanCloseJobOrder}");
+                if (existing.CanApproveSchedule != model.CanApproveSchedule)
+                {
+                    changes.Add($"Approve Schedule: {existing.CanApproveSchedule} → {model.CanApproveSchedule}");
+                }
+                if (existing.CanApproveRateUpload != model.CanApproveRateUpload)
+                {
+                    changes.Add($"Approve Rate Upload: {existing.CanApproveRateUpload} → {model.CanApproveRateUpload}");
+                }
+                if (existing.CanApproveFinalBilling != model.CanApproveFinalBilling)
+                {
+                    changes.Add($"Approve Final Billing: {existing.CanApproveFinalBilling} → {model.CanApproveFinalBilling}");
+                }
                 if (existing.CanAccessTreasury != model.CanAccessTreasury) changes.Add($"Access Treasury: {existing.CanAccessTreasury} → {model.CanAccessTreasury}");
                 if (existing.CanCreateDisbursement != model.CanCreateDisbursement) changes.Add($"Create Disbursement: {existing.CanCreateDisbursement} → {model.CanCreateDisbursement}");
                 if (existing.CanManageMsapImport != model.CanManageMsapImport) changes.Add($"Manage Import: {existing.CanManageMsapImport} → {model.CanManageMsapImport}");
@@ -180,6 +195,9 @@ namespace IBS.Services.MSAP
                     existing.CanEditJobOrder = model.CanEditJobOrder;
                     existing.CanDeleteJobOrder = model.CanDeleteJobOrder;
                     existing.CanCloseJobOrder = model.CanCloseJobOrder;
+                    existing.CanApproveSchedule = model.CanApproveSchedule;
+                    existing.CanApproveRateUpload = model.CanApproveRateUpload;
+                    existing.CanApproveFinalBilling = model.CanApproveFinalBilling;
                     existing.CanAccessTreasury = model.CanAccessTreasury;
                     existing.CanCreateDisbursement = model.CanCreateDisbursement;
                     existing.CanManageMsapImport = model.CanManageMsapImport;

@@ -18,6 +18,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -27,7 +29,7 @@ namespace Checks.MSAP
 {
     internal static class DatabaseCheck
     {
-        public static async Task RunAsync(ICloudStorageService storage, ITempDataDictionaryFactory tempData)
+        public static async Task RunAsync(ICloudStorageService storage, ITempDataDictionaryFactory tempData, bool approvalsOnly = false)
         {
             var sourceConfig = new ConfigurationBuilder().SetBasePath(Path.GetFullPath("../MSAP/IBSWeb"))
                 .AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", optional: true).Build();
@@ -69,6 +71,26 @@ namespace Checks.MSAP
                 Check(await module.MsapPorts.AnyAsync(port => port.PortNumber == "ZZZ" && port.PortName == "Prefix migration check"),
                     "Table prefix migration lost existing data.");
                 Console.WriteLine("PASS: mmsi table renames preserve existing MSAP records.");
+                var migrationAccess = new UserAccess
+                {
+                    UserId = "approval-migration-check",
+                    CanCreateJobOrder = true,
+                    CanApproveSchedule = true,
+                    CanApproveRateUpload = true,
+                    CanApproveFinalBilling = true
+                };
+                module.MsapUserAccesses.Add(migrationAccess);
+                await module.SaveChangesAsync();
+                IMigrator migrator = module.GetService<IMigrator>();
+                await migrator.MigrateAsync("20261012011514_AddCollectionCheckReturn");
+                await migrator.MigrateAsync();
+                await module.Entry(migrationAccess).ReloadAsync();
+                Check(migrationAccess.CanCreateJobOrder && !migrationAccess.CanApproveSchedule
+                    && !migrationAccess.CanApproveRateUpload && !migrationAccess.CanApproveFinalBilling,
+                    "Approval migration changed existing grants or enabled approval by default.");
+                module.MsapUserAccesses.Remove(migrationAccess);
+                await module.SaveChangesAsync();
+                Console.WriteLine("PASS: approval migration upgrade/downgrade preserves existing grants and defaults all new approvals to false.");
                 using var seedServices = new ServiceCollection().AddSingleton(module).BuildServiceProvider();
                 await DbSeeder.SeedAsync(seedServices);
                 await DbSeeder.SeedAsync(seedServices);
@@ -88,6 +110,10 @@ namespace Checks.MSAP
                 Check(await dashboardWork.Terms.ComputeDueDateAsync("M15", new DateOnly(2026, 10, 6)) == new DateOnly(2026, 11, 15),
                     "Shared month-based due-date calculation changed.");
                 await RoleCheck.RunAsync(users, identityServices.GetRequiredService<RoleManager<IdentityRole>>(), dashboardWork);
+                if (approvalsOnly)
+                {
+                    return;
+                }
                 var roles = new RoleService(users);
                 var access = new AccessControlService(users, new UserAccessService(dashboardWork, users, roles, NullLogger<UserAccessService>.Instance));
                 var dashboard = new IBSWeb.Areas.MSAP.Controllers.HomeController(users, module, access,

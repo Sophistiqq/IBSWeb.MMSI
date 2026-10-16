@@ -20,6 +20,16 @@ namespace Checks.MSAP
             ApplicationUser user = (await users.FindByIdAsync("shared-check"))!;
             Check((await users.UpdateAsync(user)).Succeeded, "Cannot normalize the shared test account.");
             Check((await roles.CreateAsync(new IdentityRole("Admin"))).Succeeded, "Cannot create the Filpride test role.");
+            var unrelatedAdmin = new ApplicationUser
+            {
+                Id = "approval-admin-check",
+                UserName = "approval-admin-check",
+                Name = "Unassigned Administrator",
+                Department = "MIS"
+            };
+            Check((await users.CreateAsync(unrelatedAdmin)).Succeeded, "Cannot create the unassigned administrator.");
+            Check((await users.AddToRoleAsync(unrelatedAdmin, "Admin")).Succeeded, "Cannot assign the unrelated administrator role.");
+            await CheckApprovalsAsync(users, work, unrelatedAdmin.Id, false);
             Check((await users.AddToRoleAsync(user, "Admin")).Succeeded, "Cannot assign the Filpride test role.");
             Check((await users.AddClaimAsync(user, new Claim("Company", "Filpride"))).Succeeded, "Cannot prepare the shared company claim.");
             var principal = new ClaimsPrincipal(new ClaimsIdentity(
@@ -27,6 +37,11 @@ namespace Checks.MSAP
             var permission = new UserAccess { UserId = user.Id, UserName = user.UserName, CanCreateJobOrder = true };
             await work.UserAccess.AddAsync(permission);
             await work.SaveAsync();
+
+            Check((int)ProcedureEnum.CreateDispatchTicket == 0 && (int)ProcedureEnum.ViewMaritimeReport == 21
+                && (int)ProcedureEnum.ApproveSchedule == 22 && (int)ProcedureEnum.ApproveRateUpload == 23
+                && (int)ProcedureEnum.ApproveFinalBilling == 24, "Procedure values shifted.");
+            await CheckApprovalsAsync(users, work, user.Id, false);
 
             Check(await HasRoleAsync(users, principal, MsapRoles.Admin), "Filpride Admin did not default to MSAP Admin.");
             Check(!await HasRoleAsync(users, principal, MsapRoles.SuperAdmin), "Filpride Admin inherited MSAP SuperAdmin.");
@@ -37,6 +52,30 @@ namespace Checks.MSAP
             Check(await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateJobOrder)
                 && !await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateBilling),
                 "The default MSAP User does not retain its procedure permissions.");
+            await CheckApprovalsAsync(users, work, user.Id, false);
+            var accessService = new UserAccessService(work, users, new RoleService(users), NullLogger<UserAccessService>.Instance);
+            var update = new UserAccess
+            {
+                Id = permission.Id,
+                UserId = permission.UserId,
+                CanCreateJobOrder = true,
+                CanApproveSchedule = true,
+                CanApproveRateUpload = true,
+                CanApproveFinalBilling = true
+            };
+            Check((await accessService.UpdateAsync(update, "approval-check", default)).IsSuccess, "Cannot save approval assignments.");
+            await CheckApprovalsAsync(users, work, user.Id, true);
+            foreach (ProcedureEnum procedure in new[] { ProcedureEnum.ApproveSchedule, ProcedureEnum.ApproveRateUpload, ProcedureEnum.ApproveFinalBilling })
+            {
+                Check((await work.UserAccess.GetUserIdsWithAccessAsync(procedure)).SequenceEqual([user.Id]), "Approval recipients include unassigned administrators.");
+            }
+            update.CanApproveRateUpload = false;
+            Check((await accessService.UpdateAsync(update, "approval-check", default)).IsSuccess, "Cannot revoke rate approval.");
+            Check(await HasProcedureAsync(users, work, user.Id, ProcedureEnum.ApproveSchedule)
+                && !await HasProcedureAsync(users, work, user.Id, ProcedureEnum.ApproveRateUpload)
+                && await HasProcedureAsync(users, work, user.Id, ProcedureEnum.ApproveFinalBilling), "Approval assignments are not independent.");
+            update.CanApproveRateUpload = true;
+            Check((await accessService.UpdateAsync(update, "approval-check", default)).IsSuccess, "Cannot restore rate approval.");
             Check((await users.AddToRoleAsync(user, "Admin")).Succeeded, "Cannot restore Filpride Admin for override check.");
             Check((await users.AddClaimAsync(user, new Claim(MsapRoles.ClaimType, MsapRoles.User))).Succeeded,
                 "Cannot assign MSAP User.");
@@ -56,17 +95,20 @@ namespace Checks.MSAP
             Check(await HasRoleAsync(users, principal, MsapRoles.Admin)
                 && !await HasRoleAsync(users, principal, MsapRoles.SuperAdmin), "MSAP Admin boundary failed.");
             Check(await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateBilling), "MSAP Admin lacks procedure access.");
+            await CheckApprovalsAsync(users, work, user.Id, false);
             Check((await users.ReplaceClaimAsync(user, new Claim(MsapRoles.ClaimType, MsapRoles.Admin),
                 new Claim(MsapRoles.ClaimType, MsapRoles.SuperAdmin))).Succeeded, "Cannot bootstrap MSAP SuperAdmin.");
             Check(await HasRoleAsync(users, principal, MsapRoles.SuperAdmin)
                 && await HasRoleAsync(users, principal, MsapRoles.Admin, MsapRoles.SuperAdmin),
                 "MSAP SuperAdmin cannot access both administration areas.");
+            await CheckApprovalsAsync(users, work, user.Id, false);
             user.IsActive = false;
             Check((await users.UpdateAsync(user)).Succeeded, "Cannot deactivate the test account.");
             principal.Identities.First().AddClaim(new Claim(MsapRoles.ClaimType, MsapRoles.SuperAdmin));
             Check(!await HasRoleAsync(users, principal, MsapRoles.SuperAdmin)
                 && !await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateBilling),
                 "An inactive account retained MSAP access through its cookie or permissions.");
+            await CheckApprovalsAsync(users, work, user.Id, false);
             user.IsActive = true;
             Check((await users.UpdateAsync(user)).Succeeded, "Cannot reactivate the test account.");
             Check((await users.ReplaceClaimAsync(user, new Claim(MsapRoles.ClaimType, MsapRoles.SuperAdmin),
@@ -81,10 +123,22 @@ namespace Checks.MSAP
             string?[] allowed = (await new RoleService(users).GetAllRolesAsync(default)).Select(role => role.Name).ToArray();
             Check(allowed.Length == 3 && allowed.All(MsapRoles.IsValid), "MSAP role list contains other roles.");
             await work.UserAccess.RemoveAsync(permission);
+            Check((await users.RemoveFromRoleAsync(unrelatedAdmin, "Admin")).Succeeded, "Cannot prepare the unassigned User check.");
+            await CheckApprovalsAsync(users, work, unrelatedAdmin.Id, false);
+            Check((await users.DeleteAsync(unrelatedAdmin)).Succeeded, "Cannot remove the unassigned test account.");
             await work.SaveAsync();
             Check((await users.RemoveFromRoleAsync(user, "Admin")).Succeeded, "Cannot clean up Filpride test membership.");
             Check((await roles.DeleteAsync((await roles.FindByNameAsync("Admin"))!)).Succeeded, "Cannot clean up Filpride test role.");
             Console.WriteLine("PASS: MSAP Admin defaults, explicit role overrides, procedure permissions, shared role preservation, inactive accounts and stale cookies.");
+            Console.WriteLine("PASS: explicit workflow approval grants/revocation, stable procedure values, and no Admin/SuperAdmin or inactive-account approval bypass.");
+        }
+
+        private static async Task CheckApprovalsAsync(UserManager<ApplicationUser> users, IUnitOfWork work, string userId, bool expected)
+        {
+            foreach (ProcedureEnum procedure in new[] { ProcedureEnum.ApproveSchedule, ProcedureEnum.ApproveRateUpload, ProcedureEnum.ApproveFinalBilling })
+            {
+                Check(await HasProcedureAsync(users, work, userId, procedure) == expected, $"Unexpected access to {procedure}.");
+            }
         }
 
         private static async Task<bool> HasRoleAsync(UserManager<ApplicationUser> users, ClaimsPrincipal principal, params string[] roles)

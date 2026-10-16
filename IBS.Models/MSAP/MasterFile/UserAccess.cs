@@ -45,6 +45,12 @@ namespace IBS.Models.MSAP.MasterFile
 
         public bool CanCloseJobOrder { get; set; }
 
+        public bool CanApproveSchedule { get; set; }
+
+        public bool CanApproveRateUpload { get; set; }
+
+        public bool CanApproveFinalBilling { get; set; }
+
         #endregion -- MSAP Workflow --
 
         #region -- Treasury --

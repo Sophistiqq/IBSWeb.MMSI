@@ -2,7 +2,7 @@
 
 Prepared: 16 October 2026.
 
-Status: implementation planning only. No application behavior, schema, or production data has been changed by this plan.
+Status: implementation started. Phase 0 source trace is recorded; phase 1a adds the three explicit approval permissions and an additive migration. The new schedule/rate/billing workflow is not enabled. Production data has not been changed.
 
 Implementation tracking: see [IMPLEMENTATION_BASELINE.md](IMPLEMENTATION_BASELINE.md) for the source trace, accounting boundary, sample reconciliation, and outstanding release prerequisites.
 

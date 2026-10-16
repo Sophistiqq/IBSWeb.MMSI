@@ -1,0 +1,20 @@
+@model UserAccess
+
+<fieldset class="border border-outline-variant rounded p-3">
+    <legend class="modern-label px-1">Individual workflow approvals — designated RML account only</legend>
+    <p class="text-sm mb-3">Assign only to RML's MSAP User account. Admin and SuperAdmin roles do not inherit these approvals.</p>
+    <div class="flex flex-wrap gap-4">
+        <label class="flex items-center gap-2 cursor-pointer">
+            <input asp-for="CanApproveSchedule" class="form-check-input" />
+            <span class="text-sm">Approve schedule / COS</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+            <input asp-for="CanApproveRateUpload" class="form-check-input" />
+            <span class="text-sm">Approve rate upload</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+            <input asp-for="CanApproveFinalBilling" class="form-check-input" />
+            <span class="text-sm">Approve final billing</span>
+        </label>
+    </div>
+</fieldset>

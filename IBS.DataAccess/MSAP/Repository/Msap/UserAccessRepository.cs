@@ -49,6 +49,9 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 ProcedureEnum.EditJobOrder => query.Where(u => u.CanEditJobOrder),
                 ProcedureEnum.DeleteJobOrder => query.Where(u => u.CanDeleteJobOrder),
                 ProcedureEnum.CloseJobOrder => query.Where(u => u.CanCloseJobOrder),
+                ProcedureEnum.ApproveSchedule => query.Where(u => u.CanApproveSchedule),
+                ProcedureEnum.ApproveRateUpload => query.Where(u => u.CanApproveRateUpload),
+                ProcedureEnum.ApproveFinalBilling => query.Where(u => u.CanApproveFinalBilling),
                 ProcedureEnum.AccessTreasury => query.Where(u => u.CanAccessTreasury),
                 ProcedureEnum.CreateDisbursement => query.Where(u => u.CanCreateDisbursement),
                 ProcedureEnum.ManageMsapImport => query.Where(u => u.CanManageMsapImport),
@@ -58,6 +61,11 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             };
 
             var userIds = await query.Select(u => u.UserId).ToListAsync(cancellationToken);
+
+            if (procedure is ProcedureEnum.ApproveSchedule or ProcedureEnum.ApproveRateUpload or ProcedureEnum.ApproveFinalBilling)
+            {
+                return userIds;
+            }
 
             // Also include all Admins
             var admins = await _db.UserRoles

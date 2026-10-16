@@ -18,7 +18,7 @@ namespace IBS.DataAccess.MSAP.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("msap")
-                .HasAnnotation("ProductVersion", "10.0.6")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -2104,6 +2104,18 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Property<bool>("CanAccessTreasury")
                         .HasColumnType("boolean")
                         .HasColumnName("can_access_treasury");
+
+                    b.Property<bool>("CanApproveFinalBilling")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_approve_final_billing");
+
+                    b.Property<bool>("CanApproveRateUpload")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_approve_rate_upload");
+
+                    b.Property<bool>("CanApproveSchedule")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_approve_schedule");
 
                     b.Property<bool>("CanApproveTariff")
                         .HasColumnType("boolean")

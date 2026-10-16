@@ -20,7 +20,7 @@ Source inspection: 16 October 2026. No production database was queried or change
 | Withholding | Collection settlement conditions withholding on customer flags, Local billing, and VAT. Browser print uses PrintWht; principal print/collection treatment is not uniformly established. | Preserve existing calculations until the intended treatment is reconciled. |
 | Progress | `JobProgressCalculator` aggregates entered tickets and linked billing/receipts. `JobOrderRepository.SearchBillableJobOrdersAsync` also checks ticket statuses. | Neither can prove that an unentered expected service is complete. Expected rows must be authoritative across both paths. |
 | Imports | `MsapImportController` writes tariff, dispatch, billing, collection, and allocation records directly through MsapDbContext. | New-flow activation requires import/legacy classification and equivalent gates, not merely hidden screen actions. |
-| Authorization | `ProcedureEnum` currently occupies 0 through 21. `UserAccessService.CheckAccess` grants Admin/SuperAdmin all procedures before inspecting stored flags. Access maintenance allows MSAP Users. | Append stable explicit values; new approval operations must check explicit assignments before the blanket administrative shortcut. Do not seed anyone automatically. |
+| Authorization before phase 1a | Existing `ProcedureEnum` values end at 21. `UserAccessService.CheckAccess` grants Admin/SuperAdmin all procedures before inspecting stored flags. Access maintenance allows MSAP Users. | Append stable explicit values; new approval operations must not inherit the blanket administrative shortcut. Do not seed anyone automatically. |
 
 ## Workbook arithmetic checks
 
@@ -42,7 +42,9 @@ Do not infer an expected service from a synthetic ticket's first-master ServiceI
 
 ## Next independent foundation and blockers
 
-The three explicit approval permissions can be added without enabling the new schedule/rate/billing workflow. Leave all assignments false until the designated RML account is provisioned through access maintenance. Existing procedures retain their behavior.
+Phase 1a adds explicit schedule/COS, rate-upload, and final-billing approval permissions (22–24), access-maintenance controls, audited updates, and an additive migration. The new permissions deny Admin/SuperAdmin and inactive/unassigned users. Leave assignments false until the designated RML MSAP User account is provisioned through access maintenance. Existing confirmation/tariff/posting actions retain their current permissions; the new workflow remains disabled until its service gates exist.
+
+Verification: solution build passed with zero warnings/errors. The existing check project has a focused `--approval-database` mode for migration upgrade/downgrade, grant/revocation, role, and recipient checks on disposable PostgreSQL. The broader `--database` run passed the new authorization checks but failed later at its existing linked-record billing/progress scenario (`Linked records have an unresolved status or billing reference`). That unrelated scenario was not changed. No production migration, browser visual check, or end-to-end new workflow test has been performed.
 
 Before implementing dependent milestones, resolve:
 
