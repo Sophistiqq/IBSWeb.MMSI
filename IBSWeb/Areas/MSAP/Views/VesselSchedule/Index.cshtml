@@ -67,7 +67,6 @@
                         <label class="schedule-date-jump" for="calendarMonth">Month<input type="month" id="calendarMonth" name="month" form="calendarFilters" min="1900-01" max="9998-12" value="@month.ToString("yyyy-MM")" /></label>
                     </div>
                 </div>
-                <div class="schedule-calendar-legend">@foreach (var status in statuses) { <span class="schedule-legend-item" data-status="@status">@MsapConstants.VesselScheduleStatus.GetDisplayName(status)</span> }<span class="schedule-conflict-legend">⚠ Overlap needs review</span></div>
                 <div class="schedule-calendar-scroll">
                     <div class="schedule-calendar" aria-label="@month.ToString("MMMM yyyy") vessel schedules">
                         @foreach (var name in new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" }) { <div class="schedule-weekday">@name</div> }
