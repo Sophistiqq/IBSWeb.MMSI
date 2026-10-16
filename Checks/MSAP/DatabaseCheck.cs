@@ -30,7 +30,7 @@ namespace Checks.MSAP
     internal static class DatabaseCheck
     {
         public static async Task RunAsync(ICloudStorageService storage, ITempDataDictionaryFactory tempData, bool approvalsOnly = false,
-            bool customerDiscountOnly = false)
+            bool customerDiscountOnly = false, bool ticketLinkageOnly = false)
         {
             var sourceConfig = new ConfigurationBuilder().SetBasePath(Path.GetFullPath("../MSAP/IBSWeb"))
                 .AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", optional: true).Build();
@@ -119,6 +119,11 @@ namespace Checks.MSAP
                 if (approvalsOnly)
                 {
                     await ApprovalEvidenceCheck.RunAsync(module);
+                    return;
+                }
+                if (ticketLinkageOnly)
+                {
+                    await TicketLinkageCheck.RunAsync(module);
                     return;
                 }
                 var roles = new RoleService(users);

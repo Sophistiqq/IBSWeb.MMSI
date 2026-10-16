@@ -252,10 +252,16 @@ namespace IBS.DataAccess.MSAP.Data
             builder.Entity<DispatchTicket>(dt =>
             {
                 dt.Property(x => x.ApOtherTugsIncludesVat).HasDefaultValue(true);
+                dt.ToTable(table =>
+                {
+                    table.HasCheckConstraint("ck_dispatch_tickets_raw_duration",
+                        "(raw_duration_hours IS NULL OR raw_duration_hours >= 0) AND (raw_duration_minutes IS NULL OR raw_duration_minutes >= 0)");
+                });
                 dt.HasIndex(x => x.Status);
                 dt.HasIndex(x => x.CustomerId);
                 dt.HasIndex(x => x.JobOrderId);
                 dt.HasIndex(x => x.BillingId);
+                dt.HasIndex(x => x.VesselScheduleServiceEntryId);
 
                 dt.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
                 dt.HasOne(x => x.Tugboat).WithMany().HasForeignKey(x => x.TugBoatId).OnDelete(DeleteBehavior.Restrict);
@@ -266,6 +272,10 @@ namespace IBS.DataAccess.MSAP.Data
                 dt.HasOne(x => x.Service).WithMany().HasForeignKey(x => x.ServiceId).OnDelete(DeleteBehavior.Restrict);
                 dt.HasOne(x => x.JobOrder).WithMany(j => j.DispatchTickets).HasForeignKey(x => x.JobOrderId).OnDelete(DeleteBehavior.Restrict);
                 dt.HasOne(x => x.Billing).WithMany().HasForeignKey(x => x.BillingId).OnDelete(DeleteBehavior.Restrict);
+                dt.HasOne(x => x.ExpectedServiceEntry)
+                    .WithMany(e => e.DispatchTickets)
+                    .HasForeignKey(x => x.VesselScheduleServiceEntryId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             builder.Entity<Tugboat>(t =>

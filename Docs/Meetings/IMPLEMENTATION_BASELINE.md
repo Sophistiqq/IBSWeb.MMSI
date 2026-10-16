@@ -68,6 +68,10 @@ Phase 1e adds revision-bound approval evidence to `VesselSchedule` and `Billing`
 
 Phase 1e verification: compiled with zero warnings/errors. Approval evidence migration, form/JSON binding protection, and PostgreSQL check constraints are integrated into `Checks/MSAP` (`--approval-database`). No deployment database was changed.
 
+Phase 1f links `DispatchTicket` to `VesselScheduleServiceEntry` (`VesselScheduleServiceEntryId`, navigation `ExpectedServiceEntry` on ticket and `DispatchTickets` on service entry). It introduces `RawDurationHours` and `RawDurationMinutes` to separate unadjusted service duration from minimum-adjusted billable `TotalHours`, and rate provenance flags (`IsManualTariffRate`, `IsManualBafRate`). A database check constraint (`ck_dispatch_tickets_raw_duration`) rejects negative raw durations, and foreign key deletion is restricted. The additive migration adds columns, constraint, and index without changing existing unlinked tickets.
+
+Phase 1f verification: solution and check project compiled with zero warnings/errors. Migration upgrade/downgrade, non-fabrication of linkage/durations on existing rows, value round-trips, constraint enforcement, and deletion restrictions are integrated into `Checks/MSAP` (`--ticket-linkage-database`). No deployment database was changed.
+
 Before implementing dependent milestones, resolve:
 
 - Actual tariff/BAF upload columns, matching keys, company/table scope, and weekly coverage. Actual service date governs historical lookup, as clarified; this does not settle upload scope or mid-Tuesday effective-date policy.

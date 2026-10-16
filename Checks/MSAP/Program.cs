@@ -419,10 +419,10 @@ finally
 }
 Console.WriteLine("PASS: unsafe storage paths rejected for upload, URL, download and deletion; nested attachment round-trip.");
 if (args.Contains("--database", StringComparer.Ordinal) || args.Contains("--approval-database", StringComparer.Ordinal)
-    || args.Contains("--customer-discount-database", StringComparer.Ordinal))
+    || args.Contains("--customer-discount-database", StringComparer.Ordinal) || args.Contains("--ticket-linkage-database", StringComparer.Ordinal))
 {
     await Checks.MSAP.DatabaseCheck.RunAsync(storage, services.GetRequiredService<ITempDataDictionaryFactory>(),
-        args.Contains("--approval-database", StringComparer.Ordinal), args.Contains("--customer-discount-database", StringComparer.Ordinal));
+        args.Contains("--approval-database", StringComparer.Ordinal), args.Contains("--customer-discount-database", StringComparer.Ordinal), args.Contains("--ticket-linkage-database", StringComparer.Ordinal));
 }
 if (args.Contains("--scheduling-database", StringComparer.Ordinal) || args.Contains("--calendar-database", StringComparer.Ordinal)
     || args.Contains("--service-entries-database", StringComparer.Ordinal))

@@ -71,6 +71,13 @@ namespace IBS.Models.MSAP
 
         public decimal TotalHours { get; set; }
 
+        [Display(Name = "Raw Duration (Hours)")]
+        [Column(TypeName = "numeric(18,4)")]
+        public decimal? RawDurationHours { get; set; }
+
+        [Display(Name = "Raw Duration (Minutes)")]
+        public int? RawDurationMinutes { get; set; }
+
         public string Status { get; set; } = null!;
 
         public string CreatedBy { get; set; } = null!;
@@ -127,6 +134,10 @@ namespace IBS.Models.MSAP
         public decimal ApOtherTugs { get; set; }
         public bool ApOtherTugsIncludesVat { get; set; } = true;
 
+        public bool IsManualTariffRate { get; set; }
+
+        public bool IsManualBafRate { get; set; }
+
         public string? TariffBy { get; set; }
 
         [Column(TypeName = "timestamp without time zone")]
@@ -159,6 +170,11 @@ namespace IBS.Models.MSAP
         public int? BillingId { get; set; }
         [ForeignKey(nameof(BillingId))]
         public Billing? Billing { get; set; }
+
+        [Display(Name = "Expected Service Entry")]
+        public int? VesselScheduleServiceEntryId { get; set; }
+        [ForeignKey(nameof(VesselScheduleServiceEntryId))]
+        public VesselScheduleServiceEntry? ExpectedServiceEntry { get; set; }
 
         #region ---Columns with Table relations---
 

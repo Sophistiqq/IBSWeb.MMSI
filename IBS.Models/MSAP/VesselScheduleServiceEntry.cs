@@ -35,5 +35,7 @@ namespace IBS.Models.MSAP
         [Range(typeof(decimal), "0", "99999999999999.9999")]
         [Column(TypeName = "numeric(18,4)")]
         public decimal? ManualBafRate { get; set; }
+
+        public List<DispatchTicket> DispatchTickets { get; set; } = [];
     }
 }
