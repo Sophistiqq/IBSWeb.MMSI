@@ -88,11 +88,16 @@
     }
     function positionPreview() {
         if (!activePreview?.matches(':popover-open') || !activeTrigger) return;
-        const rect = activeTrigger.getBoundingClientRect();
+        const rect = (activeTrigger.closest('.schedule-calendar-entry') || activeTrigger).getBoundingClientRect();
         const width = activePreview.offsetWidth;
         const height = activePreview.offsetHeight;
-        activePreview.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`;
-        activePreview.style.top = `${Math.max(8, rect.bottom + height + 8 > window.innerHeight ? rect.top - height - 8 : rect.bottom + 8)}px`;
+        const fitsLeft = rect.left - width - 12 >= 8;
+        const fitsRight = rect.right + width + 12 <= window.innerWidth - 8;
+        const left = fitsLeft ? rect.left - width - 12 : fitsRight ? rect.right + 12 : rect.left;
+        const top = fitsLeft || fitsRight ? rect.top + (rect.height - height) / 2
+            : rect.bottom + height + 8 > window.innerHeight ? rect.top - height - 8 : rect.bottom + 8;
+        activePreview.style.left = `${Math.max(8, Math.min(left, window.innerWidth - width - 8))}px`;
+        activePreview.style.top = `${Math.max(8, Math.min(top, window.innerHeight - height - 8))}px`;
     }
     workspace.querySelectorAll('[data-preview-id]').forEach(trigger => {
         const preview = document.getElementById(trigger.dataset.previewId);

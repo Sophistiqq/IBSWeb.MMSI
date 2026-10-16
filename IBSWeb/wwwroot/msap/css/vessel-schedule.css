@@ -583,29 +583,82 @@
     position: fixed;
     inset: auto;
     margin: 0;
-    width: min(360px, calc(100vw - 16px));
+    width: min(480px, calc(100vw - 16px));
     max-height: calc(100vh - 16px);
     overflow: auto;
-    padding: 14px;
+    padding: 22px;
     border: 1px solid var(--outline-variant);
     border-radius: 4px;
     background: var(--surface-container-lowest);
     color: var(--on-surface);
     font-size: .8rem;
+    box-shadow: 4px 4px 0 rgb(0 0 0 / 12%);
+}
+.schedule-calendar-workspace .schedule-vessel-preview h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.3;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.schedule-preview-state {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+}
+.schedule-preview-state > span {
+    min-width: 140px;
+    padding: 6px 12px;
+    border-radius: 3px;
+    background: var(--surface-container);
+    text-align: center;
+    font-size: .75rem;
+    font-weight: 600;
+}
+.schedule-preview-state small {
+    color: var(--on-surface-variant);
+    font-size: .7rem;
 }
 .schedule-vessel-preview dl {
-    display: grid;
-    grid-template-columns: 95px minmax(0, 1fr);
-    gap: 6px;
-    margin: 12px 0;
+    margin: 20px 0 16px;
 }
 .schedule-vessel-preview dt {
-    font-weight: 500;
+    font-size: .7rem;
+    font-weight: 400;
     color: var(--on-surface-variant);
 }
 .schedule-vessel-preview dd {
-    margin: 0;
+    margin: 8px 0 20px;
+    font-weight: 600;
     overflow-wrap: anywhere;
+}
+.schedule-vessel-preview dd:last-child {
+    margin-bottom: 0;
+}
+.schedule-preview-tugs {
+    border-top: 1px solid var(--outline-variant);
+    padding-top: 16px;
+}
+.schedule-preview-tugs h3 {
+    margin: 0 0 16px;
+    font-size: .875rem;
+    font-weight: 600;
+}
+.schedule-preview-tugs ul {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.schedule-vessel-preview .schedule-preview-open {
+    display: block;
+    margin-top: 18px;
+    color: var(--on-surface-variant);
+    text-align: right;
+    font-size: .75rem;
 }
 .schedule-calendar-workspace :is(a, button, input, select):focus-visible {
     outline: 2px solid var(--primary);

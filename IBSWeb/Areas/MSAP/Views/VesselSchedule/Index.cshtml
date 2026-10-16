@@ -8,7 +8,7 @@
     var gridStart = month.AddDays(-(int)month.DayOfWeek);
     var cellCount = ((int)month.DayOfWeek + DateTime.DaysInMonth(month.Year, month.Month) + 6) / 7 * 7;
     var monthSchedules = Model.Schedules.Where(s => s.PlannedStart < month.AddMonths(1) && s.PlannedEnd > month).ToList();
-    var names = Model.Tugboats.ToDictionary(t => t.TugboatId, t => t.TugboatName);
+    var tugboats = Model.Tugboats.ToDictionary(t => t.TugboatId);
     var assignments = Model.Schedules.ToDictionary(s => s.VesselScheduleId,
         s => (JsonSerializer.Deserialize<List<int>>(s.AssignedTugboatIds ?? "[]") ?? new List<int>()).Distinct().ToList());
     var filters = new Dictionary<string, string>
@@ -102,11 +102,44 @@
         {
             var ids = assignments[entry.VesselScheduleId];
             <div id="schedule-preview-@entry.VesselScheduleId" class="schedule-vessel-preview" popover="auto" role="dialog" aria-label="@entry.Vessel.VesselName booking preview">
-                <div class="schedule-panel-heading"><h2>@entry.Vessel.VesselName</h2><button type="button" class="schedule-icon-button" popovertarget="schedule-preview-@entry.VesselScheduleId" popovertargetaction="hide" aria-label="Close preview">×</button></div>
-                <p><span class="schedule-status" data-status="@entry.Status">@MsapConstants.VesselScheduleStatus.GetDisplayName(entry.Status)</span> · Voyage @(entry.VoyageNumber ?? "—")</p>
-                <dl><dt>Customer</dt><dd>@(entry.Customer?.CustomerName ?? "Not recorded")</dd><dt>Planned window</dt><dd>@entry.PlannedStart.ToString("MMM d, yyyy HH:mm") – @entry.PlannedEnd.ToString("MMM d, yyyy HH:mm")</dd><dt>Location</dt><dd>@entry.Port.PortName / @entry.Terminal.TerminalName</dd><dt>Tugboats</dt><dd>@(ids.Count == 0 ? "Not assigned" : string.Join(", ", ids.Select(id => names.GetValueOrDefault(id, $"Unknown tug #{id}")))) · @ids.Count / @entry.RequiredTugCount assigned</dd></dl>
+                <div class="schedule-panel-heading">
+                    <h2>@entry.Vessel.VesselName</h2>
+                    <button type="button" class="schedule-icon-button" popovertarget="schedule-preview-@entry.VesselScheduleId" popovertargetaction="hide" aria-label="Close preview">×</button>
+                </div>
+                <div class="schedule-preview-state">
+                    <span>@MsapConstants.VesselScheduleStatus.GetDisplayName(entry.Status)</span>
+                    <small>@(entry.JobOrderId.HasValue ? "Job order linked" : "No job order yet")</small>
+                </div>
+                <dl>
+                    <dt>Customer</dt>
+                    <dd>@(entry.Customer?.CustomerName ?? "Not recorded")</dd>
+                    <dt>Planned window · Philippine time</dt>
+                    <dd>
+                        @if (entry.PlannedStart.Date == entry.PlannedEnd.Date)
+                        {
+                            @entry.PlannedStart.ToString("d MMM yyyy, HH:mm")<text> – </text>@entry.PlannedEnd.ToString("HH:mm")
+                        }
+                        else
+                        {
+                            @entry.PlannedStart.ToString("d MMM yyyy, HH:mm")<text> – </text>@entry.PlannedEnd.ToString("d MMM yyyy, HH:mm")
+                        }
+                    </dd>
+                    <dt>Location</dt>
+                    <dd>@entry.Port.PortName / @entry.Terminal.TerminalName</dd>
+                </dl>
+                <section class="schedule-preview-tugs" aria-label="Assigned tugboats">
+                    <h3>Assigned tugboats · @ids.Count of @entry.RequiredTugCount</h3>
+                    <ul>
+                        @foreach (int id in ids)
+                        {
+                            var tug = tugboats.GetValueOrDefault(id);
+                            <li><strong>@(tug?.TugboatName ?? $"Unknown tug #{id}")</strong>@if (tug != null) { <text> · @(tug.IsCompanyOwned ? "Company-owned" : "Subcontractor")</text> }</li>
+                        }
+                    </ul>
+                    @if (ids.Count == 0) { <p class="schedule-muted">No tugboats assigned.</p> }
+                </section>
                 @if (!string.IsNullOrWhiteSpace(entry.Notes)) { <p class="schedule-note">@entry.Notes</p> }
-                <a asp-action="Details" asp-route-id="@entry.VesselScheduleId" class="modern-btn-primary">Open booking / COS →</a>
+                <a asp-action="Details" asp-route-id="@entry.VesselScheduleId" class="schedule-preview-open">Open booking / COS →</a>
             </div>
         }
     </main>
