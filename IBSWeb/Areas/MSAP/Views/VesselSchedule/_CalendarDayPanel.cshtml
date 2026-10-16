@@ -58,7 +58,7 @@
         <p class="schedule-muted">Active bookings across all locations and statuses. Calendar filters do not imply tug availability.</p>
         <div class="schedule-tug-filters">
             <label for="tugSearch">Find tugboat<input type="search" id="tugSearch" class="modern-input" placeholder="Tug name or number" /></label>
-            <label for="tugScope">Show<select id="tugScope" class="modern-input"><option value="booked">Booked</option><option value="all">All tugs</option><option value="unbooked">Unbooked</option></select></label>
+            <label for="tugScope">Show<select id="tugScope" class="js-modern-select" data-searchable="false"><option value="booked">Booked</option><option value="all">All tugs</option><option value="unbooked">Unbooked</option></select></label>
         </div>
         @foreach (var tug in Model.Tugboats)
         {
@@ -76,5 +76,8 @@
         <p id="noCalendarTugs" class="schedule-empty" hidden>No tugboats match this view.</p>
         <p class="schedule-muted">Unbooked means no active planned booking that day. Confirm operational availability before assigning.</p>
     </section>
-    <a asp-action="Create" asp-route-date="@day.ToString("yyyy-MM-dd")" class="modern-btn-primary schedule-panel-create">+ Create schedule for @day.ToString("d MMMM")</a>
+    <footer class="schedule-panel-footer">
+        <p class="schedule-muted">Filters and selected date stay in the calendar.</p>
+        <a asp-action="Create" asp-route-date="@day.ToString("yyyy-MM-dd")" class="modern-btn-primary schedule-panel-create">+ Create schedule for @day.ToString("d MMMM")</a>
+    </footer>
 </aside>

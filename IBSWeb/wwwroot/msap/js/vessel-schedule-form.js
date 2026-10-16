@@ -158,7 +158,7 @@
         }
     }
     tugSearch.addEventListener('input', filterTugOptions);
-    tugScope.addEventListener('change', filterTugOptions);
+    $(tugScope).on('change', filterTugOptions);
     form.addEventListener('change', event => {
         if (event.target.name === 'SelectedTugboatIds') showSelectedTugs();
     });

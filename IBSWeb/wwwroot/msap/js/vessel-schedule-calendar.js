@@ -7,8 +7,8 @@
     const form = document.getElementById('calendarFilters');
     const port = document.getElementById('calendarPort');
     const terminal = document.getElementById('calendarTerminal');
-    port.addEventListener('change', () => {
-        terminal.value = '';
+    $(port).on('change', () => {
+        $(terminal).val('').trigger('change');
         form.requestSubmit();
     });
     document.getElementById('calendarMonth').addEventListener('change', event => {
@@ -65,7 +65,7 @@
     }
     if (tugSearch) {
         tugSearch.addEventListener('input', filterTugs);
-        tugScope.addEventListener('change', filterTugs);
+        $(tugScope).on('change', filterTugs);
         filterTugs();
     }
 

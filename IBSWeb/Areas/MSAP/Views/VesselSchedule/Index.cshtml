@@ -33,10 +33,10 @@
             {
                 <input type="hidden" name="date" value="@Model.SelectedDate.Value.ToString("yyyy-MM-dd")" />
             }
-            <label for="calendarPort">Port<select asp-for="PortId" asp-items="Model.Ports" id="calendarPort" class="modern-input"><option value="">All ports</option></select></label>
-            <label for="calendarTerminal">Terminal<select asp-for="TerminalId" asp-items="Model.Terminals" id="calendarTerminal" class="modern-input"><option value="">All terminals</option></select></label>
+            <label for="calendarPort">Port<select asp-for="PortId" asp-items="Model.Ports" id="calendarPort" class="js-modern-select" data-placeholder="All ports"><option value="">-- All ports --</option></select></label>
+            <label for="calendarTerminal">Terminal<select asp-for="TerminalId" asp-items="Model.Terminals" id="calendarTerminal" class="js-modern-select" data-placeholder="All terminals"><option value="">-- All terminals --</option></select></label>
             <label for="calendarSearch">Find schedule<input name="search" id="calendarSearch" type="search" value="@Model.Search" maxlength="120" class="modern-input" placeholder="Vessel, voyage or tugboat" /></label>
-            <label for="calendarStatus">Status<select asp-for="Status" id="calendarStatus" class="modern-input"><option value="">All statuses</option>@foreach (var status in statuses) { <option value="@status">@MsapConstants.VesselScheduleStatus.GetDisplayName(status)</option> }</select></label>
+            <label for="calendarStatus">Status<select asp-for="Status" id="calendarStatus" class="js-modern-select" data-placeholder="All statuses" data-searchable="false"><option value="">-- All statuses --</option>@foreach (var status in statuses) { <option value="@status">@MsapConstants.VesselScheduleStatus.GetDisplayName(status)</option> }</select></label>
             <div class="schedule-filter-actions"><button type="submit" class="modern-btn-primary">Apply</button><a asp-action="Index" asp-route-month="@month.ToString("yyyy-MM")" asp-route-date="@Model.SelectedDate?.ToString("yyyy-MM-dd")" class="modern-btn-secondary">Clear</a></div>
         </form>
         <div class="schedule-calendar-split @(Model.SelectedDate.HasValue ? "has-selected-day" : "")">

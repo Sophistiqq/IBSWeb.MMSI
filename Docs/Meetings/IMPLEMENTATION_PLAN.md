@@ -10,6 +10,7 @@ Implementation tracking: see [IMPLEMENTATION_BASELINE.md](IMPLEMENTATION_BASELIN
 
 ### Subsequent wireframe decisions — 16 October 2026
 
+- Calendar layout refinement: follow the reviewed wireframes for subsequent UI work. The selected-day sidebar is a full-height right drawer below the existing top bar and occupies 40% of desktop screen width; keep the date/tabs above its scrolling content and the create action at the bottom. Reflow above the calendar on phones. Reuse the existing modern select component for dropdowns, including the calendar and tug filters. Use dark calendar action buttons and a larger 44px sidebar close control.
 - Current implementation direction: defer rate uploading and its screens for now. Continue independent operational and layout milestones; do not invent the pending financial integration or silently waive new-workflow guards.
 - Implementation clarification: a service performed Monday whose ticket arrives Tuesday must use the rate effective on Monday, even if a new BAF table was approved Tuesday. Resolve against actual service start, not ticket arrival, entry, upload, or billing date. Retain dated history; a correction to an erroneous historical row is distinct from a new period's rate.
 - Implementation styling clarification: retain the compact, full-width wireframe layout, with a few restrained accent colors for primary actions, active progress, and warnings. This supersedes the earlier prohibition on all decorative color accents; status must still be understandable without color.
