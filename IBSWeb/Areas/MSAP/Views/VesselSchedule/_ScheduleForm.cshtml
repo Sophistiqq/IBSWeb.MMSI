@@ -3,7 +3,15 @@
 <div class="modern-layout">
     <main class="modern-container schedule-workspace">
         <div class="flex-stack">
-            <div><span class="modern-label">Vessel Schedule</span><h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
+            <div>
+                <nav aria-label="Breadcrumb">
+                    <ol class="schedule-breadcrumb">
+                        <li><a asp-controller="Home" asp-action="Index">MSAP</a></li>
+                        <li><a asp-action="Index">Vessel schedules</a></li>
+                        <li aria-current="page">@ViewData["Title"]</li>
+                    </ol>
+                </nav>
+                <h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
                 <p class="schedule-muted">Plan the time window, then assign tugboats. All times are Philippine time.</p></div>
             <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary"><span class="material-symbols-outlined">arrow_back</span> Calendar</a>
         </div>

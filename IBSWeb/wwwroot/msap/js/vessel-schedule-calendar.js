@@ -71,19 +71,17 @@
 
     let activePreview = null;
     let activeTrigger = null;
-    let pinnedPreview = false;
     let dismissTimer;
     function keepPreview() {
         window.clearTimeout(dismissTimer);
     }
     function closePreview() {
-        pinnedPreview = false;
         if (activePreview?.matches(':popover-open')) activePreview.hidePopover();
     }
     function dismissPreview() {
         keepPreview();
         dismissTimer = window.setTimeout(() => {
-            if (!pinnedPreview && !activePreview?.contains(document.activeElement) && !activeTrigger?.matches(':focus-visible')) closePreview();
+            if (!activePreview?.contains(document.activeElement) && !activeTrigger?.matches(':focus-visible')) closePreview();
         }, 200);
     }
     function positionPreview() {
@@ -116,21 +114,12 @@
         trigger.addEventListener('pointerleave', dismissPreview);
         trigger.addEventListener('focus', showPreview);
         trigger.addEventListener('blur', dismissPreview);
-        if (trigger.tagName === 'BUTTON') trigger.addEventListener('click', () => {
-            showPreview();
-            pinnedPreview = true;
-        });
     });
     workspace.querySelectorAll('.schedule-vessel-preview').forEach(preview => {
         preview.addEventListener('pointerenter', keepPreview);
         preview.addEventListener('pointerleave', dismissPreview);
         preview.addEventListener('focusin', keepPreview);
         preview.addEventListener('focusout', dismissPreview);
-        preview.addEventListener('toggle', event => {
-            workspace.querySelectorAll(`[aria-controls="${preview.id}"]`).forEach(trigger => {
-                trigger.setAttribute('aria-expanded', String(event.newState === 'open'));
-            });
-        });
     });
     window.addEventListener('resize', positionPreview);
     document.addEventListener('scroll', event => {

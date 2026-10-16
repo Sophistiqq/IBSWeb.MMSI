@@ -10,7 +10,13 @@
     <main class="modern-container schedule-workspace schedule-details-workspace">
         <header class="schedule-details-heading">
             <div class="schedule-details-identity">
-                <span class="modern-label">Vessel Schedule #@Model.VesselScheduleId</span>
+                <nav aria-label="Breadcrumb">
+                    <ol class="schedule-breadcrumb">
+                        <li><a asp-controller="Home" asp-action="Index">MSAP</a></li>
+                        <li><a asp-action="Index">Vessel schedules</a></li>
+                        <li aria-current="page">Schedule #@Model.VesselScheduleId</li>
+                    </ol>
+                </nav>
                 <h1 class="modern-headline-md" data-page-header>@Model.Vessel.VesselName</h1>
                 <span class="modern-badge-sm">@MsapConstants.VesselScheduleStatus.GetDisplayName(Model.Status)</span>
                 @if (Model.JobOrderId.HasValue)

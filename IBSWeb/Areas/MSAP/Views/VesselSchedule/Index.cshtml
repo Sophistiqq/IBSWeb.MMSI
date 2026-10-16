@@ -25,7 +25,16 @@
 <div class="modern-layout schedule-calendar-layout">
     <main class="modern-container schedule-workspace schedule-calendar-workspace">
         <header class="schedule-calendar-header">
-            <div><span class="modern-label">Maritime operations / Vessel schedules</span><h1 data-page-header>Vessel calendar</h1><p class="schedule-muted">Find a booking, preview a vessel or select a day. All times are Philippine time.</p></div>
+            <div>
+                <nav aria-label="Breadcrumb">
+                    <ol class="schedule-breadcrumb">
+                        <li><a asp-controller="Home" asp-action="Index">MSAP</a></li>
+                        <li aria-current="page">Vessel schedules</li>
+                    </ol>
+                </nav>
+                <h1 data-page-header>Vessel calendar</h1>
+                <p class="schedule-muted">Find a booking, preview a vessel or select a day. All times are Philippine time.</p>
+            </div>
             <a asp-action="Create" asp-route-date="@((Model.SelectedDate ?? today).ToString("yyyy-MM-dd"))" class="modern-btn-primary" data-hotkey="c">+ New schedule</a>
         </header>
         <form method="get" class="schedule-calendar-filters" id="calendarFilters">
@@ -83,7 +92,6 @@
                                             <small>@entry.Terminal.TerminalName · @ids.Count/@entry.RequiredTugCount tugs</small>
                                             <span>@MsapConstants.VesselScheduleStatus.GetDisplayName(entry.Status)@(conflicts.Contains(entry.VesselScheduleId) ? " · ⚠ Overlap" : "")</span>
                                         </a>
-                                        <button type="button" class="schedule-preview-button" data-preview-id="schedule-preview-@entry.VesselScheduleId" aria-label="Preview @entry.Vessel.VesselName" aria-haspopup="dialog" aria-controls="schedule-preview-@entry.VesselScheduleId" aria-expanded="false">ⓘ</button>
                                     </div>
                                 }
                                 @if (entries.Count > 2)
@@ -150,7 +158,7 @@
         window.IBS_TOUR_STEPS = [
             { selector: '.schedule-calendar-filters', title: 'Find a booking', text: 'Filter by port, terminal, vessel, voyage, tugboat or status. These filters stay active while browsing months and days.', interactive: false },
             { selector: '.schedule-stepper', title: 'Browse months', text: 'Move between months or return to this month. Overnight bookings appear on each affected day.', interactive: false },
-            { selector: '.schedule-calendar', title: 'Preview or open', text: 'Hover or focus a vessel for its booking preview, or use the information button on a touch screen. Select a date or more link for the day panel.', interactive: false }
+            { selector: '.schedule-calendar', title: 'Preview or open', text: 'Hover or focus a vessel for its booking preview, or select it to open the booking. Select a date or more link for the day panel.', interactive: false }
         ];
     </script>
 }
