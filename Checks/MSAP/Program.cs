@@ -47,6 +47,10 @@ builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql
 builder.Services.AddDefaultIdentity<ApplicationUser>().AddRoles<IdentityRole>().AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddScoped<IBS.DataAccess.Repository.IRepository.IUnitOfWork, IBS.DataAccess.Repository.UnitOfWork>();
 builder.Services.AddMsapModule(builder.Configuration);
+if (args.Contains("--calendar-render-only", StringComparer.Ordinal))
+{
+    builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
+}
 builder.Services.AddSingleton<IBS.Services.MSAP.AccessControl.IAccessControlService, Checks.MSAP.JobProgressCheck.CheckAccess>();
 await using var app = builder.Build();
 app.UseRouting();
@@ -110,6 +114,11 @@ Check(links.GetPathByAction("Index", "Home", new { area = "MSAP" })?.StartsWith(
 Check(links.GetPathByAction("GetTimeline", "AuditTrail", new { area = "MSAP", id = 1 }) == "/MSAP/AuditTrail/GetTimeline/1", "MSAP audit link is wrong.");
 Check(links.GetPathByAction("Index", "Home", new { area = "User" }) != null, "Base dashboard route is missing.");
 var engine = services.GetRequiredService<IRazorViewEngine>();
+await Checks.MSAP.CalendarRenderingCheck.RunAsync(services, Environment.GetEnvironmentVariable("MSAP_CALENDAR_PREVIEW_DIRECTORY"));
+if (args.Contains("--calendar-render-only", StringComparer.Ordinal))
+{
+    return;
+}
 foreach (string emptyAmount in new[] { "", "0.00" })
 {
     var controller = ActivatorUtilities.CreateInstance<IBSWeb.Areas.MSAP.Controllers.CollectionController>(services);
@@ -372,7 +381,7 @@ if (args.Contains("--database", StringComparer.Ordinal) || args.Contains("--appr
     await Checks.MSAP.DatabaseCheck.RunAsync(storage, services.GetRequiredService<ITempDataDictionaryFactory>(),
         args.Contains("--approval-database", StringComparer.Ordinal));
 }
-if (args.Contains("--scheduling-database", StringComparer.Ordinal))
+if (args.Contains("--scheduling-database", StringComparer.Ordinal) || args.Contains("--calendar-database", StringComparer.Ordinal))
 {
-    await Checks.MSAP.SchedulingCheck.RunAsync();
+    await Checks.MSAP.SchedulingCheck.RunAsync(args.Contains("--calendar-database", StringComparer.Ordinal));
 }

@@ -10,6 +10,7 @@ Implementation tracking: see [IMPLEMENTATION_BASELINE.md](IMPLEMENTATION_BASELIN
 
 ### Subsequent wireframe decisions — 16 October 2026
 
+- Current implementation direction: defer rate uploading and its screens for now. Continue independent operational and layout milestones; do not invent the pending financial integration or silently waive new-workflow guards.
 - Implementation clarification: a service performed Monday whose ticket arrives Tuesday must use the rate effective on Monday, even if a new BAF table was approved Tuesday. Resolve against actual service start, not ticket arrival, entry, upload, or billing date. Retain dated history; a correction to an erroneous historical row is distinct from a new period's rate.
 - Implementation styling clarification: retain the compact, full-width wireframe layout, with a few restrained accent colors for primary actions, active progress, and warnings. This supersedes the earlier prohibition on all decorative color accents; status must still be understandable without color.
 - Wireframe filenames and editable tab names use unique decimal numbers for related states: calendar `00.1`–`00.4`, customer/principal billing preparation `06.1`–`06.2`, deposit/clearing/return `09.1`–`09.3`, and rate upload/comparison/review/changed comparison `10.1`–`10.4`. Dashboard remains `00`; other single-screen steps retain their existing integer numbers. Renumbering changes organization only, not workflow stages.

@@ -23,29 +23,41 @@ namespace IBSWeb.Areas.MSAP.Controllers
         IAccessControlService accessControl) : Controller
     {
         [HttpGet]
-        public async Task<IActionResult> Index(DateTime? month, CancellationToken ct)
+        public async Task<IActionResult> Index(DateTime? month, CancellationToken ct, DateTime? date = null,
+            int? portId = null, int? terminalId = null, string? search = null, string? status = null)
         {
-            if (!ModelState.IsValid)
+            if (!ModelState.IsValid || search?.Length > 120)
             {
-                return BadRequest("Choose a valid month.");
+                return BadRequest("Choose a valid month and a search of at most 120 characters.");
             }
 
-            var selected = month ?? DateTimeHelper.GetCurrentPhilippineTime();
+            var selected = month ?? date ?? DateTimeHelper.GetCurrentPhilippineTime();
             var start = new DateTime(selected.Year, selected.Month, 1);
-            if (start.Year < 1900 || start.Year > 9998)
+            if (start.Year < 1900 || start.Year > 9998 || date.HasValue && (date.Value.Year < 1900 || date.Value.Year > 9998))
             {
                 return BadRequest("Choose a month between 1900 and 9998.");
             }
 
             var gridStart = start.AddDays(-(int)start.DayOfWeek);
-            var schedules = await scheduleService.GetSchedulesAsync(gridStart, gridStart.AddDays(42), ct);
-            var board = new VesselScheduleBoardViewModel { Date = start, Schedules = schedules.ToList() };
-            await MarkConflictsAsync(board, gridStart, gridStart.AddDays(42), ct);
-            return View(board);
+            if (date.HasValue && (date.Value < gridStart || date.Value >= gridStart.AddDays(42)))
+            {
+                date = new DateTime(start.Year, start.Month, Math.Min(date.Value.Day, DateTime.DaysInMonth(start.Year, start.Month)));
+            }
+
+            var result = await scheduleService.GetCalendarAsync(new VesselScheduleBoardViewModel
+            {
+                Date = start,
+                SelectedDate = date?.Date,
+                PortId = portId,
+                TerminalId = terminalId,
+                Search = search,
+                Status = status
+            }, ct);
+            return result.IsSuccess ? View(result.Data) : BadRequest(result.Message);
         }
 
         [HttpGet]
-        public async Task<IActionResult> Day(DateTime? date, CancellationToken ct)
+        public IActionResult Day(DateTime? date, CancellationToken ct)
         {
             if (!ModelState.IsValid)
             {
@@ -58,17 +70,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return BadRequest("Choose a date between 1900 and 9998.");
             }
 
-            var schedules = await scheduleService.GetSchedulesAsync(day, day.AddDays(1), ct);
-            var tugboats = await unitOfWork.Tugboat.GetAllAsync(null, ct);
-            var board = new VesselScheduleBoardViewModel
-            {
-                Date = day,
-                Schedules = schedules.ToList(),
-                Tugboats = tugboats.OrderBy(t => t.TugboatName).ToList()
-            };
-            await MarkConflictsAsync(board, day, day.AddDays(1), ct);
-            await SetActionPermissionsAsync();
-            return View(board);
+            return RedirectToAction(nameof(Index), new { date = day.ToString("yyyy-MM-dd") });
         }
 
         [HttpGet]
@@ -323,37 +325,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     }))
                 .ToList();
             return Json(new { bookings });
-        }
-
-        private async Task MarkConflictsAsync(VesselScheduleBoardViewModel board, DateTime from, DateTime to, CancellationToken ct)
-        {
-            if (board.Schedules.Count == 0)
-            {
-                return;
-            }
-
-            var tugboats = board.Tugboats.Count > 0 ? board.Tugboats : await unitOfWork.Tugboat.GetAllAsync(null, ct);
-            var names = tugboats.ToDictionary(t => t.TugboatId, t => t.TugboatName);
-            // ponytail: pairwise checks in the displayed window; index resource intervals if schedule volume grows.
-            foreach (var schedule in board.Schedules)
-            {
-                var conflicts = await scheduleService.CheckConflictsAsync(schedule, ct, board.Schedules, names);
-                foreach (var conflict in conflicts)
-                {
-                    var start = new[] { schedule.PlannedStart, conflict.ConflictStart, from }.Max();
-                    var end = new[] { schedule.PlannedEnd, conflict.ConflictEnd, to }.Min();
-                    for (var day = start.Date; day < end; day = day.AddDays(1))
-                    {
-                        if (!board.ConflictsByDay.TryGetValue(day, out var ids))
-                        {
-                            board.ConflictsByDay[day] = ids = [];
-                        }
-
-                        ids.Add(schedule.VesselScheduleId);
-                        ids.Add(conflict.ConflictingScheduleId);
-                    }
-                }
-            }
         }
 
         private async Task PopulateDropdownsAsync(VesselScheduleViewModel vm, CancellationToken ct, int? selectedPortId = null)

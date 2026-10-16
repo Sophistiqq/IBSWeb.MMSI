@@ -5,7 +5,7 @@
         <div class="flex-stack">
             <div><span class="modern-label">Vessel Schedule</span><h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
                 <p class="schedule-muted">Plan the time window, then assign tugboats. All times are Philippine time.</p></div>
-            <a asp-action="Day" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary"><span class="material-symbols-outlined">arrow_back</span> Daily schedules</a>
+            <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary"><span class="material-symbols-outlined">arrow_back</span> Calendar</a>
         </div>
         <section class="modern-card schedule-progress-card" data-status="@Model.Status" data-tour-step="1" aria-labelledby="scheduleProgressTitle">
             <div class="schedule-progress-heading">
@@ -123,7 +123,7 @@
             </div>
             <div class="schedule-actions schedule-form-actions" data-tour-step="14">
                 <button type="submit" class="modern-btn-primary"><span class="material-symbols-outlined">save</span> Save schedule</button>
-                <a asp-action="Day" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">Back to day</a>
+                <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">Back to calendar</a>
             </div>
         </form>
     </main>

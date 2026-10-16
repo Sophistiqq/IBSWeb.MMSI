@@ -18,7 +18,7 @@
                     <a asp-controller="JobOrder" asp-action="Details" asp-route-id="@Model.JobOrderId" class="schedule-progress-order">@Model.JobOrder?.JobOrderNumber</a>
                 }
             </div>
-            <a asp-action="Day" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span> Daily schedules</a>
+            <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span> Calendar</a>
         </header>
         <partial name="_JobProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
         <div class="schedule-details-layout">

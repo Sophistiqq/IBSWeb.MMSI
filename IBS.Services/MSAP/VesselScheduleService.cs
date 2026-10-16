@@ -1,9 +1,11 @@
+using System.Text.Json;
 using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
+using IBS.Models.MSAP.ViewModels;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 
 namespace IBS.Services.MSAP
 {
@@ -12,6 +14,84 @@ namespace IBS.Services.MSAP
         JobOrderService jobOrderService,
         ILogger<VesselScheduleService> logger) : IVesselScheduleService
     {
+        public async Task<ServiceResult<VesselScheduleBoardViewModel>> GetCalendarAsync(VesselScheduleBoardViewModel filters, CancellationToken ct = default)
+        {
+            var gridStart = filters.Date.AddDays(-(int)filters.Date.DayOfWeek);
+            int? portId = filters.PortId;
+            int? terminalId = filters.TerminalId;
+            string? search = filters.Search;
+            string? status = filters.Status;
+            var schedules = (await GetSchedulesAsync(gridStart, gridStart.AddDays(42), ct)).ToList();
+            var ports = (await unitOfWork.Port.GetAllAsync(null, ct)).OrderBy(p => p.PortName).ToList();
+            if (portId.HasValue && ports.All(p => p.PortId != portId))
+            {
+                return ServiceResult<VesselScheduleBoardViewModel>.Failure("Choose a valid port.", ServiceResultStatus.ValidationError);
+            }
+            var terminals = (await unitOfWork.Terminal.GetAllAsync(t => !portId.HasValue || t.PortId == portId, ct))
+                .OrderBy(t => t.TerminalName).ToList();
+            if (terminalId.HasValue && terminals.All(t => t.TerminalId != terminalId))
+            {
+                terminalId = null;
+            }
+            var board = new VesselScheduleBoardViewModel
+            {
+                Date = filters.Date,
+                SelectedDate = filters.SelectedDate,
+                PortId = portId,
+                TerminalId = terminalId,
+                Search = search?.Trim(),
+                Status = status,
+                Schedules = schedules,
+                Tugboats = (await unitOfWork.Tugboat.GetAllAsync(null, ct)).OrderBy(t => t.TugboatName).ToList(),
+                Ports = ports.Select(p => new SelectListItem(p.PortName, p.PortId.ToString())).ToList(),
+                Terminals = terminals.Select(t => new SelectListItem(t.TerminalName, t.TerminalId.ToString())).ToList(),
+                LocationHeading = $"{ports.FirstOrDefault(p => p.PortId == portId)?.PortName ?? "All ports"} / {terminals.FirstOrDefault(t => t.TerminalId == terminalId)?.TerminalName ?? "All terminals"}"
+            };
+            await MarkConflictsAsync(board, gridStart, gridStart.AddDays(42), ct);
+            board.TugBookings = schedules.Where(s => s.Status != MsapConstants.VesselScheduleStatus.Cancelled).ToList();
+            var matchingTugIds = board.Tugboats.Where(t => t.TugboatName.Contains(board.Search ?? "", StringComparison.OrdinalIgnoreCase)
+                || t.TugboatNumber.Contains(board.Search ?? "", StringComparison.OrdinalIgnoreCase)).Select(t => t.TugboatId).ToHashSet();
+            board.Schedules = schedules.Where(s => (!portId.HasValue || s.PortId == portId)
+                && (!terminalId.HasValue || s.TerminalId == terminalId)
+                && (string.IsNullOrEmpty(status) || s.Status == status)
+                && (string.IsNullOrEmpty(board.Search)
+                    || s.Vessel.VesselName.Contains(board.Search, StringComparison.OrdinalIgnoreCase)
+                    || (s.VoyageNumber?.Contains(board.Search, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (JsonSerializer.Deserialize<List<int>>(s.AssignedTugboatIds ?? "[]") ?? []).Any(matchingTugIds.Contains))).ToList();
+            return ServiceResult<VesselScheduleBoardViewModel>.Success(board);
+        }
+
+        private async Task MarkConflictsAsync(VesselScheduleBoardViewModel board, DateTime from, DateTime to, CancellationToken ct)
+        {
+            if (board.Schedules.Count == 0)
+            {
+                return;
+            }
+
+            var tugboats = board.Tugboats.Count > 0 ? board.Tugboats : await unitOfWork.Tugboat.GetAllAsync(null, ct);
+            var names = tugboats.ToDictionary(t => t.TugboatId, t => t.TugboatName);
+            // shortcut: pairwise checks in the visible window; index intervals if schedule volume grows.
+            foreach (var schedule in board.Schedules)
+            {
+                var conflicts = await CheckConflictsAsync(schedule, ct, board.Schedules, names);
+                foreach (var conflict in conflicts)
+                {
+                    var start = new[] { schedule.PlannedStart, conflict.ConflictStart, from }.Max();
+                    var end = new[] { schedule.PlannedEnd, conflict.ConflictEnd, to }.Min();
+                    for (var day = start.Date; day < end; day = day.AddDays(1))
+                    {
+                        if (!board.ConflictsByDay.TryGetValue(day, out var ids))
+                        {
+                            board.ConflictsByDay[day] = ids = [];
+                        }
+
+                        ids.Add(schedule.VesselScheduleId);
+                        ids.Add(conflict.ConflictingScheduleId);
+                    }
+                }
+            }
+        }
+
         public async Task<ServiceResult<int>> CreateAsync(VesselSchedule model, string username, CancellationToken ct = default, bool allowConflicts = false)
         {
             try

@@ -6,6 +6,7 @@ using IBS.DataAccess.MSAP.Repository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.MasterFile;
+using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP;
 using IBS.Services.MSAP.AccessControl;
 using IBS.Services.MSAP.Attributes;
@@ -25,7 +26,7 @@ namespace Checks.MSAP
 {
     internal static class SchedulingCheck
     {
-        public static async Task RunAsync()
+        public static async Task RunAsync(bool calendarOnly = false)
         {
             foreach (var method in typeof(IBSWeb.Areas.MSAP.Controllers.VesselScheduleController).GetMethods()
                 .Where(m => m.Name is "Confirm" or "Edit" or "Cancel" or "Complete")
@@ -80,6 +81,60 @@ namespace Checks.MSAP
                 var work = new UnitOfWork(db, shared);
                 var jobs = new JobOrderService(work, NullLogger<JobOrderService>.Instance);
                 var schedules = new VesselScheduleService(work, jobs, NullLogger<VesselScheduleService>.Instance);
+                if (calendarOnly)
+                {
+                    var calendarController = new IBSWeb.Areas.MSAP.Controllers.VesselScheduleController(work, schedules, new CheckAccess(null));
+                    var legacyDay = (RedirectToActionResult)calendarController.Day(new DateTime(2030, 1, 2), default);
+                    Check(legacyDay.ActionName == "Index" && (string?)legacyDay.RouteValues!["date"] == "2030-01-02",
+                        "Legacy day links did not retain selected-date context.");
+                    Check(await calendarController.Index(new DateTime(1899, 12, 1), default) is BadRequestObjectResult,
+                        "Calendar accepted an out-of-range month.");
+                    var otherPort = new Port { PortNumber = "002", PortName = "Other Port" };
+                    var otherTerminal = new Terminal { TerminalNumber = "002", TerminalName = "Other Terminal", Port = otherPort };
+                    var otherVessel = new Vessel { VesselNumber = "0002", VesselName = "Other Vessel", VesselType = "LOCAL" };
+                    db.AddRange(otherPort, otherTerminal, otherVessel);
+                    await db.SaveChangesAsync();
+                    var overnight = new VesselSchedule
+                    {
+                        CustomerId = customer.CustomerId, VesselId = vessel.VesselId, PortId = port.PortId, TerminalId = terminal.TerminalId,
+                        PlannedStart = new DateTime(2030, 1, 1, 23, 0, 0), PlannedEnd = new DateTime(2030, 1, 2, 2, 0, 0),
+                        AssignedTugboatIds = JsonSerializer.Serialize(new[] { tug.TugboatId }), VoyageNumber = "NIGHT-01"
+                    };
+                    var outside = new VesselSchedule
+                    {
+                        CustomerId = customer.CustomerId, VesselId = otherVessel.VesselId, PortId = otherPort.PortId, TerminalId = otherTerminal.TerminalId,
+                        PlannedStart = new DateTime(2030, 1, 2, 0, 0, 0), PlannedEnd = new DateTime(2030, 1, 2, 1, 0, 0),
+                        AssignedTugboatIds = overnight.AssignedTugboatIds
+                    };
+                    db.AddRange(overnight, outside);
+                    await db.SaveChangesAsync();
+                    var filters = new VesselScheduleBoardViewModel
+                    {
+                        Date = new DateTime(2030, 1, 1), SelectedDate = new DateTime(2030, 1, 2),
+                        PortId = port.PortId, TerminalId = otherTerminal.TerminalId, Search = "night-01", Status = "Tentative"
+                    };
+                    var calendar = (await schedules.GetCalendarAsync(filters)).Data!;
+                    Check(calendar.Schedules.Count == 1 && calendar.Schedules[0].VesselScheduleId == overnight.VesselScheduleId,
+                        "Calendar filters lost the overnight booking or included another port.");
+                    Check(calendar.TerminalId == null && calendar.Terminals.All(t => t.Value == terminal.TerminalId.ToString()),
+                        "Changing port retained an incompatible terminal.");
+                    Check(calendar.ConflictsByDay[new DateTime(2030, 1, 2)].Contains(overnight.VesselScheduleId)
+                        && calendar.TugBookings.Any(s => s.VesselScheduleId == outside.VesselScheduleId),
+                        "Calendar filters hid an external conflict or invented tug availability.");
+                    filters.Search = tug.TugboatNumber;
+                    Check((await schedules.GetCalendarAsync(filters)).Data!.Schedules.Count == 1, "Tug number search failed.");
+                    filters.Search = "CHECK VESSEL";
+                    Check((await schedules.GetCalendarAsync(filters)).Data!.Schedules.Count == 1, "Case-insensitive vessel search failed.");
+                    outside.Status = MsapConstants.VesselScheduleStatus.Cancelled;
+                    await db.SaveChangesAsync();
+                    calendar = (await schedules.GetCalendarAsync(filters)).Data!;
+                    Check(!calendar.TugBookings.Any(s => s.VesselScheduleId == outside.VesselScheduleId)
+                        && calendar.ConflictsByDay.Count == 0, "Cancelled bookings blocked tug availability.");
+                    filters.PortId = int.MaxValue;
+                    Check(!(await schedules.GetCalendarAsync(filters)).IsSuccess, "Calendar accepted an unknown port.");
+                    Console.WriteLine("PASS: calendar location/status/vessel/voyage/tug filters, dependent terminal reset, overnight continuity and conflicts/bookings outside filters.");
+                    return;
+                }
                 VesselSchedule Booking(int day) => new()
                 {
                     CustomerId = customer.CustomerId, VesselId = vessel.VesselId, PortId = port.PortId, TerminalId = terminal.TerminalId,

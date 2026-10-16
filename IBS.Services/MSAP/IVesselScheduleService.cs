@@ -1,10 +1,12 @@
 using IBS.Models.MSAP;
+using IBS.Models.MSAP.ViewModels;
 using IBS.Utility.MSAP.Helpers;
 
 namespace IBS.Services.MSAP
 {
     public interface IVesselScheduleService
     {
+        Task<ServiceResult<VesselScheduleBoardViewModel>> GetCalendarAsync(VesselScheduleBoardViewModel filters, CancellationToken ct = default);
         Task<ServiceResult<int>> CreateAsync(VesselSchedule model, string username, CancellationToken ct = default, bool allowConflicts = false);
         Task<ServiceResult> UpdateAsync(VesselSchedule model, string username, CancellationToken ct = default, bool allowConflicts = false);
         Task<ServiceResult> DeleteAsync(int id, string username, CancellationToken ct = default);

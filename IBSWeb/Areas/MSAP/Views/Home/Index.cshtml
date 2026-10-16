@@ -65,7 +65,7 @@ else
                 <div class="dashboard-panel-heading">
                     <div><h2 id="vessel-heading"><span class="material-symbols-outlined" aria-hidden="true">directions_boat</span> Today's vessels</h2><p class="dashboard-muted">Planned windows and recorded statuses</p></div>
                     <div class="dashboard-links">
-                        <a asp-controller="VesselSchedule" asp-action="Day" asp-route-date="@dateValue">Daily agenda</a>
+                        <a asp-controller="VesselSchedule" asp-action="Index" asp-route-date="@dateValue">Day schedules</a>
                         <a asp-controller="VesselSchedule" asp-action="Index" asp-route-month="@day.ToString("yyyy-MM")">Calendar</a>
                     </div>
                 </div>
@@ -105,7 +105,7 @@ else
                                 </tbody>
                             </table>
                         </div>
-                        <div class="dashboard-panel-footer"><span class="dashboard-muted">Showing @Model.Schedules.Count of @Model.ScheduleCount · active plans first</span><a asp-controller="VesselSchedule" asp-action="Day" asp-route-date="@dateValue">View all schedules <span aria-hidden="true">→</span></a></div>
+                        <div class="dashboard-panel-footer"><span class="dashboard-muted">Showing @Model.Schedules.Count of @Model.ScheduleCount · active plans first</span><a asp-controller="VesselSchedule" asp-action="Index" asp-route-date="@dateValue">View all schedules <span aria-hidden="true">→</span></a></div>
                     }
                 }
             </section>
