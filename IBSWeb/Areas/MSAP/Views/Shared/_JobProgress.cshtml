@@ -3,16 +3,16 @@
 @inject IAccessControlService AccessControl
 @model JobProgressViewModel
 @{
-    string[] stages = ["Planning", "Confirmation", "Service", "Tariff", "Approval", "Billing", "Posting", "Collection", "Deposit", "Clearing", "Fully Cleared"];
+    string[] stages = { "Planning", "Confirmation", "Service", "Tariff", "Approval", "Billing", "Posting", "Collection", "Deposit", "Clearing", "Fully Cleared" };
     if (Model.Stage == JobProgressCalculator.DepositStage && Model.BankingCollection?.ReturnedDate.HasValue == true)
     {
         stages[JobProgressCalculator.DepositStage] = "Redeposit";
     }
-    string? userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
     bool canAct = !Model.Stopped && Model.Permission.HasValue && userId != null
         && await AccessControl.HasAccessAsync(userId, Model.Permission.Value);
     bool actionHere = ViewData["JobProgressActionStage"] is int stage && stage == Model.Stage;
-    string? actionUrl = !canAct ? null : Url.Action(Model.ActionName, Model.ActionController, new
+    var actionUrl = !canAct ? null : Url.Action(Model.ActionName, Model.ActionController, new
     {
         area = "MSAP",
         id = Model.TargetId,

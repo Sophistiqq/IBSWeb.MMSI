@@ -132,7 +132,15 @@ namespace IBS.Services.MSAP
                 result.Stage = ready ? 1 : 0;
                 result.Guidance = ready ? "Review the booking and assigned tugboats. Confirmation creates its Job Order." : "Complete booking details and assign at least one tugboat before confirmation.";
                 SetAction(result, ready ? "Review and Confirm" : "Complete Booking", "VesselSchedule", ready ? "Confirm" : "Edit", schedule.VesselScheduleId,
-                    ready ? ProcedureEnum.CreateJobOrder : ProcedureEnum.EditJobOrder, ready ? "schedule confirmation" : "booking preparation");
+                    ready ? ProcedureEnum.ApproveSchedule : ProcedureEnum.EditJobOrder, ready ? "schedule confirmation" : "booking preparation");
+                return result;
+            }
+            if (schedule != null && (schedule.ApprovedRevision != schedule.Revision || schedule.Status == MsapConstants.VesselScheduleStatus.Tentative) && active.Count == 0 && bills.Count == 0)
+            {
+                result.Stage = 1;
+                result.Guidance = "The schedule was revised and requires reapproval before ticket entry.";
+                SetAction(result, "Review and Reapprove", "VesselSchedule", "Confirm", schedule.VesselScheduleId,
+                    ProcedureEnum.ApproveSchedule, "schedule reapproval");
                 return result;
             }
             List<DispatchTicket> unknown = active.Where(t => !MsapConstants.DispatchTicketStatus.All.Contains(t.Status)).ToList();

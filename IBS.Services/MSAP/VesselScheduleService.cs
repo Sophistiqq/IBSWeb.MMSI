@@ -98,8 +98,27 @@ namespace IBS.Services.MSAP
             {
                 model.Status = MsapConstants.VesselScheduleStatus.Tentative;
                 model.JobOrderId = null;
+                model.Revision = 1;
+                model.ApprovedRevision = null;
+                model.ApprovedByUserId = null;
+                model.ApprovedAt = null;
+
+                if (model.CosDiscountPercent == null && !model.SkipCosDiscount && model.CustomerId.HasValue)
+                {
+                    var customer = await unitOfWork.Customer.GetAsync(c => c.CustomerId == model.CustomerId.Value, ct);
+                    if (customer != null && customer.DefaultCosDiscountPercent > 0)
+                    {
+                        model.CosDiscountPercent = customer.DefaultCosDiscountPercent;
+                    }
+                }
+
                 var error = await ValidateAsync(model, allowConflicts, ct);
                 if (error != null) return ServiceResult<int>.Failure(error, ServiceResultStatus.ValidationError);
+
+                if (model.ServiceEntries.Any(e => e.VesselScheduleServiceEntryId != 0))
+                {
+                    return ServiceResult<int>.Failure("New expected services must not contain saved row identifiers.", ServiceResultStatus.ValidationError);
+                }
 
                 model.CreatedBy = username;
                 model.CreatedDate = DateTimeHelper.GetCurrentPhilippineTime();
@@ -141,55 +160,91 @@ namespace IBS.Services.MSAP
                         result = ServiceResult.Failure("Cannot edit a completed or cancelled schedule.", ServiceResultStatus.ValidationError);
                         return;
                     }
-                    model.Status = existing.JobOrderId.HasValue ? MsapConstants.VesselScheduleStatus.Tentative : existing.Status;
+
+                    JobOrder? job = null;
+                    if (existing.JobOrderId.HasValue)
+                    {
+                        job = await unitOfWork.JobOrder.GetForUpdateAsync(existing.JobOrderId.Value, ct);
+                        if (job == null)
+                        {
+                            result = ServiceResult.Failure("Linked Job Order not found.", ServiceResultStatus.NotFound);
+                            return;
+                        }
+                        if (job.Status != MsapConstants.JobOrderStatus.Open)
+                        {
+                            result = ServiceResult.Failure("This booking already has service records or billing, or its Job Order is no longer open. Schedule revision is only available before Dispatch Tickets or billing exist.", ServiceResultStatus.ValidationError);
+                            return;
+                        }
+                        var oldPeriodClosed = await unitOfWork.PostedPeriod.IsMonthClosedAsync(job.Date.Year, job.Date.Month, ct);
+                        var newDate = DateOnly.FromDateTime(model.PlannedStart);
+                        if (oldPeriodClosed || await unitOfWork.PostedPeriod.IsMonthClosedAsync(newDate.Year, newDate.Month, ct))
+                        {
+                            result = ServiceResult.Failure("Cannot revise a booking in a closed period.", ServiceResultStatus.ValidationError);
+                            return;
+                        }
+                    }
+
+                    var existingTickets = existing.JobOrderId.HasValue
+                        ? (await unitOfWork.DispatchTicket.GetAllAsync(t => t.JobOrderId == existing.JobOrderId.Value, ct)).ToList()
+                        : [];
+                    var entryIds = existing.ServiceEntries.Select(e => e.VesselScheduleServiceEntryId).ToList();
+                    var entryTickets = entryIds.Count > 0
+                        ? (await unitOfWork.DispatchTicket.GetAllAsync(t => t.VesselScheduleServiceEntryId.HasValue && entryIds.Contains(t.VesselScheduleServiceEntryId.Value), ct)).ToList()
+                        : [];
+                    bool hasTickets = existingTickets.Count > 0 || entryTickets.Count > 0;
+                    bool hasBilling = existing.JobOrderId.HasValue && await unitOfWork.Billing.GetAsync(b => b.JobOrderId == existing.JobOrderId.Value, ct) != null;
+
+                    if (hasTickets || hasBilling)
+                    {
+                        result = ServiceResult.Failure("This booking already has service records or billing, or its Job Order is no longer open. Schedule revision is only available before Dispatch Tickets or billing exist.", ServiceResultStatus.ValidationError);
+                        return;
+                    }
+
+                    var savedEntryIds = existing.ServiceEntries.Select(e => e.VesselScheduleServiceEntryId).ToHashSet();
+                    var submittedEntryIds = model.ServiceEntries.Where(e => e.VesselScheduleServiceEntryId != 0).Select(e => e.VesselScheduleServiceEntryId).ToList();
+                    if (submittedEntryIds.Any(id => !savedEntryIds.Contains(id)) || submittedEntryIds.Distinct().Count() != submittedEntryIds.Count)
+                    {
+                        result = ServiceResult.Failure("Expected service rows changed. Reload this booking before editing.", ServiceResultStatus.ValidationError);
+                        return;
+                    }
+
+                    model.Status = MsapConstants.VesselScheduleStatus.Tentative;
                     var error = await ValidateAsync(model, allowConflicts, ct);
                     if (error != null)
                     {
                         result = ServiceResult.Failure(error, ServiceResultStatus.ValidationError);
                         return;
                     }
-                    bool keepJobOrder = existing.JobOrderId.HasValue && HasOnlyAddedTugboats(existing, model);
-                    if (existing.JobOrderId.HasValue)
+
+                    if (existing.JobOrderId.HasValue && job != null)
                     {
-                        var job = await unitOfWork.JobOrder.GetForUpdateAsync(existing.JobOrderId.Value, ct);
-                        if (job == null)
-                        {
-                            result = ServiceResult.Failure("Linked Job Order not found.", ServiceResultStatus.NotFound);
-                            return;
-                        }
-                        if (job.Status != MsapConstants.JobOrderStatus.Open
-                            || await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == job.JobOrderId, ct) != null
-                            || await unitOfWork.Billing.GetAsync(b => b.JobOrderId == job.JobOrderId, ct) != null)
-                        {
-                            result = ServiceResult.Failure("This booking already has service records or billing, or its Job Order is no longer open. Schedule revision is only available before Dispatch Tickets or billing exist.", ServiceResultStatus.ValidationError);
-                            return;
-                        }
-                        var oldPeriodClosed = await unitOfWork.PostedPeriod.IsMonthClosedAsync(job.Date.Year, job.Date.Month, ct);
-                        var date = DateOnly.FromDateTime(model.PlannedStart);
-                        if (oldPeriodClosed || await unitOfWork.PostedPeriod.IsMonthClosedAsync(date.Year, date.Month, ct))
-                        {
-                            result = ServiceResult.Failure("Cannot revise a booking in a closed period.", ServiceResultStatus.ValidationError);
-                            return;
-                        }
+                        // Revision-aware reapproval: preserve the existing COS/JobOrder identity while incrementing revision and requiring reapproval
+                        existing.Revision += 1;
+                        existing.Status = MsapConstants.VesselScheduleStatus.Tentative;
+
+                        job.CustomerId = model.CustomerId!.Value;
+                        job.VesselId = model.VesselId;
+                        job.PortId = model.PortId;
+                        job.TerminalId = model.TerminalId;
+                        job.Date = DateOnly.FromDateTime(model.PlannedStart);
+                        job.PlannedStartTime = model.PlannedStart;
+                        job.PlannedEndTime = model.PlannedEnd;
+                        job.VoyageNumber = model.VoyageNumber;
+                        job.Remarks = model.Notes;
+                        List<int> tugs = JsonSerializer.Deserialize<List<int>>(model.AssignedTugboatIds ?? "[]") ?? [];
+                        job.RequiredTugCount = Math.Max(tugs.Count, 1);
+                        job.PreferredTugboatId = tugs.Count > 0 ? tugs[0] : null;
                         job.EditedBy = username;
                         job.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                        if (keepJobOrder)
-                        {
-                            List<int> tugs = JsonSerializer.Deserialize<List<int>>(model.AssignedTugboatIds ?? "[]") ?? [];
-                            job.RequiredTugCount = Math.Max(tugs.Count, 1);
-                            await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
-                                $"Updated assigned tugboat count on Job Order #{job.JobOrderNumber} for vessel schedule #{existing.VesselScheduleId}.", "Job Order", job.JobOrderId, job.JobOrderNumber), ct);
-                        }
-                        else
-                        {
-                            job.Status = MsapConstants.JobOrderStatus.Invalidated;
-                            await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
-                                $"Invalidated Job Order #{job.JobOrderNumber} after revision of vessel schedule #{existing.VesselScheduleId}; retained for reference.", "Job Order", job.JobOrderId, job.JobOrderNumber), ct);
-                            existing.JobOrderId = null;
-                            existing.JobOrder = null;
-                            existing.Status = MsapConstants.VesselScheduleStatus.Tentative;
-                        }
+                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
+                            $"Updated Job Order #{job.JobOrderNumber} for revised vessel schedule #{existing.VesselScheduleId} (Revision {existing.Revision}).", "Job Order", job.JobOrderId, job.JobOrderNumber), ct);
                     }
+                    else
+                    {
+                        existing.Status = MsapConstants.VesselScheduleStatus.Tentative;
+                        existing.JobOrderId = null;
+                    }
+
                     existing.CustomerId = model.CustomerId;
                     existing.VesselId = model.VesselId;
                     existing.PortId = model.PortId;
@@ -200,12 +255,55 @@ namespace IBS.Services.MSAP
                     existing.VoyageNumber = model.VoyageNumber;
                     existing.VesselType = model.VesselType;
                     existing.Notes = model.Notes;
+                    existing.CosDiscountPercent = model.CosDiscountPercent;
+                    existing.SkipCosDiscount = model.SkipCosDiscount;
+                    existing.SbmaEnabled = model.SbmaEnabled;
                     existing.EditedBy = username;
                     existing.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Updated vessel schedule #{model.VesselScheduleId}. Overlap override: {allowConflicts}", "Vessel Schedule", model.VesselScheduleId), ct);
+
+                    // Sync expected service entries
+                    var incomingEntries = model.ServiceEntries ?? [];
+                    var incomingIds = incomingEntries.Where(e => e.VesselScheduleServiceEntryId > 0).Select(e => e.VesselScheduleServiceEntryId).ToHashSet();
+                    var toRemove = existing.ServiceEntries.Where(e => !incomingIds.Contains(e.VesselScheduleServiceEntryId)).ToList();
+                    if (toRemove.Count > 0)
+                    {
+                        foreach (var rem in toRemove)
+                        {
+                            existing.ServiceEntries.Remove(rem);
+                        }
+                        unitOfWork.VesselSchedule.RemoveServiceEntries(toRemove);
+                    }
+                    foreach (var existingEntry in existing.ServiceEntries)
+                    {
+                        var matching = incomingEntries.FirstOrDefault(e => e.VesselScheduleServiceEntryId == existingEntry.VesselScheduleServiceEntryId);
+                        if (matching != null)
+                        {
+                            existingEntry.TugboatId = matching.TugboatId;
+                            existingEntry.ServiceId = matching.ServiceId;
+                            existingEntry.TariffBasis = matching.TariffBasis;
+                            existingEntry.BafMethod = matching.BafMethod;
+                            existingEntry.ManualTariffRate = matching.ManualTariffRate;
+                            existingEntry.ManualBafRate = matching.ManualBafRate;
+                        }
+                    }
+                    foreach (var newEntry in incomingEntries.Where(e => e.VesselScheduleServiceEntryId == 0))
+                    {
+                        existing.ServiceEntries.Add(new VesselScheduleServiceEntry
+                        {
+                            VesselScheduleId = existing.VesselScheduleId,
+                            TugboatId = newEntry.TugboatId,
+                            ServiceId = newEntry.ServiceId,
+                            TariffBasis = newEntry.TariffBasis,
+                            BafMethod = newEntry.BafMethod,
+                            ManualTariffRate = newEntry.ManualTariffRate,
+                            ManualBafRate = newEntry.ManualBafRate
+                        });
+                    }
+
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Updated vessel schedule #{model.VesselScheduleId} (Revision {existing.Revision}). Overlap override: {allowConflicts}", "Vessel Schedule", model.VesselScheduleId), ct);
                     await unitOfWork.SaveAsync(ct);
-                    result = ServiceResult.Success(keepJobOrder
-                        ? "Assigned tugboats updated. The booking remains confirmed with the same Job Order."
+                    result = ServiceResult.Success(existing.JobOrderId.HasValue
+                        ? $"Schedule updated (Revision {existing.Revision}). Reapproval is required before ticket entry."
                         : "Schedule updated. Review and confirm the booking before creating its Job Order.");
                 }, ct);
 
@@ -218,18 +316,7 @@ namespace IBS.Services.MSAP
             }
         }
 
-        private static bool HasOnlyAddedTugboats(VesselSchedule existing, VesselSchedule updated)
-        {
-            List<int> previousTugs = JsonSerializer.Deserialize<List<int>>(existing.AssignedTugboatIds ?? "[]") ?? [];
-            List<int> updatedTugs = JsonSerializer.Deserialize<List<int>>(updated.AssignedTugboatIds ?? "[]") ?? [];
-            return existing.CustomerId == updated.CustomerId && existing.VesselId == updated.VesselId
-                && existing.PortId == updated.PortId && existing.TerminalId == updated.TerminalId
-                && existing.PlannedStart == updated.PlannedStart && existing.PlannedEnd == updated.PlannedEnd
-                && existing.VoyageNumber == updated.VoyageNumber && existing.VesselType == updated.VesselType
-                && existing.Notes == updated.Notes && previousTugs.All(updatedTugs.Contains);
-        }
-
-        public async Task<ServiceResult<int>> ConfirmAsync(int id, DateTime reviewedAt, string username, CancellationToken ct = default, bool allowConflicts = false)
+        public async Task<ServiceResult<int>> ConfirmAsync(int id, DateTime reviewedAt, string username, CancellationToken ct = default, bool allowConflicts = false, string? userId = null)
         {
             var result = ServiceResult<int>.Failure("Failed to confirm schedule. Please try again.");
             try
@@ -247,39 +334,87 @@ namespace IBS.Services.MSAP
                         result = ServiceResult<int>.Failure("Completed or cancelled schedules cannot be confirmed.", ServiceResultStatus.ValidationError);
                         return;
                     }
-                    if (schedule.JobOrderId.HasValue)
+
+                    // Idempotent repeated confirmation check
+                    if (schedule.JobOrderId.HasValue && schedule.ApprovedRevision == schedule.Revision)
                     {
-                        result = ServiceResult<int>.Success(schedule.JobOrderId.Value, "This schedule already has a Job Order.");
+                        result = ServiceResult<int>.Success(schedule.JobOrderId.Value, "This schedule is already confirmed.");
                         return;
                     }
+
                     if (reviewedAt != (schedule.EditedDate ?? schedule.CreatedDate))
                     {
                         result = ServiceResult<int>.Failure("The booking changed. Review its current details before confirming.", ServiceResultStatus.ValidationError);
                         return;
                     }
+
+                    var approverUserId = userId ?? (await unitOfWork.UserAccess.GetAsync(u => u.UserName == username, ct))?.UserId ?? username;
+
                     var error = await ValidateAsync(schedule, allowConflicts, ct, confirming: true);
                     if (error != null)
                     {
                         result = ServiceResult<int>.Failure(error, ServiceResultStatus.ValidationError);
                         return;
                     }
-                    var created = await jobOrderService.CreateJobOrderAsync(BuildJobOrder(schedule), username, ct);
-                    if (!created.IsSuccess)
+
+                    if (!schedule.JobOrderId.HasValue)
                     {
-                        result = ServiceResult<int>.Failure(created.Message ?? "Job Order creation failed.", created.Status);
-                        throw new InvalidOperationException(result.Message);
+                        var created = await jobOrderService.CreateJobOrderAsync(BuildJobOrder(schedule), username, ct);
+                        if (!created.IsSuccess)
+                        {
+                            result = ServiceResult<int>.Failure(created.Message ?? "Job Order creation failed.", created.Status);
+                            throw new InvalidOperationException(result.Message);
+                        }
+                        schedule.JobOrderId = created.Data;
                     }
-                    schedule.JobOrderId = created.Data;
+                    else
+                    {
+                        // Preserve existing JobOrder identity and sync details
+                        var job = await unitOfWork.JobOrder.GetForUpdateAsync(schedule.JobOrderId.Value, ct);
+                        if (job?.Status != MsapConstants.JobOrderStatus.Open
+                            || await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == schedule.JobOrderId, ct) != null
+                            || await unitOfWork.Billing.GetAsync(b => b.JobOrderId == schedule.JobOrderId, ct) != null)
+                        {
+                            result = ServiceResult<int>.Failure("Cannot reapprove a booking once tickets or billing exist, or its Job Order is closed.", ServiceResultStatus.ValidationError);
+                            return;
+                        }
+                        if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(job.Date.Year, job.Date.Month, ct))
+                        {
+                            result = ServiceResult<int>.Failure("Cannot reapprove a booking in a closed period.", ServiceResultStatus.ValidationError);
+                            return;
+                        }
+                        var updatedJob = BuildJobOrder(schedule);
+                        job.CustomerId = updatedJob.CustomerId;
+                        job.VesselId = updatedJob.VesselId;
+                        job.PortId = updatedJob.PortId;
+                        job.TerminalId = updatedJob.TerminalId;
+                        job.Date = updatedJob.Date;
+                        job.PlannedStartTime = updatedJob.PlannedStartTime;
+                        job.PlannedEndTime = updatedJob.PlannedEndTime;
+                        job.VoyageNumber = updatedJob.VoyageNumber;
+                        job.Remarks = updatedJob.Remarks;
+                        job.RequiredTugCount = updatedJob.RequiredTugCount;
+                        job.PreferredTugboatId = updatedJob.PreferredTugboatId;
+                        job.EditedBy = username;
+                        job.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                    }
+
+                    // Revision-aware approval evidence
+                    schedule.ApprovedRevision = schedule.Revision;
+                    schedule.ApprovedByUserId = approverUserId;
+                    schedule.ApprovedAt = DateTimeHelper.GetCurrentPhilippineTime();
+
                     if (schedule.Status != MsapConstants.VesselScheduleStatus.InProgress)
                     {
                         schedule.Status = MsapConstants.VesselScheduleStatus.Confirmed;
                     }
                     schedule.EditedBy = username;
                     schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
-                        $"Confirmed vessel schedule #{id}; linked Job Order #{created.Data}. Overlap override: {allowConflicts}", "Vessel Schedule", id), ct);
+                        $"Confirmed vessel schedule #{id} revision #{schedule.Revision}; linked Job Order #{schedule.JobOrderId}. Overlap override: {allowConflicts}", "Vessel Schedule", id), ct);
                     await unitOfWork.SaveAsync(ct);
-                    result = ServiceResult<int>.Success(created.Data, "Schedule confirmed and Job Order created successfully.");
+                    result = ServiceResult<int>.Success(schedule.JobOrderId.Value, "Schedule confirmed and Job Order created successfully.");
                 }, ct);
                 return result;
             }
@@ -376,6 +511,11 @@ namespace IBS.Services.MSAP
                         result = ServiceResult.Failure("Only tentative schedules without a Job Order can be deleted. Cancel an active schedule to retain its history.", ServiceResultStatus.ValidationError);
                         return;
                     }
+                    if (existing.ServiceEntries.Count > 0)
+                    {
+                        unitOfWork.VesselSchedule.RemoveServiceEntries(existing.ServiceEntries.ToList());
+                        existing.ServiceEntries.Clear();
+                    }
                     await unitOfWork.VesselSchedule.RemoveAsync(existing, ct);
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Deleted vessel schedule #{id}", "Vessel Schedule", id), ct);
                     await unitOfWork.SaveAsync(ct);
@@ -392,7 +532,7 @@ namespace IBS.Services.MSAP
 
         public async Task<VesselSchedule?> GetByIdAsync(int id, CancellationToken ct = default)
         {
-            return await unitOfWork.VesselSchedule.GetAsync(s => s.VesselScheduleId == id, ct);
+            return await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(id, ct);
         }
 
         public async Task<IEnumerable<VesselSchedule>> GetSchedulesAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
@@ -416,6 +556,12 @@ namespace IBS.Services.MSAP
             var terminal = await unitOfWork.Terminal.GetAsync(t => t.TerminalId == model.TerminalId && t.PortId == model.PortId, ct);
             if (terminal == null) return "Choose a terminal belonging to the selected port.";
             model.VesselType = vessel.VesselType == "FOREIGN" ? "Foreign" : "Local";
+
+            if (model.CosDiscountPercent.HasValue && (model.CosDiscountPercent.Value < 0 || model.CosDiscountPercent.Value > 100))
+            {
+                return "COS discount percentage must be between 0% and 100%.";
+            }
+
             List<int> tugIds;
             try
             {
@@ -427,6 +573,37 @@ namespace IBS.Services.MSAP
             var tugs = await unitOfWork.Tugboat.GetAllAsync(t => tugIds.Contains(t.TugboatId), ct);
             if (tugs.Count() != tugIds.Count) return "Choose valid tugboats.";
             model.AssignedTugboatIds = tugIds.Count == 0 ? null : JsonSerializer.Serialize(tugIds);
+
+            if (model.ServiceEntries != null)
+            {
+                var serviceIds = model.ServiceEntries.Select(e => e.ServiceId).Distinct().ToList();
+                var validServices = (await unitOfWork.Service.GetAllAsync(service => serviceIds.Contains(service.ServiceId), ct)).Select(service => service.ServiceId).ToHashSet();
+                foreach (var entry in model.ServiceEntries)
+                {
+                    if (!tugIds.Contains(entry.TugboatId))
+                    {
+                        return "Each expected service must belong to an assigned tugboat.";
+                    }
+                    if (entry.TariffBasis.HasValue && !Enum.IsDefined(entry.TariffBasis.Value)
+                        || entry.BafMethod.HasValue && !Enum.IsDefined(entry.BafMethod.Value))
+                    {
+                        return "Choose a valid tariff basis and BAF method.";
+                    }
+                    if (!validServices.Contains(entry.ServiceId))
+                    {
+                        return "Choose a valid service for each service entry.";
+                    }
+                    if (entry.ManualTariffRate.HasValue && (entry.ManualTariffRate.Value < 0 || entry.ManualTariffRate.Value > 99999999999999.9999m))
+                    {
+                        return "Manual tariff rate must be between 0 and 99,999,999,999,999.9999.";
+                    }
+                    if (entry.ManualBafRate.HasValue && (entry.ManualBafRate.Value < 0 || entry.ManualBafRate.Value > 99999999999999.9999m))
+                    {
+                        return "Manual BAF rate must be between 0 and 99,999,999,999,999.9999.";
+                    }
+                }
+            }
+
             if (model.Status == MsapConstants.VesselScheduleStatus.Cancelled) return null;
             if ((confirming || model.Status is MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress)
                 && tugIds.Count == 0)

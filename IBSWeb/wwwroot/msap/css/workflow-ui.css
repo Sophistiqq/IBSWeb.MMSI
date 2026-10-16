@@ -1,0 +1,181 @@
+/* Opt in with .msap-workflow. Reuse the existing theme palette and Inter font. */
+.msap-workflow {
+    --wf-font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    --wf-space-1: .25rem;
+    --wf-space-2: .5rem;
+    --wf-space-3: .75rem;
+    --wf-space-4: 1rem;
+    --wf-space-5: 1.5rem;
+    --wf-space-6: 2rem;
+    --wf-text-caption: .75rem;
+    --wf-text-body: .875rem;
+    --wf-text-section: 1rem;
+    --wf-text-page: 1.75rem;
+    --wf-leading-body: 1.5;
+    --wf-leading-heading: 1.25;
+    --wf-weight-regular: 400;
+    --wf-weight-medium: 500;
+    --wf-weight-semibold: 600;
+    --wf-weight-bold: 700;
+    --wf-panel-padding: var(--wf-space-5);
+    --wf-section-gap: var(--wf-space-5);
+    --wf-field-gap: var(--wf-space-2);
+    --wf-grid-gap: var(--wf-space-4);
+    --wf-summary-width: 22rem;
+    --wf-progress-width: 16rem;
+    --wf-control-height: 2.5rem;
+    --wf-radius: .25rem;
+    font-family: var(--wf-font-family);
+    font-size: var(--wf-text-body);
+    font-weight: var(--wf-weight-regular);
+    line-height: var(--wf-leading-body);
+    color: var(--on-surface);
+}
+
+.msap-workflow .wf-page-title {
+    margin: 0;
+    font: var(--wf-weight-bold) var(--wf-text-page) / var(--wf-leading-heading) var(--wf-font-family);
+}
+
+.msap-workflow .wf-section-title {
+    margin: 0;
+    font: var(--wf-weight-semibold) var(--wf-text-section) / var(--wf-leading-body) var(--wf-font-family);
+}
+
+.msap-workflow .wf-label {
+    margin: 0;
+    font-size: var(--wf-text-body);
+    font-weight: var(--wf-weight-medium);
+    line-height: var(--wf-leading-body);
+}
+
+.msap-workflow .wf-body {
+    margin: 0;
+    font-size: var(--wf-text-body);
+    font-weight: var(--wf-weight-regular);
+    line-height: var(--wf-leading-body);
+}
+
+.msap-workflow .wf-caption {
+    margin: 0;
+    font-size: var(--wf-text-caption);
+    font-weight: var(--wf-weight-regular);
+    line-height: var(--wf-leading-body);
+}
+
+.msap-workflow .wf-value {
+    margin: 0;
+    font-size: var(--wf-text-section);
+    font-weight: var(--wf-weight-medium);
+    line-height: var(--wf-leading-body);
+    overflow-wrap: anywhere;
+}
+
+.msap-workflow .wf-muted {
+    color: var(--on-surface-variant);
+}
+
+.msap-workflow .wf-panel {
+    padding: var(--wf-panel-padding);
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--wf-radius);
+    background: var(--surface-container-lowest);
+    box-shadow: none;
+}
+
+.msap-workflow .wf-panel--compact {
+    --wf-panel-padding: var(--wf-space-4);
+    --wf-section-gap: var(--wf-space-4);
+    --wf-field-gap: var(--wf-space-1);
+}
+
+.msap-workflow.wf-stack,
+.msap-workflow .wf-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--wf-section-gap);
+}
+
+.msap-workflow .wf-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: var(--wf-field-gap);
+}
+
+.msap-workflow :is(.modern-input, .modern-select-trigger) {
+    min-height: var(--wf-control-height);
+    padding: var(--wf-space-2) var(--wf-space-3);
+    border-radius: var(--wf-radius);
+    font-family: inherit;
+    font-size: var(--wf-text-body);
+    font-weight: var(--wf-weight-regular);
+    line-height: var(--wf-leading-body);
+}
+
+.msap-workflow :is(.modern-btn-primary, .modern-btn-secondary, .modern-btn-link, .wf-button) {
+    font-family: inherit;
+    font-size: var(--wf-text-body);
+    font-weight: var(--wf-weight-medium);
+    line-height: var(--wf-leading-body);
+}
+
+.msap-workflow :is(.modern-btn-primary, .modern-btn-secondary, .wf-button) {
+    border-radius: var(--wf-radius);
+}
+
+.msap-workflow .wf-page-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--wf-space-3) var(--wf-space-5);
+}
+
+.msap-workflow .wf-page-header > nav,
+.msap-workflow .wf-page-description {
+    grid-column: 1 / -1;
+}
+
+.msap-workflow .wf-page-header > nav > ol {
+    margin: 0;
+}
+
+.msap-workflow .wf-page-header > .wf-page-title {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+.msap-workflow .wf-page-action {
+    grid-column: 2;
+    grid-row: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--wf-space-2);
+    min-height: 2.75rem;
+    min-width: 10rem;
+    padding: var(--wf-space-3) var(--wf-space-5);
+    border-radius: var(--wf-radius);
+    font-size: var(--wf-text-body);
+    font-weight: var(--wf-weight-semibold);
+    line-height: var(--wf-leading-body);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+    .msap-workflow {
+        --wf-panel-padding: var(--wf-space-4);
+    }
+
+    .msap-workflow .wf-page-header {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .msap-workflow .wf-page-action {
+        grid-column: 1;
+        grid-row: auto;
+        min-width: 0;
+        justify-self: stretch;
+    }
+}

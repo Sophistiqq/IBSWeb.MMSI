@@ -125,6 +125,16 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 TempData["error"] = "Completed and cancelled schedules are read-only.";
                 return RedirectToAction(nameof(Details), new { id });
             }
+
+            var hasTickets = (entity.JobOrderId.HasValue && await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == entity.JobOrderId.Value, ct) != null)
+                || (entity.ServiceEntries.Count > 0 && await unitOfWork.DispatchTicket.GetAsync(t => entity.ServiceEntries.Select(e => (int?)e.VesselScheduleServiceEntryId).Contains(t.VesselScheduleServiceEntryId), ct) != null);
+            var hasBilling = entity.JobOrderId.HasValue && await unitOfWork.Billing.GetAsync(b => b.JobOrderId == entity.JobOrderId.Value, ct) != null;
+            if (hasTickets || hasBilling)
+            {
+                TempData["error"] = "Cannot edit schedule once actual tickets or billing exist.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
+
             var vm = MapToViewModel(entity);
             await PopulateDropdownsAsync(vm, ct, entity.PortId);
             return View(vm);
@@ -151,7 +161,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 ModelState.AddModelError("", result.Message ?? "Failed to update schedule.");
             }
 
-            vm.Status = (await scheduleService.GetByIdAsync(vm.VesselScheduleId, ct))?.Status ?? MsapConstants.VesselScheduleStatus.Tentative;
+            var existing = await scheduleService.GetByIdAsync(vm.VesselScheduleId, ct);
+            vm.Status = existing?.Status ?? MsapConstants.VesselScheduleStatus.Tentative;
+            vm.Revision = existing?.Revision ?? 1;
+            vm.ApprovedRevision = existing?.ApprovedRevision;
             ModelState.Remove(nameof(vm.Status));
             await PopulateDropdownsAsync(vm, ct);
             return View(vm);
@@ -170,13 +183,18 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 ? await unitOfWork.JobOrder.GetAsync(j => j.JobOrderId == schedule.JobOrderId.Value, ct)
                 : null;
             ViewBag.JobProgress = await JobProgressCalculator.LoadAsync(unitOfWork, job, schedule, ct);
-            ViewBag.HasDispatchTickets = schedule.JobOrderId.HasValue &&
-                await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == schedule.JobOrderId.Value, ct) != null;
+
+            var hasTickets = (schedule.JobOrderId.HasValue && await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == schedule.JobOrderId.Value, ct) != null)
+                || (schedule.ServiceEntries.Count > 0 && await unitOfWork.DispatchTicket.GetAsync(t => schedule.ServiceEntries.Select(e => (int?)e.VesselScheduleServiceEntryId).Contains(t.VesselScheduleServiceEntryId), ct) != null);
             bool hasBilling = schedule.JobOrderId.HasValue && await unitOfWork.Billing.GetAsync(b => b.JobOrderId == schedule.JobOrderId, ct) != null;
             bool hasActiveTickets = schedule.JobOrderId.HasValue && await unitOfWork.DispatchTicket.GetAsync(t => t.JobOrderId == schedule.JobOrderId
                 && (t.Status != MsapConstants.DispatchTicketStatus.Deleted || t.BillingId != null), ct) != null;
-            ViewBag.CanRevise = schedule.JobOrderId == null || (job?.Status == MsapConstants.JobOrderStatus.Open && ViewBag.HasDispatchTickets != true && !hasBilling);
-            ViewBag.CanComplete = job != null && schedule.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+
+            ViewBag.HasDispatchTickets = hasTickets;
+            var closed = schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
+            ViewBag.CanRevise = !closed && ViewBag.CanEdit == true && !hasTickets && !hasBilling
+                && (job == null || job.Status == MsapConstants.JobOrderStatus.Open);
+            ViewBag.CanComplete = job != null && !closed
                 && JobOrderService.CanCompleteService(await unitOfWork.DispatchTicket.GetAllAsync(t => t.JobOrderId == job.JobOrderId, ct));
             ViewBag.CanCancel = schedule.JobOrderId == null || (job?.Status == MsapConstants.JobOrderStatus.Open && !hasActiveTickets && !hasBilling);
             return View(schedule);
@@ -185,12 +203,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
         private async Task SetActionPermissionsAsync()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            ViewBag.CanConfirm = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateJobOrder);
+            ViewBag.CanConfirm = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveSchedule);
             ViewBag.CanEdit = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditJobOrder);
         }
 
         [HttpGet]
-        [RequireAccess(ProcedureEnum.CreateJobOrder)]
+        [RequireAccess(ProcedureEnum.ApproveSchedule)]
         public async Task<IActionResult> Confirm(int id, CancellationToken ct)
         {
             var schedule = await LoadDetailsAsync(id, ct);
@@ -198,27 +216,27 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 return NotFound();
             }
-            if (schedule.JobOrderId.HasValue || schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+            if ((schedule.JobOrderId.HasValue && schedule.ApprovedRevision == schedule.Revision)
+                || schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
             {
                 return RedirectToAction(nameof(Details), new { id });
             }
-            if (Request.Headers["X-Requested-With"] != "XMLHttpRequest")
-            {
-                return RedirectToAction(nameof(Details), new { id, review = true });
-            }
-            return PartialView("_ConfirmSchedule", schedule);
+            return Request.Headers["X-Requested-With"] == "XMLHttpRequest"
+                ? PartialView("_ConfirmSchedule", schedule)
+                : RedirectToAction(nameof(Details), new { id });
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.CreateJobOrder)]
+        [RequireAccess(ProcedureEnum.ApproveSchedule)]
         public async Task<IActionResult> Confirm(int id, DateTime reviewedAt, bool allowConflicts, CancellationToken ct)
         {
             if (!ModelState.IsValid)
             {
                 return Json(new { success = false, message = "Review the schedule again before confirming." });
             }
-            var result = await scheduleService.ConfirmAsync(id, reviewedAt, User.Identity?.Name ?? "system", ct, allowConflicts);
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var result = await scheduleService.ConfirmAsync(id, reviewedAt, User.Identity?.Name ?? "system", ct, allowConflicts, userId);
             if (result.IsSuccess)
             {
                 TempData["success"] = result.Message;
@@ -257,19 +275,20 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         private async Task<VesselSchedule?> LoadDetailsAsync(int id, CancellationToken ct)
         {
-            var entity = await unitOfWork.VesselSchedule.GetAsync(
-                s => s.VesselScheduleId == id, ct);
+            var entity = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(id, ct);
             if (entity == null)
             {
                 return null;
             }
 
             var schedule = (await scheduleService.GetSchedulesAsync(entity.PlannedStart, entity.PlannedEnd, ct))
-                .FirstOrDefault(s => s.VesselScheduleId == id);
-            var tugIds = string.IsNullOrEmpty(entity.AssignedTugboatIds)
-                ? new List<int>() : JsonSerializer.Deserialize<List<int>>(entity.AssignedTugboatIds) ?? [];
-            ViewBag.AssignedTugboats = (await unitOfWork.Tugboat.GetAllAsync(t => tugIds.Contains(t.TugboatId), ct))
-                .OrderBy(t => t.TugboatName).Select(t => t.TugboatName).ToList();
+                .FirstOrDefault(s => s.VesselScheduleId == id) ?? entity;
+            var tugIds = string.IsNullOrEmpty(schedule.AssignedTugboatIds)
+                ? new List<int>() : JsonSerializer.Deserialize<List<int>>(schedule.AssignedTugboatIds) ?? [];
+            var assignedTugboats = (await unitOfWork.Tugboat.GetAllAsync(t => tugIds.Contains(t.TugboatId), ct))
+                .OrderBy(t => t.TugboatName).ToList();
+            ViewBag.AssignedTugboatModels = assignedTugboats;
+            ViewBag.AssignedTugboats = assignedTugboats.Select(t => t.TugboatName).ToList();
 
             return schedule;
         }
@@ -291,6 +310,50 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             return RedirectToAction(nameof(Day), new { date = (schedule?.PlannedStart ?? DateTimeHelper.GetCurrentPhilippineTime()).ToString("yyyy-MM-dd") });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetCustomerDiscount(int customerId, CancellationToken ct)
+        {
+            var customer = await unitOfWork.Customer.GetAsync(c => c.CustomerId == customerId, ct);
+            return Json(new { defaultDiscount = customer?.DefaultCosDiscountPercent ?? 0m });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetTariffRate(int customerId, int terminalId, int serviceId, DateTime? date, CancellationToken ct)
+        {
+            if (customerId <= 0 || serviceId <= 0)
+            {
+                return Json(new { exists = false });
+            }
+
+            var asOfDate = DateOnly.FromDateTime(date ?? DateTimeHelper.GetCurrentPhilippineTime());
+
+            var rates = (await unitOfWork.TariffTable.GetAllAsync(t =>
+                t.CustomerId == customerId &&
+                t.AsOfDate <= asOfDate, ct)).ToList();
+
+            if (rates.Count == 0)
+            {
+                return Json(new { exists = false });
+            }
+
+            var rate = (terminalId > 0 ? rates.Where(t => t.TerminalId == terminalId && t.ServiceId == serviceId).OrderByDescending(t => t.AsOfDate).FirstOrDefault() : null)
+                ?? (terminalId > 0 ? rates.Where(t => t.TerminalId == terminalId).OrderByDescending(t => t.AsOfDate).FirstOrDefault() : null)
+                ?? rates.Where(t => t.ServiceId == serviceId).OrderByDescending(t => t.AsOfDate).FirstOrDefault()
+                ?? rates.OrderByDescending(t => t.AsOfDate).FirstOrDefault();
+
+            if (rate != null)
+            {
+                return Json(new
+                {
+                    exists = true,
+                    tariffRate = rate.Dispatch,
+                    bafRate = rate.BAF
+                });
+            }
+
+            return Json(new { exists = false });
         }
 
         [HttpGet]
@@ -338,9 +401,16 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 .OrderBy(p => p.PortName)
                 .Select(p => new SelectListItem { Value = p.PortId.ToString(), Text = p.PortName })
                 .ToList();
-            vm.Tugboats = (await unitOfWork.Tugboat.GetAllAsync(null, ct))
+            var allTugboats = (await unitOfWork.Tugboat.GetAllAsync(null, ct))
                 .OrderBy(t => t.TugboatName)
+                .ToList();
+            vm.Tugboats = allTugboats
                 .Select(t => new SelectListItem { Value = t.TugboatId.ToString(), Text = $"{t.TugboatName} (#{t.TugboatNumber})" })
+                .ToList();
+            ViewBag.TugboatOwnerMap = allTugboats.ToDictionary(t => t.TugboatId, t => t.IsCompanyOwned);
+            vm.Services = (await unitOfWork.Service.GetAllAsync(null, ct))
+                .OrderBy(s => s.ServiceName)
+                .Select(s => new SelectListItem { Value = s.ServiceId.ToString(), Text = s.ServiceName })
                 .ToList();
 
             var portId = selectedPortId ?? vm.PortId;
@@ -355,7 +425,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         private static VesselSchedule MapToEntity(VesselScheduleViewModel vm)
         {
-            return new VesselSchedule
+            var entity = new VesselSchedule
             {
                 CustomerId = vm.CustomerId,
                 VesselId = vm.VesselId,
@@ -364,11 +434,27 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 PlannedStart = vm.PlannedStart,
                 PlannedEnd = vm.PlannedEnd,
                 AssignedTugboatIds = vm.SelectedTugboatIds?.Any() == true
-                    ? JsonSerializer.Serialize(vm.SelectedTugboatIds)
+                    ? JsonSerializer.Serialize(vm.SelectedTugboatIds.Distinct())
                     : null,
                 VoyageNumber = vm.VoyageNumber,
-                Notes = vm.Notes
+                Notes = vm.Notes,
+                CosDiscountPercent = vm.CosDiscountPercent,
+                SkipCosDiscount = vm.SkipCosDiscount,
+                SbmaEnabled = vm.SbmaEnabled,
+                ServiceEntries = vm.ServiceEntries?
+                    .Select(e => new VesselScheduleServiceEntry
+                    {
+                        VesselScheduleServiceEntryId = e.VesselScheduleServiceEntryId,
+                        VesselScheduleId = vm.VesselScheduleId,
+                        TugboatId = e.TugboatId,
+                        ServiceId = e.ServiceId,
+                        TariffBasis = e.TariffBasis,
+                        BafMethod = e.BafMethod,
+                        ManualTariffRate = e.ManualTariffRate,
+                        ManualBafRate = e.ManualBafRate
+                    }).ToList() ?? []
             };
+            return entity;
         }
 
         private static VesselScheduleViewModel MapToViewModel(VesselSchedule entity)
@@ -389,9 +475,25 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 SelectedTugboatIds = tugIds,
                 VoyageNumber = entity.VoyageNumber,
                 Status = entity.Status,
-                Notes = entity.Notes
+                Notes = entity.Notes,
+                CosDiscountPercent = entity.CosDiscountPercent,
+                SkipCosDiscount = entity.SkipCosDiscount,
+                SbmaEnabled = entity.SbmaEnabled,
+                Revision = entity.Revision,
+                ApprovedRevision = entity.ApprovedRevision,
+                ServiceEntries = entity.ServiceEntries?.Select(e => new VesselScheduleServiceEntryViewModel
+                {
+                    VesselScheduleServiceEntryId = e.VesselScheduleServiceEntryId,
+                    TugboatId = e.TugboatId,
+                    TugboatName = e.Tugboat?.TugboatName,
+                    ServiceId = e.ServiceId,
+                    ServiceName = e.Service?.ServiceName,
+                    TariffBasis = e.TariffBasis,
+                    BafMethod = e.BafMethod,
+                    ManualTariffRate = e.ManualTariffRate,
+                    ManualBafRate = e.ManualBafRate
+                }).ToList() ?? []
             };
         }
     }
-
 }

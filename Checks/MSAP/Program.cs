@@ -114,6 +114,7 @@ Check(links.GetPathByAction("Index", "Home", new { area = "MSAP" })?.StartsWith(
 Check(links.GetPathByAction("GetTimeline", "AuditTrail", new { area = "MSAP", id = 1 }) == "/MSAP/AuditTrail/GetTimeline/1", "MSAP audit link is wrong.");
 Check(links.GetPathByAction("Index", "Home", new { area = "User" }) != null, "Base dashboard route is missing.");
 var engine = services.GetRequiredService<IRazorViewEngine>();
+await Checks.MSAP.ScheduleFormRenderingCheck.RunAsync(services);
 await Checks.MSAP.CalendarRenderingCheck.RunAsync(services, Environment.GetEnvironmentVariable("MSAP_CALENDAR_PREVIEW_DIRECTORY"));
 if (args.Contains("--calendar-render-only", StringComparer.Ordinal))
 {

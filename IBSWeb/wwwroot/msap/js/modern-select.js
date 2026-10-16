@@ -297,6 +297,7 @@ const ModernSelect = {
         $select.data('modern-select-trigger', $trigger);
         $select.data('modern-select-options', $optionsContainer);
         $select.data('modern-select-placeholder', placeholder);
+        $select.data('modern-select-dropdown', $dropdown);
     },
 
     populate: function($select, $optionsContainer, $trigger, placeholder) {

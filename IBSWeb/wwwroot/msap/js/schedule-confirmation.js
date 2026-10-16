@@ -1,45 +1,76 @@
-document.querySelectorAll('[data-schedule-confirm="true"]').forEach(button => {
-    let reviewing = false;
-    button.addEventListener('click', async event => {
+(() => {
+    const links = document.querySelectorAll('[data-schedule-confirm="true"]');
+    if (links.length && new URLSearchParams(window.location.search).get('review') === 'true') {
+        window.location.replace(links[0].href);
+        return;
+    }
+    const form = document.getElementById('confirmSchedule');
+    let submitting = false;
+    const escape = text => $('<div>').text(text).html();
+    form?.addEventListener('submit', async event => {
         event.preventDefault();
-        if (reviewing) return;
-        reviewing = true;
-        const escape = text => $('<div>').text(text).html();
+        if (submitting) return;
+        submitting = true;
+        const reapproval = form.dataset.reapproval === 'true';
+        const button = form.querySelector('button[type="submit"]');
+        button.disabled = true;
         try {
-            const response = await fetch(button.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-            if (!response.ok) throw new Error('Unable to review this schedule. Refresh and check your access.');
-            const html = await response.text();
-            const document = new DOMParser().parseFromString(html, 'text/html');
-            const form = document.getElementById('confirmSchedule');
-            if (!form) throw new Error('This schedule is no longer awaiting confirmation. Refresh its details.');
+            const confirmation = await ModernAlert.confirm({
+                title: reapproval ? 'Approve this revision?' : 'Approve this schedule?',
+                text: reapproval ? 'Approve the reviewed revision and retain the existing COS.' : 'Approve the reviewed booking and create its linked COS.',
+                confirmText: reapproval ? 'Reapprove schedule' : 'Approve schedule', cancelText: 'Keep reviewing'
+            });
+            if (!confirmation.isConfirmed) return;
             const body = new URLSearchParams(new FormData(form));
-            const review = await ModernAlert.confirm({ title: 'Review and Confirm', text: html, icon: 'question', confirmText: 'Confirm & Create Job Order', cancelText: 'Keep reviewing' });
-            if (!review.isConfirmed) return;
+            body.set('allowConflicts', 'false');
             const submit = async () => {
-                ModernAlert.showLoading('Confirming schedule…');
-                const saved = await fetch(form.getAttribute('action'), { method: 'POST', body, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-                if (!saved.ok) throw new Error('Unable to confirm this schedule. Refresh and try again.');
-                return saved.json();
+                ModernAlert.showLoading(reapproval ? 'Reapproving schedule…' : 'Approving schedule…');
+                const response = await fetch(form.action, { method: 'POST', body, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                if (!response.ok || response.redirected) throw new Error('Unable to approve this schedule. Refresh and check your access.');
+                return response.json();
             };
             let result = await submit();
             if (result.requiresConflictAcknowledgement) {
-                const conflicts = await ModernAlert.confirm({ title: 'Review schedule conflicts', text: escape(result.message), icon: 'warning', confirmText: 'Continue to final confirmation', cancelText: 'Keep reviewing' });
+                const conflicts = await ModernAlert.confirm({title: 'Review schedule conflicts', text: escape(result.message), icon: 'warning', confirmText: 'Continue to final confirmation', cancelText: 'Keep reviewing'});
                 if (!conflicts.isConfirmed) return;
-                const acknowledgement = await ModernAlert.confirm({ title: 'Confirm this overlapping booking?', text: 'I acknowledge the overlapping bookings and want to create the Job Order.', icon: 'warning', confirmText: 'Acknowledge & Create Job Order', cancelText: 'Keep reviewing' });
+                const acknowledgement = await ModernAlert.confirm({
+                    title: 'Approve this overlapping booking?', text: 'I acknowledge the overlapping bookings and want to approve this schedule.',
+                    icon: 'warning', confirmText: 'Acknowledge and approve', cancelText: 'Keep reviewing'
+                });
                 if (!acknowledgement.isConfirmed) return;
                 body.set('allowConflicts', 'true');
                 result = await submit();
             }
-            if (result.success && result.redirectUrl) {
-                window.location.href = result.redirectUrl;
-            } else {
-                ModernAlert.error(escape(result.message || 'Schedule confirmation failed.'));
-            }
+            if (result.success && result.redirectUrl) window.location.href = result.redirectUrl;
+            else ModernAlert.error(escape(result.message || 'Schedule approval failed. Refresh the review if the booking changed.'));
         } catch (error) {
             ModernAlert.error(escape(error.message));
         } finally {
-            reviewing = false;
+            submitting = false;
+            button.disabled = false;
         }
     });
-    if (new URLSearchParams(window.location.search).get('review') === 'true') button.click();
-});
+
+    const review = document.getElementById('scheduleReview');
+    if (!review) return;
+    review.querySelectorAll('[data-review-service]').forEach(async row => {
+        const cells = [...row.querySelectorAll('[data-review-rate]')].filter(cell => cell.dataset.manual !== 'true');
+        if (!cells.length) return;
+        const params = new URLSearchParams({ customerId: review.dataset.customerId, terminalId: review.dataset.terminalId, serviceId: row.dataset.reviewService, date: review.dataset.plannedStart });
+        try {
+            const response = await fetch(review.dataset.rateUrl + '?' + params);
+            if (!response.ok || response.redirected) throw new Error('Rate lookup unavailable');
+            const data = await response.json();
+            cells.forEach(cell => {
+                const rate = cell.dataset.reviewRate === 'tariff' ? data.tariffRate : data.bafRate;
+                cell.textContent = data.exists && rate != null ? Number(rate).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 4}) : 'No table match';
+                cell.parentElement.querySelector('[data-rate-source]').textContent = data.exists && rate != null ? 'Table estimate · planned date' : 'Rate needs review';
+            });
+        } catch (_) {
+            cells.forEach(cell => {
+                cell.textContent = 'Unavailable';
+                cell.parentElement.querySelector('[data-rate-source]').textContent = 'Could not check table rate';
+            });
+        }
+    });
+})();

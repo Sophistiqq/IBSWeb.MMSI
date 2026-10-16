@@ -6,7 +6,7 @@ const root = path.resolve(__dirname, '../..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 let selector;
 vm.runInNewContext(read('IBSWeb/wwwroot/msap/js/schedule-confirmation.js'), {
-    document: { querySelectorAll: value => { selector = value; return []; } }
+    document: { querySelectorAll: value => { selector = value; return []; }, getElementById: () => null }
 });
 assert.equal(selector, '[data-schedule-confirm="true"]', 'Posting links must bypass the confirmation handler.');
 for (const view of ['Billing/Create', 'Collection/Create', 'Collection/Edit']) {
@@ -44,5 +44,5 @@ for (const view of ['Billing/Create', 'Collection/Create', 'Collection/Edit']) {
     pending[2].resolve({ok: true, redirected: true});
     await tickets;
     assert.equal(container.textContent, 'Unable to load Job Progress. Refresh and check your access.');
-    console.log('PASS: only confirmation opens its modal; financial forms load progress; multiple jobs, selection changes, late responses and access errors are handled.');
+    console.log('PASS: confirmation links open their review page; financial forms load progress; multiple jobs, selection changes, late responses and access errors are handled.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,189 +1,194 @@
 @model VesselSchedule
 @{
-    ViewData["Title"] = "Schedule Details";
-    ViewData["IsFullWidth"] = true;
     var closed = Model.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
-    var tugs = (List<string>)ViewBag.AssignedTugboats;
+    var pending = !closed && (!Model.JobOrderId.HasValue || Model.ApprovedRevision != Model.Revision || Model.Status == MsapConstants.VesselScheduleStatus.Tentative);
+    var canApprove = pending && ViewBag.CanConfirm == true;
+    var reapproval = Model.JobOrderId.HasValue;
+    ViewData["Title"] = pending ? "Review schedule" : "Schedule details";
+    ViewData["IsFullWidth"] = true;
+    ViewData["BookingProgressReview"] = pending;
+    var tugs = ViewBag.AssignedTugboatModels as List<Tugboat> ?? new List<Tugboat>();
+    var manualEntries = Model.ServiceEntries.Where(entry => entry.ManualTariffRate.HasValue || entry.ManualBafRate.HasValue).ToList();
 }
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
-<div class="modern-layout">
-    <main class="modern-container schedule-workspace schedule-details-workspace">
-        <header class="schedule-details-heading">
-            <div class="schedule-details-identity">
-                <nav aria-label="Breadcrumb">
-                    <ol class="schedule-breadcrumb">
-                        <li><a asp-controller="Home" asp-action="Index">MSAP</a></li>
-                        <li><a asp-action="Index">Vessel schedules</a></li>
-                        <li aria-current="page">Schedule #@Model.VesselScheduleId</li>
-                    </ol>
-                </nav>
-                <h1 class="modern-headline-md" data-page-header>@Model.Vessel.VesselName</h1>
-                <span class="modern-badge-sm">@MsapConstants.VesselScheduleStatus.GetDisplayName(Model.Status)</span>
-                @if (Model.JobOrderId.HasValue)
-                {
-                    <a asp-controller="JobOrder" asp-action="Details" asp-route-id="@Model.JobOrderId" class="schedule-progress-order">@Model.JobOrder?.JobOrderNumber</a>
-                }
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<div class="schedule-screen-layout msap-workflow">
+    @if (pending)
+    {
+        <partial name="_BookingProgress" model="Model.VesselScheduleId" />
+    }
+    else
+    {
+        <aside class="schedule-job-progress-panel wf-panel schedule-details-progress" aria-label="Job Progress">
+            <partial name="_JobProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
+        </aside>
+    }
+    <main class="schedule-main-workspace schedule-review-workspace" id="scheduleReview"
+          data-rate-url="@Url.Action("GetTariffRate")" data-customer-id="@Model.CustomerId"
+          data-terminal-id="@Model.TerminalId" data-planned-start="@Model.PlannedStart.ToString("yyyy-MM-ddTHH:mm")">
+        <header class="schedule-header-stack wf-page-header">
+            <nav aria-label="Breadcrumb">
+                <ol class="schedule-breadcrumb">
+                    <li><a asp-action="Index">Vessel schedules</a></li>
+                    <li aria-current="page">Booking #@Model.VesselScheduleId</li>
+                </ol>
+            </nav>
+            <h1 class="wf-page-title" data-page-header>@(pending ? reapproval ? "Review schedule changes" : "Review schedule" : "Schedule details")</h1>
+            <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary wf-page-action">@(pending ? "Back to review list" : "Back to calendar")</a>
+            <p class="wf-body wf-muted wf-page-description">@(pending ? "Review the booking, service rates and commercial terms before approval." : "Booking details, service requirements and commercial terms.")</p>
+            <div class="schedule-status-banner wf-page-description">
+                <span class="schedule-status-pill">@(pending ? reapproval ? "Pending reapproval" : "Pending review" : MsapConstants.VesselScheduleStatus.GetDisplayName(Model.Status))</span>
+                <span class="wf-body wf-muted">Booking #@Model.VesselScheduleId@if (Model.Revision > 1) {<text> · Revision @(Model.Revision - 1)</text>}</span>
             </div>
-            <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span> Calendar</a>
         </header>
-        <partial name="_JobProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
-        <div class="schedule-details-layout">
-            <section class="modern-card schedule-booking" aria-labelledby="bookingDetailsTitle">
-                <div class="schedule-booking-heading">
-                    <span class="material-symbols-outlined" aria-hidden="true">directions_boat</span>
-                    <h2 id="bookingDetailsTitle">Booking details</h2>
-                    @if (closed)
-                    {
-                        <span class="schedule-readonly"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Read-only</span>
-                    }
+        <div class="schedule-review-content wf-stack">
+            <section class="wf-panel wf-panel--compact wf-stack" aria-labelledby="reviewBookingTitle">
+                <h2 class="wf-section-title" id="reviewBookingTitle">Booking details</h2>
+                <dl class="schedule-review-fields schedule-review-booking-fields">
+                    <div><dt class="wf-caption wf-muted">Customer</dt><dd class="wf-value">@(Model.Customer?.CustomerName ?? "Not selected")</dd></div>
+                    <div><dt class="wf-caption wf-muted">Vessel</dt><dd class="wf-value">@Model.Vessel.VesselName</dd></div>
+                    <div><dt class="wf-caption wf-muted">Port</dt><dd class="wf-value">@Model.Port.PortName</dd></div>
+                    <div><dt class="wf-caption wf-muted">Terminal</dt><dd class="wf-value">@Model.Terminal.TerminalName</dd></div>
+                    <div><dt class="wf-caption wf-muted">Voyage number</dt><dd class="wf-value">@(Model.VoyageNumber ?? "—")</dd></div>
+                    <div><dt class="wf-caption wf-muted">Planned start · Philippine time</dt><dd class="wf-value">@Model.PlannedStart.ToString("dd MMM yyyy, HH:mm")</dd></div>
+                    <div><dt class="wf-caption wf-muted">Planned end · Philippine time</dt><dd class="wf-value">@Model.PlannedEnd.ToString("dd MMM yyyy, HH:mm")</dd></div>
+                </dl>
+            </section>
+            <section class="wf-panel wf-panel--compact wf-stack" aria-labelledby="reviewCommercialTitle">
+                <h2 class="wf-section-title" id="reviewCommercialTitle">Commercial settings</h2>
+                <dl class="schedule-review-fields schedule-review-commercial-fields">
+                    <div><dt class="wf-caption wf-muted">Customer discount</dt><dd class="wf-value">@(Model.SkipCosDiscount ? "0% · Skipped" : $"{Model.CosDiscountPercent.GetValueOrDefault():0.##}% · Applied")</dd></div>
+                    <div><dt class="wf-caption wf-muted">Skip discount</dt><dd class="wf-value">@(Model.SkipCosDiscount ? "Yes" : "No")</dd></div>
+                    <div><dt class="wf-caption wf-muted">SBMA share</dt><dd class="wf-value">@(Model.SbmaEnabled ? "Enabled for all tugs" : "Disabled")</dd></div>
+                </dl>
+            </section>
+            <section class="wf-stack" aria-labelledby="reviewServicesTitle">
+                <div class="wf-field">
+                    <h2 class="wf-section-title" id="reviewServicesTitle">Tugboats &amp; services</h2>
+                    <p class="wf-caption wf-muted">Table estimates use the planned date. Final rates use actual service start; actual ticket details are recorded after service.</p>
                 </div>
-                <div class="schedule-booking-body">
-                    <dl class="schedule-booking-fields">
-                        <div class="schedule-booking-wide"><dt>Customer</dt><dd>@(Model.Customer?.CustomerName ?? "Select a customer before confirmation")</dd></div>
-                        <div><dt>Port</dt><dd>@Model.Port.PortName</dd></div>
-                        <div><dt>Terminal</dt><dd>@Model.Terminal.TerminalName</dd></div>
-                        <div><dt>Voyage number</dt><dd>@(Model.VoyageNumber ?? "—")</dd></div>
-                        <div><dt>Vessel type</dt><dd>@(Model.VesselType ?? "—")</dd></div>
-                    </dl>
-                    <section class="schedule-planned-window" aria-labelledby="plannedWindowTitle">
-                        <h3 id="plannedWindowTitle"><span class="material-symbols-outlined" aria-hidden="true">schedule</span> Planned service window</h3>
-                        <dl>
-                            <div><dt>Start</dt><dd><strong>@Model.PlannedStart.ToString("HH:mm")</strong><span>@Model.PlannedStart.ToString("MMM d, yyyy")</span></dd></div>
-                            <div><dt>End</dt><dd><strong>@Model.PlannedEnd.ToString("HH:mm")</strong><span>@Model.PlannedEnd.ToString("MMM d, yyyy")</span></dd></div>
-                            <div><dt>Duration</dt><dd><strong>@((Model.PlannedEnd - Model.PlannedStart).TotalHours.ToString("0.##")) <small>hours</small></strong><span>Philippine time</span></dd></div>
-                        </dl>
-                    </section>
-                    <section class="schedule-booking-tugs" aria-labelledby="assignedTugsTitle">
-                        <div class="schedule-toolbar"><h3 id="assignedTugsTitle">Assigned tugboats</h3><span class="schedule-assigned-count">@tugs.Count assigned</span></div>
-                        @if (tugs.Count == 0)
+                @if (tugs.Count == 0)
+                {
+                    <p class="wf-panel wf-body">No tugboats assigned. Complete the booking before approval.</p>
+                }
+                @foreach (var tug in tugs)
+                {
+                    var entries = Model.ServiceEntries.Where(entry => entry.TugboatId == tug.TugboatId).ToList();
+                    <section class="wf-panel wf-stack" aria-label="@tug.TugboatName services">
+                        <div class="schedule-review-tug-heading">
+                            <h3 class="wf-section-title">@tug.TugboatName</h3>
+                            <span class="schedule-pill-badge">@(tug.IsCompanyOwned ? "Company-owned" : "Subcontractor")</span>
+                            <span class="wf-caption wf-muted">@entries.Count expected services</span>
+                        </div>
+                        @if (entries.Count == 0)
                         {
-                            <p class="schedule-muted">No tugboats assigned yet.</p>
+                            <p class="wf-body wf-muted">No expected services recorded for this tugboat.</p>
                         }
                         else
                         {
-                            <ul class="schedule-booking-chips" aria-label="Assigned tugboats">
-                                @foreach (var tug in tugs)
-                                {
-                                    <li><span class="material-symbols-outlined" aria-hidden="true">directions_boat</span> @tug</li>
-                                }
-                            </ul>
-                        }
-                    </section>
-                    @if (!string.IsNullOrWhiteSpace(Model.Notes))
-                    {
-                        <section class="schedule-booking-notes" aria-labelledby="bookingNotesTitle"><h3 id="bookingNotesTitle">Planning notes</h3><p class="schedule-note">@Model.Notes</p></section>
-                    }
-                </div>
-                <div class="schedule-booking-footer">
-                    <span>Created @Model.CreatedDate.ToString("MMM d, yyyy · HH:mm") by @Model.CreatedBy</span>
-                    @if (Model.EditedDate.HasValue)
-                    {
-                        <span>Updated @Model.EditedDate.Value.ToString("MMM d, yyyy · HH:mm") by @Model.EditedBy</span>
-                    }
-                </div>
-            </section>
-            <aside class="modern-card schedule-booking-actions" aria-labelledby="bookingActionsTitle">
-                <div class="schedule-booking-heading"><span class="material-symbols-outlined" aria-hidden="true">touch_app</span><h2 id="bookingActionsTitle">Booking actions</h2></div>
-                @if (!closed && ViewBag.CanEdit == true && ViewBag.CanComplete == true)
-                {
-                    <div class="schedule-booking-body schedule-action-item">
-                        <h3>Finish vessel service</h3>
-                        <p class="schedule-muted">All recorded services have actual end times. Complete service when no more Dispatch Tickets are expected. Billing and collection continue separately.</p>
-                        <form asp-action="Complete" method="post" data-schedule-action="Complete">
-                            <input type="hidden" name="id" value="@Model.VesselScheduleId" />
-                            <button type="submit" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">task_alt</span> Complete Service</button>
-                        </form>
-                    </div>
-                }
-                <details class="schedule-booking-body">
-                    <summary>Show other actions</summary>
-                    @if (!closed && ViewBag.CanEdit == true)
-                    {
-                        @if (ViewBag.CanRevise == true)
-                        {
-                            <div class="schedule-action-item">
-                                <h3>Adjust the booking</h3><p class="schedule-muted">Adding tugboats only keeps the booking confirmed and retains its Job Order. Other booking changes return it to Tentative and retain the old unused Job Order as Invalidated.</p>
-                                <a asp-action="Edit" asp-route-id="@Model.VesselScheduleId" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">edit_calendar</span> Revise Schedule</a>
+                            <div class="schedule-services-table" role="region" aria-label="@tug.TugboatName service rates" tabindex="0">
+                                <table class="schedule-review-table">
+                                    <thead><tr><th>Service</th><th>Tariff basis</th><th>Tariff rate</th><th>BAF method</th><th>BAF rate</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var entry in entries)
+                                        {
+                                            <tr data-review-service="@entry.ServiceId">
+                                                <td>@(entry.Service?.ServiceName ?? $"Service #{entry.ServiceId}")</td>
+                                                <td>@(entry.TariffBasis == TariffChargeBasis.PerMove ? "Per move" : entry.TariffBasis == TariffChargeBasis.PerHour ? "Per hour" : "Not specified")</td>
+                                                <td><span class="@(entry.ManualTariffRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="tariff" data-manual="@entry.ManualTariffRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("N2") : "Checking table…")</span><small class="wf-caption wf-muted" data-rate-source>@(entry.ManualTariffRate.HasValue ? "Saved manual rate" : "Table estimate pending")</small></td>
+                                                <td>
+                                                    @(entry.BafMethod == BafCalculationMethod.PerMove ? "Per move" : entry.BafMethod == BafCalculationMethod.PerHour ? "Per hour" : entry.BafMethod.HasValue ? entry.BafMethod.Value.ToString() : "Not specified")
+                                                    @if (entry.BafMethod == BafCalculationMethod.Lumpsum || entry.BafMethod == BafCalculationMethod.Industry)
+                                                    {
+                                                        <small class="wf-caption">Calculation pending confirmation</small>
+                                                    }
+                                                </td>
+                                                <td><span class="@(entry.ManualBafRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="baf" data-manual="@entry.ManualBafRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualBafRate.HasValue ? entry.ManualBafRate.Value.ToString("N2") : "Checking table…")</span><small class="wf-caption wf-muted" data-rate-source>@(entry.ManualBafRate.HasValue ? "Saved manual rate" : "Table estimate pending")</small></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
                             </div>
                         }
-                        <div class="schedule-action-item schedule-action-cancel">
-                            @if (ViewBag.CanCancel != true)
-                            {
-                                <h3>Cancellation unavailable</h3><p class="schedule-muted">Resolve active Dispatch Tickets and billing before cancelling this schedule.</p>
-                            }
-                            else
-                            {
-                                <h3>Cancel this booking</h3><p class="schedule-muted">@(Model.JobOrderId.HasValue ? "Cancels the schedule and its Job Order together. Records are retained." : "Release the tug bookings and keep this plan on record.")</p>
-                                <form asp-action="Cancel" method="post" data-schedule-action="Cancel">
-                                    <input type="hidden" name="id" value="@Model.VesselScheduleId" />
-                                    <button type="submit" class="modern-btn-error"><span class="material-symbols-outlined" aria-hidden="true">event_busy</span> Cancel Booking</button>
-                                </form>
-                            }
+                    </section>
+                }
+            </section>
+            <section class="wf-panel wf-stack" aria-labelledby="reviewNotesTitle">
+                <h2 class="wf-section-title" id="reviewNotesTitle">Planning notes</h2>
+                <p class="wf-body schedule-note">@(string.IsNullOrWhiteSpace(Model.Notes) ? "No planning notes." : Model.Notes)</p>
+            </section>
+        </div>
+        <aside class="schedule-summary-sidebar" aria-label="Review summary">
+            <section class="schedule-summary-card wf-panel wf-stack">
+                <h2 class="wf-section-title">@(pending ? "Review summary" : "Booking summary")</h2>
+                <span class="schedule-status-pill">@(manualEntries.Count > 0 ? "Non-recurring" : "Recurring")</span>
+                <div class="wf-field"><span class="wf-caption wf-muted">Booking reference</span><span class="wf-value">Booking #@Model.VesselScheduleId</span></div>
+                <div class="schedule-metrics-list">
+                    <div class="schedule-metric-row"><span>Tugboats</span><strong>@tugs.Count</strong></div>
+                    <div class="schedule-metric-row"><span>Expected services</span><strong>@Model.ServiceEntries.Count</strong></div>
+                    <div class="schedule-metric-row"><span>Manual tariff rates</span><strong>@Model.ServiceEntries.Count(entry => entry.ManualTariffRate.HasValue)</strong></div>
+                    <div class="schedule-metric-row"><span>Manual BAF rates</span><strong>@Model.ServiceEntries.Count(entry => entry.ManualBafRate.HasValue)</strong></div>
+                </div>
+            </section>
+            @if (manualEntries.Count > 0)
+            {
+                <section class="wf-panel wf-stack">
+                    <h2 class="wf-section-title">@(pending ? "Manual rates to review" : "Saved manual rates")</h2>
+                    @foreach (var entry in manualEntries)
+                    {
+                        <div class="wf-field">
+                            <strong class="wf-label">@(entry.Tugboat?.TugboatName ?? $"Tug #{entry.TugboatId}") · @(entry.Service?.ServiceName ?? $"Service #{entry.ServiceId}")</strong>
+                            @if (entry.ManualTariffRate.HasValue) { <span class="wf-body">Tariff: @entry.ManualTariffRate.Value.ToString("N2")</span> }
+                            @if (entry.ManualBafRate.HasValue) { <span class="wf-body">BAF: @entry.ManualBafRate.Value.ToString("N2")</span> }
+                            <span class="wf-caption wf-muted">@(pending ? "Review the saved manual rate and its charging method before approval." : "Saved manual value and charging method.")</span>
                         </div>
                     }
-                    @if (closed)
+                </section>
+            }
+            <section class="wf-panel wf-stack">
+                <h2 class="wf-section-title">Customer details</h2>
+                <div class="wf-field"><span class="wf-caption wf-muted">TIN</span><span class="wf-body">@(Model.Customer?.CustomerTin ?? "Not recorded")</span></div>
+                <div class="wf-field"><span class="wf-caption wf-muted">Terms</span><span class="wf-body">@(Model.Customer?.CustomerTerms ?? "Not recorded")</span></div>
+                <p class="wf-caption wf-muted">@(Model.Customer?.CustomerAddress ?? "Address not recorded")</p>
+            </section>
+            @if (pending)
+            {
+                <section class="wf-panel wf-stack">
+                    <h2 class="wf-section-title">After approval</h2>
+                    <p class="wf-body wf-muted">@(reapproval ? "The existing COS is retained and this schedule revision is approved." : "The linked COS is created for this booking. Actual service tickets are recorded after service.")</p>
+                    @if (!canApprove)
                     {
-                        <p class="schedule-muted">@(Model.Status == MsapConstants.VesselScheduleStatus.Completed ? "Service is completed. Tariff, approval, billing, posting and collection can continue." : "This booking is cancelled. Schedule changes are no longer available.")</p>
+                        <p class="wf-caption wf-muted">Waiting for an authorized reviewer to approve this schedule.</p>
                     }
-                    @if (Model.Status == MsapConstants.VesselScheduleStatus.Tentative && Model.JobOrderId == null)
-                    {
-                        <details class="schedule-delete-option">
-                            <summary>Created by mistake?</summary>
-                            <p class="schedule-muted">Delete this tentative plan permanently, or cancel it to keep the record.</p>
-                            <form asp-action="Delete" method="post" id="deleteSchedule">
-                                <input type="hidden" name="id" value="@Model.VesselScheduleId" />
-                                <button type="button" id="deleteScheduleButton" class="modern-btn-error"><span class="material-symbols-outlined" aria-hidden="true">delete</span> Delete tentative schedule</button>
-                            </form>
-                        </details>
-                    }
-                </details>
-            </aside>
-        </div>
+                </section>
+            }
+            @if (Model.JobOrderId.HasValue)
+            {
+                <a asp-controller="JobOrder" asp-action="Details" asp-route-id="@Model.JobOrderId" class="modern-btn-secondary wf-button">Open COS</a>
+            }
+            <section class="wf-panel wf-stack schedule-review-actions" aria-labelledby="bookingActionsTitle">
+                <h2 class="wf-section-title" id="bookingActionsTitle">Booking actions</h2>
+                <partial name="_ScheduleActions" model="Model" />
+            </section>
+        </aside>
+        @if (canApprove)
+        {
+            <form asp-action="Confirm" method="post" id="confirmSchedule" class="schedule-bottom-bar schedule-review-footer"
+                  data-reapproval="@reapproval.ToString().ToLowerInvariant()">
+                <input type="hidden" name="id" value="@Model.VesselScheduleId" />
+                <input type="hidden" name="reviewedAt" value="@((Model.EditedDate ?? Model.CreatedDate).ToString("O"))" />
+                <input type="hidden" name="allowConflicts" value="false" />
+                <span class="wf-caption wf-muted">@(Model.Revision > 1 ? $"Approval applies to Revision {Model.Revision - 1} of this booking." : "Approval applies to this booking.")</span>
+                <div class="schedule-action-buttons">
+                    <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">@(pending ? "Back to review list" : "Back to calendar")</a>
+                    <button type="submit" class="schedule-btn-dark wf-button">@(reapproval ? "Reapprove schedule" : "Approve schedule")</button>
+                </div>
+            </form>
+        }
+
     </main>
 </div>
 @section Scripts {
-    <script>
-        window.IBS_TOUR_STEPS = [
-            { selector: '.schedule-details-identity', title: 'Booking identity', text: 'Check the vessel, schedule number, current status, and linked Job Order when one has been created.', interactive: false },
-            { selector: '.job-progress-timeline', title: 'Job stages', text: 'Follow this booking from planning and confirmation through service, billing, collection, and clearing. The highlighted stage shows where work currently stands.', interactive: false },
-            { selector: '.job-progress-next', title: 'Next action', text: 'Read the current guidance here. An action appears when the booking is ready and your access allows it; confirmation creates the linked Job Order.', interactive: false },
-            { selector: '.schedule-booking-fields', title: 'Booking details', text: 'Review the customer, port, terminal, voyage, and vessel type before confirming the plan.', interactive: false },
-            { selector: '.schedule-planned-window', title: 'Planned window', text: 'These are the expected service times in Philippine time. Actual service times are recorded on Dispatch Tickets.', interactive: false },
-            { selector: '.schedule-booking-tugs', title: 'Assigned tugboats', text: 'Review the tugboats reserved for this booking. Revise the schedule if assignments need to change.', interactive: false },
-            { selector: '.schedule-booking-actions', title: 'Booking actions', text: 'Available actions depend on status and access. Complete service after all actual times are recorded, or expand other actions to revise or cancel an eligible booking.', interactive: false }
-        ];
-        if (document.querySelector('[data-schedule-confirm="true"]')) {
-            window.IBS_TOUR_STEPS.splice(3, 0, { selector: '[data-schedule-confirm="true"]', title: 'Review and confirm', text: 'Open the booking review, verify its details and assigned tugboats, then confirm to create the Job Order.', interactive: false });
-        }
-    </script>
     <script src="~/msap/js/schedule-confirmation.js" asp-append-version="true"></script>
-    <script>
-        document.querySelectorAll('[data-schedule-action]').forEach(form => {
-            let reviewing = false;
-            form.addEventListener('submit', async event => {
-                event.preventDefault();
-                if (reviewing) return;
-                reviewing = true;
-                const action = form.dataset.scheduleAction;
-                const completing = action === 'Complete';
-                const result = await ModernAlert.confirm({
-                    title: completing ? 'Complete vessel service?' : 'Cancel schedule?',
-                    text: completing ? 'Confirm that all services are finished and no more Dispatch Tickets are expected. New tickets will be blocked. Tariff, approval, billing, posting and collection will continue.' : 'This cancels the schedule and any linked Job Order together. The booking becomes read-only and records are retained.',
-                    icon: 'warning',
-                    confirmText: completing ? 'Complete Service' : 'Cancel Schedule'
-                });
-                if (result.isConfirmed) {
-                    ModernAlert.showLoading('Updating schedule…');
-                    form.submit();
-                } else {
-                    reviewing = false;
-                }
-            });
-        });
-        document.getElementById('deleteScheduleButton')?.addEventListener('click', function () {
-            const form = document.getElementById('deleteSchedule');
-            ModernAlert.confirm({ title: 'Delete tentative schedule?', text: 'This removes the plan permanently.', icon: 'warning', confirmText: 'Delete schedule' })
-                .then(result => { if (result.isConfirmed) form.submit(); });
-        });
-    </script>
+    <script src="~/msap/js/schedule-actions.js" asp-append-version="true"></script>
 }

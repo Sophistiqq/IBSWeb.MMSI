@@ -129,7 +129,7 @@ namespace IBS.DataAccess.MSAP.Repository
             Tugboat = new TugboatRepository(_db);
             TugMaster = new TugMasterRepository(_db);
             TugboatOwner = new TugboatOwnerRepository(_db);
-            UserAccess = new UserAccessRepository(_db);
+            UserAccess = new UserAccessRepository(_db, sharedDb);
             Vessel = new VesselRepository(_db);
             VesselSchedule = new VesselScheduleRepository(_db);
 

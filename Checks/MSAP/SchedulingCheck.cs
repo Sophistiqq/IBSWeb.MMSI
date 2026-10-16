@@ -34,7 +34,7 @@ namespace Checks.MSAP
                     .Where(m => m.Name is "Cancel" or "CompleteBooking")))
             {
                 var filter = method.GetCustomAttributes(typeof(RequireAccessAttribute), true).Cast<RequireAccessAttribute>().Single();
-                var permission = method.Name == "Confirm" ? ProcedureEnum.CreateJobOrder : ProcedureEnum.EditJobOrder;
+                var permission = method.Name == "Confirm" ? ProcedureEnum.ApproveSchedule : ProcedureEnum.EditJobOrder;
                 foreach (bool allowed in new[] { false, true })
                 {
                     using var provider = new ServiceCollection().AddSingleton<IAccessControlService>(new CheckAccess(allowed ? permission : null)).BuildServiceProvider();
@@ -66,8 +66,12 @@ namespace Checks.MSAP
                     pg => pg.MigrationsHistoryTable("__EFMigrationsHistory", "msap")).Options;
                 await using var db = new MsapDbContext(options);
                 await using var shared = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseNpgsql(settings.ConnectionString).Options);
-                // MSAP notifications reference the shared directory, which these workflow checks do not use.
-                await db.Database.ExecuteSqlRawAsync("CREATE TABLE public.\"AspNetUsers\" (id text PRIMARY KEY)");
+                // Approval details read the shared user directory; create only its mapped columns in the isolated database.
+                var userTable = db.Model.GetRelationalModel().Tables.Single(table => table.Schema == "public" && table.Name == "AspNetUsers");
+                string userColumns = string.Join(", ", userTable.Columns.Select(column => $"\"{column.Name}\" {column.StoreType}"));
+                await db.Database.ExecuteSqlRawAsync($"CREATE TABLE public.\"AspNetUsers\" ({userColumns}, PRIMARY KEY (id))");
+                db.ApplicationUsers.Add(new IBS.Models.ApplicationUser { Id = "check", UserName = "check", Name = "Check reviewer", Department = "Operations" });
+                await db.SaveChangesAsync();
                 await db.Database.MigrateAsync();
                 Check(!db.Database.HasPendingModelChanges(), "Scheduling migration does not match the model.");
                 var customer = new Customer { CustomerCode = "SCH01", CustomerName = "Schedule Check", CustomerAddress = "Check Address", CustomerTin = "000-000-000-00000", CustomerTerms = "COD", CustomerType = "Regular", VatType = "Vatable", ZipCode = "1000", Company = "MMSI" };
@@ -151,6 +155,69 @@ namespace Checks.MSAP
                     db.ChangeTracker.Clear();
                     return await db.MsapVesselSchedules.SingleAsync(s => s.VesselScheduleId == id);
                 }
+                var prepared = Booking(26);
+                prepared.CosDiscountPercent = 12.5m;
+                prepared.SbmaEnabled = true;
+                prepared.ServiceEntries = [new VesselScheduleServiceEntry
+                {
+                    TugboatId = tug.TugboatId, ServiceId = serviceType.ServiceId,
+                    TariffBasis = TariffChargeBasis.PerHour, BafMethod = BafCalculationMethod.PerMove,
+                    ManualTariffRate = 0m, ManualBafRate = 29000m
+                }];
+                Check((await schedules.CreateAsync(prepared, "check")).IsSuccess, "Could not save schedule commercial settings and expected services.");
+                var restored = await schedules.GetByIdAsync(prepared.VesselScheduleId);
+                Check(restored!.ServiceEntries.Count == 1 && restored.CosDiscountPercent == 12.5m && restored.SbmaEnabled
+                    && restored.ServiceEntries[0].ManualTariffRate == 0m, "Schedule details lost expected services, a zero manual rate or commercial settings.");
+                int savedEntryId = restored.ServiceEntries[0].VesselScheduleServiceEntryId;
+                var reviewController = new IBSWeb.Areas.MSAP.Controllers.VesselScheduleController(work, schedules, new CheckAccess(ProcedureEnum.ApproveSchedule));
+                reviewController.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+                Check(await reviewController.Confirm(prepared.VesselScheduleId, default) is RedirectToActionResult reviewPage
+                    && reviewPage.ActionName == "Details", "The old confirmation route did not lead to canonical booking details.");
+                Check(await reviewController.Details(prepared.VesselScheduleId, default) is ViewResult detailsPage
+                    && detailsPage.Model is VesselSchedule detailed && detailed.VesselScheduleId == prepared.VesselScheduleId,
+                    "The calendar booking details route did not render its review data.");
+                reviewController.Request.Headers["X-Requested-With"] = "XMLHttpRequest";
+                Check(await reviewController.Confirm(prepared.VesselScheduleId, default) is PartialViewResult,
+                    "The existing AJAX review response was not preserved.");
+                var serviceEdit = Booking(26);
+                serviceEdit.VesselScheduleId = prepared.VesselScheduleId;
+                serviceEdit.ServiceEntries = [new VesselScheduleServiceEntry
+                {
+                    VesselScheduleServiceEntryId = savedEntryId, TugboatId = tug.TugboatId, ServiceId = serviceType.ServiceId,
+                    TariffBasis = TariffChargeBasis.PerMove, BafMethod = BafCalculationMethod.PerHour, ManualBafRate = 35000m
+                }];
+                Check((await schedules.UpdateAsync(serviceEdit, "check")).IsSuccess, "Could not update an expected service row.");
+                foreach (string invalidCase in new[] { "foreign-row", "duplicate-row", "unknown-service", "unassigned-tug", "invalid-method", "negative-rate" })
+                {
+                    var row = serviceEdit.ServiceEntries[0];
+                    row.VesselScheduleServiceEntryId = savedEntryId;
+                    row.ServiceId = serviceType.ServiceId;
+                    row.TugboatId = tug.TugboatId;
+                    row.BafMethod = BafCalculationMethod.PerHour;
+                    row.ManualBafRate = 35000m;
+                    switch (invalidCase)
+                    {
+                        case "foreign-row": row.VesselScheduleServiceEntryId = int.MaxValue; break;
+                        case "duplicate-row": serviceEdit.ServiceEntries.Add(row); break;
+                        case "unknown-service": row.ServiceId = int.MaxValue; break;
+                        case "unassigned-tug": row.TugboatId = int.MaxValue; break;
+                        case "invalid-method": row.BafMethod = (BafCalculationMethod)99; break;
+                        case "negative-rate": row.ManualBafRate = -1m; break;
+                    }
+                    Check(!(await schedules.UpdateAsync(serviceEdit, "check")).IsSuccess, $"Schedule accepted {invalidCase}.");
+                    if (serviceEdit.ServiceEntries.Count > 1) serviceEdit.ServiceEntries.RemoveAt(1);
+                    db.ChangeTracker.Clear();
+                    var unchanged = await schedules.GetByIdAsync(prepared.VesselScheduleId);
+                    Check(unchanged!.ServiceEntries.Count == 1 && unchanged.ServiceEntries[0].VesselScheduleServiceEntryId == savedEntryId
+                        && unchanged.ServiceEntries[0].ManualBafRate == 35000m, $"Rejected {invalidCase} changed saved service rows.");
+                }
+                serviceEdit.ServiceEntries.Clear();
+                Check((await schedules.UpdateAsync(serviceEdit, "check")).IsSuccess, "Could not remove an unused expected service row.");
+                db.ChangeTracker.Clear();
+                Check(!(await schedules.GetByIdAsync(prepared.VesselScheduleId))!.ServiceEntries.Any(), "Removed expected services remained saved.");
+                Check((await schedules.DeleteAsync(prepared.VesselScheduleId, "check")).IsSuccess, "Could not remove the tentative check booking.");
+                Console.WriteLine("PASS: schedule commercial settings, zero/manual rates, service-row edits/removal and rejected foreign/duplicate/invalid inputs preserve saved data.");
+
                 var booking = Booking(1);
                 booking.Status = MsapConstants.VesselScheduleStatus.Confirmed;
                 booking.JobOrderId = 999;
@@ -546,30 +613,39 @@ namespace Checks.MSAP
                 Check((await schedules.UpdateAsync(tugAddition, "check")).IsSuccess, "Could not add a tugboat to the confirmed booking.");
                 revisable = await Reload(revisable.VesselScheduleId);
                 originalOrder = await db.MsapJobOrders.SingleAsync(j => j.JobOrderId == firstConfirmation.Data);
-                Check(revisable.Status == MsapConstants.VesselScheduleStatus.Confirmed && revisable.JobOrderId == firstConfirmation.Data
+                Check(revisable.Status == MsapConstants.VesselScheduleStatus.Tentative && revisable.JobOrderId == firstConfirmation.Data
+                    && revisable.Revision == 2 && revisable.ApprovedRevision == 1
                     && originalOrder.Status == MsapConstants.JobOrderStatus.Open && originalOrder.RequiredTugCount == 2
                     && originalOrder.PreferredTugboatId == tug.TugboatId && await db.MsapJobOrders.CountAsync() == orderCount,
-                    "Adding only tugboats invalidated or replaced the Job Order, lost confirmation, or failed to update its tug count.");
-                var repeatedAssignment = Booking(28);
-                repeatedAssignment.VesselScheduleId = revisable.VesselScheduleId;
-                repeatedAssignment.AssignedTugboatIds = JsonSerializer.Serialize(new[] { additionalTug.TugboatId, tug.TugboatId, additionalTug.TugboatId });
-                Check((await schedules.UpdateAsync(repeatedAssignment, "check")).IsSuccess, "Reordered duplicate tug assignments could not be saved.");
+                    "Adding tugboats failed to increment revision, preserve Job Order identity, or require reapproval.");
+                db.MsapPostedPeriods.Add(new MsapPostedPeriod { Year = 2030, Month = 1, IsClosed = true });
+                await db.SaveChangesAsync();
+                Check(!(await schedules.ConfirmAsync(revisable.VesselScheduleId, revisable.EditedDate!.Value, "check")).IsSuccess,
+                    "Reapproval bypassed the closed-period guard.");
+                db.ChangeTracker.Clear();
+                var stillPending = await Reload(revisable.VesselScheduleId);
+                Check(stillPending.ApprovedRevision == 1 && stillPending.Revision == 2, "Rejected reapproval changed approval evidence.");
+                db.Remove(await db.MsapPostedPeriods.SingleAsync());
+                await db.SaveChangesAsync();
+                var firstReapproval = await schedules.ConfirmAsync(revisable.VesselScheduleId, revisable.EditedDate!.Value, "check");
+                Check(firstReapproval.IsSuccess && firstReapproval.Data == firstConfirmation.Data, "Reapproval failed or replaced the Job Order.");
                 revisable = await Reload(revisable.VesselScheduleId);
-                Check(revisable.JobOrderId == firstConfirmation.Data && revisable.Status == MsapConstants.VesselScheduleStatus.Confirmed
-                    && await db.MsapJobOrders.CountAsync() == orderCount, "An unchanged tugboat set caused unnecessary invalidation.");
+                Check(revisable.Status == MsapConstants.VesselScheduleStatus.Confirmed && revisable.ApprovedRevision == 2
+                    && revisable.ApprovedByUserId == "check" && await db.MsapJobOrders.CountAsync() == orderCount,
+                    "Reapproval failed to confirm revision 2 or record approval evidence.");
                 var newPlan = Booking(28);
                 newPlan.VesselScheduleId = revisable.VesselScheduleId;
                 newPlan.PlannedStart = newPlan.PlannedStart.AddHours(1);
                 newPlan.PlannedEnd = newPlan.PlannedEnd.AddHours(1);
                 Check((await schedules.UpdateAsync(newPlan, "check")).IsSuccess, "Unused confirmed booking could not be revised.");
                 revisable = await Reload(revisable.VesselScheduleId);
-                originalOrder = await db.MsapJobOrders.SingleAsync(j => j.JobOrderId == firstConfirmation.Data);
-                Check(revisable.Status == MsapConstants.VesselScheduleStatus.Tentative && revisable.JobOrderId == null
-                    && originalOrder.Status == MsapConstants.JobOrderStatus.Invalidated && await db.MsapJobOrders.CountAsync() == orderCount,
-                    "Revision failed to retain and invalidate the unused order or return the booking to Tentative.");
-                var replacement = await schedules.ConfirmAsync(revisable.VesselScheduleId, revisable.EditedDate!.Value, "check");
-                Check(replacement.IsSuccess && replacement.Data != firstConfirmation.Data && await db.MsapJobOrders.CountAsync() == orderCount + 1,
-                    "Reconfirmation did not create a new numbered replacement order.");
+                Check(revisable.Status == MsapConstants.VesselScheduleStatus.Tentative && revisable.JobOrderId == firstConfirmation.Data
+                    && revisable.Revision == 3 && revisable.ApprovedRevision == 2 && await db.MsapJobOrders.CountAsync() == orderCount,
+                    "Window revision failed to preserve Job Order identity, increment revision, or return booking to Tentative.");
+                var secondReapproval = await schedules.ConfirmAsync(revisable.VesselScheduleId, revisable.EditedDate!.Value, "check");
+                Check(secondReapproval.IsSuccess && secondReapproval.Data == firstConfirmation.Data && await db.MsapJobOrders.CountAsync() == orderCount,
+                    "Reapproval did not retain the existing Job Order.");
+                var replacement = secondReapproval;
                 var outsider = new Tugboat { TugboatNumber = "002", TugboatName = "Unassigned Tug", PortId = port.PortId, IsCompanyOwned = true };
                 db.Add(outsider);
                 await db.SaveChangesAsync();
@@ -599,7 +675,7 @@ namespace Checks.MSAP
                 directOptions.ServiceId = serviceType.ServiceId;
                 Check((await dispatcher.CreateDispatchTicketAsync(directOptions, null, null, "check", default)).IsSuccess, "Direct ticket entry failed.");
                 Check(!(await jobs.UpdateJobOrderAsync(directRevision, "check", default)).IsSuccess, "Direct Job Order remained editable after ticket entry.");
-                Console.WriteLine("PASS: tugboat additions preserve confirmation and the same order; other unused schedule revisions retain invalidated numbering; reconfirmation creates a replacement; scheduled orders and orders with tickets cannot be edited; assigned tugboats are enforced.");
+                Console.WriteLine("PASS: tug and booking revisions require reapproval, retain the same order and numbering, respect closed periods and record revision approval evidence; bookings with tickets remain read-only; assigned tugboats are enforced.");
                 Console.WriteLine("PASS: scheduling migration, tentative-only save, booking review, customer/tug/period/overlap guards, linked order, revisions, actual times, synchronized cancellation, billing guards, operational completion, duplicate clicks, concurrent numbering/cancellation and atomic rollback.");
             }
             finally

@@ -1,13 +1,15 @@
 using System.Linq.Expressions;
+using IBS.DataAccess.Data;
 using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository.Msap.IRepository;
 using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.MasterFile;
+using IBS.Utility.MSAP.Constants;
 using Microsoft.EntityFrameworkCore;
 
 namespace IBS.DataAccess.MSAP.Repository.Msap
 {
-    public class UserAccessRepository(MsapDbContext db): Repository<UserAccess>(db), IUserAccessRepository
+    public class UserAccessRepository(MsapDbContext db, ApplicationDbContext sharedDb): Repository<UserAccess>(db), IUserAccessRepository
     {
         private readonly MsapDbContext _db = db;
 
@@ -61,6 +63,23 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             };
 
             var userIds = await query.Select(u => u.UserId).ToListAsync(cancellationToken);
+
+            if (procedure == ProcedureEnum.ApproveSchedule)
+            {
+                var activeUsers = await _db.Users.AsNoTracking().Where(user => user.IsActive)
+                    .Select(user => user.Id).ToListAsync(cancellationToken);
+                var claims = (await sharedDb.UserClaims.AsNoTracking().Where(claim => claim.ClaimType == MsapRoles.ClaimType)
+                    .ToListAsync(cancellationToken)).ToLookup(claim => claim.UserId);
+                var sharedAdmins = (await _db.UserRoles
+                    .Join(_db.Roles, userRole => userRole.RoleId, role => role.Id, (userRole, role) => new { userRole.UserId, role.Name })
+                    .Where(role => role.Name == MsapRoles.Admin).Select(role => role.UserId).ToListAsync(cancellationToken)).ToHashSet();
+                var assignedUsers = userIds.ToHashSet();
+                return activeUsers.Where(id =>
+                {
+                    string? role = MsapRoles.GetRole(claims[id].Select(claim => claim.ToClaim()), sharedAdmins.Contains(id));
+                    return role is MsapRoles.Admin or MsapRoles.SuperAdmin || role == MsapRoles.User && assignedUsers.Contains(id);
+                }).ToList();
+            }
 
             if (procedure is ProcedureEnum.ApproveSchedule or ProcedureEnum.ApproveRateUpload or ProcedureEnum.ApproveFinalBilling)
             {

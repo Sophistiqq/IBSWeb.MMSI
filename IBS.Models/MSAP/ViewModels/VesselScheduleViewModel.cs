@@ -49,6 +49,22 @@ namespace IBS.Models.MSAP.ViewModels
 
         public bool AllowConflicts { get; set; }
 
+        [Display(Name = "COS Discount %")]
+        [Range(typeof(decimal), "0", "100", ErrorMessage = "COS Discount must be between 0% and 100%")]
+        public decimal? CosDiscountPercent { get; set; }
+
+        [Display(Name = "Skip COS Discount")]
+        public bool SkipCosDiscount { get; set; }
+
+        [Display(Name = "SBMA (₱87.50 / hour)")]
+        public bool SbmaEnabled { get; set; }
+
+        public int Revision { get; set; } = 1;
+
+        public int? ApprovedRevision { get; set; }
+
+        public List<VesselScheduleServiceEntryViewModel> ServiceEntries { get; set; } = new();
+
         #region ---Select Lists---
 
         public List<SelectListItem> Vessels { get; set; } = new();
@@ -60,6 +76,8 @@ namespace IBS.Models.MSAP.ViewModels
         public List<SelectListItem> Tugboats { get; set; } = new();
 
         public List<SelectListItem> Customers { get; set; } = new();
+
+        public List<SelectListItem> Services { get; set; } = new();
 
         #endregion
     }
