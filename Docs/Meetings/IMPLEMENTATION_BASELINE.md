@@ -60,6 +60,10 @@ Phase 1c completes customer-default discount maintenance: the existing MSAP cust
 
 Phase 1c verification: solution build passed with zero warnings/errors. The focused `--customer-discount-database` check passed against disposable PostgreSQL, including create/edit, zero and 100% boundaries, invalid model/direct writes, saved audit entries, edit projection, and both Excel export paths. Compiled Razor checks verified the field and client validation in both forms. Excel checks use the application's existing licence configuration. No authenticated browser session or deployment migration was performed.
 
+Phase 1d adds nullable schedule commercial snapshots (`CosDiscountPercent`, `SkipCosDiscount`, `SbmaEnabled`) and per-service tariff charging basis, BAF method, and manual tariff/BAF values. The four BAF selections have stable explicit enum values; Lumpsum/Industry selections do not imply a confirmed calculation. Null means unset; an explicit zero remains distinct. Constraints reject invalid percentages, method/basis codes, and negative manual rates. This slice adds storage only: no rate resolution, automatic customer-default copy, new UI path, approval, or financial behavior is enabled.
+
+Phase 1d verification: solution build passed with zero warnings/errors. The focused service-entry PostgreSQL check passed migration/model consistency and round trips for all four BAF choices, separate per-service tariff bases, preserved manual values, nullable versus zero values, discount skip/SBMA switches, and a schedule snapshot remaining unchanged after its customer's default changes. Direct invalid writes are rejected. No deployment database was changed.
+
 Before implementing dependent milestones, resolve:
 
 - Actual tariff/BAF upload columns, matching keys, company/table scope, and weekly coverage. Actual service date governs historical lookup, as clarified; this does not settle upload scope or mid-Tuesday effective-date policy.

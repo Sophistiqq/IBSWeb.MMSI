@@ -82,5 +82,13 @@ namespace IBS.Models.MSAP
         public DateTime? EditedDate { get; set; }
 
         public List<VesselScheduleServiceEntry> ServiceEntries { get; set; } = [];
+
+        [Range(typeof(decimal), "0", "100")]
+        [Column(TypeName = "numeric(18,4)")]
+        public decimal? CosDiscountPercent { get; set; }
+
+        public bool SkipCosDiscount { get; set; }
+
+        public bool SbmaEnabled { get; set; }
     }
 }

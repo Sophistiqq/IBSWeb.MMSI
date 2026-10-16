@@ -205,6 +205,8 @@ namespace IBS.DataAccess.MSAP.Data
 
             builder.Entity<VesselSchedule>(vs =>
             {
+                vs.ToTable(table => table.HasCheckConstraint("ck_vessel_schedules_cos_discount_percent",
+                    "cos_discount_percent BETWEEN 0 AND 100"));
                 vs.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
                 vs.HasIndex(x => x.Status);
                 vs.HasIndex(x => x.PlannedStart);
@@ -218,6 +220,15 @@ namespace IBS.DataAccess.MSAP.Data
 
             builder.Entity<VesselScheduleServiceEntry>(entry =>
             {
+                entry.Property(x => x.TariffBasis).HasConversion<short>();
+                entry.Property(x => x.BafMethod).HasConversion<short>();
+                entry.ToTable(table =>
+                {
+                    table.HasCheckConstraint("ck_schedule_service_entries_tariff_basis", "tariff_basis IN (1, 2)");
+                    table.HasCheckConstraint("ck_schedule_service_entries_baf_method", "baf_method IN (1, 2, 3, 4)");
+                    table.HasCheckConstraint("ck_schedule_service_entries_manual_tariff_rate", "manual_tariff_rate >= 0");
+                    table.HasCheckConstraint("ck_schedule_service_entries_manual_baf_rate", "manual_baf_rate >= 0");
+                });
                 entry.HasOne(x => x.VesselSchedule).WithMany(x => x.ServiceEntries)
                     .HasForeignKey(x => x.VesselScheduleId).OnDelete(DeleteBehavior.Restrict);
                 entry.HasOne(x => x.Tugboat).WithMany()

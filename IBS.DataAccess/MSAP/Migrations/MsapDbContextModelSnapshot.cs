@@ -2352,6 +2352,11 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("text")
                         .HasColumnName("assigned_tugboat_ids");
 
+                    b.Property<decimal?>("CosDiscountPercent")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("cos_discount_percent");
+
                     b.Property<string>("CreatedBy")
                         .HasColumnType("varchar(100)")
                         .HasColumnName("created_by");
@@ -2395,6 +2400,14 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Property<int>("RequiredTugCount")
                         .HasColumnType("integer")
                         .HasColumnName("required_tug_count");
+
+                    b.Property<bool>("SbmaEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("sbma_enabled");
+
+                    b.Property<bool>("SkipCosDiscount")
+                        .HasColumnType("boolean")
+                        .HasColumnName("skip_cos_discount");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -2441,7 +2454,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.HasIndex("PortId", "TerminalId")
                         .HasDatabaseName("ix_mmsi_vessel_schedules_port_id_terminal_id");
 
-                    b.ToTable("mmsi_vessel_schedules", "msap");
+                    b.ToTable("mmsi_vessel_schedules", "msap", t =>
+                        {
+                            t.HasCheckConstraint("ck_vessel_schedules_cos_discount_percent", "cos_discount_percent BETWEEN 0 AND 100");
+                        });
                 });
 
             modelBuilder.Entity("IBS.Models.MSAP.VesselScheduleServiceEntry", b =>
@@ -2453,9 +2469,27 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("VesselScheduleServiceEntryId"));
 
+                    b.Property<short?>("BafMethod")
+                        .HasColumnType("smallint")
+                        .HasColumnName("baf_method");
+
+                    b.Property<decimal?>("ManualBafRate")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("manual_baf_rate");
+
+                    b.Property<decimal?>("ManualTariffRate")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("manual_tariff_rate");
+
                     b.Property<int>("ServiceId")
                         .HasColumnType("integer")
                         .HasColumnName("service_id");
+
+                    b.Property<short?>("TariffBasis")
+                        .HasColumnType("smallint")
+                        .HasColumnName("tariff_basis");
 
                     b.Property<int>("TugboatId")
                         .HasColumnType("integer")
@@ -2477,7 +2511,16 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.HasIndex("VesselScheduleId")
                         .HasDatabaseName("ix_mmsi_vessel_schedule_service_entries_vessel_schedule_id");
 
-                    b.ToTable("mmsi_vessel_schedule_service_entries", "msap");
+                    b.ToTable("mmsi_vessel_schedule_service_entries", "msap", t =>
+                        {
+                            t.HasCheckConstraint("ck_schedule_service_entries_baf_method", "baf_method IN (1, 2, 3, 4)");
+
+                            t.HasCheckConstraint("ck_schedule_service_entries_manual_baf_rate", "manual_baf_rate >= 0");
+
+                            t.HasCheckConstraint("ck_schedule_service_entries_manual_tariff_rate", "manual_tariff_rate >= 0");
+
+                            t.HasCheckConstraint("ck_schedule_service_entries_tariff_basis", "tariff_basis IN (1, 2)");
+                        });
                 });
 
             modelBuilder.Entity("IBS.Models.Notification", b =>
