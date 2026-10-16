@@ -77,6 +77,7 @@ namespace IBS.DataAccess.MSAP.Repository.MasterFile
             existingCustomer.RequiresPriceAdjustment = model.RequiresPriceAdjustment;
             existingCustomer.StationCode = model.StationCode;
             existingCustomer.CommissionRate = model.CommissionRate;
+            existingCustomer.DefaultCosDiscountPercent = model.DefaultCosDiscountPercent;
             existingCustomer.CommissioneeId = model.CommissioneeId;
 
             if (_db.ChangeTracker.HasChanges())

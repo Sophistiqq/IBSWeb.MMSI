@@ -93,6 +93,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 .GetFilprideTermsListAsyncByCode(cancellationToken);
             model.Commissionees = await unitOfWork.GetCommissioneeListAsyncById(companyClaims, cancellationToken);
 
+            // Customer codes are generated after validation, never supplied by the create form.
+            ModelState.Remove(nameof(CustomerViewModel.CustomerCode));
             if (!ModelState.IsValid)
             {
                 return View(model);
@@ -118,7 +120,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 #region -- Audit Trail Recording
 
                 AuditTrail auditTrailBook = new(model.CreatedBy!,
-                    $"Created new Customer #{model.CustomerCode}", "Customer");
+                    $"Created new Customer #{model.CustomerCode}; default COS discount: {model.DefaultCosDiscountPercent}%", "Customer");
                 await unitOfWork.AuditTrail.AddAsync(auditTrailBook, cancellationToken);
 
                 #endregion -- Audit Trail Recording --
@@ -168,8 +170,20 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(CustomerViewModel model, CancellationToken cancellationToken)
         {
+            string? company = await GetCompanyClaimAsync();
+            if (company == null)
+            {
+                return BadRequest();
+            }
+
             model.PaymentTerms = await unitOfWork.Terms
                 .GetFilprideTermsListAsyncByCode(cancellationToken);
+            model.Commissionees = await unitOfWork.GetCommissioneeListAsyncById(company, cancellationToken);
+
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
 
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
@@ -181,7 +195,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 #region --Audit Trail Recording
 
                 AuditTrail auditTrailBook = new (model.EditedBy,
-                    $"Edited Customer #{model.CustomerCode}", "Customer" );
+                    $"Edited Customer #{model.CustomerCode}; default COS discount: {model.DefaultCosDiscountPercent}%", "Customer" );
                 await unitOfWork.AuditTrail.AddAsync(auditTrailBook, cancellationToken);
 
                 #endregion --Audit Trail Recording
@@ -570,6 +584,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             worksheet.Cells["K1"].Value = "CreatedDate";
             worksheet.Cells["L1"].Value = "OriginalCustomerId";
             worksheet.Cells["M1"].Value = "OriginalCustomerNumber";
+            worksheet.Cells["N1"].Value = "DefaultCosDiscountPercent";
 
             int row = 2;
 
@@ -588,6 +603,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 worksheet.Cells[row, 11].Value = item.CreatedDate.ToString("yyyy-MM-dd HH:mm:ss.ffffff");
                 worksheet.Cells[row, 12].Value = item.CustomerId;
                 worksheet.Cells[row, 13].Value = item.CustomerCode;
+                worksheet.Cells[row, 14].Value = item.DefaultCosDiscountPercent;
 
                 row++;
             }

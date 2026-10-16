@@ -119,6 +119,27 @@ if (args.Contains("--calendar-render-only", StringComparer.Ordinal))
 {
     return;
 }
+foreach (string customerAction in new[] { "Create", "Edit" })
+{
+    var http = new DefaultHttpContext { RequestServices = services };
+    http.SetEndpoint(new Endpoint(_ => Task.CompletedTask, new EndpointMetadataCollection(), "Customer discount rendering check"));
+    var context = new ActionContext(http, new RouteData(), moduleActions.First(a => a.ControllerName == "Customer" && a.ActionName == customerAction));
+    context.RouteData.Values["area"] = "MSAP";
+    context.RouteData.Values["controller"] = "Customer";
+    context.RouteData.Values["action"] = customerAction;
+    var data = new ViewDataDictionary<IBS.Models.MSAP.MasterFile.CustomerViewModel>(services.GetRequiredService<Microsoft.AspNetCore.Mvc.ModelBinding.IModelMetadataProvider>(), new Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary())
+    {
+        Model = new IBS.Models.MSAP.MasterFile.CustomerViewModel { DefaultCosDiscountPercent = 12.5m }
+    };
+    using var output = new StringWriter();
+    var view = engine.GetView(null, $"/Areas/MSAP/Views/Customer/{customerAction}.cshtml", false);
+    await view.View!.RenderAsync(new ViewContext(context, view.View, data,
+        services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), output, new HtmlHelperOptions()));
+    string html = output.ToString();
+    Check(html.Contains("name=\"DefaultCosDiscountPercent\"", StringComparison.Ordinal) && html.Contains("data-val-range-max=\"100\"", StringComparison.Ordinal)
+        && html.Contains("data-val-range-min=\"0\"", StringComparison.Ordinal), "Customer discount field or client validation is missing.");
+}
+Console.WriteLine("PASS: customer create/edit render the default COS discount and client validation.");
 foreach (string emptyAmount in new[] { "", "0.00" })
 {
     var controller = ActivatorUtilities.CreateInstance<IBSWeb.Areas.MSAP.Controllers.CollectionController>(services);
@@ -376,10 +397,11 @@ finally
     await storage.DeleteFileAsync(fileName);
 }
 Console.WriteLine("PASS: unsafe storage paths rejected for upload, URL, download and deletion; nested attachment round-trip.");
-if (args.Contains("--database", StringComparer.Ordinal) || args.Contains("--approval-database", StringComparer.Ordinal))
+if (args.Contains("--database", StringComparer.Ordinal) || args.Contains("--approval-database", StringComparer.Ordinal)
+    || args.Contains("--customer-discount-database", StringComparer.Ordinal))
 {
     await Checks.MSAP.DatabaseCheck.RunAsync(storage, services.GetRequiredService<ITempDataDictionaryFactory>(),
-        args.Contains("--approval-database", StringComparer.Ordinal));
+        args.Contains("--approval-database", StringComparer.Ordinal), args.Contains("--customer-discount-database", StringComparer.Ordinal));
 }
 if (args.Contains("--scheduling-database", StringComparer.Ordinal) || args.Contains("--calendar-database", StringComparer.Ordinal)
     || args.Contains("--service-entries-database", StringComparer.Ordinal))

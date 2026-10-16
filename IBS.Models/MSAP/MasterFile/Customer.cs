@@ -128,6 +128,11 @@ namespace IBS.Models.MSAP.MasterFile
 
         public decimal CommissionRate { get; set; }
 
+        [Display(Name = "Default COS discount (%)")]
+        [Range(typeof(decimal), "0", "100", ErrorMessage = "Default COS discount must be between 0 and 100 percent.")]
+        [Column(TypeName = "numeric(18,4)")]
+        public decimal DefaultCosDiscountPercent { get; set; }
+
         [NotMapped]
         public List<SelectListItem>? Commissionees { get; set; }
 

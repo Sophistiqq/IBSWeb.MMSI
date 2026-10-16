@@ -1303,6 +1303,13 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("customer_type");
 
+                    b.Property<decimal>("DefaultCosDiscountPercent")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("default_cos_discount_percent");
+
                     b.Property<string>("EditedBy")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
@@ -1377,7 +1384,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.HasIndex("CustomerName")
                         .HasDatabaseName("ix_customers_customer_name");
 
-                    b.ToTable("customers", "msap");
+                    b.ToTable("customers", "msap", t =>
+                        {
+                            t.HasCheckConstraint("ck_customers_default_cos_discount_percent", "default_cos_discount_percent BETWEEN 0 AND 100");
+                        });
                 });
 
             modelBuilder.Entity("IBS.Models.MSAP.MasterFile.Employee", b =>

@@ -29,7 +29,8 @@ namespace Checks.MSAP
 {
     internal static class DatabaseCheck
     {
-        public static async Task RunAsync(ICloudStorageService storage, ITempDataDictionaryFactory tempData, bool approvalsOnly = false)
+        public static async Task RunAsync(ICloudStorageService storage, ITempDataDictionaryFactory tempData, bool approvalsOnly = false,
+            bool customerDiscountOnly = false)
         {
             var sourceConfig = new ConfigurationBuilder().SetBasePath(Path.GetFullPath("../MSAP/IBSWeb"))
                 .AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", optional: true).Build();
@@ -110,6 +111,11 @@ namespace Checks.MSAP
                 Check(await dashboardWork.Terms.ComputeDueDateAsync("M15", new DateOnly(2026, 10, 6)) == new DateOnly(2026, 11, 15),
                     "Shared month-based due-date calculation changed.");
                 await RoleCheck.RunAsync(users, identityServices.GetRequiredService<RoleManager<IdentityRole>>(), dashboardWork);
+                if (customerDiscountOnly)
+                {
+                    await CustomerDiscountCheck.RunAsync(module, dashboardWork, users, tempData);
+                    return;
+                }
                 if (approvalsOnly)
                 {
                     return;

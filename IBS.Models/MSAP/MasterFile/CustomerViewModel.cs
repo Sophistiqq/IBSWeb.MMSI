@@ -36,6 +36,7 @@ namespace IBS.Models.MSAP.MasterFile
             RequiresPriceAdjustment = entity.RequiresPriceAdjustment;
             CommissioneeId = entity.CommissioneeId;
             CommissionRate = entity.CommissionRate;
+            DefaultCosDiscountPercent = entity.DefaultCosDiscountPercent;
             MsapRecId = entity.MsapRecId;
         }
     }

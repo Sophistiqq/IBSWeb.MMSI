@@ -111,6 +111,15 @@
                                 </div>
                             </div>
 
+                            <div class="modern-grid mt-3">
+                                <div class="modern-col-4">
+                                    <label asp-for="DefaultCosDiscountPercent" class="modern-label"></label>
+                                    <input asp-for="DefaultCosDiscountPercent" type="number" min="0" max="100" step="0.0001" class="modern-input" aria-describedby="cosDiscountHelp" />
+                                    <span asp-validation-for="DefaultCosDiscountPercent" class="text-error text-xs"></span>
+                                    <small id="cosDiscountHelp">Customer default for the COS discount. Enter 10 for 10%.</small>
+                                </div>
+                            </div>
+
                             <div class="modern-grid mt-3" id="station-div" style="display:none;">
                                 <div class="modern-col-6">
                                     <label asp-for="StationCode" class="modern-label">Station Code <span class="text-error">*</span></label>
@@ -177,6 +186,7 @@
 </div>
 
 @section Scripts {
+    <partial name="_ValidationScriptsPartial" />
     <script>
         $(document).ready(function () {
             function toggleStationDiv() {

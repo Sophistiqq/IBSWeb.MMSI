@@ -128,6 +128,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             new() { Header = "STATION CODE", ValueSelector = c => ((Customer)c).StationCode ?? "" },
             new() { Header = "TYPE", ValueSelector = c => ((Customer)c).Type },
             new() { Header = "DEFAULT COMMISION RATE", ValueSelector = c => ((Customer)c).CommissionRate },
+            new() { Header = "DEFAULT COS DISCOUNT (%)", ValueSelector = c => ((Customer)c).DefaultCosDiscountPercent },
             new() { Header = "DEFAULT COMMISIONEE", ValueSelector = c => ((Customer)c).Commissionee?.SupplierName ?? ""},
             new() { Header = "STATUS", ValueSelector = c => ((Customer)c).IsActive ? "Active" : "Inactive" },
             };

@@ -56,6 +56,10 @@ Phase 1b verification: the solution and check executable build with zero warning
 
 The existing `--scheduling-database` regression also passed after this addition, including current confirmation/revision behavior, overlap/closed-period checks, booking completion, billing guards, concurrency, and rollback. Passing these existing-flow checks does not mean the planned RML/reapproval workflow has been enabled.
 
+Phase 1c completes customer-default discount maintenance: the existing MSAP customer create/edit screens expose `DefaultCosDiscountPercent` (0–100%, zero by default), the repository and edit projection retain it, and both customer Excel exports include it. Customer audits record the saved percentage. Create ignores validation of its internally generated customer code; edit now checks model validation and repopulates its select lists before returning errors. The additive migration adds a `numeric(18,4)` column and a range constraint within `msap.customers`. Imports that omit this new optional default start at zero. No existing ticket discount, tariff lookup, or billing calculation is changed; copying the default into a COS belongs to the following workflow slice.
+
+Phase 1c verification: solution build passed with zero warnings/errors. The focused `--customer-discount-database` check passed against disposable PostgreSQL, including create/edit, zero and 100% boundaries, invalid model/direct writes, saved audit entries, edit projection, and both Excel export paths. Compiled Razor checks verified the field and client validation in both forms. Excel checks use the application's existing licence configuration. No authenticated browser session or deployment migration was performed.
+
 Before implementing dependent milestones, resolve:
 
 - Actual tariff/BAF upload columns, matching keys, company/table scope, and weekly coverage. Actual service date governs historical lookup, as clarified; this does not settle upload scope or mid-Tuesday effective-date policy.
