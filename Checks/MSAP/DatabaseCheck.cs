@@ -128,9 +128,9 @@ namespace Checks.MSAP
                 }
                 var roles = new RoleService(users);
                 var access = new AccessControlService(users, new UserAccessService(dashboardWork, users, roles, NullLogger<UserAccessService>.Instance));
-                var dashboard = new IBSWeb.Areas.MSAP.Controllers.HomeController(users, module, access,
+                var dashboard = new IBSWeb.Areas.MSAP.Controllers.HomeController(users, module, access, new DashboardService(module,
                     new VesselScheduleService(dashboardWork, new CustomerOrderSlipService(dashboardWork, NullLogger<CustomerOrderSlipService>.Instance), NullLogger<VesselScheduleService>.Instance),
-                    NullLogger<IBSWeb.Areas.MSAP.Controllers.HomeController>.Instance);
+                    NullLogger<DashboardService>.Instance));
                 var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "shared-check"), new Claim("Company", "Filpride")], "check");
                 dashboard.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } };
                 var dashboardModel = (DashboardCountViewModel)((ViewResult)await dashboard.Index(default)).Model!;
@@ -141,6 +141,25 @@ namespace Checks.MSAP
                 Check(((DashboardCountViewModel)((ViewResult)await dashboard.Index(default)).Model!).ShowDashboard,
                     "Filpride PortCoordinator role hides the MSAP dashboard.");
                 Console.WriteLine("PASS: shared login opens MSAP dashboard; PortCoordinator does not hide it.");
+                var fullDashboard = new DashboardCountViewModel
+                {
+                    UpdatedAt = DateTimeHelper.GetCurrentPhilippineTime(),
+                    CanApproveSchedule = true,
+                    CanApproveBilling = true,
+                    CanViewDispatch = true,
+                    CanViewFinance = true
+                };
+                await new DashboardService(module,
+                    new VesselScheduleService(dashboardWork, new CustomerOrderSlipService(dashboardWork, NullLogger<CustomerOrderSlipService>.Instance), NullLogger<VesselScheduleService>.Instance),
+                    NullLogger<DashboardService>.Instance).LoadAsync(fullDashboard, default);
+                Check(fullDashboard.DataError == null && fullDashboard.ScheduleError == null,
+                    "Dashboard queries failed for an authorized user.");
+                Check(fullDashboard.ScheduleReviews == 0 && fullDashboard.ForPosting == 0
+                    && fullDashboard.MissingTicketCount == 0 && fullDashboard.PendingCalculationCount == 0
+                    && fullDashboard.BilledMonth == 0 && fullDashboard.ReceivedMonth == 0
+                    && fullDashboard.KnownUnbilledCharges == 0 && fullDashboard.OutstandingBalance == 0
+                    && fullDashboard.BankingCounts.Count == 0,
+                    "Empty dashboard displays fabricated workflow or finance figures.");
 
                 var customer = new Customer { CustomerCode = "CHECK01", CustomerName = "Check Customer", CustomerAddress = "Check Address", CustomerTin = "000-000-000-00000", CustomerTerms = "CHECK17", CustomerType = "Regular", VatType = "Vatable", ZipCode = "1000", Company = "MMSI" };
                 var vessel = new Vessel { VesselNumber = "0001", VesselName = "Check Vessel", VesselType = "Cargo" };
