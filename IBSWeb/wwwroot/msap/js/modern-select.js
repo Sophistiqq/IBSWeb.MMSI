@@ -60,6 +60,16 @@ const ModernSelect = {
         $container.append($trigger);
         $select.after($container);
 
+        const syncDisabled = () => {
+            const disabled = $select.prop('disabled');
+            $trigger.toggleClass('disabled', disabled).attr('aria-disabled', String(disabled)).attr('tabindex', disabled ? '-1' : '0');
+            if (disabled) {
+                $dropdown.removeClass('show');
+                $trigger.removeClass('active');
+            }
+        };
+        syncDisabled();
+
         // Initial population
         ModernSelect.populate($select, $optionsContainer, $trigger, placeholder);
 
@@ -85,6 +95,7 @@ const ModernSelect = {
         let focusOpened = false;
 
         $trigger.on('focus', function() {
+            if ($select.prop('disabled')) return;
             if (!$dropdown.hasClass('show')) {
                 $('.modern-select-dropdown').not($dropdown).removeClass('show');
                 $('.modern-select-trigger').not($trigger).removeClass('active');
@@ -106,6 +117,7 @@ const ModernSelect = {
         $trigger.on('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
+            if ($select.prop('disabled')) return;
 
             if (focusOpened) {
                 focusOpened = false;
@@ -136,6 +148,7 @@ const ModernSelect = {
         });
 
         const selectOption = ($opt) => {
+            if ($select.prop('disabled')) return;
             const val = $opt.data('value');
             const text = $opt.text();
 
@@ -289,9 +302,10 @@ const ModernSelect = {
 
         // Watch for mutations (if options are added dynamically)
         const observer = new MutationObserver(() => {
+            syncDisabled();
             ModernSelect.populate($select, $optionsContainer, $trigger, placeholder);
         });
-        observer.observe($select[0], { childList: true });
+        observer.observe($select[0], { childList: true, attributes: true, attributeFilter: ['disabled'] });
 
         $select.data('modern-select-initialized', true);
         $select.data('modern-select-trigger', $trigger);

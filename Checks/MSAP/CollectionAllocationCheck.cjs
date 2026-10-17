@@ -1,0 +1,15 @@
+const assert = require('node:assert/strict');
+const allocation = require('../../IBSWeb/wwwroot/msap/js/collection-form.js');
+const bill = { amount: 11200, net: 11000, ewt: 200, wvat: 0 };
+assert.deepEqual(allocation.calculate(bill, 11000), { ewt: 200, wvat: 0, gross: 11200, remaining: 0 });
+assert.deepEqual(allocation.calculate(bill, 5500), { ewt: 100, wvat: 0, gross: 5600, remaining: 5600 });
+assert.deepEqual(allocation.calculate({ amount: 112, net: 105, ewt: 2, wvat: 5 }, 52.5), { ewt: 1, wvat: 2.5, gross: 56, remaining: 56 });
+assert.equal(allocation.round(1.005), 1);
+assert.equal(allocation.round(1.015), 1.02);
+assert.equal(allocation.calculate(bill, 0).remaining, 11200);
+console.log('Collection allocation checks passed: full, partial, combined withholding and midpoint rounding.');
+const fs = require('node:fs');
+const path = require('node:path');
+const service = fs.readFileSync(path.join(__dirname, '../../IBS.Services/MSAP/CollectionService.cs'), 'utf8');
+assert(service.includes('if (!BillingService.CanPrint(billing))'), 'Saving must reject unapproved or stale-approved bills.');
+assert(service.includes('!BillingService.CanPrint(b)'), 'Selection must mark unapproved or stale-approved bills ineligible.');

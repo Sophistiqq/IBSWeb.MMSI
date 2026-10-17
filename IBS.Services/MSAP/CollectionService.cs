@@ -131,6 +131,10 @@ namespace IBS.Services.MSAP
 
         private async Task<Dictionary<int, decimal>> GetSettlementAllocationsAsync(CreateCollectionViewModel model, CancellationToken ct)
         {
+            if (!model.IsUndocumented && string.IsNullOrWhiteSpace(model.MsapCollectionNumber))
+            {
+                throw new InvalidOperationException("Enter the collection / receipt number or mark it undocumented.");
+            }
             if (model.Date == default || (model.CheckAmount > 0 &&
                 (!model.CheckDate.HasValue || string.IsNullOrWhiteSpace(model.CheckNumber) || string.IsNullOrWhiteSpace(model.CheckBank))))
             {
@@ -176,14 +180,9 @@ namespace IBS.Services.MSAP
                 {
                     throw new InvalidOperationException($"Billing #{billing.MsapBillingNumber} already belongs to a collection. Review or edit that receipt instead of creating another.");
                 }
-                if (billing.Status is not (MsapConstants.BillingStatus.ForCollection or MsapConstants.BillingStatus.Collected))
+                if (!BillingService.CanPrint(billing))
                 {
-                    throw new InvalidOperationException("Only posted billings can receive collection. Review and post all billings first.");
-                }
-                if (model.CustomerOrderSlipId.HasValue && billing.CustomerOrderSlipId != model.CustomerOrderSlipId
-                    && await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == model.CustomerOrderSlipId && t.BillingId == billing.MsapBillingId, ct) == null)
-                {
-                    throw new InvalidOperationException("Selected billing does not belong to this COS.");
+                    throw new InvalidOperationException("Only bills with current final approval can receive collection.");
                 }
                 string? blocker = await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, billing, JobProgressCalculator.CollectionStage, ct);
                 if (blocker != null)
@@ -418,40 +417,44 @@ namespace IBS.Services.MSAP
                     return ServiceResult<object>.Failure("Customer not found.");
                 }
 
-                var billings = await unitOfWork.Collection.GetMsapUncollectedBillingsByCustomerList(customerId, cancellationToken);
-                if (collectionId.HasValue && collectionId.Value != 0)
+                var billings = await unitOfWork.Billing.GetAllAsync(b => b.CustomerId == customerId
+                    && (b.Balance > 0 || (collectionId.HasValue && b.CollectionId == collectionId)), cancellationToken);
+                var principals = (await unitOfWork.Principal.GetAllAsync(p => p.CustomerId == customerId, cancellationToken))
+                    .ToDictionary(p => p.PrincipalId, p => p.PrincipalName);
+                int[] jobIds = billings.Select(b => b.CustomerOrderSlipId ?? b.BasicBilling?.CustomerOrderSlipId)
+                    .Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToArray();
+                var jobs = (await unitOfWork.CustomerOrderSlip.GetAllAsync(j => jobIds.Contains(j.CustomerOrderSlipId), cancellationToken))
+                    .ToDictionary(j => j.CustomerOrderSlipId, j => j.CustomerOrderSlipNumber);
+                var result = new List<object>();
+                foreach (var b in billings.OrderBy(b => b.MsapBillingNumber))
                 {
-                    var alreadyCollected = await unitOfWork.Billing.GetAllAsync(b => b.CollectionId == collectionId.Value, cancellationToken);
-                    billings.AddRange(alreadyCollected);
-                }
-
-                if (customerOrderSlipId.HasValue)
-                {
-                    IEnumerable<DispatchTicket> tickets = await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == customerOrderSlipId.Value && t.BillingId.HasValue, cancellationToken);
-                    List<int> ids = tickets.Select(t => t.BillingId!.Value).ToList();
-                    billings = billings.Where(b => b.CustomerOrderSlipId == customerOrderSlipId.Value || ids.Contains(b.MsapBillingId)).ToList();
-                }
-                var result = billings
-                    .DistinctBy(b => b.MsapBillingId)
-                    .Select(b =>
+                    bool selected = collectionId.HasValue && b.CollectionId == collectionId;
+                    decimal available = b.Balance + (selected ? b.AmountPaid : 0);
+                    var settlement = GetSettlementAmounts(b, customer, available);
+                    string? blocker = !BillingService.CanPrint(b) ? "Awaiting current final approval"
+                        : b.CollectionId.HasValue && !selected ? "Already allocated; review the existing receipt"
+                        : await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, b, JobProgressCalculator.CollectionStage, cancellationToken);
+                    result.Add(new
                     {
-                        decimal available = b.Balance + (collectionId.HasValue && b.CollectionId == collectionId ? b.AmountPaid : 0);
-                        var settlement = GetSettlementAmounts(b, customer, available);
-
-                        return new
-                        {
-                            msapBillingId = b.MsapBillingId,
-                            msapBillingNumber = b.MsapBillingNumber,
-                            date = b.Date,
-                            amount = available,
-                            balance = b.Balance,
-                            ewt = settlement.Ewt,
-                            wvat = settlement.Wvat,
-                            net = settlement.Net,
-                            isVatable = b.IsVatable,
-                            isSelected = collectionId.HasValue && b.CollectionId == collectionId.Value
-                        };
+                        msapBillingId = b.MsapBillingId,
+                        msapBillingNumber = b.MsapBillingNumber,
+                        customerOrderSlipId = b.CustomerOrderSlipId ?? b.BasicBilling?.CustomerOrderSlipId,
+                        cosNumber = jobs.GetValueOrDefault(b.CustomerOrderSlipId ?? b.BasicBilling?.CustomerOrderSlipId ?? 0),
+                        component = b.BasicBillingId.HasValue ? "BAF" : b.BafBilling != null ? "Basic" : "Combined",
+                        billedParty = b.PrincipalId.HasValue ? principals.GetValueOrDefault(b.PrincipalId.Value, "Principal") : "Customer",
+                        date = b.Date,
+                        isVatable = b.IsVatable,
+                        amount = available,
+                        balance = b.Balance,
+                        ewt = settlement.Ewt,
+                        wvat = settlement.Wvat,
+                        net = settlement.Net,
+                        isSelected = selected,
+                        paymentAmount = selected ? GetSettlementAmounts(b, customer, b.AmountPaid).Net : settlement.Net,
+                        eligible = blocker == null && available > 0 && settlement.Net > 0,
+                        reason = blocker
                     });
+                }
 
                 return ServiceResult<object>.Success(result);
             }
@@ -466,6 +469,10 @@ namespace IBS.Services.MSAP
         {
             var ids = billingIds.Select(int.Parse).ToList();
             var billings = await unitOfWork.Billing.GetAllAsync(b => ids.Contains(b.MsapBillingId), cancellationToken);
+            if (billings.Any(b => !BillingService.CanPrint(b)))
+            {
+                return ServiceResult<IEnumerable<Billing>>.Failure("Only bills with current final approval can receive collection.");
+            }
             return ServiceResult<IEnumerable<Billing>>.Success(billings);
         }
 

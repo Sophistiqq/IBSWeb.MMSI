@@ -154,7 +154,7 @@
                 <p class="job-progress-handoff">Waiting for an authorized user to handle @Model.WaitingFor.</p>
             }
         </div>
-        @if (canAct && !string.IsNullOrEmpty(Model.ActionName))
+        @if (canAct && !string.IsNullOrEmpty(Model.ActionName) && !(actionHere && Model.BankingCollection != null))
         {
             @if (Model.BankingCollection is Collection receipt)
             {

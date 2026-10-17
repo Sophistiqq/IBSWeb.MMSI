@@ -319,10 +319,10 @@ namespace Checks.MSAP
                 await db.SaveChangesAsync();
                 var collectibles = await progressCollection.GetUncollectedBillingsForTableAsync(customer.CustomerId, null, default, order.CustomerOrderSlipId);
                 string collectibleJson = JsonSerializer.Serialize(collectibles.Data);
-                Check(collectibleJson.Contains("CHECK-BAF", StringComparison.Ordinal) && !collectibleJson.Contains("CHECK-O", StringComparison.Ordinal), "Guided collection must include the split BAF bill and exclude other jobs.");
+                Check(collectibleJson.Contains("CHECK-BAF", StringComparison.Ordinal) && collectibleJson.Contains("CHECK-O", StringComparison.Ordinal), "Guided collection must allow bill selection across COS for the same customer.");
                 db.RemoveRange(bafOnlyBill, unrelatedBill);
                 await db.SaveChangesAsync();
-                Console.WriteLine("PASS: financial navigation deduplicates jobs, filters ticket-linked/split billings, matches Posting status and scopes collection.");
+                Console.WriteLine("PASS: financial navigation deduplicates jobs, filters ticket-linked/split billings, matches Posting status and allows collection across COS.");
                 Check(!(await progressBilling.PostBillingAsync(progressBill.MsapBillingId, "check", default, "check", progressBill.Revision)).IsSuccess, "Posting ignored an unbilled ticket when Billing.CustomerOrderSlipId was absent.");
                 progressBill.Status = MsapConstants.BillingStatus.ForCollection;
                 ticket.Status = MsapConstants.DispatchTicketStatus.Billed;

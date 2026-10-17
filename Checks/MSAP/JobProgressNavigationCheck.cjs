@@ -10,7 +10,8 @@ vm.runInNewContext(read('IBSWeb/wwwroot/msap/js/schedule-confirmation.js'), {
 });
 assert.equal(selector, '[data-schedule-confirm="true"]', 'Posting links must bypass the confirmation handler.');
 for (const view of ['Billing/Create', 'Collection/Create', 'Collection/Edit']) {
-    const source = read(`IBSWeb/Areas/MSAP/Views/${view}.cshtml`);
+    const source = read(`IBSWeb/Areas/MSAP/Views/${view}.cshtml`)
+        + (view.startsWith('Collection/') ? read('IBSWeb/Areas/MSAP/Views/Collection/_CollectionForm.cshtml') : '');
     assert(source.includes('id="financialJobProgress"'));
     assert(source.includes('~/msap/js/job-progress.js'), `${view} must load the progress script.`);
 }

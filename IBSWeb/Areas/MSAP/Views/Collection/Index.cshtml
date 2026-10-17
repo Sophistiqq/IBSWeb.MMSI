@@ -3,62 +3,33 @@
     ViewData["IsFullWidth"] = true;
 }
 
-<div class="modern-layout">
-    <main class="modern-container">
-        <!-- Header Section -->
-        <div class="flex-stack">
-            <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="modern-label" style="color: var(--on-surface-variant)">MSAP</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface)">Collections</span>
-                </div>
-                <h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/collection-form.css" asp-append-version="true" />
+<div class="modern-layout msap-workflow collection-form">
+    <main class="collection-page wf-stack">
+        <header class="wf-page-header">
+            <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb"><li>MSAP</li><li aria-current="page">Collections</li></ol></nav>
+            <h1 class="wf-page-title" data-page-header>Collections</h1>
+            <a id="createCollection" asp-action="Create" class="modern-btn-primary wf-page-action" data-hotkey="c">Record collection</a>
+            <p class="wf-page-description wf-caption wf-muted">Review receipts, billing payments and deposit or clearing status.</p>
+        </header>
+        <section class="wf-panel wf-stack" aria-labelledby="collectionRecordsHeading">
+            <div class="collection-heading">
+                <h2 id="collectionRecordsHeading" class="wf-section-title">Collection records</h2>
+                <div class="collection-date-filter"><label for="dateFilter" class="wf-label">Collection date</label><input type="date" id="dateFilter" class="modern-input" /></div>
             </div>
-            <div class="flex gap-2">
-                <a asp-area="MSAP" asp-controller="Collection" asp-action="Create" class="modern-btn-primary" data-hotkey="c">
-                    <span class="material-symbols-outlined">add_circle</span>
-                    CREATE COLLECTION
-                </a>
-            </div>
-        </div>
-
-        <!-- Table Card -->
-        <div class="modern-card">
-            <div class="modern-card-header-action flex justify-between items-center w-full">
-                <div class="flex items-center gap-2">
-                    <span class="material-symbols-outlined text-primary">payments</span>
-                    <h2 class="modern-headline-md">Collection Records</h2>
-                </div>
-                <div class="flex items-center gap-2">
-                    <label class="modern-label mb-0" style="color: var(--on-surface-variant)">Filter by Date:</label>
-                    <input type="date" id="dateFilter" class="modern-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
-                </div>
-            </div>
-            <div class="modern-card-body">
+            <div class="collection-table-scroll">
                 <table class="modern-table" id="paginatedTable">
-                    <thead>
-                        <tr>
-                            <th>DATE</th>
-                            <th>COLLECTION #</th>
-                            <th>CHECK DATE</th>
-                            <th>DATE DEPOSITED</th>
-                            <th class="text-right">AMOUNT</th>
-                            <th>CUSTOMER</th>
-                            <th>STATUS</th>
-                            <th class="text-center">ACTIONS</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>Date</th><th>Receipt number</th><th>Check date</th><th>Deposited</th><th class="text-right">Net received</th><th>Service customer</th><th>Status</th><th class="text-center">Actions</th></tr></thead>
                 </table>
             </div>
-        </div>
+        </section>
     </main>
 </div>
-
 @section Scripts {
     <script>
         window.IBS_TOUR_STEPS = [
-            { selector: '.flex-stack > .flex > a', title: 'Record collection', text: 'Create a collection to record payment against eligible posted billings.', interactive: false },
+            { selector: '#createCollection', title: 'Record collection', text: 'Create a collection to record payment against eligible posted billings.', interactive: false },
             { selector: '#dateFilter', title: 'Filter by date', text: 'Choose a collection date to narrow the records.', interactive: false },
             { selector: '#paginatedTable', title: 'Collection records', text: 'Review payment status, amount, customer, and deposit dates. Open a collection number to inspect its billings and banking progress.', interactive: false }
         ];
