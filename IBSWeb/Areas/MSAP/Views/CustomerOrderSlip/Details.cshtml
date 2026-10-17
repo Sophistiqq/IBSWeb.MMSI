@@ -1,486 +1,152 @@
-@model IBS.Models.MSAP.CustomerOrderSlip
-
+@model CustomerOrderSlip
 @{
     ViewData["Title"] = $"COS {Model.CustomerOrderSlipNumber}";
     ViewData["IsFullWidth"] = true;
+    ViewData["Cos"] = Model;
     var booking = ViewBag.VesselSchedule as VesselSchedule;
+    var progress = (JobProgressViewModel)ViewBag.JobProgress;
+    var entries = booking?.ServiceEntries ?? new List<VesselScheduleServiceEntry>();
+    var pendingServices = entries.Where(entry => !Model.DispatchTickets.Any(ticket => ticket.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId)).ToList();
     var bookingClosed = booking?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
-    var pendingServices = booking?.ServiceEntries.Where(entry => !Model.DispatchTickets.Any(t =>
-        t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId)).ToList() ?? new List<VesselScheduleServiceEntry>();
+    var canRecord = ViewBag.CanCreateDispatchTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open
+        && !bookingClosed && ViewBag.HasBilling != true && (booking == null || (booking.ApprovedRevision == booking.Revision
+            && booking.Status is MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress));
+    ViewData["CanRecordExpectedService"] = canRecord;
+    var tugIds = entries.Select(entry => entry.TugboatId).Concat(Model.DispatchTickets.Select(ticket => ticket.TugBoatId)).Distinct().ToList();
+    var statusLabel = bookingClosed && booking != null ? MsapConstants.VesselScheduleStatus.GetDisplayName(booking.Status)
+        : booking != null && booking.ApprovedRevision != booking.Revision ? "Pending reapproval"
+        : booking != null && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open ? "COS approved"
+        : MsapConstants.CustomerOrderSlipStatus.GetDisplayName(Model.Status);
+    var ticketEntry = ViewBag.ActualTicketEntry as DispatchTicketViewModel;
+    var viewedTicket = ViewData["ViewedTicket"] as DispatchTicket;
+    var selectedEntry = entries.FirstOrDefault(entry => entry.VesselScheduleServiceEntryId == ticketEntry?.VesselScheduleServiceEntryId);
 }
-
-<div class="modern-layout">
-    <main class="modern-container">
-        <!-- Breadcrumbs & Actions Row -->
-        <div class="flex-stack" style="width: 100%;">
-            <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="modern-label">MSAP</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <a class="modern-label" style="text-decoration:none;" asp-action="Index">COS records</a>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface)">@Model.CustomerOrderSlipNumber</span>
-                </div>
-                <div class="flex items-center gap-3">
-                    <h1 class="modern-headline-lg" data-page-header>COS #@Model.CustomerOrderSlipNumber</h1>
-                    <span class="modern-badge @(Model.Status == MsapConstants.CustomerOrderSlipStatus.Open ? "status-open" : "status-closed")">@MsapConstants.CustomerOrderSlipStatus.GetDisplayName(Model.Status)</span>
-                    @if (booking?.Status == MsapConstants.VesselScheduleStatus.Completed)
-                    {
-                        <span class="modern-badge-sm">@MsapConstants.VesselScheduleStatus.GetDisplayName(booking.Status)</span>
-                    }
-                </div>
+<link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/cos-details.css" asp-append-version="true" />
+<div class="schedule-screen-layout msap-workflow">
+    <partial name="_WorkflowProgress" model="progress" />
+    <main class="cos-details-workspace wf-stack">
+        @Html.AntiForgeryToken()
+        <header class="wf-page-header">
+            <nav aria-label="Breadcrumb"><ol class="schedule-breadcrumb"><li><a asp-action="Index">COS records</a></li><li aria-current="page">@Model.CustomerOrderSlipNumber</li></ol></nav>
+            <h1 class="wf-page-title" data-page-header>COS details &amp; tickets</h1>
+            <a asp-action="Index" class="modern-btn-secondary wf-page-action">Back to list</a>
+            <div class="wf-page-description cos-details-status">
+                <span class="schedule-status-pill">@statusLabel</span>
+                <span class="wf-body wf-muted">@Model.CustomerOrderSlipNumber</span>
+                @if (entries.Count > 0)
+                {
+                    <span class="wf-body wf-muted">@(entries.Count - pendingServices.Count) of @entries.Count tickets entered · @pendingServices.Count pending</span>
+                }
             </div>
-            <div class="flex gap-2" style="flex-wrap: wrap;">
-                <a asp-action="Index" class="modern-btn-secondary"><span class="material-symbols-outlined">arrow_back</span> Back</a>
+        </header>
+        <section class="wf-panel wf-panel--compact wf-stack" id="cosBookingDetails" aria-label="COS booking details">
+            <dl class="schedule-review-fields cos-details-fields">
+                <div><dt class="wf-caption wf-muted">Customer</dt><dd class="wf-value">@Model.Customer.CustomerName</dd></div>
+                <div><dt class="wf-caption wf-muted">Vessel</dt><dd class="wf-value">@Model.Vessel.VesselName</dd></div>
+                <div><dt class="wf-caption wf-muted">Port / terminal</dt><dd class="wf-value">@Model.Port.PortName / @Model.Terminal.TerminalName</dd></div>
+                <div><dt class="wf-caption wf-muted">Voyage</dt><dd class="wf-value">@(Model.VoyageNumber ?? "—")</dd></div>
+                <div class="cos-planned-window"><dt class="wf-caption wf-muted">Planned window · Philippine time</dt><dd class="wf-value">@(Model.PlannedStartTime?.ToString("dd MMM yyyy, HH:mm") ?? "Not scheduled") @(Model.PlannedEndTime.HasValue ? $"– {Model.PlannedEndTime:dd MMM yyyy, HH:mm}" : "")</dd></div>
+                @if (booking != null)
+                {
+                    <div><dt class="wf-caption wf-muted">COS discount</dt><dd class="wf-value">@(booking.SkipCosDiscount ? "0% · Skipped" : $"{booking.CosDiscountPercent.GetValueOrDefault():0.##}% · Applied")</dd></div>
+                    <div><dt class="wf-caption wf-muted">SBMA share</dt><dd class="wf-value">@(booking.SbmaEnabled ? "Enabled · Actual time" : "Disabled")</dd></div>
+                }
+            </dl>
+            <div class="cos-details-links">
+                @if (booking != null)
+                {
+                    <a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@booking.VesselScheduleId">View vessel schedule</a>
+                }
+                @if (ViewBag.CanEditCustomerOrderSlip == true && booking == null && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && ViewBag.HasDispatchTickets != true && ViewBag.HasBilling != true)
+                {
+                    <a asp-action="Edit" asp-route-id="@Model.CustomerOrderSlipId">Edit COS</a>
+                }
             </div>
-        </div>
-
-        <partial name="_JobProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
-        <!-- Main Grid Layout - Now explicitly using Grid classes for side-by-side -->
-        <div class="modern-grid">
-            <!-- Left Column: COS Details (col-4) -->
-            <section class="modern-col-4">
-                <div class="modern-card sticky top-24">
-                    <div class="modern-card-header-info">
-                        <span class="material-symbols-outlined">info</span>
-                        <h2 class="modern-headline-md">COS Details</h2>
-                        @if (ViewBag.CanEditCustomerOrderSlip == true && booking == null && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && ViewBag.HasDispatchTickets != true && !ViewBag.HasBilling)
+        </section>
+        <section class="wf-panel wf-stack" id="cosServices" aria-labelledby="cosServicesTitle">
+            <div class="cos-section-heading">
+                <h2 class="wf-section-title" id="cosServicesTitle">Services &amp; tickets</h2>
+                @if (pendingServices.Count > 0)
+                {
+                    <span class="schedule-status-pill">@pendingServices.Count ticket(s) missing</span>
+                }
+                @if (entries.Count == 0 && canRecord)
+                {
+                    <a asp-controller="DispatchTicket" asp-action="Create" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-secondary">Add ticket</a>
+                }
+            </div>
+            @if (ViewBag.HasBilling == true)
+            {
+                <p class="wf-body wf-muted">Billing #@ViewBag.BillingNumber is linked to this COS. Ticket modifications are restricted.</p>
+            }
+            <div class="schedule-services-table" role="region" aria-label="Services and tickets by tugboat" tabindex="0">
+                <table class="schedule-review-table cos-services-table">
+                    <thead><tr>
+                        <th>Service</th>
+                        <th>Ticket number</th>
+                        <th>Actual hours</th><th>Billable hours</th><th>Service status</th><th>Action</th>
+                    </tr></thead>
+                    <tbody>
+                        @foreach (var tugId in tugIds)
                         {
-                            <a asp-action="Edit" asp-route-id="@Model.CustomerOrderSlipId" class="modern-btn-secondary" title="Edit COS" aria-label="Edit COS" style="margin-left:auto;padding:.35rem;">
-                                <span class="material-symbols-outlined" aria-hidden="true">edit</span>
-                            </a>
+                            var tugEntries = entries.Where(entry => entry.TugboatId == tugId).ToList();
+                            var tugTickets = Model.DispatchTickets.Where(ticket => ticket.TugBoatId == tugId).ToList();
+                            var tug = tugEntries.FirstOrDefault()?.Tugboat ?? tugTickets.First().Tugboat;
+                            <tr class="cos-tug-group"><th colspan="6">@tug.TugboatName <span class="wf-caption wf-muted">@(tug.IsCompanyOwned ? "Company-owned" : "Subcontractor")</span></th></tr>
+                            @foreach (var entry in tugEntries)
+                            {
+                                var ticket = tugTickets.FirstOrDefault(item => item.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId);
+                                <partial name="_ServiceTicketRow" model="Tuple.Create<VesselScheduleServiceEntry?, DispatchTicket?>(entry, ticket)" />
+                            }
+                            @foreach (var ticket in tugTickets.Where(item => !tugEntries.Any(entry => entry.VesselScheduleServiceEntryId == item.VesselScheduleServiceEntryId)))
+                            {
+                                <partial name="_ServiceTicketRow" model="Tuple.Create<VesselScheduleServiceEntry?, DispatchTicket?>(null, ticket)" />
+                            }
                         }
-                    </div>
-                    <div class="modern-card-body">
-                        <div class="modern-grid">
-                            <div class="modern-col-6">
-                                <p class="modern-label">Date</p>
-                                <p class="modern-value-lg">@Model.Date.ToString("MMM dd, yyyy")</p>
-                            </div>
-                        </div>
-                        <div style="border-top: 1px solid var(--outline-variant); padding-top: 1rem;">
-                            <p class="modern-label">Customer</p>
-                            <p class="modern-value-lg">@Model.Customer.CustomerName</p>
-                        </div>
-                        <div style="border-top: 1px solid var(--outline-variant); padding-top: 1rem;">
-                            <p class="modern-label">Vessel</p>
-                            <p class="modern-value-lg font-bold" style="text-transform: uppercase;">@Model.Vessel.VesselName</p>
-                        </div>
-                        <div class="modern-grid" style="border-top: 1px solid var(--outline-variant); padding-top: 1rem;">
-                            <div class="modern-col-6">
-                                <p class="modern-label">Port</p>
-                                <p class="modern-value-md font-bold">@Model.Port.PortName</p>
-                            </div>
-                            <div class="modern-col-6">
-                                <p class="modern-label">Terminal</p>
-                                <p class="modern-value-md font-bold">@Model.Terminal.TerminalName</p>
-                            </div>
-                        </div>
-                        <div class="modern-grid" style="border-top: 1px solid var(--outline-variant); padding-top: 1rem;">
-                            <div class="modern-col-6">
-                                <p class="modern-label">COS #</p>
-                                <p class="modern-value-md">@(Model.COSNumber ?? "-")</p>
-                            </div>
-                            <div class="modern-col-6">
-                                <p class="modern-label">Voyage #</p>
-                                <p class="modern-value-md">@(Model.VoyageNumber ?? "-")</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3" style="border-top: 1px solid var(--outline-variant); background-color: var(--surface-container-low); padding: 0.75rem; border-radius: var(--radius-xl);">
-                            <span class="material-symbols-outlined" style="color: var(--on-surface-variant)">calendar_month</span>
-                            <div>
-                                <p class="modern-label font-bold">Planned Schedule</p>
-                                @if (Model is { PlannedStartTime: not null, PlannedEndTime: not null })
-                                {
-                                    <p class="modern-value-md" style="margin-top: 0.25rem;">
-                                        <span class="text-primary font-bold">@Model.PlannedStartTime.Value.ToString("MMM dd, HH:mm")</span>
-                                        to
-                                        <span class="text-primary font-bold">@Model.PlannedEndTime.Value.ToString("HH:mm")</span>
-                                    </p>
-                                }
-                                else
-                                {
-                                    <p class="modern-label italic" style="margin-top: 0.25rem;">No planned schedule set</p>
-                                }
-                            </div>
-                        </div>
-                        @if (!string.IsNullOrEmpty(Model.Remarks))
-                        {
-                            <div style="border-top: 1px solid var(--outline-variant); padding-top: 1rem;">
-                                <p class="modern-label">Remarks</p>
-                                <p class="modern-value-md italic text-sm">@Model.Remarks</p>
-                            </div>
-                        }
-                    </div>
-                </div>
+                    </tbody>
+                </table>
+            </div>
+            @if (tugIds.Count == 0) { <p class="wf-body wf-muted">No services or tickets recorded.</p> }
+        </section>
+        @if (ticketEntry != null)
+        {
+            <section class="wf-panel wf-stack" id="actualTicketEntry" aria-labelledby="actualTicketTitle">
+                <div class="cos-section-heading"><h2 class="wf-section-title" id="actualTicketTitle">@(ViewData["EditActualTicket"] is true ? "Edit actual ticket" : ticketEntry.DispatchTicketId.HasValue ? "View actual ticket" : "Enter actual ticket") · @(selectedEntry?.Tugboat.TugboatName ?? viewedTicket?.Tugboat.TugboatName) / @(selectedEntry?.Service.ServiceName ?? viewedTicket?.Service.ServiceName)</h2><span class="schedule-status-pill">@(ticketEntry.DispatchTicketId.HasValue ? "Recorded" : "Not saved yet")</span></div>
+                <partial name="_ActualTicketEntry" model="ticketEntry" />
             </section>
-
-            <!-- Right Column: Dispatch Tickets Table (col-8) -->
-            <section class="modern-col-8">
-                <div class="modern-card">
-                    <div class="modern-card-header-action">
-                        <div class="flex items-center gap-2">
-                            <span class="material-symbols-outlined text-primary">list_alt</span>
-                            <h2 class="modern-headline-md">Dispatch Tickets</h2>
-                        </div>
-                        @if ((booking == null || booking.ServiceEntries.Count == 0) && ViewBag.CanCreateDispatchTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && !bookingClosed && !ViewBag.HasBilling && Model.DispatchTickets.All(t => t.Status != MsapConstants.DispatchTicketStatus.Billed))
-                        {
-                            <a asp-controller="DispatchTicket" asp-action="Create" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-primary text-sm"><span class="material-symbols-outlined" aria-hidden="true">add_circle</span> Add Ticket</a>
-                        }
-                    </div>
-
-                    @if (pendingServices.Count > 0)
-                    {
-                        <div class="modern-card-body">
-                            <h3 class="modern-headline-md">Expected services · @pendingServices.Count pending</h3>
-                            <p class="modern-label">A dispatch ticket is created when its actual number, dates, times and required details are saved.</p>
-                            <div class="modern-table-container">
-                                <table class="modern-table">
-                                    <thead><tr><th>Tugboat</th><th>Service</th><th>Status</th><th>Action</th></tr></thead>
-                                    <tbody>
-                                        @foreach (var entry in pendingServices)
-                                        {
-                                            <tr>
-                                                <td>@entry.Tugboat.TugboatName</td>
-                                                <td>@entry.Service.ServiceName</td>
-                                                <td>Pending ticket</td>
-                                                <td>
-                                                    @if (ViewBag.CanCreateDispatchTicket == true && !bookingClosed && !ViewBag.HasBilling
-                                                        && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && booking!.ApprovedRevision == booking.Revision)
-                                                    {
-                                                        <a asp-controller="DispatchTicket" asp-action="Create" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId"
-                                                           asp-route-expectedServiceEntryId="@entry.VesselScheduleServiceEntryId" class="modern-btn-secondary">Record ticket</a>
-                                                    }
-                                                </td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    }
-                    @if (ViewBag.HasBilling)
-                    {
-                        <div style="padding: 0.75rem 1.25rem; background: var(--error-container, #fce4ec); color: var(--on-error-container, #c62828); font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--outline-variant);">
-                            <span class="material-symbols-outlined" style="font-size: 18px;">lock</span>
-                            <span>This COS has <strong>Billing #@ViewBag.BillingNumber</strong> — modifications are restricted.</span>
-                        </div>
-                    }
-
-                    @if (ViewBag.CanSetTariff == true || ViewBag.CanApproveTariff == true)
-                    {
-                        <div id="batchToolbar" class="batch-toolbar" style="display:@(ViewBag.HasBilling ? "none!important" : "none"); padding: 0.5rem 1.25rem; border-bottom: 1px solid var(--outline-variant); background: var(--surface-container-low);">
-                            <div class="flex items-center justify-between">
-                                <span id="batchCount" class="modern-label font-bold">0 selected</span>
-                                <div class="flex gap-2">
-                                    @if (ViewBag.CanApproveTariff == true && ((JobProgressViewModel)ViewBag.JobProgress).Stage == JobProgressCalculator.ApprovalStage)
-                                    {
-                                        <button type="button" id="batchApproveBtn" class="modern-btn-primary text-sm" style="display:none; padding:0.4rem 0.75rem;" onclick="batchApprove()">
-                                            <span class="material-symbols-outlined" style="font-size:16px">check_circle</span> Approve Selected
-                                        </button>
-                                    }
-                                    @if (ViewBag.CanSetTariff == true && ((JobProgressViewModel)ViewBag.JobProgress).Stage == JobProgressCalculator.TariffStage)
-                                    {
-                                        <button type="button" id="batchSetTariffBtn" class="modern-btn-secondary text-sm" style="display:none; padding:0.4rem 0.75rem;" onclick="showBatchTariffModal()">
-                                            <span class="material-symbols-outlined" style="font-size:16px">payments</span> Set Tariff
-                                        </button>
-                                    }
-                                </div>
-                            </div>
-                        </div>
-                    }
-
-                    <div class="modern-table-container">
-                        <table class="modern-table">
-                            <thead>
-                                <tr>
-                                    @if (ViewBag.CanSetTariff == true || ViewBag.CanApproveTariff == true)
-                                    {
-                                        <th class="text-center" style="width:40px">
-                                            <input type="checkbox" id="selectAll" class="batch-checkbox" title="Select all">
-                                        </th>
-                                    }
-                                    <th>Ticket #</th>
-                                    <th>Timeline</th>
-                                    <th>Date</th>
-                                    <th>Service</th>
-                                    <th>Tugboat</th>
-                                    <th class="text-right">Hrs</th>
-                                    <th class="text-right">Billing (PHP)</th>
-                                    <th>Status</th>
-                                    <th class="text-center">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var ticket in Model.DispatchTickets)
-                                {
-                                    <tr>
-                                        @if (ViewBag.CanSetTariff == true || ViewBag.CanApproveTariff == true)
-                                        {
-                                            <td class="text-center">
-                                                <input type="checkbox" class="batch-checkbox row-checkbox" value="@ticket.DispatchTicketId" data-status="@ticket.Status">
-                                            </td>
-                                        }
-                                        <td class="font-bold">
-                                            <a asp-action="Preview" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" style="text-decoration:none; color: var(--primary)" >
-                                                @ticket.DispatchNumber
-                                            </a>
-                                        </td>
-                                        <td class="text-xs" style="color: var(--on-surface-variant)">
-                                            @if (ticket is { DateLeft: not null, TimeLeft: not null, DateArrived: not null, TimeArrived: not null })
-                                            {
-                                                <span>@ticket.DateLeft.Value.ToString("MMM dd"), @ticket.TimeLeft.Value.ToString("HH:mm")</span>
-                                                <span style="color: var(--outline-variant); margin: 0 0.25rem;">-</span>
-                                                <span>@ticket.DateArrived.Value.ToString("MMM dd"), @ticket.TimeArrived.Value.ToString("HH:mm")</span>
-                                            }
-                                            else
-                                            {
-                                                <span>-</span>
-                                            }
-                                        </td>
-                                        <td style="color: var(--on-surface-variant)">@ticket.Date.ToString("MMM dd, yyyy")</td>
-                                        <td style="font-weight: 500;">@ticket.Service.ServiceName</td>
-                                        <td>@ticket.Tugboat.TugboatName</td>
-                                        <td class="text-right">@ticket.TotalHours.ToString("N2")</td>
-                                        <td class="text-right font-bold text-primary">@ticket.TotalBilling.ToString("N2")</td>
-                                        <td>
-                                            <span class="modern-badge-sm @(GetStatusBadgeClass(ticket.Status))">@ticket.Status</span>
-                                        </td>
-                                        <td class="text-center">
-                                            <div class="relative inline-block text-left dropdown-container">
-                                                <button type="button" class="modern-btn-dropdown dropdown-trigger">
-                                                    ACTIONS <span class="material-symbols-outlined" style="font-size:16px">arrow_drop_down</span>
-                                                </button>
-                                                <!-- Dropdown Menu -->
-                                                <div class="modern-dropdown-menu dropdown-menu">
-                                                    <a asp-action="Preview" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" class="modern-dropdown-item">
-                                                        <span class="material-symbols-outlined">visibility</span> View Ticket
-                                                    </a>
-
-                                                    @if (!ViewBag.HasBilling && ticket.Status is "Draft" or "Requested")
-                                                    {
-                                                        @if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open)
-                                                        {
-                                                            <a asp-action="EditTicket" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-dropdown-item">
-                                                                <span class="material-symbols-outlined">edit</span> Edit Ticket
-                                                            </a>
-                                                        }
-                                                        @if (!string.IsNullOrEmpty(ticket.ImageSignedUrl))
-                                                        {
-                                                            <button type="button" class="modern-dropdown-item" style="width:100%; border:none; background:none; cursor:pointer;" onclick="ModernAlert.image('@ticket.ImageSignedUrl', 'Upload Preview')">
-                                                                <span class="material-symbols-outlined">image</span> View Image
-                                                            </button>
-                                                        }
-                                                        @if (!string.IsNullOrEmpty(ticket.VideoSignedUrl))
-                                                        {
-                                                            <button type="button" class="modern-dropdown-item" style="width:100%; border:none; background:none; cursor:pointer;" onclick="ModernAlert.video('@ticket.VideoSignedUrl', 'Video Preview')">
-                                                                <span class="material-symbols-outlined">play_circle</span> Play Video
-                                                            </button>
-                                                        }
-                                                    }
-                                                    else if (!ViewBag.HasBilling && ticket.Status is "For Tariff")
-                                                    {
-                                                        @if (ViewBag.CanSetTariff == true && ((JobProgressViewModel)ViewBag.JobProgress).Stage == JobProgressCalculator.TariffStage)
-                                                        {
-                                                            <a asp-action="SetTariff" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" class="modern-dropdown-item" style="color: var(--primary)">
-                                                                <span class="material-symbols-outlined">payments</span> Set Tariff
-                                                            </a>
-                                                        }
-                                                        @if (ViewBag.CanDeleteTicket == true)
-                                                        {
-                                                            <button type="button" class="modern-dropdown-item" style="color: var(--error); width: 100%; border: none; background: none; cursor: pointer;" onclick="confirmDeleteTicket(@ticket.DispatchTicketId)">
-                                                                <span class="material-symbols-outlined">delete</span> Delete Ticket
-                                                            </button>
-                                                        }
-                                                        @if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open)
-                                                        {
-                                                            <a asp-action="EditTicket" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-dropdown-item">
-                                                                <span class="material-symbols-outlined">edit</span> Edit Ticket
-                                                            </a>
-                                                        }
-                                                    }
-                                                    else if (!ViewBag.HasBilling && ticket.Status == "For Approval")
-                                                    {
-                                                        @if (ViewBag.CanApproveTariff == true && ((JobProgressViewModel)ViewBag.JobProgress).Stage == JobProgressCalculator.ApprovalStage)
-                                                        {
-                                                            <button type="button" class="modern-dropdown-item" style="color: #406915; width: 100%; border: none; background: none; cursor: pointer;" data-id="@ticket.DispatchTicketId" onclick="confirmApprove(this)">
-                                                                <span class="material-symbols-outlined">check_circle</span> Approve Tariff
-                                                            </button>
-                                                        }
-                                                        @if (ViewBag.CanApproveTariff == true && ((JobProgressViewModel)ViewBag.JobProgress).Stage == JobProgressCalculator.ApprovalStage)
-                                                        {
-                                                            <button type="button" class="modern-dropdown-item" style="color: var(--error); width: 100%; border: none; background: none; cursor: pointer;" onclick="confirmDisapprove(@ticket.DispatchTicketId)">
-                                                                <span class="material-symbols-outlined">block</span> Disapprove Tariff
-                                                            </button>
-                                                        }
-                                                        @if (ViewBag.CanSetTariff == true)
-                                                        {
-                                                            <a asp-action="EditTariff" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" class="modern-dropdown-item" style="color: #ef6c00">
-                                                                <span class="material-symbols-outlined">edit</span> Edit Tariff
-                                                            </a>
-                                                        }
-                                                        @if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open)
-                                                        {
-                                                            <a asp-action="EditTicket" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-dropdown-item">
-                                                                <span class="material-symbols-outlined">edit</span> Edit Ticket
-                                                            </a>
-                                                        }
-                                                    }
-                                                    else if (!ViewBag.HasBilling && ticket.Status == "Disapproved")
-                                                    {
-                                                        @if (ViewBag.CanSetTariff == true)
-                                                        {
-                                                            <a asp-action="EditTariff" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" class="modern-dropdown-item" style="color: #ef6c00">
-                                                                <span class="material-symbols-outlined">edit</span> Edit Tariff
-                                                            </a>
-                                                        }
-                                                        @if (ViewBag.CanDeleteTicket == true)
-                                                        {
-                                                            <button type="button" class="modern-dropdown-item" style="color: var(--error); width: 100%; border: none; background: none; cursor: pointer;" onclick="confirmDeleteTicket(@ticket.DispatchTicketId)">
-                                                                <span class="material-symbols-outlined">delete</span> Delete Ticket
-                                                            </button>
-                                                        }
-                                                    }
-                                                    else if (!ViewBag.HasBilling && (ticket.Status == "For Billing" || ticket.Status == "Billed"))
-                                                    {
-                                                        @if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open)
-                                                        {
-                                                            <a asp-action="EditTicket" asp-controller="DispatchTicket" asp-route-id="@ticket.DispatchTicketId" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-dropdown-item">
-                                                                <span class="material-symbols-outlined">edit</span> Edit Ticket
-                                                            </a>
-                                                        }
-                                                    }
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div class="text-center" style="padding: 1rem; border-top: 1px solid rgba(194, 200, 199, 0.3)">
-                        <div class="flex items-center justify-center gap-2" style="opacity: 0.4">
-                            <span class="material-symbols-outlined" style="font-size:18px">anchor</span>
-                            <p class="modern-label" style="font-size:10px; margin-bottom:0">End of Ticket Records</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="modern-card mt-4" id="timelineAccordion">
-                    <button type="button"
-                            id="timelineToggle"
-                            class="modern-card-header-info w-100"
-                            style="border:none; cursor:pointer; width:100%; text-align:left; display:flex; align-items:center; justify-content:space-between; padding: 1rem 1.25rem;"
-                            aria-expanded="false"
-                            aria-controls="timelineBody">
-                        <span class="flex items-center gap-2">
-                            <span class="material-symbols-outlined">history</span>
-                            <h2 class="modern-headline-md" style="margin:0">Workflow Timeline</h2>
-                        </span>
-                        <span class="material-symbols-outlined" id="timelineChevron" style="transition: transform 0.3s ease;">expand_more</span>
-                    </button>
-                    <div id="timelineBody"
-                         style="overflow:hidden; max-height:0; transition: max-height 0.4s ease, opacity 0.3s ease; opacity:0;">
-                        <div class="modern-card-body" id="timelineContainer">
-                            <div class="text-center py-4">
-                                <p class="modern-label">Click above to load the workflow timeline.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </div>
-
-        <!-- COS Specific Footer - Now in flow and contained -->
-        <footer class="modern-sticky-footer">
-            <div class="flex items-center gap-4">
-                <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:16px">description</span> @Model.DispatchTickets.Count() Total Tickets</span>
-                <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:16px">payments</span> Total Billing: ₱ @Model.DispatchTickets.Sum(t => t.TotalBilling).ToString("N2")</span>
-            </div>
-            <div class="flex items-center gap-4">
-                <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:16px">schedule</span> Last Updated: @DateTime.Now.ToString("MMM dd, yyyy HH:mm")</span>
-            </div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.Remarks))
+        {
+            <section class="wf-panel wf-stack"><h2 class="wf-section-title">Planning notes</h2><p class="wf-body schedule-note">@Model.Remarks</p></section>
+        }
+        <section class="wf-panel" id="timelineAccordion" aria-label="Workflow activity">
+            <button type="button" id="timelineToggle" class="cos-timeline-toggle" aria-expanded="false" aria-controls="timelineBody"><span class="wf-section-title">Workflow timeline</span><span class="material-symbols-outlined" id="timelineChevron" aria-hidden="true">expand_more</span></button>
+            <div id="timelineBody" style="overflow:hidden;max-height:0;opacity:0"><div id="timelineContainer"><p class="wf-body wf-muted">Expand to load the workflow activity.</p></div></div>
+        </section>
+        <footer class="cos-details-footer">
+            <span class="wf-caption wf-muted">@progress.Guidance</span>
+            <span class="wf-body">@Model.DispatchTickets.Count ticket(s) · Calculated billing ₱ @Model.DispatchTickets.Where(ticket => ticket.Status != MsapConstants.DispatchTicketStatus.CalculationPending).Sum(ticket => ticket.TotalBilling).ToString("N2")
+                @if (Model.DispatchTickets.Any(ticket => ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending))
+                {
+                    <span class="wf-caption wf-muted">· Unresolved charges excluded</span>
+                }</span>
         </footer>
     </main>
 </div>
 
-@functions {
-    string GetStatusBadgeClass(string status) {
-        return status switch {
-            "For Tariff" => "status-tariff",
-            "For Approval" => "status-approval",
-            "For Billing" => "status-billing",
-            "Billed" => "status-open",
-            "Disapproved" => "status-closed",
-            "Draft" => "status-closed",
-            "Requested" => "status-approval",
-            _ => "status-closed"
-        };
-    }
-}
-
-<!-- Batch Set Tariff Modal -->
-<div id="batchTariffModal" class="modern-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10000; align-items:center; justify-content:center;">
-    <div class="modern-card" style="max-width:480px; width:90%; margin:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
-        <div class="modern-card-header-action" style="padding:1rem 1.25rem;">
-            <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-primary">payments</span>
-                <h2 class="modern-headline-md" style="margin:0;">Batch Set Tariff</h2>
-            </div>
-            <button type="button" class="modern-btn-text" onclick="closeBatchTariffModal()" style="border:none; background:none; cursor:pointer; padding:0.25rem;">
-                <span class="material-symbols-outlined">close</span>
-            </button>
-        </div>
-        <div class="modern-card-body">
-            <div class="mb-3">
-                <label class="modern-label">Dispatch Rate <span class="text-error">*</span></label>
-                <input type="number" id="batchDispatchRate" class="modern-input" step="0.01" min="0" value="0" placeholder="0.00" required>
-            </div>
-            <div class="mb-3">
-                <label class="modern-label">BAF Rate <span class="text-error">*</span></label>
-                <input type="number" id="batchBafRate" class="modern-input" step="0.01" min="0" value="0" placeholder="0.00" required>
-            </div>
-            <div class="modern-grid-compact">
-                <div class="modern-col-6">
-                    <label class="modern-label">Dispatch Charge Type</label>
-                    <select id="batchChargeType" class="modern-input">
-                        <option value="Per hour" selected>Per hour</option>
-                        <option value="Per move">Per move</option>
-                    </select>
-                </div>
-                <div class="modern-col-6">
-                    <label class="modern-label">BAF Charge Type</label>
-                    <select id="batchChargeType2" class="modern-input">
-                        <option value="Per hour" selected>Per hour</option>
-                        <option value="Per move">Per move</option>
-                    </select>
-                </div>
-            </div>
-            <p class="modern-label text-xs mt-3" style="color:var(--on-surface-variant);">Applies to <span id="batchModalCount" class="font-bold">0</span> selected ticket(s).</p>
-        </div>
-        <div class="flex gap-2 justify-end" style="padding:1rem 1.25rem; border-top:1px solid var(--outline-variant);">
-            <button type="button" class="modern-btn-secondary" onclick="closeBatchTariffModal()">Cancel</button>
-            <button type="button" class="modern-btn-primary" onclick="batchSetTariff()">
-                <span class="material-symbols-outlined" style="font-size:18px">payments</span> Apply Tariff
-            </button>
-        </div>
-    </div>
-</div>
-
 @section Scripts {
+    <script src="~/msap/js/cos-ticket-entry.js" asp-append-version="true"></script>
     <script>
         window.IBS_TOUR_STEPS = [
-            { selector: '.job-progress-timeline', title: 'Job stages', text: 'Follow the current stage through service, tariff, approval, billing, posting, collection, and clearing. Direct COS records bypass vessel planning and confirmation.', interactive: false },
-            { selector: '.job-progress-next', title: 'Next action', text: 'Read the guidance for the current stage. The action is available here when the workflow and your access allow it; some tariff actions are on the tickets below.', interactive: false },
-            { selector: '.modern-grid > .modern-col-4 > .modern-card', title: 'Order details', text: 'Review the customer, vessel, location, references, and planned schedule. Direct orders can be edited here when their status and access allow it.', interactive: false },
-            { selector: '.modern-grid > .modern-col-8 > .modern-card', title: 'Dispatch Tickets', text: 'Add service tickets when allowed, then review each ticket’s timeline, tugboat, billing amount, and status. Use its Actions menu for the next available step.', interactive: false },
+            { selector: '.job-progress-timeline', title: 'Job stages', text: 'Follow COS approval, service tickets, billing, final bill approval, collection, deposit, and clearing. Direct COS records bypass vessel planning and COS approval.', interactive: false },
+            { selector: '.job-progress-next', title: 'Next action', text: 'Read the guidance for the current stage and any blockers before continuing.', interactive: false },
+            { selector: '#cosBookingDetails', title: 'Order details', text: 'Review the customer, vessel, location, references, and planned schedule. Direct orders can be edited here when their status and access allow it.', interactive: false },
+            { selector: '#cosServices', title: 'Dispatch Tickets', text: 'Add service tickets when allowed, then review each ticket’s timeline, tugboat, billing amount, and status. Use View ticket to review saved actual service details.', interactive: false },
             { selector: '#timelineAccordion', title: 'Activity timeline', text: 'Expand this section to load the COS activity history.', interactive: false },
-            { selector: '.modern-sticky-footer', title: 'Order totals', text: 'See the total ticket count and accumulated billing amount for this COS.', interactive: false }
+            { selector: '.cos-details-footer', title: 'Order totals', text: 'See the total ticket count and accumulated billing amount for this COS.', interactive: false }
         ];
-        if (document.querySelector('#selectAll')) {
-            window.IBS_TOUR_STEPS.splice(4, 0, { selector: '#selectAll', title: 'Batch actions', text: 'Select eligible tickets to reveal available batch tariff or approval actions. Review the selected tickets before applying an action.', interactive: false });
-        }
     </script>
     <script>
         const PageConfig = {
@@ -503,42 +169,6 @@
                     .then(result => { if (result.isConfirmed) window.location.href = '@Url.Action("Create", "DispatchTicket", new { area = "MSAP", customerOrderSlipId = Model.CustomerOrderSlipId })'; });
                 </text>
             }
-            $(document).on('click', '.dropdown-trigger', function(e) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                const $trigger = $(this);
-                const $menu = $trigger.siblings('.modern-dropdown-menu');
-
-                // Close other menus
-                $('.modern-dropdown-menu').not($menu).removeClass('show');
-
-                // Toggle current menu
-                $menu.toggleClass('show');
-
-                if ($menu.hasClass('show')) {
-                    const rect = $trigger[0].getBoundingClientRect();
-                    const menuWidth = $menu.outerWidth();
-
-                    // Position fixed to bypass parent overflow:hidden
-                    $menu.css({
-                        'position': 'fixed',
-                        'top': (rect.bottom + 4) + 'px',
-                        'left': (rect.right - menuWidth) + 'px',
-                        'z-index': '9999'
-                    });
-
-                    // Flip up if hitting bottom of viewport
-                    const menuHeight = $menu.outerHeight();
-                    if (rect.bottom + menuHeight > window.innerHeight) {
-                        $menu.css('top', (rect.top - menuHeight - 4) + 'px');
-                    }
-                }
-            });
-
-            $(document).on('click', function() {
-                $('.modern-dropdown-menu').removeClass('show');
-            });
-
             // Show TempData messages
             if (PageConfig.messages.error) {
                 ModernAlert.error(PageConfig.messages.error);
@@ -549,31 +179,6 @@
             if (PageConfig.messages.warning) {
                 ModernAlert.warning(PageConfig.messages.warning);
             }
-
-            // Batch checkboxes
-            function updateBatchToolbar() {
-                const checked = $('.row-checkbox:checked');
-                const count = checked.length;
-                if (count > 0) {
-                    $('#batchToolbar').show();
-                    $('#batchCount').text(count + ' selected');
-
-                    const hasApproval = checked.filter(function() { return $(this).data('status') === 'For Approval'; }).length > 0;
-                    const hasTariffable = checked.filter(function() { return $(this).data('status') === 'For Tariff'; }).length > 0;
-
-                    $('#batchApproveBtn').toggle(hasApproval);
-                    $('#batchSetTariffBtn').toggle(hasTariffable);
-                } else {
-                    $('#batchToolbar').hide();
-                }
-            }
-
-            $(document).on('change', '.row-checkbox', updateBatchToolbar);
-
-            $('#selectAll').on('change', function() {
-                $('.row-checkbox:not(:disabled)').prop('checked', this.checked);
-                updateBatchToolbar();
-            });
 
             // Accordion: lazy-load timeline on first expand
             let timelineLoaded = false;
@@ -611,190 +216,5 @@
             });
         }
 
-        function getSelectedIds() {
-            return $('.row-checkbox:checked').map(function() { return parseInt($(this).val()); }).get();
-        }
-
-        function getRequestToken() {
-            return $('input[name="__RequestVerificationToken"]').val();
-        }
-
-        function fetchJson(url, body) {
-            return fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getRequestToken() },
-                body: JSON.stringify(body)
-            }).then(r => r.json());
-        }
-
-        function batchApprove() {
-            const ids = getSelectedIds();
-            if (ids.length === 0) return;
-
-            ModernAlert.confirm({
-                title: 'Batch Approve Tariffs?',
-                text: `Approve tariffs for ${ids.length} selected ticket(s)?`,
-                icon: 'question',
-                confirmText: 'Yes, approve all!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-            $('#batchToolbar').hide();
-            ModernAlert.showLoading("Approving tariffs...");
-            fetchJson('@Url.Action("BatchApproveTariff", "DispatchTicket", new { area = "MSAP" })', ids)
-                    .then(data => {
-                        if (data.success) {
-                            ModernAlert.success(data.message).then(() => location.reload());
-                        } else {
-                            ModernAlert.error(data.message);
-                        }
-                    })
-                    .catch(err => ModernAlert.error(err.message));
-                }
-            });
-        }
-
-        function showBatchTariffModal() {
-            const ids = getSelectedIds();
-            if (ids.length === 0) return;
-            const tariffable = $('.row-checkbox:checked').filter(function() {
-                return $(this).data('status') === 'For Tariff';
-            });
-            $('#batchModalCount').text(tariffable.length);
-            $('#batchTariffModal').css('display', 'flex');
-        }
-
-        function closeBatchTariffModal() {
-            $('#batchTariffModal').hide();
-        }
-
-        function batchSetTariff() {
-            const ids = $('.row-checkbox:checked').filter(function() {
-                return $(this).data('status') === 'For Tariff';
-            }).map(function() { return parseInt($(this).val()); }).get();
-            const dispatchRate = parseFloat($('#batchDispatchRate').val()) || 0;
-            const bafRate = parseFloat($('#batchBafRate').val()) || 0;
-            if (dispatchRate <= 0 && bafRate <= 0) {
-                ModernAlert.warning('Please enter at least one rate.');
-                return;
-            }
-
-            closeBatchTariffModal();
-            ModernAlert.showLoading("Setting tariffs...");
-            fetchJson('@Url.Action("BatchSetTariff", "DispatchTicket", new { area = "MSAP" })', {
-                    ids: ids,
-                    dispatchRate: dispatchRate,
-                    bafRate: bafRate,
-                    chargeType: $('#batchChargeType').val(),
-                    chargeType2: $('#batchChargeType2').val()
-                })
-                .then(data => {
-                    if (data.success) {
-                        ModernAlert.success(data.message).then(() => location.reload());
-                    } else {
-                        ModernAlert.error(data.message);
-                    }
-                })
-                .catch(err => ModernAlert.error(err.message));
-        }
-
-        function confirmApprove(btn) {
-            const id = btn.getAttribute('data-id');
-            ModernAlert.confirm({
-                title: 'Approve Tariff?',
-                text: "This ticket will be marked for billing.",
-                icon: 'question',
-                confirmText: 'Yes, approve it!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    ModernAlert.showLoading("Approving tariff...");
-                    const formData = new FormData();
-                    formData.append('id', id);
-                    formData.append('__RequestVerificationToken', $('input[name="__RequestVerificationToken"]').val());
-
-                    fetch('@Url.Action("ApproveTariff", "DispatchTicket", new { area = "MSAP" })', {
-                        method: 'POST',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                        body: new URLSearchParams(formData)
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            ModernAlert.success('The tariff has been approved.').then(() => location.reload());
-                        } else {
-                            ModernAlert.error(data.message);
-                        }
-                    })
-                    .catch(error => ModernAlert.error(`Request failed: ${error}`));
-                }
-            });
-        }
-
-        function confirmDisapprove(id) {
-            ModernAlert.prompt({
-                title: 'Disapprove Tariff',
-                text: 'Please provide a reason (min 10 characters):',
-                placeholder: 'Reason for disapproval...',
-                icon: 'error',
-                confirmText: 'Submit',
-                validator: (value) => {
-                    if (!value || value.length < 10) return 'Reason must be at least 10 characters';
-                }
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    ModernAlert.showLoading("Submitting...");
-                    const formData = new FormData();
-                    formData.append('id', id);
-                    formData.append('reason', result.value);
-                    formData.append('__RequestVerificationToken', $('input[name="__RequestVerificationToken"]').val());
-
-                    fetch('@Url.Action("DisapproveTariff", "DispatchTicket", new { area = "MSAP" })', {
-                        method: 'POST',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                        body: new URLSearchParams(formData)
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            ModernAlert.success('The tariff has been disapproved.').then(() => location.reload());
-                        } else {
-                            ModernAlert.error(data.message);
-                        }
-                    })
-                    .catch(error => ModernAlert.error(`Request failed: ${error}`));
-                }
-            });
-        }
-
-        function confirmDeleteTicket(id) {
-            ModernAlert.confirm({
-                title: 'Delete Dispatch Ticket?',
-                text: "This action will permanently delete the ticket record from the database.",
-                icon: 'warning',
-                confirmText: 'Yes, delete it!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    ModernAlert.showLoading("Deleting ticket...");
-                    const formData = new FormData();
-                    formData.append('id', id);
-                    formData.append('__RequestVerificationToken', $('input[name="__RequestVerificationToken"]').val());
-
-                    fetch('@Url.Action("Delete", "DispatchTicket", new { area = "MSAP" })', {
-                        method: 'POST',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                        body: new URLSearchParams(formData)
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            ModernAlert.success(data.message).then(() => location.reload());
-                        } else {
-                            ModernAlert.error(data.message);
-                        }
-                    })
-                    .catch(error => ModernAlert.error(`Request failed: ${error}`));
-                }
-            });
-
-        }
     </script>
 }

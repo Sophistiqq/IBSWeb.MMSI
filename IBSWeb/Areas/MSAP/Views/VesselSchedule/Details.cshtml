@@ -19,9 +19,7 @@
     }
     else
     {
-        <aside class="schedule-job-progress-panel wf-panel schedule-details-progress" aria-label="Job Progress">
-            <partial name="_JobProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
-        </aside>
+        <partial name="_WorkflowProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
     }
     <main class="schedule-main-workspace schedule-review-workspace" id="scheduleReview"
           data-rate-url="@Url.Action("GetTariffRate")" data-customer-id="@Model.CustomerId"
@@ -117,6 +115,20 @@
                 <h2 class="wf-section-title" id="reviewNotesTitle">Planning notes</h2>
                 <p class="wf-body schedule-note">@(string.IsNullOrWhiteSpace(Model.Notes) ? "No planning notes." : Model.Notes)</p>
             </section>
+            @if (canApprove)
+            {
+                <form asp-action="Confirm" method="post" id="confirmSchedule" class="schedule-bottom-bar schedule-review-footer"
+                      data-reapproval="@reapproval.ToString().ToLowerInvariant()">
+                    <input type="hidden" name="id" value="@Model.VesselScheduleId" />
+                    <input type="hidden" name="reviewedAt" value="@((Model.EditedDate ?? Model.CreatedDate).ToString("O"))" />
+                    <input type="hidden" name="allowConflicts" value="false" />
+                    <span class="wf-caption wf-muted">@(Model.Revision > 1 ? $"Approval applies to Revision {Model.Revision - 1} of this booking." : "Approval applies to this booking.")</span>
+                    <div class="schedule-action-buttons">
+                        <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">@(pending ? "Back to review list" : "Back to calendar")</a>
+                        <button type="submit" class="schedule-btn-dark wf-button">@(reapproval ? "Reapprove schedule" : "Approve schedule")</button>
+                    </div>
+                </form>
+            }
         </div>
         <aside class="schedule-summary-sidebar" aria-label="Review summary">
             <section class="schedule-summary-card wf-panel wf-stack">
@@ -171,20 +183,7 @@
                 <partial name="_ScheduleActions" model="Model" />
             </section>
         </aside>
-        @if (canApprove)
-        {
-            <form asp-action="Confirm" method="post" id="confirmSchedule" class="schedule-bottom-bar schedule-review-footer"
-                  data-reapproval="@reapproval.ToString().ToLowerInvariant()">
-                <input type="hidden" name="id" value="@Model.VesselScheduleId" />
-                <input type="hidden" name="reviewedAt" value="@((Model.EditedDate ?? Model.CreatedDate).ToString("O"))" />
-                <input type="hidden" name="allowConflicts" value="false" />
-                <span class="wf-caption wf-muted">@(Model.Revision > 1 ? $"Approval applies to Revision {Model.Revision - 1} of this booking." : "Approval applies to this booking.")</span>
-                <div class="schedule-action-buttons">
-                    <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">@(pending ? "Back to review list" : "Back to calendar")</a>
-                    <button type="submit" class="schedule-btn-dark wf-button">@(reapproval ? "Reapprove schedule" : "Approve schedule")</button>
-                </div>
-            </form>
-        }
+
 
     </main>
 </div>

@@ -145,7 +145,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ProcedureEnum.EditCustomerOrderSlip,
             ProcedureEnum.DeleteCustomerOrderSlip,
             ProcedureEnum.CloseCustomerOrderSlip)]
-        public async Task<IActionResult> Details(int id, CancellationToken cancellationToken)
+        public async Task<IActionResult> Details(int id, CancellationToken cancellationToken, int? expectedServiceEntryId = null, int? dispatchTicketId = null, bool editTicket = false)
         {
             var customerOrderSlip = await customerOrderSlipService.GetCustomerOrderSlipByIdAsync(id, cancellationToken);
             if (customerOrderSlip == null)
@@ -165,10 +165,33 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ViewBag.CanDeleteTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteDispatchTicket);
             ViewBag.CanEditCustomerOrderSlip = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditCustomerOrderSlip);
             ViewBag.CanCreateDispatchTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateDispatchTicket);
+            ViewData["CanViewActualTicket"] = ViewBag.CanSetTariff == true || ViewBag.CanApproveTariff == true
+                || ViewBag.CanCreateDispatchTicket == true || ViewBag.CanEditTicket == true || ViewBag.CanDeleteTicket == true
+                || (userId != null && (await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateBilling)
+                    || await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateCollection)));
             var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == id, cancellationToken);
             if (schedule != null)
             {
                 schedule = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(schedule.VesselScheduleId, cancellationToken);
+            }
+            if (expectedServiceEntryId.HasValue)
+            {
+                if (ViewBag.CanCreateDispatchTicket != true)
+                {
+                    return Forbid();
+                }
+                if (schedule?.ServiceEntries.Any(entry => entry.VesselScheduleServiceEntryId == expectedServiceEntryId.Value) != true
+                    || customerOrderSlip.DispatchTickets.Any(ticket => ticket.VesselScheduleServiceEntryId == expectedServiceEntryId.Value))
+                {
+                    return NotFound();
+                }
+                if (schedule != null && billing == null && customerOrderSlip.Status == MsapConstants.CustomerOrderSlipStatus.Open
+                    && schedule.ApprovedRevision == schedule.Revision
+                    && schedule.Status is MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress)
+                {
+                    ViewBag.ActualTicketEntry = await dispatchTicketService.PopulateDispatchTicketViewModelAsync(
+                        new DispatchTicketViewModel { VesselScheduleServiceEntryId = expectedServiceEntryId.Value }, id, cancellationToken);
+                }
             }
             ViewBag.VesselSchedule = schedule;
             ViewBag.JobProgress = await JobProgressCalculator.LoadAsync(unitOfWork, customerOrderSlip, schedule, cancellationToken);
@@ -185,6 +208,39 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     try { ticket.VideoSignedUrl = await cloudStorageService.GetSignedUrlAsync(ticket.VideoName); }
                     catch (Exception ex) { logger.LogWarning(ex, "Video file not found: {Name}", ticket.VideoName); }
                 }
+            }
+
+            if (dispatchTicketId.HasValue)
+            {
+                if (ViewData["CanViewActualTicket"] is not true)
+                {
+                    return Forbid();
+                }
+                var ticket = customerOrderSlip.DispatchTickets.SingleOrDefault(t => t.DispatchTicketId == dispatchTicketId.Value);
+                if (ticket == null || expectedServiceEntryId.HasValue)
+                {
+                    return NotFound();
+                }
+                if (editTicket)
+                {
+                    if (ViewBag.CanEditTicket != true)
+                    {
+                        return Forbid();
+                    }
+                    if (billing != null || customerOrderSlip.Status != MsapConstants.CustomerOrderSlipStatus.Open
+                        || customerOrderSlip.DispatchTickets.Any(t => t.Status == MsapConstants.DispatchTicketStatus.Billed || t.BillingId.HasValue)
+                        || schedule?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled
+                        || schedule != null && schedule.ApprovedRevision != schedule.Revision)
+                    {
+                        TempData["error"] = "This ticket cannot be edited in the current booking or billing state.";
+                        return RedirectToAction(nameof(Details), new { id, dispatchTicketId });
+                    }
+                    ViewData["EditActualTicket"] = true;
+                }
+                ViewData["ViewedTicket"] = ticket;
+                var ticketDetails = new DispatchTicketViewModel();
+                ticketDetails.FromEntity(ticket);
+                ViewBag.ActualTicketEntry = await dispatchTicketService.PopulateDispatchTicketViewModelAsync(ticketDetails, id, cancellationToken);
             }
 
             return View(customerOrderSlip);

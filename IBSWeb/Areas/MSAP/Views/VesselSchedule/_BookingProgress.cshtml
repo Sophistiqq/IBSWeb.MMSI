@@ -1,87 +1,11 @@
 @model int
 @{
     var reviewing = ViewData["BookingProgressReview"] is true;
+    var progress = new JobProgressViewModel
+    {
+        HasSchedule = true,
+        Stage = reviewing ? 1 : 0,
+        Guidance = reviewing ? "Review booking and rates. Approve when ready." : "Complete booking details. Save for reviewing."
+    };
 }
-<aside class="schedule-job-progress-panel wf-panel" aria-label="Job Progress">
-    <div class="job-progress-header">
-        <h2 class="job-progress-title wf-section-title">Job Progress</h2>
-        <p class="job-progress-subtitle">@(Model == 0 ? "New booking" : $"Booking #{Model}")</p>
-    </div>
-    <hr class="schedule-panel-divider" />
-    <ol class="job-progress-stepper" aria-label="Progress stages">
-        <li class="job-progress-step @(reviewing ? "is-done" : "is-current")" aria-current="@(reviewing ? null : "step")">
-            <span class="job-progress-circle">1</span>
-            <div class="job-progress-step-info">
-                <strong class="job-progress-step-title">Planning</strong>
-                <span class="job-progress-step-sub">@(reviewing ? "Saved" : "In progress")</span>
-            </div>
-        </li>
-        <li class="job-progress-step @(reviewing ? "is-current" : "")" aria-current="@(reviewing ? "step" : null)">
-            <span class="job-progress-circle">2</span>
-            <div class="job-progress-step-info">
-                <strong class="job-progress-step-title">COS approval</strong>
-                <span class="job-progress-step-sub">@(reviewing ? "Ready for review" : "Awaiting review")</span>
-            </div>
-        </li>
-        <li class="job-progress-step">
-            <span class="job-progress-circle">3</span>
-            <div class="job-progress-step-info">
-                <strong class="job-progress-step-title">Service tickets</strong>
-                <span class="job-progress-step-sub">Waiting for approval</span>
-            </div>
-        </li>
-        <li class="job-progress-step">
-            <span class="job-progress-circle">4</span>
-            <div class="job-progress-step-info">
-                <strong class="job-progress-step-title">Billing</strong>
-                <span class="job-progress-step-sub">Waiting for tickets</span>
-            </div>
-        </li>
-        <li class="job-progress-step">
-            <span class="job-progress-circle">5</span>
-            <div class="job-progress-step-info">
-                <strong class="job-progress-step-title">Final bill approval</strong>
-                <span class="job-progress-step-sub">Waiting for bill</span>
-            </div>
-        </li>
-        <li class="job-progress-step">
-            <span class="job-progress-circle">6</span>
-            <div class="job-progress-step-info">
-                <strong class="job-progress-step-title">Collection</strong>
-                <span class="job-progress-step-sub">Waiting for approval</span>
-            </div>
-        </li>
-        <li class="job-progress-step">
-            <span class="job-progress-circle">7</span>
-            <div class="job-progress-step-info">
-                <strong class="job-progress-step-title">Deposit</strong>
-                <span class="job-progress-step-sub">Not yet due</span>
-            </div>
-        </li>
-        <li class="job-progress-step">
-            <span class="job-progress-circle">8</span>
-            <div class="job-progress-step-info">
-                <strong class="job-progress-step-title">Clearing</strong>
-                <span class="job-progress-step-sub">Not yet due</span>
-            </div>
-        </li>
-        <li class="job-progress-step">
-            <span class="job-progress-circle">9</span>
-            <div class="job-progress-step-info">
-                <strong class="job-progress-step-title">Fully cleared</strong>
-                <span class="job-progress-step-sub">Not yet due</span>
-            </div>
-        </li>
-    </ol>
-    <hr class="schedule-panel-divider" />
-    <div class="job-progress-section">
-        <div class="job-progress-section-label">SERVICE POSTING</div>
-        <div class="job-progress-section-value">Not started</div>
-        <p class="job-progress-section-desc">Waiting for approved booking and actual service details.</p>
-    </div>
-    <hr class="schedule-panel-divider" />
-    <div class="job-progress-section">
-        <div class="job-progress-section-label">NEXT ACTION</div>
-        <div class="job-progress-section-action">@(reviewing ? "Review booking and rates. Approve when ready." : "Complete booking details. Save for reviewing.")</div>
-    </div>
-</aside>
+<partial name="_WorkflowProgress" model="progress" />

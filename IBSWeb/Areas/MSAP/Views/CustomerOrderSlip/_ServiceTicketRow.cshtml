@@ -1,0 +1,63 @@
+@model Tuple<VesselScheduleServiceEntry?, DispatchTicket?>
+@{
+    var entry = Model.Item1;
+    var ticket = Model.Item2;
+    var cos = ViewData["Cos"] as CustomerOrderSlip ?? throw new InvalidOperationException("COS context is required.");
+    var selected = ViewBag.ActualTicketEntry as DispatchTicketViewModel;
+    var progress = (JobProgressViewModel)ViewBag.JobProgress;
+    var calculationBlocker = ticket == null ? null : progress.CalculationBlockers.GetValueOrDefault(ticket.DispatchTicketId);
+    var service = entry?.Service ?? ticket?.Service ?? throw new InvalidOperationException("A service row requires an expected service or ticket.");
+}
+<tr>
+    <td>@service.ServiceName</td>
+    @if (ticket == null && entry != null)
+    {
+        <td>Not entered</td><td>Pending</td><td>Pending</td><td>Awaiting ticket</td>
+        <td>
+            @if (ViewData["CanRecordExpectedService"] is true)
+            {
+                @if (selected?.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId)
+                {
+                    <span class="wf-label" aria-current="true">Entering ticket</span>
+                }
+                else
+                {
+                    <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@cos.CustomerOrderSlipId"
+                       asp-route-expectedServiceEntryId="@entry.VesselScheduleServiceEntryId" asp-fragment="actualTicketEntry" class="cos-ticket-link">Record ticket</a>
+                }
+            }
+        </td>
+    }
+    else if (ticket != null)
+    {
+        <td>
+            @if (ViewData["CanViewActualTicket"] is true)
+            {
+                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@cos.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-fragment="actualTicketEntry" class="cos-ticket-link">@ticket.DispatchNumber</a>
+            }
+            else
+            {
+                @ticket.DispatchNumber
+            }
+            @if (ticket.DateLeft.HasValue && ticket.TimeLeft.HasValue && ticket.DateArrived.HasValue && ticket.TimeArrived.HasValue)
+            {
+                <small class="wf-caption wf-muted">@ticket.DateLeft.Value.ToString("dd MMM") @ticket.TimeLeft.Value.ToString("HH:mm") – @ticket.DateArrived.Value.ToString("dd MMM") @ticket.TimeArrived.Value.ToString("HH:mm")</small>
+            }
+        </td>
+        <td>@(ticket.RawDurationHours?.ToString("0.00") ?? "—")</td>
+        <td>@ticket.TotalHours.ToString("0.00")</td>
+        <td>
+            <span class="schedule-status-pill">@(calculationBlocker != null || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "Calculation pending" : "Recorded")</span>
+            @if (calculationBlocker != null)
+            {
+                <small class="cos-ticket-blocker wf-caption wf-muted">@calculationBlocker</small>
+            }
+        </td>
+        <td>
+            @if (ViewData["CanViewActualTicket"] is true)
+            {
+                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@cos.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-fragment="actualTicketEntry" class="cos-ticket-link">View ticket</a>
+            }
+        </td>
+    }
+</tr>

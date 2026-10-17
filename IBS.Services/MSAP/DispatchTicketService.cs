@@ -220,9 +220,14 @@ namespace IBS.Services.MSAP
                         model.RawDurationMinutes = (int)duration.TotalMinutes;
                         model.RawDurationHours = (decimal)duration.TotalHours;
                     }
+                    string? chargeBlocker = null;
+                    if (booking != null && model.VesselScheduleServiceEntryId.HasValue)
+                    {
+                        chargeBlocker = await ApplyScheduledChargesAsync(model, booking, username, cancellationToken);
+                    }
                     await unitOfWork.DispatchTicket.AddAsync(model, cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Create dispatch ticket #{model.DispatchNumber}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Create dispatch ticket #{model.DispatchNumber}{(chargeBlocker == null ? "" : $"; {chargeBlocker}")}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
                 }, cancellationToken);
 
@@ -232,6 +237,76 @@ namespace IBS.Services.MSAP
             {
                 logger.LogError(ex, "Failed to create dispatch ticket");
                 return ServiceResult<int>.Failure($"Failed to create dispatch ticket: {ExceptionHelper.GetErrorMessage(ex)}");
+            }
+        }
+
+        public async Task<ServiceResult> RecalculateChargesAsync(int id, int customerOrderSlipId, string username, CancellationToken ct)
+        {
+            try
+            {
+                var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId, ct);
+                if (schedule == null)
+                {
+                    return ServiceResult.Failure("The ticket must belong to an approved vessel schedule.");
+                }
+                var scheduleId = schedule.VesselScheduleId;
+                var result = ServiceResult.Failure("The approved COS is unavailable.");
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    schedule = await unitOfWork.VesselSchedule.GetForUpdateAsync(scheduleId, ct);
+                    var job = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(customerOrderSlipId, ct);
+                    if (job?.Status != MsapConstants.CustomerOrderSlipStatus.Open || schedule == null
+                        || schedule.ApprovedRevision != schedule.Revision
+                        || schedule.Status is not (MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress or MsapConstants.VesselScheduleStatus.Completed))
+                    {
+                        result = ServiceResult.Failure("Approve the current COS revision before recalculating charges.");
+                        return;
+                    }
+                    var ticket = await unitOfWork.DispatchTicket.GetAsync(t => t.DispatchTicketId == id && t.CustomerOrderSlipId == customerOrderSlipId, ct);
+                    if (ticket == null || !ticket.VesselScheduleServiceEntryId.HasValue)
+                    {
+                        result = ServiceResult.Failure("The expected service ticket was not found in this COS.");
+                        return;
+                    }
+                    if (ticket.Status is not (MsapConstants.DispatchTicketStatus.CalculationPending or MsapConstants.DispatchTicketStatus.ForTariff
+                            or MsapConstants.DispatchTicketStatus.ForApproval or MsapConstants.DispatchTicketStatus.Disapproved)
+                        || await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == customerOrderSlipId, ct) != null
+                        || await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == customerOrderSlipId
+                            && (t.BillingId.HasValue || t.Status == MsapConstants.DispatchTicketStatus.Billed), ct) != null)
+                    {
+                        result = ServiceResult.Failure("Only unresolved, unbilled tickets can be recalculated.");
+                        return;
+                    }
+                    var periodBlocker = await GuardClosedPeriodAsync(ticket.Date, ct);
+                    if (periodBlocker == null && ticket.DateLeft.HasValue)
+                    {
+                        periodBlocker = await GuardClosedPeriodAsync(ticket.DateLeft.Value, ct);
+                    }
+                    if (periodBlocker != null)
+                    {
+                        result = periodBlocker;
+                        return;
+                    }
+                    schedule = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(schedule.VesselScheduleId, ct);
+                    var entry = schedule?.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
+                    if (schedule == null || entry == null || entry.TugboatId != ticket.TugBoatId || entry.ServiceId != ticket.ServiceId)
+                    {
+                        result = ServiceResult.Failure("The ticket does not match its approved service requirement.");
+                        return;
+                    }
+                    var blocker = await ApplyScheduledChargesAsync(ticket, schedule, username, ct);
+                    ticket.EditedBy = username;
+                    ticket.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Recalculate charges for #{ticket.DispatchNumber}: {blocker ?? "Charges calculated from approved COS terms and service-date rates"}", "Dispatch Ticket", ticket.DispatchTicketId, ticket.DispatchNumber), ct);
+                    await unitOfWork.SaveAsync(ct);
+                    result = blocker == null ? ServiceResult.Success("Ticket charges recalculated successfully.") : ServiceResult.Failure(blocker);
+                }, ct);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to recalculate ticket {Id}", id);
+                return ServiceResult.Failure("Unable to recalculate charges. Refresh the COS and try again.");
             }
         }
 
@@ -426,7 +501,7 @@ namespace IBS.Services.MSAP
                     c.StartsWith("TimeArrived:") ||
                     c.StartsWith("TotalHours:"));
 
-                if (criticalFieldsChanged)
+                if (criticalFieldsChanged && !currentModel.VesselScheduleServiceEntryId.HasValue)
                 {
                     currentModel.Status = MsapConstants.DispatchTicketStatus.ForTariff;
                     currentModel.DispatchRate = 0;
@@ -446,6 +521,22 @@ namespace IBS.Services.MSAP
                     currentModel.TariffEditedBy = string.Empty;
                     currentModel.TariffEditedDate = null;
                     changes.Add("Tariff data reset due to critical field change");
+                }
+
+                if (criticalFieldsChanged && currentModel.VesselScheduleServiceEntryId.HasValue)
+                {
+                    var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == currentModel.CustomerOrderSlipId, cancellationToken);
+                    if (schedule == null)
+                    {
+                        return ServiceResult.Failure("The approved schedule is unavailable.");
+                    }
+                    schedule = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(schedule.VesselScheduleId, cancellationToken);
+                    if (schedule == null || schedule.ApprovedRevision != schedule.Revision)
+                    {
+                        return ServiceResult.Failure("The current schedule revision must be approved before calculating charges.");
+                    }
+                    var chargeBlocker = await ApplyScheduledChargesAsync(currentModel, schedule, username, cancellationToken);
+                    changes.Add(chargeBlocker ?? "Charges recalculated from approved schedule terms and service-date rates");
                 }
 
                 var auditMessage = changes.Any()
@@ -477,6 +568,11 @@ namespace IBS.Services.MSAP
                 if (currentModel == null)
                 {
                     return ServiceResult.Failure("Ticket not found.", ServiceResultStatus.NotFound);
+                }
+
+                if (currentModel.VesselScheduleServiceEntryId.HasValue)
+                {
+                    return ServiceResult.Failure("Charges for scheduled tickets come from the approved COS and rate tables; separate tariff entry or approval is not allowed.");
                 }
 
                 var guard = await GuardClosedPeriodAsync(currentModel.Date, cancellationToken);
@@ -615,6 +711,11 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Ticket not found.", ServiceResultStatus.NotFound);
                 }
 
+                if (model.VesselScheduleServiceEntryId.HasValue)
+                {
+                    return ServiceResult.Failure("Charges for scheduled tickets come from the approved COS and rate tables; separate tariff entry or approval is not allowed.");
+                }
+
                 var guard = await GuardClosedPeriodAsync(model.Date, cancellationToken);
                 if (guard != null)
                 {
@@ -710,6 +811,11 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Ticket not found.", ServiceResultStatus.NotFound);
                 }
 
+                if (model.VesselScheduleServiceEntryId.HasValue)
+                {
+                    return ServiceResult.Failure("Charges for scheduled tickets come from the approved COS and rate tables; separate tariff entry or approval is not allowed.");
+                }
+
                 var guard = await GuardClosedPeriodAsync(model.Date, cancellationToken);
                 if (guard != null)
                 {
@@ -748,6 +854,11 @@ namespace IBS.Services.MSAP
             {
                 var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(
                     dt => ids.Contains(dt.DispatchTicketId), cancellationToken)).ToList();
+
+                if (tickets.Any(t => t.VesselScheduleServiceEntryId.HasValue))
+                {
+                    return ServiceResult.Failure("Scheduled tickets use approved COS terms and cannot use batch tariff actions.");
+                }
 
                 foreach (var ticket in tickets)
                 {
@@ -822,6 +933,11 @@ namespace IBS.Services.MSAP
             {
                 var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(
                     dt => ids.Contains(dt.DispatchTicketId), cancellationToken)).ToList();
+
+                if (tickets.Any(t => t.VesselScheduleServiceEntryId.HasValue))
+                {
+                    return ServiceResult.Failure("Scheduled tickets use approved COS terms and cannot use batch tariff actions.");
+                }
 
                 foreach (var ticket in tickets)
                 {
@@ -1101,24 +1217,9 @@ namespace IBS.Services.MSAP
                 return ServiceResult<object>.Failure("Ticket not found.", ServiceResultStatus.NotFound);
             }
 
-            var tariffRate =
-                await unitOfWork.TariffTable.GetAsync(t =>
-                        t.CustomerId == customerId &&
-                        t.TerminalId == dispatchModel.TerminalId &&
-                        t.ServiceId == dispatchModel.ServiceId &&
-                        t.AsOfDate <= dispatchModel.DateLeft,
-                    cancellationToken)
-                ??
-                await unitOfWork.TariffTable.GetAsync(t =>
-                        t.CustomerId == customerId &&
-                        t.TerminalId == dispatchModel.TerminalId &&
-                        t.AsOfDate <= dispatchModel.DateLeft,
-                    cancellationToken)
-                ??
-                await unitOfWork.TariffTable.GetAsync(t =>
-                        t.CustomerId == customerId &&
-                        t.AsOfDate <= dispatchModel.DateLeft,
-                    cancellationToken);
+            var tariffRate = dispatchModel.DateLeft.HasValue
+                ? await unitOfWork.TariffTable.GetApplicableRateAsync(customerId, dispatchModel.TerminalId, dispatchModel.ServiceId, dispatchModel.DateLeft.Value, cancellationToken)
+                : null;
 
             if (tariffRate != null)
             {
@@ -1221,6 +1322,18 @@ namespace IBS.Services.MSAP
                 totalBilling = ticket.TotalBilling.ToString("N2"),
                 totalNetRevenue = ticket.TotalNetRevenue.ToString("N2")
             };
+        }
+
+        private async Task<string?> ApplyScheduledChargesAsync(DispatchTicket ticket, VesselSchedule schedule, string username, CancellationToken ct)
+        {
+            var entry = schedule.ServiceEntries.Single(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
+            var rate = ticket.DateLeft.HasValue
+                ? await unitOfWork.TariffTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
+                : null;
+            var blocker = ScheduledTicketCharges.Apply(ticket, schedule, entry, rate);
+            ticket.TariffBy = username;
+            ticket.TariffDate = DateTimeHelper.GetCurrentPhilippineTime();
+            return blocker;
         }
 
         private async Task<string?> ValidateExpectedActualAsync(DispatchTicketViewModel model, CancellationToken ct)

@@ -7,7 +7,8 @@ $(document).ready(function () {
 
     spinnerWrapper.hide();
 
-    $('form:not([data-download])').on('submit', function () {
+    $(document).on('submit', 'form:not([data-download])', function (event) {
+        if (event.isDefaultPrevented()) return;
         if ($(this).data('submitting')) return false;
         $(this).data('submitting', 'true');
 

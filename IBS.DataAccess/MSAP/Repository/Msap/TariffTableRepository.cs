@@ -36,6 +36,18 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             return await query.ToListAsync(cancellationToken);
         }
 
+        public async Task<TariffRate?> GetApplicableRateAsync(int customerId, int terminalId, int serviceId, DateOnly serviceDate, CancellationToken cancellationToken)
+        {
+            return await dbSet
+                .Where(t => t.CustomerId == customerId && t.AsOfDate <= serviceDate)
+                .OrderByDescending(t => t.TerminalId == terminalId && t.ServiceId == serviceId)
+                .ThenByDescending(t => t.TerminalId == terminalId)
+                .ThenByDescending(t => t.ServiceId == serviceId)
+                .ThenByDescending(t => t.AsOfDate)
+                .ThenByDescending(t => t.TariffRateId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         public async Task SaveAsync(CancellationToken cancellationToken)
         {
             await _db.SaveChangesAsync(cancellationToken);

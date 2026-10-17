@@ -18,7 +18,8 @@ $(document).ready(function () {
         spinnerWrapper.hide();
     }
 
-    $('form').on('submit', function () {
+    $(document).on('submit', 'form', function (event) {
+        if (event.isDefaultPrevented()) return;
         $(this).validate();
         if (!$(this).valid()) {
             return false; // Stop execution if invalid

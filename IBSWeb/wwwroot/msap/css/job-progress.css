@@ -77,8 +77,9 @@
     font-size: .875rem;
 }
 
-.job-progress-next .modern-btn-primary {
+.job-progress .job-progress-next :is(.modern-btn-primary, .modern-btn-secondary) {
     flex-shrink: 0;
+    font-size: var(--wf-text-caption, .75rem);
 }
 
 .job-progress-handoff {
@@ -106,4 +107,14 @@
         align-items: flex-start;
         flex-direction: column;
     }
+}
+
+.job-progress-blockers {
+    margin: .5rem 0 0;
+    padding-left: 1rem;
+    font-size: var(--wf-text-caption, .75rem);
+}
+
+.job-progress-blockers li + li {
+    margin-top: .5rem;
 }

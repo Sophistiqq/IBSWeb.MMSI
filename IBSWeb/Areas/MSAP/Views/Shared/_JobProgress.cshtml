@@ -3,10 +3,17 @@
 @inject IAccessControlService AccessControl
 @model JobProgressViewModel
 @{
-    string[] stages = { "Planning", "Confirmation", "Service", "Tariff", "Approval", "Billing", "Posting", "Collection", "Deposit", "Clearing", "Fully Cleared" };
+    (int Stage, string Label)[] stages =
+    {
+        (0, "Planning"), (1, "COS approval"), (2, "Service tickets"),
+        (JobProgressCalculator.BillingStage, "Billing"), (JobProgressCalculator.PostingStage, "Final bill approval"),
+        (JobProgressCalculator.CollectionStage, "Collection"), (JobProgressCalculator.DepositStage, "Deposit"),
+        (JobProgressCalculator.ClearingStage, "Clearing"), (JobProgressCalculator.CompletedStage, "Fully cleared")
+    };
+    var currentStage = Model.Stage is JobProgressCalculator.TariffStage or JobProgressCalculator.ApprovalStage ? 2 : Model.Stage;
     if (Model.Stage == JobProgressCalculator.DepositStage && Model.BankingCollection?.ReturnedDate.HasValue == true)
     {
-        stages[JobProgressCalculator.DepositStage] = "Redeposit";
+        stages[6] = (JobProgressCalculator.DepositStage, "Redeposit");
     }
     var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
     bool canAct = !Model.Stopped && Model.Permission.HasValue && userId != null
@@ -25,15 +32,16 @@
 <section class="modern-card job-progress" aria-label="Job Progress">
     <div class="job-progress-heading">
         <h2 class="modern-headline-md">Job Progress</h2>
-        <span class="modern-badge-sm">@(Model.IsCancelled ? "Cancelled" : Model.IsInvalidated ? "Invalidated" : Model.Stopped ? "Needs attention" : stages[Model.Stage])</span>
+        <span class="modern-badge-sm">@(Model.IsCancelled ? "Cancelled" : Model.IsInvalidated ? "Invalidated" : Model.Stopped ? "Needs attention" : stages.First(s => s.Stage == currentStage).Label)</span>
     </div>
     <ol class="job-progress-timeline" aria-label="Job stages">
         @for (int index = 0; index < stages.Length; index++)
         {
-            bool bypassed = !Model.HasSchedule && index < 2;
-            <li class="@(bypassed ? "is-bypassed" : !Model.Stopped && index < Model.Stage ? "is-done" : index == Model.Stage && !Model.Stopped ? "is-current" : "")" aria-current="@(index == Model.Stage && !Model.Stopped ? "step" : null)">
-                <span class="job-progress-dot" aria-hidden="true">@(bypassed ? "—" : !Model.Stopped && index < Model.Stage ? "✓" : (index + 1).ToString())</span>
-                <span>@stages[index]</span>
+            var step = stages[index];
+            bool bypassed = !Model.HasSchedule && step.Stage < 2;
+            <li class="@(bypassed ? "is-bypassed" : !Model.Stopped && step.Stage < currentStage ? "is-done" : step.Stage == currentStage && !Model.Stopped ? "is-current" : "")" aria-current="@(step.Stage == currentStage && !Model.Stopped ? "step" : null)">
+                <span class="job-progress-dot" aria-hidden="true">@(bypassed ? "—" : !Model.Stopped && step.Stage < currentStage ? "✓" : (index + 1).ToString())</span>
+                <span>@step.Label</span>
                 @if (bypassed)
                 {
                     <span class="visually-hidden">Skipped for direct COS</span>
@@ -45,7 +53,16 @@
         <div>
             <span class="modern-label">@(Model.Stage == JobProgressCalculator.CompletedStage && !Model.Stopped ? "Completed" : "Next Action")</span>
             <p>@Model.Guidance</p>
-            @if (Model.Stage == JobProgressCalculator.TariffStage && !Model.Stopped)
+            @if (Model.CalculationBlockers.Count > 0)
+            {
+                <ul class="job-progress-blockers">
+                    @foreach (var blocker in Model.CalculationBlockers.Values)
+                    {
+                        <li>@blocker</li>
+                    }
+                </ul>
+            }
+            @if (Model.Stage == JobProgressCalculator.TariffStage && !Model.HasSchedule && !Model.Stopped)
             {
                 <p class="job-progress-handoff">Use the tariff action on each Dispatch Ticket in the COS.</p>
             }
@@ -75,7 +92,7 @@
             }
             else
             {
-                <a href="@actionUrl" data-schedule-confirm="@(Model.ActionController == "VesselSchedule" && Model.ActionName == "Confirm" ? "true" : null)" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span> @Model.ActionLabel</a>
+                <a href="@actionUrl" data-schedule-confirm="@(Model.ActionController == "VesselSchedule" && Model.ActionName == "Confirm" ? "true" : null)" class="modern-btn-primary">@Model.ActionLabel</a>
             }
         }
     </div>

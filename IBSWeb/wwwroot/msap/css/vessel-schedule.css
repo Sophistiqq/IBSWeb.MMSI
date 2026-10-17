@@ -418,12 +418,12 @@
     position: relative;
 }
 
-.job-progress-stepper::before {
+.job-progress-step:not(:last-child)::before {
     content: '';
     position: absolute;
-    top: 15px;
-    bottom: 15px;
-    left: calc(0.65rem + 10px);
+    top: calc(var(--wf-space-2) + 11px);
+    bottom: calc(0px - var(--wf-space-1) - var(--wf-space-2) - 11px);
+    left: calc(var(--wf-space-3) + 10px);
     width: 2px;
     background: var(--outline-variant, #e5e7eb);
     z-index: 0;
@@ -1182,54 +1182,14 @@
 }
 
 .schedule-review-footer {
-    grid-column: 1;
     margin: 0;
-    padding-top: var(--wf-section-gap);
+    padding-top: var(--wf-space-4);
 }
 
 .job-progress-step.is-done .job-progress-circle {
     background: var(--on-surface);
     color: var(--surface-container-lowest);
     border-color: var(--on-surface);
-}
-
-.schedule-details-progress .job-progress {
-    border: 0;
-    padding: 0;
-    box-shadow: none;
-}
-
-.schedule-details-progress .modern-headline-md {
-    font: var(--wf-weight-semibold) var(--wf-text-section) / var(--wf-leading-body) var(--wf-font-family);
-}
-
-.schedule-details-progress .job-progress-next .modern-btn-primary {
-    width: 100%;
-    white-space: normal;
-}
-
-.schedule-details-progress :is(.job-progress-heading, .job-progress-next) {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--wf-space-3);
-}
-
-.schedule-details-progress .job-progress-timeline {
-    display: flex;
-    flex-direction: column;
-    padding: 0;
-    gap: var(--wf-space-3);
-}
-
-.schedule-details-progress .job-progress-timeline li {
-    flex-direction: row;
-    align-items: center;
-    text-align: left;
-    min-width: 0;
-}
-
-.schedule-details-progress .job-progress-timeline li::after {
-    display: none;
 }
 
 .schedule-review-actions details > :not(summary) {
@@ -1276,7 +1236,7 @@
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
-    .job-progress-stepper::before {
+    .job-progress-step:not(:last-child)::before {
         display: none;
     }
     .job-progress-step {

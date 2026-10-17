@@ -330,19 +330,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             var asOfDate = DateOnly.FromDateTime(date ?? DateTimeHelper.GetCurrentPhilippineTime());
 
-            var rates = (await unitOfWork.TariffTable.GetAllAsync(t =>
-                t.CustomerId == customerId &&
-                t.AsOfDate <= asOfDate, ct)).ToList();
-
-            if (rates.Count == 0)
-            {
-                return Json(new { exists = false });
-            }
-
-            var rate = (terminalId > 0 ? rates.Where(t => t.TerminalId == terminalId && t.ServiceId == serviceId).OrderByDescending(t => t.AsOfDate).FirstOrDefault() : null)
-                ?? (terminalId > 0 ? rates.Where(t => t.TerminalId == terminalId).OrderByDescending(t => t.AsOfDate).FirstOrDefault() : null)
-                ?? rates.Where(t => t.ServiceId == serviceId).OrderByDescending(t => t.AsOfDate).FirstOrDefault()
-                ?? rates.OrderByDescending(t => t.AsOfDate).FirstOrDefault();
+            var rate = await unitOfWork.TariffTable.GetApplicableRateAsync(customerId, terminalId, serviceId, asOfDate, ct);
 
             if (rate != null)
             {

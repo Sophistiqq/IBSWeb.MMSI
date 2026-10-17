@@ -19,6 +19,7 @@ namespace IBS.Models.MSAP.ViewModels
         public ProcedureEnum? Permission { get; set; }
         public string WaitingFor { get; set; } = string.Empty;
         public Collection? BankingCollection { get; set; }
+        public Dictionary<int, string> CalculationBlockers { get; set; } = [];
         public List<DispatchTicket> Tickets { get; set; } = [];
         public List<Billing> Billings { get; set; } = [];
     }

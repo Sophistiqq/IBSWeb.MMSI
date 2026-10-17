@@ -77,12 +77,16 @@ namespace IBSWeb.Areas.MSAP.Controllers
             DispatchTicketViewModel viewModel,
             IFormFile? imageFile,
             IFormFile? videoFile,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default, bool inlineEntry = false)
         {
             string? userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             string? role = userId is not null ? await roleService.GetUserRoleAsync(userId) : null;
             if ((imageFile == null || imageFile.Length == 0) && role is not (MsapRoles.Admin or MsapRoles.SuperAdmin))
             {
+                if (inlineEntry)
+                {
+                    return Json(new { success = false, message = "An image of the Dispatch Ticket is required." });
+                }
                 TempData["warning"] = "An image of the Dispatch Ticket is strictly required!";
                 viewModel = await dispatchTicketService.PopulateDispatchTicketViewModelAsync(viewModel, null, cancellationToken);
                 return View(viewModel);
@@ -90,6 +94,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             if (!ModelState.IsValid)
             {
+                if (inlineEntry)
+                {
+                    return Json(new { success = false, message = "Review the ticket number, dates and required fields before saving." });
+                }
                 await dispatchTicketService.PopulateDispatchTicketViewModelAsync(viewModel, viewModel.CustomerOrderSlipId, cancellationToken);
                 return View(viewModel);
             }
@@ -97,18 +105,29 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             if (result.IsSuccess)
             {
+                if (inlineEntry)
+                {
+                    return Json(new { success = true, message = result.Message, redirectUrl = Url.Action("Details", "CustomerOrderSlip", new { id = viewModel.CustomerOrderSlipId, dispatchTicketId = result.Data }) });
+                }
                 TempData["success"] = result.Message;
 
                 if (viewModel.CustomerOrderSlipId.HasValue)
                 {
                     TempData["PromptAddTicket"] = !viewModel.VesselScheduleServiceEntryId.HasValue;
-                    TempData.Remove("success");
+                    if (!viewModel.VesselScheduleServiceEntryId.HasValue)
+                    {
+                        TempData.Remove("success");
+                    }
                     return RedirectToAction("Details", "CustomerOrderSlip", new { id = viewModel.CustomerOrderSlipId });
                 }
 
                 return RedirectToAction(nameof(Index));
             }
 
+            if (inlineEntry)
+            {
+                return Json(new { success = false, message = result.Message });
+            }
             TempData["error"] = result.Message;
             viewModel = await dispatchTicketService.PopulateDispatchTicketViewModelAsync(viewModel, null, cancellationToken);
             return View(viewModel);
@@ -464,12 +483,20 @@ namespace IBSWeb.Areas.MSAP.Controllers
             IFormFile? imageFile,
             IFormFile? videoFile,
             string? filterType,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default, bool inlineEntry = false)
         {
+            if (inlineEntry && (!ModelState.IsValid || !viewModel.DispatchTicketId.HasValue))
+            {
+                return Json(new { success = false, message = "Review the ticket number, dates and required fields before saving." });
+            }
             var result = await dispatchTicketService.UpdateDispatchTicketAsync(viewModel, imageFile, videoFile, User.Identity?.Name ?? "System", cancellationToken);
 
             if (result.IsSuccess)
             {
+                if (inlineEntry)
+                {
+                    return Json(new { success = true, message = result.Message, redirectUrl = Url.Action("Details", "CustomerOrderSlip", new { id = viewModel.CustomerOrderSlipId, dispatchTicketId = viewModel.DispatchTicketId }) });
+                }
                 TempData["success"] = result.Message;
 
                 return viewModel.CustomerOrderSlipId.HasValue
@@ -477,6 +504,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     : RedirectToAction(nameof(Index), new { filterType });
             }
 
+            if (inlineEntry)
+            {
+                return Json(new { success = false, message = result.Message });
+            }
             if (result.Status == ServiceResultStatus.NotFound)
             {
                 return NotFound();
@@ -487,6 +518,20 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         #endregion
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.EditDispatchTicket, "Access denied. You don't have permission to recalculate ticket charges.")]
+        public async Task<IActionResult> RecalculateCharges(int id, int customerOrderSlipId, CancellationToken ct)
+        {
+            var result = await dispatchTicketService.RecalculateChargesAsync(id, customerOrderSlipId, User.Identity?.Name ?? "System", ct);
+            return Json(new
+            {
+                success = result.IsSuccess,
+                message = result.Message,
+                redirectUrl = result.IsSuccess ? Url.Action("Details", "CustomerOrderSlip", new { id = customerOrderSlipId, dispatchTicketId = id }) : null
+            });
+        }
 
         #region Status Changes
 

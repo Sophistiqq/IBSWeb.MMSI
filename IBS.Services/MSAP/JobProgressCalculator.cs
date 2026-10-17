@@ -30,7 +30,25 @@ namespace IBS.Services.MSAP
             List<int> collectionIds = billings.Where(b => b.CollectionId.HasValue).Select(b => b.CollectionId!.Value).Distinct().ToList();
             IEnumerable<Collection> collections = collectionIds.Count == 0 ? []
                 : await unitOfWork.Collection.GetAllAsync(c => collectionIds.Contains(c.MsapCollectionId), ct);
-            return Calculate(job, schedule, tickets, billings, collections);
+            var progress = Calculate(job, schedule, tickets, billings, collections);
+            if (schedule != null)
+            {
+                foreach (var ticket in tickets.Where(t => t.Status is not (MsapConstants.DispatchTicketStatus.ForBilling or MsapConstants.DispatchTicketStatus.Billed or MsapConstants.DispatchTicketStatus.Deleted)))
+                {
+                    var entry = schedule.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
+                    if (entry == null)
+                    {
+                        continue;
+                    }
+                    var rate = ticket.DateLeft.HasValue
+                        ? await unitOfWork.TariffTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
+                        : null;
+                    var reason = ScheduledTicketCharges.GetBlocker(ticket, schedule, entry, rate)
+                        ?? "Rates and terms are available. Recalculate charges to complete this ticket.";
+                    progress.CalculationBlockers[ticket.DispatchTicketId] = $"{entry.Tugboat.TugboatName} / {entry.Service.ServiceName} ({ticket.DispatchNumber}): {reason}";
+                }
+            }
+            return progress;
         }
 
         public static async Task<List<JobProgressViewModel>> LoadForBillingsAsync(IUnitOfWork unitOfWork, IEnumerable<int> billingIds, CancellationToken ct)
@@ -200,6 +218,13 @@ namespace IBS.Services.MSAP
                     result.Billings = bills;
                     result.Guidance = "No active Dispatch Tickets remain, and this booking cannot accept new tickets. Review its booking status and linked billing before continuing.";
                 }
+                return result;
+            }
+            if (schedule?.ServiceEntries.Count > 0 && active.Any(t => t.Status is not (MsapConstants.DispatchTicketStatus.ForBilling or MsapConstants.DispatchTicketStatus.Billed)))
+            {
+                result.Stage = 2;
+                result.Stopped = true;
+                result.Guidance = "Recorded service tickets still need charge calculation. Review the affected tickets and their calculation details before billing.";
                 return result;
             }
             List<DispatchTicket> tariff = active.Where(t => t.Status is MsapConstants.DispatchTicketStatus.ForTariff or MsapConstants.DispatchTicketStatus.Disapproved).ToList();

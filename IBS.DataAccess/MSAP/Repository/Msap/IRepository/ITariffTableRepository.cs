@@ -5,6 +5,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
 {
     public interface ITariffTableRepository : IRepository<TariffRate>
     {
+        Task<TariffRate?> GetApplicableRateAsync(int customerId, int terminalId, int serviceId, DateOnly serviceDate, CancellationToken cancellationToken);
+
         Task SaveAsync(CancellationToken cancellationToken);
     }
 }

@@ -179,3 +179,109 @@
         justify-self: stretch;
     }
 }
+
+/* Shared vertical progress for schedule and COS workspaces. */
+.msap-workflow .schedule-details-progress .job-progress {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+    background: transparent;
+}
+
+.msap-workflow .schedule-details-progress .modern-headline-md {
+    font: var(--wf-weight-semibold) var(--wf-text-section) / var(--wf-leading-body) var(--wf-font-family);
+}
+
+.msap-workflow .schedule-details-progress :is(.job-progress-heading, .job-progress-next) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--wf-space-3);
+}
+
+.msap-workflow .schedule-details-progress .job-progress-heading {
+    padding-bottom: var(--wf-space-3);
+    border-bottom: 1px solid var(--outline-variant);
+}
+
+.msap-workflow .schedule-details-progress .job-progress-heading .modern-badge-sm {
+    align-self: flex-start;
+    background: var(--surface-container-low);
+    color: var(--on-surface);
+    border: 0;
+}
+
+.msap-workflow .schedule-details-progress .job-progress-timeline {
+    flex-direction: column;
+    gap: var(--wf-space-1);
+    padding: var(--wf-space-3) 0;
+    overflow: visible;
+}
+
+.msap-workflow .schedule-details-progress .job-progress-timeline li {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--wf-space-3);
+    padding: var(--wf-space-2) var(--wf-space-3);
+    border-radius: var(--wf-radius);
+    min-width: 0;
+    white-space: normal;
+    font-size: var(--wf-text-body);
+    font-weight: var(--wf-weight-medium);
+    line-height: 22px;
+    color: var(--on-surface-variant);
+}
+
+.msap-workflow .schedule-details-progress .job-progress-timeline li:not(:last-child)::after {
+    display: block;
+    left: calc(var(--wf-space-3) + 10px);
+    right: auto;
+    top: calc(var(--wf-space-2) + 22px);
+    bottom: calc(-1 * (var(--wf-space-2) + var(--wf-space-1)));
+    width: 2px;
+    height: auto;
+    background: var(--outline-variant);
+}
+
+.msap-workflow .schedule-details-progress .job-progress-timeline .is-current {
+    background: color-mix(in srgb, var(--on-surface) 6%, transparent);
+    color: var(--on-surface);
+    font-weight: var(--wf-weight-semibold);
+}
+
+.msap-workflow .schedule-details-progress .job-progress-dot {
+    position: relative;
+    z-index: 1;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    background: var(--surface-container-lowest);
+    color: var(--on-surface-variant);
+    font-size: var(--wf-text-caption);
+}
+
+.msap-workflow .schedule-details-progress :is(.is-current, .is-done) .job-progress-dot {
+    background: var(--on-surface);
+    border-color: var(--on-surface);
+    color: var(--surface-container-lowest);
+}
+
+.msap-workflow .schedule-details-progress .job-progress-next {
+    border-top: 1px solid var(--outline-variant);
+    padding-top: var(--wf-space-4);
+}
+
+.msap-workflow .schedule-details-progress .job-progress-next .modern-label {
+    font-size: var(--wf-text-caption);
+}
+
+.msap-workflow .schedule-details-progress .job-progress-next :is(.modern-btn-primary, .modern-btn-secondary) {
+    width: 100%;
+    white-space: normal;
+}
+
+.msap-workflow .schedule-details-progress .job-progress-next .modern-btn-primary {
+    background: var(--on-surface);
+    border-color: var(--on-surface);
+    color: var(--surface-container-lowest);
+}
