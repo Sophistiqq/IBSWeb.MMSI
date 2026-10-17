@@ -140,6 +140,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ProcedureEnum.SetTariff,
             ProcedureEnum.ApproveTariff,
             ProcedureEnum.CreateBilling,
+            ProcedureEnum.ApproveFinalBilling,
             ProcedureEnum.CreateCollection,
             ProcedureEnum.CreateCustomerOrderSlip,
             ProcedureEnum.EditCustomerOrderSlip,
@@ -168,6 +169,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ViewData["CanViewActualTicket"] = ViewBag.CanSetTariff == true || ViewBag.CanApproveTariff == true
                 || ViewBag.CanCreateDispatchTicket == true || ViewBag.CanEditTicket == true || ViewBag.CanDeleteTicket == true
                 || (userId != null && (await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateBilling)
+                    || await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveFinalBilling)
                     || await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateCollection)));
             var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == id, cancellationToken);
             if (schedule != null)
@@ -256,6 +258,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ProcedureEnum.SetTariff,
             ProcedureEnum.ApproveTariff,
             ProcedureEnum.CreateBilling,
+            ProcedureEnum.ApproveFinalBilling,
             ProcedureEnum.CreateCollection,
             ProcedureEnum.CreateCustomerOrderSlip,
             ProcedureEnum.EditCustomerOrderSlip,

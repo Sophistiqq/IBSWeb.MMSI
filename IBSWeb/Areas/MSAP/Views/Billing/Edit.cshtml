@@ -6,6 +6,8 @@
     var hasCustomerOrderSlip = Model.CustomerOrderSlipId.HasValue;
 }
 
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+
 <div class="modern-layout">
     <form id="myForm" method="post">
         @Html.AntiForgeryToken()
@@ -16,15 +18,12 @@
             <!-- Header -->
             <div class="flex-stack">
                 <div>
-                    <div class="flex items-center gap-2 mb-1">
-                        <span class="modern-label">MSAP</span>
-                        <span class="material-symbols-outlined text-xs">chevron_right</span>
-                        <a class="modern-label" style="text-decoration:none;" asp-action="Index">Billing</a>
-                        <span class="material-symbols-outlined text-xs">chevron_right</span>
-                        <span class="modern-label" style="color: var(--on-surface)">@Model.MsapBillingNumber</span>
-                        <span class="material-symbols-outlined text-xs">chevron_right</span>
-                        <span class="modern-label" style="color: var(--on-surface)">Edit</span>
-                    </div>
+                    <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb">
+                        <li>MSAP</li>
+                        <li><a asp-action="Index">Billing</a></li>
+                        <li>@Model.MsapBillingNumber</li>
+                        <li aria-current="page">Edit</li>
+                    </ol></nav>
                     <h1 class="modern-headline-lg" data-page-header>Edit Billing: @Model.MsapBillingNumber</h1>
                 </div>
                 <div class="flex gap-2">

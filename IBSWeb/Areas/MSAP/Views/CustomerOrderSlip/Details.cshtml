@@ -29,7 +29,7 @@
     <main class="cos-details-workspace wf-stack">
         @Html.AntiForgeryToken()
         <header class="wf-page-header">
-            <nav aria-label="Breadcrumb"><ol class="schedule-breadcrumb"><li><a asp-action="Index">COS records</a></li><li aria-current="page">@Model.CustomerOrderSlipNumber</li></ol></nav>
+            <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb"><li><a asp-action="Index">COS records</a></li><li aria-current="page">@Model.CustomerOrderSlipNumber</li></ol></nav>
             <h1 class="wf-page-title" data-page-header>COS details &amp; tickets</h1>
             <a asp-action="Index" class="modern-btn-secondary wf-page-action">Back to list</a>
             <div class="wf-page-description cos-details-status">

@@ -9,7 +9,7 @@
     string component = bafOnly ? "BAF" : basicOnly ? "Basic" : "Basic and BAF";
     string? blocker = ViewData["PostingBlocker"] as string;
     bool canPrint = BillingService.CanPrint(Model);
-    bool canPost = Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && ViewData["IsPeriodClosed"] is not true;
+    bool canPost = ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && ViewData["IsPeriodClosed"] is not true;
 }
 <style media="print">
     body { display: none !important; }
@@ -27,11 +27,18 @@
         </div>
         <main class="billing-content wf-stack">
             <header class="wf-page-header">
-                <nav class="wf-caption wf-muted" aria-label="Breadcrumb"><a asp-action="Index">Billing</a> / @Model.MsapBillingNumber / Review</nav>
+                <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb"><li><a asp-action="Index">Billing</a></li><li>@Model.MsapBillingNumber</li><li aria-current="page">Review</li></ol></nav>
                 <h1 class="wf-page-title" data-page-header>Review billing</h1>
-                <a asp-action="Index" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-secondary wf-page-action">Review list</a>
-                <p class="wf-page-description wf-caption wf-muted">@Model.MsapBillingNumber · @component · @Model.Status · @(Model.IsUndocumented ? "Undocumented" : "Documented")</p>
+                <div class="billing-review-header-actions">
+                    <a asp-action="Index" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-secondary wf-page-action">Review list</a>
+                    <a asp-action="Preview" asp-route-id="@Model.MsapBillingId" asp-route-printCopy="@canPrint" target="_blank" class="modern-btn-primary wf-page-action">Preview statements</a>
+                </div>
+                <p class="wf-page-description wf-caption wf-muted">@Model.MsapBillingNumber · @component · @(Model.Status == MsapConstants.BillingStatus.ForPosting ? "Awaiting final approval" : "Approved") · @(Model.IsUndocumented ? "Undocumented" : "Documented")</p>
             </header>
+            @if (Model.ApprovedAt.HasValue)
+            {
+                <p class="wf-caption wf-muted">Approved by @(Model.ApprovedByUser?.UserName ?? Model.ApprovedByUserId) · revision @Model.ApprovedRevision · @Model.ApprovedAt.Value.ToString("dd MMM yyyy HH:mm")</p>
+            }
             @if (related != null)
             {
                 <section class="wf-panel billing-section-heading" aria-label="Related billing">
@@ -100,20 +107,18 @@
                     <p class="wf-caption wf-muted">No ticket images are available.</p>
                 }
             </section>
-            <div class="billing-section-heading">
-                <a asp-action="Preview" asp-route-id="@Model.MsapBillingId" asp-route-printCopy="@canPrint" target="_blank" class="modern-btn-secondary">Preview statements</a>
-            </div>
             <footer class="billing-footer">
-                <p class="wf-caption wf-muted">Posting applies to @Model.MsapBillingNumber only.</p>
+                <p class="wf-caption wf-muted">Final approval applies to @Model.MsapBillingNumber only.</p>
                 @if (canPost)
                 {
                     <form asp-action="Review" asp-route-id="@Model.MsapBillingId" method="post" id="postReviewedBilling">
-                        <button class="modern-btn-primary wf-page-action" type="submit">Post billing @Model.MsapBillingNumber</button>
+                        <input type="hidden" name="reviewedRevision" value="@Model.Revision" />
+                        <button class="modern-btn-primary wf-page-action" type="submit">Approve final bill @Model.MsapBillingNumber</button>
                     </form>
                 }
                 else
                 {
-                    <p class="wf-caption wf-muted">@(blocker ?? (ViewData["IsPeriodClosed"] is true ? "This accounting period is closed." : "This billing has already been posted."))</p>
+                    <p class="wf-caption wf-muted">@(blocker ?? (ViewData["IsPeriodClosed"] is true ? "This accounting period is closed." : Model.Status == MsapConstants.BillingStatus.ForPosting ? "Waiting for an authorized final-bill approver." : "This billing has already been approved."))</p>
                 }
             </footer>
         </main>
@@ -128,7 +133,7 @@
             if (button.disabled) return;
             button.disabled = true;
             try {
-                const result = await ModernAlert.confirm({ title: 'Post this billing?', text: 'Post the selected billing after reviewing its charges and statement.', confirmText: 'Post billing', cancelText: 'Keep reviewing' });
+                const result = await ModernAlert.confirm({ title: 'Approve this final bill?', text: 'Approve this numbered bill after reviewing its charges, statement and ticket images.', confirmText: 'Approve final bill', cancelText: 'Keep reviewing' });
                 if (result.isConfirmed) form.submit();
             } finally {
                 button.disabled = false;

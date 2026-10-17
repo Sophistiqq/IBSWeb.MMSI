@@ -31,6 +31,7 @@
             ProcedureEnum.SetTariff,
             ProcedureEnum.ApproveTariff,
             ProcedureEnum.CreateBilling,
+            ProcedureEnum.ApproveFinalBilling,
             ProcedureEnum.CreateCollection,
             ProcedureEnum.CreateCustomerOrderSlip,
             ProcedureEnum.EditCustomerOrderSlip,
@@ -133,7 +134,7 @@
                                                 </div>
                                             </a>
                                         }
-                                        @if (await ModernHasAnyAccess(ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling, ProcedureEnum.DeleteBilling, ProcedureEnum.ReverseBilling))
+                                        @if (await ModernHasAnyAccess(ProcedureEnum.CreateBilling, ProcedureEnum.ApproveFinalBilling, ProcedureEnum.EditBilling, ProcedureEnum.DeleteBilling, ProcedureEnum.ReverseBilling))
                                         {
                                             <a class="mnav-mega-link"
                                                asp-area="MSAP" asp-controller="Billing" asp-action="Index"

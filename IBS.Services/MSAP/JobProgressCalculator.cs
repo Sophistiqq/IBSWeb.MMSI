@@ -118,9 +118,18 @@ namespace IBS.Services.MSAP
 
         public static JobProgressViewModel Calculate(CustomerOrderSlip? job, VesselSchedule? schedule, IEnumerable<DispatchTicket> tickets, IEnumerable<Billing> billings, IEnumerable<Collection>? collections = null)
         {
-            var result = new JobProgressViewModel { HasSchedule = schedule != null, CustomerOrderSlipId = job?.CustomerOrderSlipId, CustomerOrderSlipNumber = job?.CustomerOrderSlipNumber };
+            var result = new JobProgressViewModel
+            {
+                HasSchedule = schedule != null,
+                VesselScheduleId = schedule?.VesselScheduleId,
+                CustomerOrderSlipId = job?.CustomerOrderSlipId,
+                CustomerOrderSlipNumber = job?.CustomerOrderSlipNumber,
+                ExpectedTicketCount = schedule?.ServiceEntries.Count ?? 0
+            };
             List<DispatchTicket> active = tickets.Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted).OrderBy(t => t.DispatchTicketId).ToList();
             List<Billing> bills = billings.OrderBy(b => b.MsapBillingId).ToList();
+            result.RecordedTicketCount = active.Count;
+            result.LinkedBillings = bills;
             if (schedule?.Status == MsapConstants.VesselScheduleStatus.Cancelled || job?.Status == MsapConstants.CustomerOrderSlipStatus.Cancelled)
             {
                 result.Stopped = true;
@@ -156,7 +165,7 @@ namespace IBS.Services.MSAP
                     && schedule.TerminalId > 0 && schedule.PlannedEnd > schedule.PlannedStart && assigned.Any(id => id > 0);
                 result.Stage = ready ? 1 : 0;
                 result.Guidance = ready ? "Review the booking and assigned tugboats. Confirmation creates its COS." : "Complete booking details and assign at least one tugboat before confirmation.";
-                SetAction(result, ready ? "Review and Confirm" : "Complete Booking", "VesselSchedule", ready ? "Confirm" : "Edit", schedule.VesselScheduleId,
+                SetAction(result, ready ? "Review and Confirm" : "Complete Booking", "VesselSchedule", ready ? "Details" : "Edit", schedule.VesselScheduleId,
                     ready ? ProcedureEnum.ApproveSchedule : ProcedureEnum.EditCustomerOrderSlip, ready ? "schedule confirmation" : "booking preparation");
                 return result;
             }
@@ -164,7 +173,7 @@ namespace IBS.Services.MSAP
             {
                 result.Stage = 1;
                 result.Guidance = "The schedule was revised and requires reapproval before ticket entry.";
-                SetAction(result, "Review and Reapprove", "VesselSchedule", "Confirm", schedule.VesselScheduleId,
+                SetAction(result, "Review and Reapprove", "VesselSchedule", "Details", schedule.VesselScheduleId,
                     ProcedureEnum.ApproveSchedule, "schedule reapproval");
                 return result;
             }
@@ -263,8 +272,8 @@ namespace IBS.Services.MSAP
             {
                 result.Stage = PostingStage;
                 result.Billings = posting;
-                result.Guidance = $"{posting.Count} billing(s) need review and posting before collection.";
-                SetAction(result, "Review and Post Billing", "Billing", "Review", posting[0].MsapBillingId, ProcedureEnum.CreateBilling, "billing posting");
+                result.Guidance = $"{posting.Count} billing(s) await final approval.";
+                SetAction(result, "Review final bill", "Billing", "Review", posting[0].MsapBillingId, ProcedureEnum.ApproveFinalBilling, "final bill approval");
                 return result;
             }
             if (bills.Count == 0 || active.Any(t => t.Status != MsapConstants.DispatchTicketStatus.Billed || !t.BillingId.HasValue))

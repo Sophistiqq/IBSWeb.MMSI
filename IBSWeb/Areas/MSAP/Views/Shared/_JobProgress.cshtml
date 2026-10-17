@@ -18,7 +18,14 @@
     var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
     bool canAct = !Model.Stopped && Model.Permission.HasValue && userId != null
         && await AccessControl.HasAccessAsync(userId, Model.Permission.Value);
-    bool actionHere = ViewData["JobProgressActionStage"] is int stage && stage == Model.Stage;
+    bool actionHere = ViewData["JobProgressActionStage"] is int stage && stage == Model.Stage
+        && (ViewData["JobProgressActionTargetId"] is not int targetId || targetId == Model.TargetId);
+    bool canViewBilling = userId != null && await AccessControl.HasAnyAccessAsync(userId, ProcedureEnum.CreateBilling, ProcedureEnum.ApproveFinalBilling);
+    bool canViewCos = userId != null && await AccessControl.HasAnyAccessAsync(userId, ProcedureEnum.ApproveSchedule,
+        ProcedureEnum.CreateDispatchTicket, ProcedureEnum.EditDispatchTicket, ProcedureEnum.SetTariff, ProcedureEnum.ApproveTariff,
+        ProcedureEnum.CreateBilling, ProcedureEnum.ApproveFinalBilling, ProcedureEnum.CreateCollection,
+        ProcedureEnum.CreateCustomerOrderSlip, ProcedureEnum.EditCustomerOrderSlip, ProcedureEnum.DeleteCustomerOrderSlip, ProcedureEnum.CloseCustomerOrderSlip);
+    var reviewBill = Model.LinkedBillings.FirstOrDefault(b => b.Status == MsapConstants.BillingStatus.ForPosting) ?? Model.LinkedBillings.FirstOrDefault();
     var actionUrl = !canAct ? null : Url.Action(Model.ActionName, Model.ActionController, new
     {
         area = "MSAP",
@@ -37,9 +44,87 @@
         {
             var step = stages[index];
             bool bypassed = !Model.HasSchedule && step.Stage < 2;
-            <li class="@(bypassed ? "is-bypassed" : !Model.Stopped && step.Stage < currentStage ? "is-done" : step.Stage == currentStage && !Model.Stopped ? "is-current" : "")" aria-current="@(step.Stage == currentStage && !Model.Stopped ? "step" : null)">
-                <span class="job-progress-dot" aria-hidden="true">@(bypassed ? "—" : !Model.Stopped && step.Stage < currentStage ? "✓" : (index + 1).ToString())</span>
-                <span>@step.Label</span>
+            bool done = !bypassed && step.Stage < currentStage;
+            string label = done ? step.Stage switch
+            {
+                0 => "Planned",
+                1 => "COS approved",
+                2 => "Tickets recorded",
+                JobProgressCalculator.BillingStage => "Billing prepared",
+                JobProgressCalculator.PostingStage => "Final bill approved",
+                _ => step.Label
+            } : step.Label;
+            string? stepUrl = null;
+            if (!bypassed && userId != null)
+            {
+                if (step.Stage is 0 or 1 && Model.VesselScheduleId.HasValue)
+                {
+                    stepUrl = Url.Action("Details", "VesselSchedule", new { area = "MSAP", id = Model.VesselScheduleId });
+                }
+                else if (step.Stage == 2 && canViewCos && Model.CustomerOrderSlipId.HasValue)
+                {
+                    stepUrl = Url.Action("Details", "CustomerOrderSlip", new { area = "MSAP", id = Model.CustomerOrderSlipId });
+                }
+                else if (step.Stage == JobProgressCalculator.BillingStage && canViewBilling)
+                {
+                    if (reviewBill != null)
+                    {
+                        stepUrl = Url.Action("Review", "Billing", new { area = "MSAP", id = reviewBill.MsapBillingId });
+                    }
+                    else if (!Model.Stopped && currentStage == JobProgressCalculator.BillingStage && canAct)
+                    {
+                        stepUrl = actionUrl;
+                    }
+                }
+                else if (step.Stage == JobProgressCalculator.PostingStage && canViewBilling && reviewBill != null)
+                {
+                    stepUrl = Url.Action("Review", "Billing", new { area = "MSAP", id = reviewBill.MsapBillingId });
+                }
+            }
+            <li class="@(bypassed ? "is-bypassed" : done ? "is-done" : step.Stage == currentStage && !Model.Stopped ? "is-current" : "")" aria-current="@(step.Stage == currentStage && !Model.Stopped ? "step" : null)">
+                <span class="job-progress-dot" aria-hidden="true">@(bypassed ? "—" : done ? "✓" : (index + 1).ToString())</span>
+                <span class="job-progress-stage-content">
+                    @if (stepUrl != null)
+                    {
+                        <a href="@stepUrl" class="job-progress-stage-link">@label</a>
+                    }
+                    else
+                    {
+                        <span>@label</span>
+                    }
+                    @if (step.Stage == 1 && Model.CustomerOrderSlipNumber != null)
+                    {
+                        <small class="job-progress-detail">@Model.CustomerOrderSlipNumber</small>
+                    }
+                    @if (step.Stage == 2 && Model.CustomerOrderSlipId.HasValue)
+                    {
+                        <small class="job-progress-detail">@(Model.ExpectedTicketCount > 0 ? $"{Model.RecordedTicketCount} / {Model.ExpectedTicketCount} recorded" : $"{Model.RecordedTicketCount} recorded")</small>
+                    }
+                    @if (step.Stage == JobProgressCalculator.PostingStage)
+                    {
+                        @foreach (var bill in Model.LinkedBillings)
+                        {
+                            string billStatus = bill.Status switch
+                            {
+                                MsapConstants.BillingStatus.ForPosting => "Awaiting approval",
+                                MsapConstants.BillingStatus.ForCollection or MsapConstants.BillingStatus.Collected => "Approved",
+                                _ => bill.Status
+                            };
+                            string billType = bill.BasicBillingId.HasValue ? "BAF" : bill.BafBilling != null ? "Basic" : "Combined";
+                            <small class="job-progress-detail">
+                                @if (canViewBilling)
+                                {
+                                    <a asp-area="MSAP" asp-controller="Billing" asp-action="Review" asp-route-id="@bill.MsapBillingId">@billType #@bill.MsapBillingNumber</a>
+                                }
+                                else
+                                {
+                                    <span>@billType #@bill.MsapBillingNumber</span>
+                                }
+                                <span> · @billStatus</span>
+                            </small>
+                        }
+                    }
+                </span>
                 @if (bypassed)
                 {
                     <span class="visually-hidden">Skipped for direct COS</span>

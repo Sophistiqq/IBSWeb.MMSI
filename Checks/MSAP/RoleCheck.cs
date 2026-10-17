@@ -105,6 +105,7 @@ namespace Checks.MSAP
                 "MSAP SuperAdmin cannot access both administration areas.");
             await CheckApprovalsAsync(users, work, user.Id, false, scheduleAdmin: true);
             Check((await work.UserAccess.GetUserIdsWithAccessAsync(ProcedureEnum.ApproveSchedule)).Contains(user.Id), "MSAP SuperAdmin is missing from schedule recipients.");
+            Check((await work.UserAccess.GetUserIdsWithAccessAsync(ProcedureEnum.ApproveFinalBilling)).Contains(user.Id), "MSAP SuperAdmin is missing from final-bill approvers.");
             user.IsActive = false;
             Check((await users.UpdateAsync(user)).Succeeded, "Cannot deactivate the test account.");
             principal.Identities.First().AddClaim(new Claim(MsapRoles.ClaimType, MsapRoles.SuperAdmin));
@@ -134,14 +135,14 @@ namespace Checks.MSAP
             Check((await users.RemoveFromRoleAsync(user, "Admin")).Succeeded, "Cannot clean up Filpride test membership.");
             Check((await roles.DeleteAsync((await roles.FindByNameAsync("Admin"))!)).Succeeded, "Cannot clean up Filpride test role.");
             Console.WriteLine("PASS: MSAP Admin defaults, explicit role overrides, procedure permissions, shared role preservation, inactive accounts and stale cookies.");
-            Console.WriteLine("PASS: explicit workflow approval grants/revocation, stable procedure values, Admin/SuperAdmin schedule approval, separate rate/final-billing grants and inactive-account denial.");
+            Console.WriteLine("PASS: explicit workflow approval grants/revocation, stable procedure values, Admin/SuperAdmin schedule and final-bill approval, separate rate approval grants and inactive-account denial.");
         }
 
         private static async Task CheckApprovalsAsync(UserManager<ApplicationUser> users, IUnitOfWork work, string userId, bool expected, bool scheduleAdmin = false)
         {
             foreach (ProcedureEnum procedure in new[] { ProcedureEnum.ApproveSchedule, ProcedureEnum.ApproveRateUpload, ProcedureEnum.ApproveFinalBilling })
             {
-                bool allowed = expected || procedure == ProcedureEnum.ApproveSchedule && scheduleAdmin;
+                bool allowed = expected || (procedure is ProcedureEnum.ApproveSchedule or ProcedureEnum.ApproveFinalBilling) && scheduleAdmin;
                 Check(await HasProcedureAsync(users, work, userId, procedure) == allowed, $"Unexpected access to {procedure}.");
             }
         }

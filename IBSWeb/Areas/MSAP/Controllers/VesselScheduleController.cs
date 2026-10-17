@@ -179,6 +179,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return NotFound();
             }
             await SetActionPermissionsAsync();
+            ViewData["JobProgressActionStage"] = 1;
+            ViewData["JobProgressActionTargetId"] = id;
             var job = schedule.CustomerOrderSlipId.HasValue
                 ? await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == schedule.CustomerOrderSlipId.Value, ct)
                 : null;

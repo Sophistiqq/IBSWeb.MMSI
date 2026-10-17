@@ -13,20 +13,13 @@
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <div class="schedule-screen-layout msap-workflow">
-    @if (pending)
-    {
-        <partial name="_BookingProgress" model="Model.VesselScheduleId" />
-    }
-    else
-    {
-        <partial name="_WorkflowProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
-    }
+    <partial name="_WorkflowProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
     <main class="schedule-main-workspace schedule-review-workspace" id="scheduleReview"
           data-rate-url="@Url.Action("GetTariffRate")" data-customer-id="@Model.CustomerId"
           data-terminal-id="@Model.TerminalId" data-planned-start="@Model.PlannedStart.ToString("yyyy-MM-ddTHH:mm")">
         <header class="schedule-header-stack wf-page-header">
             <nav aria-label="Breadcrumb">
-                <ol class="schedule-breadcrumb">
+                <ol class="wf-breadcrumb">
                     <li><a asp-action="Index">Vessel schedules</a></li>
                     <li aria-current="page">Booking #@Model.VesselScheduleId</li>
                 </ol>

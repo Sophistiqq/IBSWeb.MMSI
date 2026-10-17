@@ -175,7 +175,7 @@ namespace Checks.MSAP
                 ticket.Status = MsapConstants.DispatchTicketStatus.ForBilling;
                 ticket.DispatchNetRevenue = ticket.TotalNetRevenue = 100m;
                 await module.SaveChangesAsync();
-                var billingService = new BillingService(work, service, NullLogger<BillingService>.Instance);
+                var billingService = new BillingService(work, service, NullLogger<BillingService>.Instance, new JobProgressCheck.CheckAccess());
                 var bill = new Billing
                 {
                     CustomerOrderSlipId = job.CustomerOrderSlipId, Date = job.Date, CustomerId = customer.CustomerId, BilledTo = "CHECK01", MsapBillingNumber = "B-CHECK",
@@ -188,8 +188,15 @@ namespace Checks.MSAP
                     "MSAP billing did not use the shared Filpride term with an empty local terms table.");
                 Check(bill.Amount == 100m && bill.Balance == 100m && bill.IsVatInclusive && bill.IsVatable && !bill.PrintWht, "Billing accepted tax overrides instead of customer settings.");
                 Check((await audits.GetAuditTrailsByEntityAsync("Billing", bill.MsapBillingId, default)).Any(a => a.ReferenceNumber == bill.MsapBillingNumber), "Billing creation audit lost its ID.");
-                var posted = await billingService.PostBillingAsync(bill.MsapBillingId, "check", default);
-                Check(posted.IsSuccess, posted.Message ?? "Billing posting failed.");
+                Check(!(await billingService.PostBillingAsync(bill.MsapBillingId, "check", default, "denied", bill.Revision)).IsSuccess,
+                    "Billing creation access must not grant final approval.");
+                Check(!(await billingService.PostBillingAsync(bill.MsapBillingId, "check", default, "shared-check", bill.Revision + 1)).IsSuccess,
+                    "A stale review must not approve a bill.");
+                bill = (await work.Billing.GetAsync(b => b.MsapBillingId == bill.MsapBillingId, default))!;
+                var posted = await billingService.PostBillingAsync(bill.MsapBillingId, "check", default, "shared-check", bill.Revision);
+                Check(posted.IsSuccess, posted.Message ?? "Billing approval failed.");
+                Check(bill.ApprovedRevision == bill.Revision && bill.ApprovedByUserId == "shared-check" && bill.ApprovedAt.HasValue,
+                    "Final approval evidence was not saved against the reviewed revision.");
                 var collectionService = new CollectionService(work, NullLogger<CollectionService>.Instance);
                 var collection = await collectionService.CreateCollectionAsync(new CreateCollectionViewModel
                 {
@@ -225,23 +232,23 @@ namespace Checks.MSAP
                 Check(undocumentedPreview.IsSuccess && undocumented.BafBilling is { IsUndocumented: true }
                     && undocumented.MsapBillingNumber != undocumented.BafBilling.MsapBillingNumber,
                     "Undocumented split preview did not generate two distinct billing references.");
-                ServiceResult<(int DispatchBillingId, int BafBillingId)> split = await billingService.CreatePhilCebSplitAsync(new Billing
+                ServiceResult<int> split = await billingService.CreateBillingAsync(new Billing
                 {
-                    MsapBillingNumber = "SPLIT01", Date = job.Date, CustomerId = customer.CustomerId,
+                    MsapBillingNumber = "SPLIT01", SeparateBaf = true, BafBillingNumber = "BAF-CHECK", Date = job.Date, CustomerId = customer.CustomerId,
                     CustomerOrderSlipId = splitJob.CustomerOrderSlipId, VesselId = vessel.VesselId, PortId = port.PortId, TerminalId = terminal.TerminalId,
                     BilledTo = "PRINCIPAL", PrincipalId = principal.PrincipalId, ToBillDispatchTickets = [splitTicket.DispatchTicketId.ToString()]
-                }, "BAF-CHECK", "check", "MMSI", default);
+                }, "check", "MMSI", default);
                 Check(split.IsSuccess, split.Message ?? "Split billing creation failed.");
                 Check(await module.MsapDispatchTickets.CountAsync() == 2 && splitTicket.BAFNetRevenue == 10m && splitTicket.TotalNetRevenue == 110m,
                     "Split preparation duplicated or changed actual service tickets.");
-                var splitBasic = await work.Billing.GetAsync(b => b.MsapBillingId == split.Data.DispatchBillingId, default);
-                var splitBaf = await work.Billing.GetAsync(b => b.MsapBillingId == split.Data.BafBillingId, default);
+                var splitBasic = await work.Billing.GetAsync(b => b.MsapBillingId == split.Data, default);
+                var splitBaf = await work.Billing.GetAsync(b => b.MsapBillingId == splitBasic!.BafBilling!.MsapBillingId, default);
                 Check(splitBasic is { Amount: 100m } && splitBaf is { Amount: 10m } && splitBaf.BasicBillingId == splitBasic.MsapBillingId
                     && splitBasic.PrincipalId == principal.PrincipalId && splitBaf.PrincipalId == principal.PrincipalId,
                     "Basic and BAF did not retain separate linked balances and the principal recipient.");
-                Check((await work.Billing.GetPaidDispatchTicketsAsync(split.Data.BafBillingId))?.Single().DispatchTicketId == splitTicket.DispatchTicketId,
+                Check((await work.Billing.GetPaidDispatchTicketsAsync(splitBasic!.BafBilling!.MsapBillingId))?.Single().DispatchTicketId == splitTicket.DispatchTicketId,
                     "BAF statement did not reuse the actual service ticket.");
-                Check((await billingService.PostBillingAsync(split.Data.BafBillingId, "check", default)).IsSuccess, "BAF could not be posted independently.");
+                Check((await billingService.PostBillingAsync(splitBasic!.BafBilling!.MsapBillingId, "check", default, "shared-check", splitBaf!.Revision)).IsSuccess, "BAF could not be posted independently.");
                 Check(await JobProgressCalculator.GetBillingBlockerAsync(work, splitBaf!, JobProgressCalculator.CollectionStage, default) == null,
                     "Posted BAF cannot receive collection while Basic awaits posting.");
                 Check(splitTicket.Status == MsapConstants.DispatchTicketStatus.ForBilling && splitBasic!.Status == MsapConstants.BillingStatus.ForPosting,

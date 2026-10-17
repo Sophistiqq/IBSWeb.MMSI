@@ -227,30 +227,6 @@ foreach (var status in new[] { "For Deposit", "Deposited", "Returned", "Redeposi
     Check(!html.Contains("Collection → Deposit → Clear", StringComparison.Ordinal), "Banking inputs must not render another progress section.");
 }
 Console.WriteLine("PASS: collection banking forms render eligible actions and keep the bank dropdown visible and automatically select the first bank.");
-var progressView = engine.GetView(null, "/Areas/MSAP/Views/VesselSchedule/_ScheduleProgress.cshtml", false);
-Check(progressView.Success, "Schedule progress partial is missing.");
-foreach (var status in new[] { "Tentative", "Confirmed", "In Progress", "Completed", "Cancelled" })
-{
-    var http = new DefaultHttpContext { RequestServices = services };
-    var actionContext = new ActionContext(http, new RouteData(), moduleActions.First());
-    var viewData = new ViewDataDictionary<string>(services.GetRequiredService<Microsoft.AspNetCore.Mvc.ModelBinding.IModelMetadataProvider>(), new Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary()) { Model = status };
-    using var output = new StringWriter();
-    var viewContext = new ViewContext(actionContext, progressView.View!, viewData,
-        services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), output, new HtmlHelperOptions());
-    await progressView.View!.RenderAsync(viewContext);
-    var html = output.ToString();
-    if (status == "Cancelled")
-    {
-        Check(html.Contains("Booking cancelled", StringComparison.Ordinal) && !html.Contains("schedule-progress-step", StringComparison.Ordinal), "Cancelled schedule implies completed stages.");
-    }
-    else
-    {
-        Check(Regex.Matches(html, "aria-current=\"step\"").Count == 1, $"Schedule {status} must have one current stage.");
-        Check(html.Contains($"<strong>{MsapConstants.VesselScheduleStatus.GetDisplayName(status)}</strong>", StringComparison.Ordinal), $"Schedule {status} stage is missing.");
-        Check(Regex.Matches(html, "class=\"schedule-progress-step\"").Count == (status == "In Progress" ? 4 : 3), "Schedule progress adds an operation step to the normal flow.");
-    }
-}
-Console.WriteLine("PASS: schedule progress renders all statuses, one current stage and a separate cancelled state.");
 var jobProgressView = engine.GetView(null, "/Areas/MSAP/Views/Shared/_JobProgress.cshtml", false);
 Check(jobProgressView.Success, "Shared Job Progress partial is missing.");
 foreach (bool allowed in new[] { false, true })
@@ -276,13 +252,17 @@ foreach (bool allowed in new[] { false, true })
         if (stage == 1)
         {
             model.ActionController = "VesselSchedule";
-            model.ActionName = "Confirm";
+            model.ActionName = "Details";
+            model.VesselScheduleId = 42;
         }
         if (stage == JobProgressCalculator.PostingStage)
         {
             model.ActionController = "Billing";
-            model.ActionName = "Index";
+            model.ActionName = "Review";
             model.CustomerOrderSlipId = 77;
+            model.RecordedTicketCount = 2;
+            model.ExpectedTicketCount = 2;
+            model.LinkedBillings = [new Billing { MsapBillingId = 123, MsapBillingNumber = "B-CHECK", Status = MsapConstants.BillingStatus.ForPosting }];
         }
         if (stage is JobProgressCalculator.DepositStage or JobProgressCalculator.ClearingStage)
         {
@@ -300,7 +280,7 @@ foreach (bool allowed in new[] { false, true })
         await jobProgressView.View!.RenderAsync(viewContext);
         string html = output.ToString();
         Check(Regex.Matches(html, "aria-current=\"step\"").Count == (stage == JobProgressCalculator.CompletedStage + 1 ? 0 : 1), "Job Progress current stage is wrong.");
-        Check(html.Contains("Fully Cleared", StringComparison.Ordinal) && html.Contains("Job Progress", StringComparison.Ordinal), "Job Progress does not show the entire journey.");
+        Check(html.Contains("Fully cleared", StringComparison.Ordinal) && html.Contains("Job Progress", StringComparison.Ordinal), "Job Progress does not show the entire journey.");
         Check(Regex.Matches(html, "class=\"modern-btn-primary\"").Count == (allowed && stage < JobProgressCalculator.CompletedStage ? 1 : 0), "Job Progress must show exactly one permitted next action.");
         if (!allowed && stage < JobProgressCalculator.CompletedStage)
         {
@@ -312,12 +292,15 @@ foreach (bool allowed in new[] { false, true })
         }
         if (allowed && stage == 1)
         {
-            Check(html.Contains("data-schedule-confirm=\"true\"", StringComparison.Ordinal), "Only confirmation should trigger the booking review modal.");
+            Check(html.Contains("/MSAP/VesselSchedule/Details/42", StringComparison.Ordinal) && !html.Contains("data-schedule-confirm=\"true\"", StringComparison.Ordinal), "Planning must link to the canonical schedule review page.");
         }
         if (allowed && stage == JobProgressCalculator.PostingStage)
         {
-            Check(html.Contains("customerOrderSlipId=77", StringComparison.Ordinal) && html.Contains("For%20Posting", StringComparison.Ordinal)
-                && !html.Contains("data-schedule-confirm=\"true\"", StringComparison.Ordinal), "Posting must open the scoped billing list and bypass confirmation.");
+            Check(html.Contains("customerOrderSlipId=77", StringComparison.Ordinal) && html.Contains("Review", StringComparison.Ordinal)
+                && !html.Contains("data-schedule-confirm=\"true\"", StringComparison.Ordinal), "Final approval must open the selected bill review and bypass confirmation.");
+            Check(html.Contains("Tickets recorded", StringComparison.Ordinal) && html.Contains("Billing prepared", StringComparison.Ordinal)
+                && html.Contains("2 / 2 recorded", StringComparison.Ordinal) && html.Contains("#B-CHECK", StringComparison.Ordinal),
+                "Completed labels, recorded-ticket counts and individual billing links must remain visible.");
         }
         if (allowed && stage is JobProgressCalculator.DepositStage or JobProgressCalculator.ClearingStage)
         {

@@ -64,7 +64,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
             var userIds = await query.Select(u => u.UserId).ToListAsync(cancellationToken);
 
-            if (procedure == ProcedureEnum.ApproveSchedule)
+            if (procedure is ProcedureEnum.ApproveSchedule or ProcedureEnum.ApproveFinalBilling)
             {
                 var activeUsers = await _db.Users.AsNoTracking().Where(user => user.IsActive)
                     .Select(user => user.Id).ToListAsync(cancellationToken);

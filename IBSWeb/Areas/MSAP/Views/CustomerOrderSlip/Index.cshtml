@@ -1,3 +1,4 @@
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 @{
     ViewData["Title"] = "COS records";
     ViewData["IsFullWidth"] = true;
@@ -8,11 +9,10 @@
         <!-- Header Section -->
         <div class="flex-stack">
             <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="modern-label" style="color: var(--on-surface-variant)">MSAP</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface)">COS records</span>
-                </div>
+                <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb">
+                    <li>MSAP</li>
+                    <li aria-current="page">COS records</li>
+                </ol></nav>
                 <h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
             </div>
             <div class="flex gap-2">

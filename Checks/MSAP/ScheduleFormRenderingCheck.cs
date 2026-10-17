@@ -84,6 +84,8 @@ namespace Checks.MSAP
                 var reviewData = new ViewDataDictionary<VesselSchedule>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = schedule };
                 reviewData["AssignedTugboatModels"] = new List<Tugboat> { tug };
                 reviewData["CanConfirm"] = true;
+                reviewData["JobProgress"] = new JobProgressViewModel { HasSchedule = true, VesselScheduleId = 5, Stage = 1 };
+                reviewData["JobProgressActionStage"] = 1;
                 var reviewView = engine.GetView(null, "/Areas/MSAP/Views/VesselSchedule/Details.cshtml", false);
                 using var reviewOutput = new StringWriter();
                 await reviewView.View!.RenderAsync(new ViewContext(context, reviewView.View, reviewData,
@@ -94,12 +96,13 @@ namespace Checks.MSAP
                 Check(reviewHtml.Contains(">0.00</span>", StringComparison.Ordinal) && reviewHtml.Contains("29,000.00", StringComparison.Ordinal), "Review lost zero/manual rates.");
                 Check(reviewHtml.Contains("__RequestVerificationToken", StringComparison.Ordinal) && reviewHtml.Contains("name=\"reviewedAt\"", StringComparison.Ordinal), "Review is missing approval protections.");
                 Check(reviewHtml.Contains(reapproval ? "Reapprove schedule" : "Approve schedule", StringComparison.Ordinal), "Review action does not match revision state.");
-                Check(Regex.Matches(reviewHtml, "aria-current=\"step\"").Count == 1 && reviewHtml.Contains("Ready for review", StringComparison.Ordinal), "Review must show COS approval as its single current progress step.");
+                Check(Regex.Matches(reviewHtml, "aria-current=\"step\"").Count == 1 && reviewHtml.Contains("COS approval", StringComparison.Ordinal), "Review must show COS approval as its single current progress step.");
             }
             schedule.CustomerOrderSlipId = null;
             var viewerData = new ViewDataDictionary<VesselSchedule>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = schedule };
             viewerData["AssignedTugboatModels"] = new List<Tugboat> { tug };
             viewerData["CanConfirm"] = false;
+            viewerData["JobProgress"] = new JobProgressViewModel { HasSchedule = true, VesselScheduleId = 5, Stage = 1 };
             var detailsView = engine.GetView(null, "/Areas/MSAP/Views/VesselSchedule/Details.cshtml", false);
             using var viewerOutput = new StringWriter();
             await detailsView.View!.RenderAsync(new ViewContext(context, detailsView.View, viewerData,

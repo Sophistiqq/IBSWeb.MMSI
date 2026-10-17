@@ -22,7 +22,7 @@ namespace IBS.Services.MSAP
             string? role = await roleService.GetUserRoleAsync(id);
             if (role is MsapRoles.Admin or MsapRoles.SuperAdmin)
             {
-                return procedure is not (ProcedureEnum.ApproveRateUpload or ProcedureEnum.ApproveFinalBilling);
+                return procedure != ProcedureEnum.ApproveRateUpload;
             }
 
             if (role != MsapRoles.User)

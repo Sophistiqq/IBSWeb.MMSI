@@ -258,7 +258,7 @@ namespace Checks.MSAP
                 db.Add(ticket);
                 await db.SaveChangesAsync();
                 var progressDispatcher = new DispatchTicketService(work, null!, NullLogger<DispatchTicketService>.Instance);
-                var progressBilling = new BillingService(work, jobs, NullLogger<BillingService>.Instance);
+                var progressBilling = new BillingService(work, jobs, NullLogger<BillingService>.Instance, new CheckAccess(ProcedureEnum.ApproveFinalBilling));
                 var progressCollection = new CollectionService(work, NullLogger<CollectionService>.Instance);
                 var unfinished = new DispatchTicket
                 {
@@ -277,10 +277,10 @@ namespace Checks.MSAP
                 Check(!(await progressBilling.CreateBillingAsync(new Billing { Date = order.Date, CustomerOrderSlipId = order.CustomerOrderSlipId }, "check", "MMSI", default)).IsSuccess, "Billing ignored disapproved tickets.");
                 var splitRequest = new Billing
                 {
-                    MsapBillingNumber = "CHECK-S1", Date = order.Date, CustomerOrderSlipId = order.CustomerOrderSlipId,
+                    MsapBillingNumber = "CHECK-S1", SeparateBaf = true, BafBillingNumber = "CHECK-S2", Date = order.Date, CustomerOrderSlipId = order.CustomerOrderSlipId,
                     CustomerId = customer.CustomerId, ToBillDispatchTickets = [ticket.DispatchTicketId.ToString()]
                 };
-                Check(!(await progressBilling.CreatePhilCebSplitAsync(splitRequest, "CHECK-S2", "check", "MMSI", default)).IsSuccess, "Split billing bypassed ticket readiness.");
+                Check(!(await progressBilling.CreateBillingAsync(splitRequest, "check", "MMSI", default)).IsSuccess, "Split billing bypassed ticket readiness.");
                 Check((await progressDispatcher.SaveTariffAsync(new DispatchTicket { DispatchTicketId = ticket.DispatchTicketId, CustomerId = customer.CustomerId, DispatchRate = 100, BAFRate = 10 }, "Per hour", "Per hour", "check", true, default)).IsSuccess, "Disapproved tariff could not be corrected for resubmission.");
                 ticket.Status = unfinished.Status = MsapConstants.DispatchTicketStatus.ForBilling;
                 var progressBill = new Billing
@@ -323,7 +323,7 @@ namespace Checks.MSAP
                 db.RemoveRange(bafOnlyBill, unrelatedBill);
                 await db.SaveChangesAsync();
                 Console.WriteLine("PASS: financial navigation deduplicates jobs, filters ticket-linked/split billings, matches Posting status and scopes collection.");
-                Check(!(await progressBilling.PostBillingAsync(progressBill.MsapBillingId, "check", default)).IsSuccess, "Posting ignored an unbilled ticket when Billing.CustomerOrderSlipId was absent.");
+                Check(!(await progressBilling.PostBillingAsync(progressBill.MsapBillingId, "check", default, "check", progressBill.Revision)).IsSuccess, "Posting ignored an unbilled ticket when Billing.CustomerOrderSlipId was absent.");
                 progressBill.Status = MsapConstants.BillingStatus.ForCollection;
                 ticket.Status = MsapConstants.DispatchTicketStatus.Billed;
                 await db.SaveChangesAsync();

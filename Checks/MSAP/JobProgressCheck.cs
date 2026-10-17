@@ -17,7 +17,9 @@ namespace Checks.MSAP
             schedule.PlannedStart = new DateTime(2030, 1, 1, 8, 0, 0);
             schedule.PlannedEnd = schedule.PlannedStart.AddHours(2);
             schedule.AssignedTugboatIds = "[1]";
-            Check(JobProgressCalculator.Calculate(null, schedule, [], []).Stage == 1, "Prepared booking must require Confirmation.");
+            var preparedSchedule = JobProgressCalculator.Calculate(null, schedule, [], []);
+            Check(preparedSchedule.Stage == 1 && preparedSchedule.VesselScheduleId == schedule.VesselScheduleId
+                && preparedSchedule.ActionName == "Details", "Prepared booking must link to its canonical review page.");
             Check(JobProgressCalculator.Calculate(job, null, [], []).Stage == 2, "Direct COS must start at Service.");
             Check(MsapConstants.VesselScheduleStatus.GetDisplayName("Completed") == "Service Completed"
                 && MsapConstants.CustomerOrderSlipStatus.GetDisplayName("Closed") == "Fully Billed", "Completion labels must distinguish service from billing.");
@@ -48,6 +50,9 @@ namespace Checks.MSAP
             var splitReview = JobProgressCalculator.Calculate(job, null, [first, second], [bill, split]);
             Check(splitReview.Stage == 6 && splitReview.ActionName == "Review" && splitReview.TargetId == split.MsapBillingId,
                 "Pending split bills must link directly to the selected billing review page.");
+            Check(splitReview.Permission == IBS.Models.MSAP.Enums.ProcedureEnum.ApproveFinalBilling
+                && splitReview.LinkedBillings.Count == 2 && splitReview.RecordedTicketCount == 2,
+                "Progress must preserve both split bills and require final-approval access.");
             split.Status = "For Collection";
             job.Status = MsapConstants.CustomerOrderSlipStatus.Closed;
             schedule.Status = MsapConstants.VesselScheduleStatus.Completed;
@@ -102,7 +107,11 @@ namespace Checks.MSAP
             var printGate = new Billing { Status = MsapConstants.BillingStatus.ForPosting };
             Check(!BillingService.CanPrint(printGate), "Unposted billing must not be printable.");
             printGate.Status = MsapConstants.BillingStatus.ForCollection;
-            Check(BillingService.CanPrint(printGate), "Completed billing review must enable printing.");
+            Check(!BillingService.CanPrint(printGate), "Posting without final approval evidence must not enable printing.");
+            printGate.ApprovedRevision = printGate.Revision;
+            printGate.ApprovedByUserId = "approver";
+            printGate.ApprovedAt = DateTime.Now;
+            Check(BillingService.CanPrint(printGate), "Current final approval evidence must enable printing.");
             printGate.ApprovedRevision = 1;
             printGate.Revision = 2;
             Check(!BillingService.CanPrint(printGate), "A stale approved revision must not be printable.");
@@ -135,7 +144,7 @@ namespace Checks.MSAP
         {
             public Task<bool> HasAccessAsync(string userId, params ProcedureEnum[] procedures)
             {
-                return Task.FromResult(userId == "progress-allowed");
+                return Task.FromResult(userId is "progress-allowed" or "shared-check");
             }
 
             public Task<bool> HasAnyAccessAsync(string userId, params ProcedureEnum[] procedures)

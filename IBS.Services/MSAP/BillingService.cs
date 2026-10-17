@@ -2,6 +2,7 @@ using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.Books;
 using IBS.Models.MSAP.Enums;
+using IBS.Services.MSAP.AccessControl;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -14,12 +15,14 @@ namespace IBS.Services.MSAP
     public class BillingService(
         IUnitOfWork unitOfWork,
         CustomerOrderSlipService customerOrderSlipService,
-        ILogger<BillingService> logger)
+        ILogger<BillingService> logger,
+        IAccessControlService accessControl)
     {
         public static bool CanPrint(Billing billing)
         {
             return (billing.Status is MsapConstants.BillingStatus.ForCollection or MsapConstants.BillingStatus.Collected)
-                && (!billing.ApprovedRevision.HasValue || billing.ApprovedRevision == billing.Revision);
+                && billing.ApprovedRevision == billing.Revision
+                && !string.IsNullOrEmpty(billing.ApprovedByUserId) && billing.ApprovedAt.HasValue;
         }
 
         public async Task<Billing?> GetBillingByIdAsync(int id, CancellationToken cancellationToken)
@@ -272,7 +275,7 @@ namespace IBS.Services.MSAP
                 cancellationToken);
         }
 
-        public async Task<ServiceResult> PostBillingAsync(int id, string username, CancellationToken cancellationToken)
+        public async Task<ServiceResult> PostBillingAsync(int id, string username, CancellationToken cancellationToken, string approverUserId, int reviewedRevision)
         {
             try
             {
@@ -302,13 +305,27 @@ namespace IBS.Services.MSAP
                         await unitOfWork.Billing.GetForUpdateAsync(billingId, cancellationToken);
                     }
                     var model = billing;
+                    if (string.IsNullOrEmpty(approverUserId) || !await accessControl.HasAccessAsync(approverUserId, ProcedureEnum.ApproveFinalBilling))
+                    {
+                        throw new InvalidOperationException("You do not have permission to approve final bills.");
+                    }
+                    if (model.Revision != reviewedRevision)
+                    {
+                        throw new InvalidOperationException("This bill changed. Review the current revision before approving.");
+                    }
+                    var lockedGuard = await GuardClosedPeriodAsync(model.Date, cancellationToken);
+                    string? lockedBlocker = await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, model, JobProgressCalculator.PostingStage, cancellationToken);
+                    if (lockedGuard != null || lockedBlocker != null)
+                    {
+                        throw new InvalidOperationException(lockedGuard?.Message ?? lockedBlocker);
+                    }
 
                     if (model.Status != MsapConstants.BillingStatus.ForPosting)
                     {
                         throw new InvalidOperationException($"Billing #{model.MsapBillingNumber} is already {model.Status}.");
                     }
 
-                    // Actual tickets become billed after both numbered components are posted.
+                    // Actual tickets become billed after both numbered components are approved.
                     if (related == null || related.Status is MsapConstants.BillingStatus.ForCollection or MsapConstants.BillingStatus.Collected)
                     {
                         int sourceId = model.BasicBillingId ?? model.MsapBillingId;
@@ -367,9 +384,12 @@ namespace IBS.Services.MSAP
                     salesBook.DocumentId = model.MsapBillingId;
                     salesBook.Company = model.Company;
 
+                    model.ApprovedRevision = model.Revision;
+                    model.ApprovedByUserId = approverUserId;
+                    model.ApprovedAt = DateTimeHelper.GetCurrentPhilippineTime();
                     model.Status = MsapConstants.BillingStatus.ForCollection;
 
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Posted Billing #{model.MsapBillingNumber}", "Billing", model.MsapBillingId, model.MsapBillingNumber), cancellationToken);
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Approved final billing #{model.MsapBillingNumber}, revision {model.Revision}", "Billing", model.MsapBillingId, model.MsapBillingNumber), cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
 
                     if (model.CustomerOrderSlipId.HasValue)
@@ -378,16 +398,39 @@ namespace IBS.Services.MSAP
                     }
                 }, cancellationToken);
 
-                return ServiceResult.Success($"Billing posted successfully.");
+                return ServiceResult.Success("Final bill approved successfully.");
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to post billing {BillingId}", id);
-                return ServiceResult.Failure($"Failed to post billing: {ExceptionHelper.GetErrorMessage(ex)}");
+                logger.LogError(ex, "Failed to approve final billing {BillingId}", id);
+                return ServiceResult.Failure($"Failed to approve final billing: {ExceptionHelper.GetErrorMessage(ex)}");
             }
         }
 
         public async Task<ServiceResult> UpdateBillingAsync(Billing model, string username, CancellationToken cancellationToken)
+        {
+            ServiceResult result = ServiceResult.Failure("Unable to update billing.");
+            try
+            {
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    await unitOfWork.Billing.GetForUpdateAsync(model.MsapBillingId, cancellationToken);
+                    result = await UpdateBillingCoreAsync(model, username, cancellationToken);
+                    if (!result.IsSuccess)
+                    {
+                        throw new InvalidOperationException(result.Message);
+                    }
+                }, cancellationToken);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to update billing {BillingId}", model.MsapBillingId);
+                return ServiceResult.Failure(ExceptionHelper.GetErrorMessage(ex));
+            }
+        }
+
+        private async Task<ServiceResult> UpdateBillingCoreAsync(Billing model, string username, CancellationToken cancellationToken)
         {
             try
             {
@@ -435,6 +478,12 @@ namespace IBS.Services.MSAP
                             return ServiceResult.Failure(blocker);
                         }
                     }
+                }
+
+                var requestedPeriodGuard = await GuardClosedPeriodAsync(model.Date, cancellationToken);
+                if (requestedPeriodGuard != null)
+                {
+                    return requestedPeriodGuard;
                 }
 
                 // Update ticket billing references only when ticket selection was submitted
@@ -512,6 +561,10 @@ namespace IBS.Services.MSAP
                     currentModel.BAFAmount = baf;
                 }
 
+                currentModel.Revision++;
+                currentModel.ApprovedRevision = null;
+                currentModel.ApprovedByUserId = null;
+                currentModel.ApprovedAt = null;
                 await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Edit billing #{currentModel.MsapBillingNumber}", "Billing", currentModel.MsapBillingId, currentModel.MsapBillingNumber), cancellationToken);
                 await unitOfWork.SaveAsync(cancellationToken);
 
@@ -627,6 +680,10 @@ namespace IBS.Services.MSAP
                     }
 
                     billing.Status = MsapConstants.BillingStatus.ForPosting;
+                    billing.Revision++;
+                    billing.ApprovedRevision = null;
+                    billing.ApprovedByUserId = null;
+                    billing.ApprovedAt = null;
                     billing.UnpostedBy = username;
                     billing.UnpostedDate = DateTimeHelper.GetCurrentPhilippineTime();
                     billing.UnpostRemarks = remarks;
@@ -893,18 +950,6 @@ namespace IBS.Services.MSAP
                 businessStyle = p.BusinessType,
                 terms = p.Terms
             }).ToList();
-        }
-
-        // Retain the existing endpoint's service contract for callers using the old route.
-        public async Task<ServiceResult<(int DispatchBillingId, int BafBillingId)>> CreatePhilCebSplitAsync(
-            Billing model, string bafBillingNumber, string username, string company, CancellationToken cancellationToken)
-        {
-            model.SeparateBaf = true;
-            model.BafBillingNumber = bafBillingNumber;
-            var result = await CreateBillingAsync(model, username, company, cancellationToken);
-            return result.IsSuccess
-                ? ServiceResult<(int, int)>.Success((model.MsapBillingId, model.BafBilling!.MsapBillingId), result.Message)
-                : ServiceResult<(int, int)>.Failure(result.Message!);
         }
 
         private async Task<ServiceResult?> GuardClosedPeriodAsync(DateOnly date, CancellationToken ct)

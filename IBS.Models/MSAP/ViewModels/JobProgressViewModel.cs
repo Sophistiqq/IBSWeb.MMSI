@@ -6,6 +6,10 @@ namespace IBS.Models.MSAP.ViewModels
     {
         public int Stage { get; set; }
         public bool HasSchedule { get; set; }
+        public int? VesselScheduleId { get; set; }
+        public int ExpectedTicketCount { get; set; }
+        public int RecordedTicketCount { get; set; }
+        public List<Billing> LinkedBillings { get; set; } = [];
         public bool Stopped { get; set; }
         public bool IsCancelled { get; set; }
         public bool IsInvalidated { get; set; }

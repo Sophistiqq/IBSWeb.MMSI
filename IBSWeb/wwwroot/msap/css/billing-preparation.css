@@ -1,8 +1,8 @@
 .billing-preparation .billing-workspace {
     display: grid;
     grid-template-columns: var(--wf-progress-width) minmax(0, 1fr);
-    gap: var(--wf-space-5);
-    padding: var(--wf-space-5);
+    gap: var(--wf-grid-gap);
+    padding: var(--wf-space-4) var(--wf-space-4) var(--wf-space-5);
     align-items: start;
 }
 
@@ -143,6 +143,12 @@
     display: none !important;
 }
 
+@media (max-width: 1200px) {
+    .billing-preparation .billing-workspace {
+        grid-template-columns: calc(var(--wf-progress-width) - var(--wf-space-6)) minmax(0, 1fr);
+    }
+}
+
 @media (max-width: 1199px) {
     .billing-preparation .billing-fields,
     .billing-preparation .billing-recipient {
@@ -159,7 +165,7 @@
     }
 
     .billing-preparation .billing-workspace {
-        padding: var(--wf-space-4);
+        padding: var(--wf-space-2);
     }
 
     .billing-preparation .billing-progress {
@@ -235,4 +241,20 @@
 .billing-preparation .billing-tugboat-owner {
     margin-left: var(--wf-space-5);
     font-weight: var(--wf-weight-regular);
+}
+
+.billing-preparation .billing-review-header-actions {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--wf-space-3);
+}
+
+@media (max-width: 767px) {
+    .billing-preparation .billing-review-header-actions {
+        grid-column: 1;
+        grid-row: auto;
+    }
 }

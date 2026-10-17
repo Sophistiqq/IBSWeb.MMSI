@@ -118,3 +118,29 @@
 .job-progress-blockers li + li {
     margin-top: .5rem;
 }
+
+.job-progress-stage-link,
+.job-progress-detail a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.job-progress-stage-link:hover,
+.job-progress-detail a:hover {
+    text-decoration: underline;
+}
+
+.job-progress-stage-link:focus-visible,
+.job-progress-detail a:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+}
+
+.job-progress-detail {
+    display: block;
+    margin-top: .2rem;
+    font-size: .7rem;
+    font-weight: 400;
+    white-space: normal;
+    color: var(--on-surface-variant);
+}
