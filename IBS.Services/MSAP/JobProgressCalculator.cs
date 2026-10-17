@@ -264,7 +264,7 @@ namespace IBS.Services.MSAP
                 result.Stage = PostingStage;
                 result.Billings = posting;
                 result.Guidance = $"{posting.Count} billing(s) need review and posting before collection.";
-                SetAction(result, "Review and Post Billing", "Billing", "Index", posting[0].MsapBillingId, ProcedureEnum.CreateBilling, "billing posting");
+                SetAction(result, "Review and Post Billing", "Billing", "Review", posting[0].MsapBillingId, ProcedureEnum.CreateBilling, "billing posting");
                 return result;
             }
             if (bills.Count == 0 || active.Any(t => t.Status != MsapConstants.DispatchTicketStatus.Billed || !t.BillingId.HasValue))

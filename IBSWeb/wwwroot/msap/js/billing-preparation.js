@@ -53,9 +53,13 @@ $(function () {
 
     function updateSummary() {
         const split = $('#SeparateBaf').is(':checked');
+        const undocumented = $('#IsUndocumented').is(':checked');
+        if (undocumented) $('#MsapBillingNumber, #BafBillingNumber').val('');
+        $('#MsapBillingNumber').prop('required', !undocumented).prop('disabled', undocumented).attr('placeholder', undocumented ? 'Generated when saved' : 'B000000');
         $('#bafNumberField, .split-only').prop('hidden', !split);
-        $('#BafBillingNumber').prop('disabled', !split).prop('required', split);
-        $('#basicNumberLabel').text(split ? 'Basic billing number *' : 'Billing number *');
+        $('#BafBillingNumber').prop('disabled', !split || undocumented).prop('required', split && !undocumented).attr('placeholder', undocumented ? 'Generated when saved' : 'BAF billing number');
+        $('#basicNumberLabel').text((split ? 'Basic billing number' : 'Billing number') + (undocumented ? ' · Automatic' : ' *'));
+        $('label[for="BafBillingNumber"]').text(undocumented ? 'BAF billing number · Automatic' : 'BAF billing number *');
         $('#basicSummaryHeading').text('Basic' + (split && $('#MsapBillingNumber').val() ? ' · ' + $('#MsapBillingNumber').val() : ''));
         $('#bafSummaryHeading').text('BAF' + (split && $('#BafBillingNumber').val() ? ' · ' + $('#BafBillingNumber').val() : ''));
         const basic = tickets.reduce((sum, ticket) => sum + Number(ticket.dispatchNetAmount), 0);
@@ -116,8 +120,8 @@ $(function () {
             if (principals.length) $recipient.append('<option value="PRINCIPAL">Principal</option>');
             $('#customerVat').prop('checked', customer.vatType === 'Vatable');
             $('#customerWithholding').prop('checked', !!customer.withholdingTax);
-            const undocumented = customer.isUndoc === 'Undocumented';
-            $('#MsapBillingNumber').prop('required', !undocumented).prop('disabled', undocumented).attr('placeholder', undocumented ? 'Generated when saved' : 'B000000');
+            $('#IsUndocumented').prop('checked', customer.isUndoc === 'Undocumented');
+            updateSummary();
             updateRecipient();
             if (initialCos && jobs.some(job => String(job.value) === initialCos)) $cos.val(initialCos);
             initialCos = null;
@@ -155,7 +159,7 @@ $(function () {
 
     $recipient.on('change', updateRecipient);
     $principal.on('change', updateRecipient);
-    $('#SeparateBaf').on('change', updateSummary);
+    $('#SeparateBaf, #IsUndocumented').on('change', updateSummary);
     $('#MsapBillingNumber, #BafBillingNumber').on('input', updateSummary);
     $(form).on('submit', async function (event) {
         const preview = event.originalEvent?.submitter?.id === 'previewBilling';
@@ -174,7 +178,7 @@ $(function () {
             event.preventDefault();
             return;
         }
-        if ($('#SeparateBaf').is(':checked') && $('#MsapBillingNumber').val()?.trim().toUpperCase() === $('#BafBillingNumber').val()?.trim().toUpperCase()) {
+        if (!$('#IsUndocumented').is(':checked') && $('#SeparateBaf').is(':checked') && $('#MsapBillingNumber').val()?.trim().toUpperCase() === $('#BafBillingNumber').val()?.trim().toUpperCase()) {
             event.preventDefault();
             ModernAlert.error('Basic and BAF billing numbers must be different.');
             return;

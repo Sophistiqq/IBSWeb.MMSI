@@ -92,7 +92,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to create Billings.")]
-        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IncludeTicketImages,CombineMatchingBafRates")] Billing model, CancellationToken cancellationToken)
+        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IsUndocumented")] Billing model, CancellationToken cancellationToken)
         {
             try
             {
@@ -103,7 +103,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
                 if (result.IsSuccess)
                 {
-                    return Json(new { success = true, message = result.Message, redirectUrl = Url.Action(nameof(Preview), new { id = result.Data, includeTicketImages = model.IncludeTicketImages, combineMatchingBafRates = model.CombineMatchingBafRates }) });
+                    return Json(new { success = true, message = result.Message, redirectUrl = Url.Action(nameof(Review), new { id = result.Data }) });
                 }
 
                 return Json(new { success = false, message = result.Message });
@@ -119,7 +119,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling)]
         public async Task<IActionResult> PreviewPreparation(
-            [Bind("CustomerId,CustomerOrderSlipId,PrincipalId,BilledTo,MsapBillingNumber,Date,SeparateBaf,BafBillingNumber,IncludeTicketImages,CombineMatchingBafRates")] Billing model,
+            [Bind("CustomerId,CustomerOrderSlipId,PrincipalId,BilledTo,MsapBillingNumber,Date,SeparateBaf,BafBillingNumber,IsUndocumented")] Billing model,
             CancellationToken cancellationToken)
         {
             var company = User.Claims.FirstOrDefault(c => c.Type == "Company")?.Value ?? MsapConstants.Company_MMSI;
@@ -128,11 +128,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 return BadRequest(result.Message);
             }
-            await PrepareStatementImagesAsync(model, model.IncludeTicketImages);
+            await PrepareStatementImagesAsync(model, true);
             ViewData["Statements"] = result.Data;
             ViewData["IsDraft"] = true;
-            ViewData["IncludeTicketImages"] = model.IncludeTicketImages;
-            ViewData["CombineMatchingBafRates"] = model.CombineMatchingBafRates;
+            ViewData["CanPrint"] = false;
+            ViewData["IncludeTicketImages"] = false;
             return View("Preview", model);
         }
 
@@ -253,6 +253,39 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         #endregion
 
+        #region Billing review
+
+        [HttpGet]
+        [RequireAccess(ProcedureEnum.CreateBilling)]
+        public async Task<IActionResult> Review(int id, CancellationToken cancellationToken)
+        {
+            var model = await billingService.GetBillingByIdAsync(id, cancellationToken);
+            if (model == null)
+            {
+                return NotFound();
+            }
+            model = await billingService.PopulateTicketListsAsync(model, cancellationToken);
+            await PrepareStatementImagesAsync(model, true);
+            ViewBag.JobProgressItems = await JobProgressCalculator.LoadForBillingsAsync(unitOfWork, [id], cancellationToken);
+            ViewData["JobProgressActionStage"] = JobProgressCalculator.PostingStage;
+            ViewData["PostingBlocker"] = await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, model, JobProgressCalculator.PostingStage, cancellationToken);
+            ViewData["IsPeriodClosed"] = await unitOfWork.PostedPeriod.IsMonthClosedAsync(model.Date.Year, model.Date.Month, cancellationToken);
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.CreateBilling)]
+        [ActionName("Review")]
+        public async Task<IActionResult> ReviewConfirmed(int id, CancellationToken cancellationToken)
+        {
+            var result = await billingService.PostBillingAsync(id, User.Identity?.Name ?? "System", cancellationToken);
+            TempData[result.IsSuccess ? "success" : "error"] = result.Message;
+            return RedirectToAction(nameof(Review), new { id });
+        }
+
+        #endregion
+
         #region Post to Books
 
         /// <summary>
@@ -313,12 +346,16 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// Displays a preview of the Billing, including associated tickets and tugboats.
         /// </summary>
         [RequireAnyAccess("Access denied. You don't have permission to view Billings.", ProcedureEnum.CreateBilling)]
-        public async Task<IActionResult> Preview(int id, CancellationToken cancellationToken, bool includeTicketImages = false, bool combineMatchingBafRates = false)
+        public async Task<IActionResult> Preview(int id, CancellationToken cancellationToken, bool includeTicketImages = false, bool combineMatchingBafRates = false, bool printCopy = false)
         {
             var model = await billingService.GetBillingByIdAsync(id, cancellationToken);
             if (model == null)
             {
                 return NotFound();
+            }
+            if (printCopy && !BillingService.CanPrint(model))
+            {
+                return Forbid();
             }
             if (model.BasicBillingId.HasValue)
             {
@@ -329,17 +366,27 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 }
             }
             model = await billingService.PopulateTicketListsAsync(model, cancellationToken);
-            var statements = new List<Billing> { model };
+            var statements = new List<Billing>();
+            if (!printCopy || BillingService.CanPrint(model))
+            {
+                statements.Add(model);
+            }
             if (model.BafBilling != null)
             {
                 var baf = await billingService.GetBillingByIdAsync(model.BafBilling.MsapBillingId, cancellationToken);
-                if (baf != null)
+                if (baf != null && (!printCopy || BillingService.CanPrint(baf)))
                 {
                     statements.Add(await billingService.PopulateTicketListsAsync(baf, cancellationToken));
                 }
             }
+            if (printCopy)
+            {
+                model = statements[0];
+            }
             await PrepareStatementImagesAsync(model, true);
             ViewData["Statements"] = statements;
+            ViewData["CanPrint"] = statements.All(BillingService.CanPrint);
+            ViewData["ReviewBillingId"] = id;
             ViewData["IncludeTicketImages"] = includeTicketImages;
             ViewData["CombineMatchingBafRates"] = combineMatchingBafRates;
             ViewBag.JobProgressItems = await JobProgressCalculator.LoadForBillingsAsync(unitOfWork, [model.MsapBillingId], cancellationToken);
@@ -377,6 +424,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 if (billing == null)
                 {
                     return NotFound();
+                }
+
+                if (!BillingService.CanPrint(billing))
+                {
+                    return Forbid();
                 }
 
                 billing.PaidDispatchTickets = await unitOfWork.Billing.GetPaidDispatchTicketsAsync(billing.MsapBillingId, cancellationToken);
@@ -715,7 +767,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to create Billings.")]
         public async Task<IActionResult> CreatePhilCebSplit(
-            [Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,VoyageNumber,COSNumber,PortId,TerminalId,VesselId,IsVatable,IsVatInclusive,PrintWht,CustomerOrderSlipId,ToBillDispatchTickets,BafRates")] Billing model,
+            [Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,VoyageNumber,COSNumber,PortId,TerminalId,VesselId,IsVatable,IsVatInclusive,PrintWht,CustomerOrderSlipId,ToBillDispatchTickets,BafRates,IsUndocumented")] Billing model,
             string bafBillingNumber,
             CancellationToken cancellationToken)
         {

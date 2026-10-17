@@ -61,7 +61,10 @@
                 <section class="wf-panel wf-stack" aria-labelledby="billingHeading">
                     <div class="billing-section-heading">
                         <h2 id="billingHeading" class="wf-section-title">Billing details</h2>
-                        <label class="billing-check"><input asp-for="SeparateBaf" /> Separate Basic and BAF</label>
+                        <div class="billing-tax-options">
+                            <label class="billing-check"><input asp-for="IsUndocumented" /> Undocumented</label>
+                            <label class="billing-check"><input asp-for="SeparateBaf" /> Separate Basic and BAF</label>
+                        </div>
                     </div>
                     <div class="billing-number-fields">
                         <div class="wf-field">
@@ -135,11 +138,6 @@
                     </section>
                 </div>
 
-                <section class="wf-panel billing-preview-options" aria-label="Statement preview options">
-                    <div><h2 class="wf-section-title">Statement preview options</h2><p class="wf-caption wf-muted">Different BAF rates stay on separate lines.</p></div>
-                    <label class="billing-check"><input asp-for="IncludeTicketImages" /> Include ticket images</label>
-                    <label class="billing-check"><input asp-for="CombineMatchingBafRates" /> Combine matching BAF rates</label>
-                </section>
                 <footer class="billing-footer">
                     <p id="preparationNote" class="wf-caption wf-muted">One preparation · One billing number</p>
                     <div class="billing-footer-actions">

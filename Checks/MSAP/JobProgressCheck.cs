@@ -45,7 +45,9 @@ namespace Checks.MSAP
             first.Status = second.Status = "Billed";
             bill.Status = "For Collection";
             var split = new Billing { MsapBillingId = 2, Status = "For Posting", Balance = 25 };
-            Check(JobProgressCalculator.Calculate(job, null, [first, second], [bill, split]).Stage == 6, "Every split billing must be posted before Collection.");
+            var splitReview = JobProgressCalculator.Calculate(job, null, [first, second], [bill, split]);
+            Check(splitReview.Stage == 6 && splitReview.ActionName == "Review" && splitReview.TargetId == split.MsapBillingId,
+                "Pending split bills must link directly to the selected billing review page.");
             split.Status = "For Collection";
             job.Status = MsapConstants.CustomerOrderSlipStatus.Closed;
             schedule.Status = MsapConstants.VesselScheduleStatus.Completed;
@@ -97,6 +99,13 @@ namespace Checks.MSAP
             job.Status = "Cancelled";
             var cancelled = JobProgressCalculator.Calculate(job, schedule, [first], []);
             Check(cancelled.Stopped && cancelled.Permission == null, "Cancelled jobs must not expose a next action.");
+            var printGate = new Billing { Status = MsapConstants.BillingStatus.ForPosting };
+            Check(!BillingService.CanPrint(printGate), "Unposted billing must not be printable.");
+            printGate.Status = MsapConstants.BillingStatus.ForCollection;
+            Check(BillingService.CanPrint(printGate), "Completed billing review must enable printing.");
+            printGate.ApprovedRevision = 1;
+            printGate.Revision = 2;
+            Check(!BillingService.CanPrint(printGate), "A stale approved revision must not be printable.");
             Console.WriteLine("PASS: Job Progress covers planning, mixed tickets, deleted tickets, actual times, rejection, approval, billing, split posting, partial collection, deposit, clearing, returned checks, multiple receipts, reversal and cancellation.");
         }
 

@@ -23,9 +23,7 @@
     {
         area = "MSAP",
         id = Model.TargetId,
-        customerOrderSlipId = Model.CustomerOrderSlipId,
-        status = Model.Stage == JobProgressCalculator.PostingStage ? MsapConstants.BillingStatus.ForPosting : null,
-        billingNumber = Model.Stage == JobProgressCalculator.PostingStage && !Model.CustomerOrderSlipId.HasValue ? Model.Billings.FirstOrDefault()?.MsapBillingNumber : null
+        customerOrderSlipId = Model.CustomerOrderSlipId
     });
 }
 <link rel="stylesheet" href="~/msap/css/job-progress.css" asp-append-version="true" />

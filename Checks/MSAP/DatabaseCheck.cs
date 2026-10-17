@@ -216,6 +216,15 @@ namespace Checks.MSAP
                     Address1 = "Principal Address", TIN = "111-111-111-11111", Terms = "CHECK17", IsActive = true };
                 module.MsapPrincipals.Add(principal);
                 await module.SaveChangesAsync();
+                var undocumented = new Billing
+                {
+                    CustomerId = customer.CustomerId, CustomerOrderSlipId = splitJob.CustomerOrderSlipId, Date = job.Date,
+                    BilledTo = "LOCAL", IsUndocumented = true, SeparateBaf = true
+                };
+                var undocumentedPreview = await billingService.PrepareBillingAsync(undocumented, "check", "MMSI", default);
+                Check(undocumentedPreview.IsSuccess && undocumented.BafBilling is { IsUndocumented: true }
+                    && undocumented.MsapBillingNumber != undocumented.BafBilling.MsapBillingNumber,
+                    "Undocumented split preview did not generate two distinct billing references.");
                 ServiceResult<(int DispatchBillingId, int BafBillingId)> split = await billingService.CreatePhilCebSplitAsync(new Billing
                 {
                     MsapBillingNumber = "SPLIT01", Date = job.Date, CustomerId = customer.CustomerId,

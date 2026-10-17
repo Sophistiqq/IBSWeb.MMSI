@@ -5,8 +5,16 @@
     ViewData["IsFullWidth"] = true;
 
     bool isDraft = ViewData["IsDraft"] is true;
+    bool canPrint = !isDraft && ViewData["CanPrint"] is true;
     var progressItems = (ViewBag.JobProgressItems as IEnumerable<JobProgressViewModel>)?.ToList() ?? [];
 
+}
+
+@if (!canPrint)
+{
+    <style media="print">
+        body { display: none !important; }
+    </style>
 }
 
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
@@ -69,34 +77,6 @@
                 border-top: none;
             }
         }
-        .actions-dropdown { position: relative; display: inline-block; }
-        .actions-menu {
-            display: none;
-            position: absolute;
-            right: 0;
-            top: 100%;
-            width: 14rem;
-            background-color: var(--surface-container-lowest);
-            border: 1px solid var(--outline-variant);
-            border-radius: var(--radius-xl);
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-            z-index: 1000;
-            padding: 0.5rem 0;
-            margin-top: 4px;
-        }
-        .actions-menu.show { display: block; }
-        .actions-menu label {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            font-size: 0.875rem;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        .actions-menu label:hover { background-color: var(--surface-container-low); }
-        .actions-menu input[type="checkbox"] { margin: 0; }
-        .actions-divider { border-top: 1px solid var(--outline-variant); margin: 0.25rem 0; }
 
 </style>
 
@@ -126,35 +106,27 @@
                     </div>
                     <h1 class="modern-headline-lg" data-page-header>@(isDraft ? "Draft statement preview · Not saved" : "Billing Statement Preview")</h1>
                 </div>
-                <div class="flex gap-2">
-                    <div class="actions-dropdown">
-                        <button type="button" class="modern-btn-secondary" id="actionsBtn">
-                            <span class="material-symbols-outlined">settings</span> PRINT <span class="material-symbols-outlined" style="font-size:16px">arrow_drop_down</span>
-                        </button>
-                        <div class="actions-menu" id="actionsMenu">
-                            <label><input type="checkbox" id="chkTickets" checked="@(ViewData["IncludeTicketImages"] is true)"> Include Ticket Images</label>
-                            <label><input type="checkbox" id="chkCombinedBAF" checked="@(ViewData["CombineMatchingBafRates"] is true)"> Combine matching BAF rates</label>
-                            <div class="actions-divider"></div>
-                            <button type="button" class="modern-btn-primary" id="proceedBtn" style="margin:0.5rem 1rem 0.25rem; width:calc(100% - 2rem); justify-content:center;">
-                                <span class="material-symbols-outlined">print</span> PROCEED
-                            </button>
-                        </div>
-                    </div>
-                    @if (!isDraft)
-                    {
-                        <a asp-action="Print" asp-route-id="@Model.MsapBillingId" class="modern-btn-secondary">
-                            <span class="material-symbols-outlined">terminal</span> DOT MATRIX
-                        </a>
-                        @if (Model.BafBilling != null)
-                        {
-                            <a asp-action="Print" asp-route-id="@Model.BafBilling.MsapBillingId" class="modern-btn-secondary">BAF DOT MATRIX</a>
-                        }
-                    }
-                    <a asp-action="Index" class="modern-btn-secondary">
-                        <span class="material-symbols-outlined">arrow_back</span> BACK
-                    </a>
+                <div class="billing-preview-navigation msap-workflow">
+                    <button type="button" id="closePreview" class="modern-btn-secondary">Close</button>
                 </div>
             </div>
+
+            @if (canPrint)
+            {
+                <section class="billing-preview-toolbar msap-workflow no-print" aria-label="Statement print controls">
+                    <label class="billing-preview-option" for="combineMatchingBafRates">
+                        <input type="checkbox" id="combineMatchingBafRates" checked="@(ViewData["CombineMatchingBafRates"] is true)" aria-describedby="bafGroupingHint" />
+                        <span><span class="wf-label">Combine matching BAF rates</span><span id="bafGroupingHint" class="wf-caption wf-muted">Different rates remain separate.</span></span>
+                    </label>
+                    <div class="billing-preview-print-actions">
+                        <button type="button" data-print-with-tickets="false" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">print</span> Print statement</button>
+                        <button type="button" data-print-with-tickets="true" class="modern-btn-secondary">Print with tickets</button>
+                        <div class="billing-preview-alternate-print">
+                            <a asp-action="Print" asp-route-id="@(ViewData["ReviewBillingId"] ?? Model.MsapBillingId)" class="modern-btn-secondary">Dot matrix</a>
+                        </div>
+                    </div>
+                </section>
+            }
 
             @foreach (var statement in (ViewData["Statements"] as IReadOnlyList<Billing> ?? new[] { Model }))
             {
@@ -163,93 +135,29 @@
                 </div>
             }
 
-            @if (Model.PaidDispatchTickets != null && Model.PaidDispatchTickets.Any(dt => !string.IsNullOrEmpty(dt.ImageSignedUrl)))
-            {
-                @foreach (var dt in Model.PaidDispatchTickets.Where(dt => !string.IsNullOrEmpty(dt.ImageSignedUrl)))
-                {
-                    <div class="modern-card ticket-image-page">
-                        <div class="billing-statement text-center">
-                            <h4 class="font-bold text-sm mb-3">
-                                Dispatch Ticket #@(dt.DispatchNumber) &mdash; Billing @Model.MsapBillingNumber
-                            </h4>
-                            <div class="flex justify-center items-center" style="max-height: 90vh;">
-                                <img src="@dt.ImageSignedUrl" alt="Dispatch Ticket @dt.DispatchNumber" style="max-width: 100%; max-height: 85vh; object-fit: contain;" />
-                            </div>
-                        </div>
-                    </div>
-                }
-            }
+            <partial name="_TicketImages" model="Model" />
 
-            <!-- Sticky Footer Buttons (No Print) -->
-            <div class="flex justify-end gap-2 mt-4 no-print">
-                <a asp-action="Index" class="modern-btn-secondary px-5">
-                    <span class="material-symbols-outlined">arrow_back</span> BACK TO LIST
-                </a>
-
-            </div>
         </main>
     </div>
 </div>
 
 @section Scripts {
     <script>
-        window.IBS_TOUR_STEPS = [
-            { selector: '#actionsBtn', title: 'Print options', text: 'Choose whether to include ticket images or combine bunker adjustment charges before printing. Dot Matrix opens the alternate print format.', interactive: false },
-            { selector: '.billing-statement', title: 'Statement details', text: 'Review the billed party, vessel, voyage, location, and included services before printing or posting.', interactive: false },
-            { selector: '.statement-totals', title: 'Amount due', text: 'Check the statement totals, tax, withholding, and final amount due.', interactive: false }
-        ];
-        if (document.querySelector('.billing-preview-progress .job-progress')) {
-            window.IBS_TOUR_STEPS.unshift({ selector: '.billing-preview-progress', title: 'Job progress', text: 'Follow each linked COS and its next available action through billing, posting, and collection.', interactive: false });
-        }
-    </script>
-    <script>
-        $(document).ready(function () {
-            const $actionsBtn = $('#actionsBtn');
-            const $menu = $('#actionsMenu');
-            const $chkTickets = $('#chkTickets');
-            const $chkCombinedBAF = $('#chkCombinedBAF');
-
-            $actionsBtn.on('click', function (e) {
-                e.stopPropagation();
-                $menu.toggleClass('show');
-                $('.modern-dropdown-menu.show').not($menu).removeClass('show');
+        $(function () {
+            const includeImages = @((ViewData["IncludeTicketImages"] is true).ToString().ToLowerInvariant());
+            const combineBaf = @((ViewData["CombineMatchingBafRates"] is true).ToString().ToLowerInvariant());
+            $('.ticket-image-page').toggleClass('no-print', !includeImages);
+            $('.baf-row, .baf-header').toggle(!combineBaf);
+            $('.combined-baf-row').toggle(combineBaf);
+            $('#combineMatchingBafRates').on('change', function () {
+                $('.baf-row, .baf-header').toggle(!this.checked);
+                $('.combined-baf-row').toggle(this.checked);
             });
-            $(document).on('click', function () { $menu.removeClass('show'); });
-            $menu.on('click', function (e) { e.stopPropagation(); });
-
-            function applyModes() {
-                $('.ticket-image-page').toggleClass('no-print', !$chkTickets.is(':checked'));
-
-                if ($chkCombinedBAF.is(':checked')) {
-                    $('.baf-row, .baf-header').hide();
-                    $('.combined-baf-row').show();
-                } else {
-                    $('.baf-row, .baf-header').show();
-                    $('.combined-baf-row').hide();
-                }
-            }
-
-            function restoreDefaults() {
-                applyModes();
-            }
-
-            applyModes();
-            $('#chkTickets, #chkCombinedBAF').on('change', applyModes);
-
-            $('#proceedBtn').on('click', function () {
-                $menu.removeClass('show');
-                applyModes();
-                setTimeout(function () {
-                    window.print();
-                    setTimeout(restoreDefaults, 200);
-                }, 200);
+            $('[data-print-with-tickets]').on('click', function () {
+                $('.ticket-image-page').toggleClass('no-print', this.dataset.printWithTickets !== 'true');
+                window.print();
             });
-
-            if (window.matchMedia) {
-                window.matchMedia('print').addEventListener('change', function (mql) {
-                    if (!mql.matches) restoreDefaults();
-                });
-            }
+            $('#closePreview').on('click', function () { window.close(); });
         });
     </script>
 }

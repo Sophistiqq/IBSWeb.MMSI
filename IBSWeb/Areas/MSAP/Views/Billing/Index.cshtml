@@ -105,7 +105,7 @@
         $(document).ready(function () {
             const previewUrl = '@Url.Action("Preview", "Billing")';
             const editUrl = '@Url.Action("Edit", "Billing")';
-            const postUrl = '@Url.Action("Post", "Billing")';
+            const reviewUrl = '@Url.Action("Review", "Billing")';
             const canReverse = @((ViewBag.CanReverse as bool? ?? false).ToString().ToLower());
             const canPost = @((ViewBag.CanPost as bool? ?? false).ToString().ToLower());
             const canEdit = @((ViewBag.CanEdit as bool? ?? false).ToString().ToLower());
@@ -170,7 +170,7 @@
                             if (row.status === "@MsapConstants.BillingStatus.ForPosting") {
                                 return ModernTable.render.dropdown([
                                     { label: 'View Details', icon: 'visibility', url: `${previewUrl}?id=${row.msapBillingId}` },
-                                    { label: 'Post to Books', icon: 'send', onclick: `confirmPost(${row.msapBillingId})`, condition: !row.isMonthClosed && canPost },
+                                    { label: 'Review and Post Billing', icon: 'fact_check', url: `${reviewUrl}?id=${row.msapBillingId}`, condition: !row.isMonthClosed && canPost },
                                     { label: 'Edit', icon: 'edit', url: `${editUrl}?id=${row.msapBillingId}`, condition: !row.isMonthClosed && canEdit },
                                     { label: 'Delete', icon: 'delete', isError: true, onclick: `confirmDelete(${row.msapBillingId})`, condition: !row.isMonthClosed && canDelete }
                                 ]);
@@ -234,20 +234,6 @@
                 else if (status === "@MsapConstants.BillingStatus.Collected") $('#filterCollected').addClass('active');
             }
         });
-
-        function confirmPost(id) {
-            ModernAlert.confirm({
-                title: 'Post to Books?',
-                text: "This will post the billing to the Sales Book. Continue?",
-                icon: 'question',
-                confirmText: 'Yes, post it!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    ModernAlert.showLoading("Posting to books...");
-                    window.location.href = '@Url.Action("Post", "Billing")?id=' + id;
-                }
-            });
-        }
 
         function confirmDelete(id) {
             ModernAlert.confirm({

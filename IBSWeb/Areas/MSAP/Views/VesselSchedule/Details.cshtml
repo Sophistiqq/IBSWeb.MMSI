@@ -32,7 +32,13 @@
                 </ol>
             </nav>
             <h1 class="wf-page-title" data-page-header>@(pending ? reapproval ? "Review schedule changes" : "Review schedule" : "Schedule details")</h1>
-            <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary wf-page-action">@(pending ? "Back to review list" : "Back to calendar")</a>
+            <div class="schedule-details-header-actions">
+                @if (Model.CustomerOrderSlipId.HasValue)
+                {
+                    <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" class="modern-btn-secondary wf-page-action">Open COS</a>
+                }
+                <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary wf-page-action">@(pending ? "Back to review list" : "Back to calendar")</a>
+            </div>
             <p class="wf-body wf-muted wf-page-description">@(pending ? "Review the booking, service rates and commercial terms before approval." : "Booking details, service requirements and commercial terms.")</p>
             <div class="schedule-status-banner wf-page-description">
                 <span class="schedule-status-pill">@(pending ? reapproval ? "Pending reapproval" : "Pending review" : MsapConstants.VesselScheduleStatus.GetDisplayName(Model.Status))</span>
@@ -173,10 +179,6 @@
                         <p class="wf-caption wf-muted">Waiting for an authorized reviewer to approve this schedule.</p>
                     }
                 </section>
-            }
-            @if (Model.CustomerOrderSlipId.HasValue)
-            {
-                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" class="modern-btn-secondary wf-button">Open COS</a>
             }
             <section class="wf-panel wf-stack schedule-review-actions" aria-labelledby="bookingActionsTitle">
                 <h2 class="wf-section-title" id="bookingActionsTitle">Booking actions</h2>

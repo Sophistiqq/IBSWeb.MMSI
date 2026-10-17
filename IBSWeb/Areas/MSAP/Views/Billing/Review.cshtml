@@ -1,0 +1,138 @@
+@model Billing
+@{
+    ViewData["Title"] = "Review billing";
+    ViewData["IsFullWidth"] = true;
+    var progressItems = (ViewBag.JobProgressItems as IEnumerable<JobProgressViewModel>)?.ToList() ?? [];
+    var related = Model.BasicBilling ?? Model.BafBilling;
+    bool bafOnly = Model.BasicBillingId.HasValue;
+    bool basicOnly = Model.BafBilling != null;
+    string component = bafOnly ? "BAF" : basicOnly ? "Basic" : "Basic and BAF";
+    string? blocker = ViewData["PostingBlocker"] as string;
+    bool canPrint = BillingService.CanPrint(Model);
+    bool canPost = Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && ViewData["IsPeriodClosed"] is not true;
+}
+<style media="print">
+    body { display: none !important; }
+</style>
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/billing-preparation.css" asp-append-version="true" />
+
+<div class="modern-layout msap-workflow billing-preparation">
+    <div class="billing-workspace">
+        <div class="wf-stack">
+            @foreach (var progress in progressItems)
+            {
+                <partial name="_WorkflowProgress" model="progress" />
+            }
+        </div>
+        <main class="billing-content wf-stack">
+            <header class="wf-page-header">
+                <nav class="wf-caption wf-muted" aria-label="Breadcrumb"><a asp-action="Index">Billing</a> / @Model.MsapBillingNumber / Review</nav>
+                <h1 class="wf-page-title" data-page-header>Review billing</h1>
+                <a asp-action="Index" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-secondary wf-page-action">Review list</a>
+                <p class="wf-page-description wf-caption wf-muted">@Model.MsapBillingNumber · @component · @Model.Status · @(Model.IsUndocumented ? "Undocumented" : "Documented")</p>
+            </header>
+            @if (related != null)
+            {
+                <section class="wf-panel billing-section-heading" aria-label="Related billing">
+                    <div><h2 class="wf-section-title">Related bill · @related.MsapBillingNumber</h2><p class="wf-caption wf-muted">@(bafOnly ? "Basic" : "BAF") · @related.Status · Separate balance</p></div>
+                    <a asp-action="Review" asp-route-id="@related.MsapBillingId" class="modern-btn-secondary">Review related bill</a>
+                </section>
+            }
+            <section class="wf-panel wf-stack" aria-label="Billing recipient and booking">
+                <div class="billing-fields">
+                    <div><span class="wf-caption wf-muted">Service customer</span><p class="wf-body">@Model.Customer.CustomerName</p></div>
+                    <div><span class="wf-caption wf-muted">Bill to</span><p class="wf-body">@(Model.Principal?.PrincipalName ?? Model.Customer.CustomerName)</p></div>
+                    <div><span class="wf-caption wf-muted">Vessel</span><p class="wf-body">@Model.Vessel.VesselName</p></div>
+                    <div><span class="wf-caption wf-muted">Port / terminal</span><p class="wf-body">@Model.Port.PortName / @Model.Terminal.TerminalName</p></div>
+                </div>
+                <div class="billing-recipient">
+                    <div><span class="wf-caption wf-muted">Statement address</span><p class="wf-body">@(Model.Principal?.Address1 ?? Model.Customer.CustomerAddress)</p></div>
+                    <div><span class="wf-caption wf-muted">Statement TIN</span><p class="wf-body">@(Model.Principal?.TIN ?? Model.Customer.CustomerTin)</p></div>
+                    <div><span class="wf-caption wf-muted">Payment terms</span><p class="wf-body">@Model.Terms</p></div>
+                </div>
+                <p class="wf-caption wf-muted">@(Model.IsVatable ? "VAT" : "Non-VAT") · @(Model.IsVatInclusive ? "VAT inclusive" : "VAT exclusive") · @(Model.PrintWht ? "Print withholding" : "No printed withholding")</p>
+            </section>
+            <section class="wf-panel wf-stack" aria-labelledby="reviewChargesHeading">
+                <h2 id="reviewChargesHeading" class="wf-section-title">@component charges for review</h2>
+                <div class="billing-table-scroll">
+                    <table class="billing-service-table">
+                        <thead><tr><th>Service / ticket</th><th>Actual / billed hours</th><th>Basic rate</th><th>BAF rate</th><th>Source · Basic / BAF</th><th>After discount</th></tr></thead>
+                        <tbody>
+                            @foreach (var group in (Model.PaidDispatchTickets ?? []).GroupBy(t => t.Tugboat.TugboatName))
+                            {
+                                <tr class="billing-tugboat-row"><th colspan="6" scope="rowgroup">@group.Key<span class="billing-tugboat-owner wf-caption wf-muted">@(group.First().Tugboat.IsCompanyOwned ? "Company-owned" : "Subcontractor")</span></th></tr>
+                                @foreach (var ticket in group)
+                                {
+                                    <tr>
+                                        <td>@ticket.Service.ServiceName<span class="billing-ticket-number">@ticket.DispatchNumber</span></td>
+                                        <td>@(ticket.RawDurationHours?.ToString("N2") ?? "—") / @ticket.TotalHours.ToString("N2")</td>
+                                        <td>@(bafOnly ? "—" : ticket.DispatchRate.ToString("N2"))</td>
+                                        <td>@(basicOnly ? "—" : ticket.BAFRate.ToString("N2"))</td>
+                                        <td>@(bafOnly ? "—" : ticket.IsManualTariffRate ? "Manual" : "Table") / @(basicOnly ? "—" : ticket.IsManualBafRate ? "Manual" : "Table")</td>
+                                        <td>@(bafOnly ? ticket.BAFNetRevenue.ToString("N2") : basicOnly ? ticket.DispatchNetRevenue.ToString("N2") : ticket.TotalNetRevenue.ToString("N2"))</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="wf-panel wf-stack" aria-label="Saved billing totals">
+                <h2 class="wf-section-title">@Model.MsapBillingNumber · @component amounts</h2>
+                <div class="billing-amount"><span>Basic charges after discount</span><strong>@Model.DispatchAmount.ToString("N2")</strong></div>
+                <div class="billing-amount"><span>BAF charges after discount</span><strong>@Model.BAFAmount.ToString("N2")</strong></div>
+                <div class="billing-amount billing-summary-total"><strong>Statement total</strong><strong>@Model.Amount.ToString("N2")</strong></div>
+                <div class="billing-amount"><span>Remaining billing balance</span><strong>@Model.Balance.ToString("N2")</strong></div>
+                @if (basicOnly)
+                {
+                    <p class="wf-caption wf-muted">Reminder: confirm SBMA placement and financial treatment.</p>
+                }
+            </section>
+            <section class="wf-stack" aria-labelledby="ticketImagesHeading">
+                <h2 id="ticketImagesHeading" class="wf-section-title">Ticket images</h2>
+                @if (Model.PaidDispatchTickets?.Any(t => !string.IsNullOrEmpty(t.ImageSignedUrl)) == true)
+                {
+                    <partial name="_TicketImages" model="Model" />
+                }
+                else
+                {
+                    <p class="wf-caption wf-muted">No ticket images are available.</p>
+                }
+            </section>
+            <div class="billing-section-heading">
+                <a asp-action="Preview" asp-route-id="@Model.MsapBillingId" asp-route-printCopy="@canPrint" target="_blank" class="modern-btn-secondary">Preview statements</a>
+            </div>
+            <footer class="billing-footer">
+                <p class="wf-caption wf-muted">Posting applies to @Model.MsapBillingNumber only.</p>
+                @if (canPost)
+                {
+                    <form asp-action="Review" asp-route-id="@Model.MsapBillingId" method="post" id="postReviewedBilling">
+                        <button class="modern-btn-primary wf-page-action" type="submit">Post billing @Model.MsapBillingNumber</button>
+                    </form>
+                }
+                else
+                {
+                    <p class="wf-caption wf-muted">@(blocker ?? (ViewData["IsPeriodClosed"] is true ? "This accounting period is closed." : "This billing has already been posted."))</p>
+                }
+            </footer>
+        </main>
+    </div>
+</div>
+@section Scripts {
+    <script>
+        $('#postReviewedBilling').on('submit', async function (event) {
+            event.preventDefault();
+            const form = this;
+            const button = form.querySelector('button');
+            if (button.disabled) return;
+            button.disabled = true;
+            try {
+                const result = await ModernAlert.confirm({ title: 'Post this billing?', text: 'Post the selected billing after reviewing its charges and statement.', confirmText: 'Post billing', cancelText: 'Keep reviewing' });
+                if (result.isConfirmed) form.submit();
+            } finally {
+                button.disabled = false;
+            }
+        });
+    </script>
+}

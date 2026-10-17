@@ -16,6 +16,12 @@ namespace IBS.Services.MSAP
         CustomerOrderSlipService customerOrderSlipService,
         ILogger<BillingService> logger)
     {
+        public static bool CanPrint(Billing billing)
+        {
+            return (billing.Status is MsapConstants.BillingStatus.ForCollection or MsapConstants.BillingStatus.Collected)
+                && (!billing.ApprovedRevision.HasValue || billing.ApprovedRevision == billing.Revision);
+        }
+
         public async Task<Billing?> GetBillingByIdAsync(int id, CancellationToken cancellationToken)
         {
             return await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == id, cancellationToken);
@@ -118,13 +124,20 @@ namespace IBS.Services.MSAP
                 model.BilledTo = "LOCAL";
                 model.PrincipalId = null;
             }
-            model.IsUndocumented = customer.Type == "Undocumented";
             if (model.IsUndocumented)
             {
                 model.MsapBillingNumber = await unitOfWork.Billing.GenerateBillingNumber(model.Date.Year, cancellationToken);
             }
             string basicNumber = model.MsapBillingNumber?.Trim() ?? "";
             string bafNumber = model.BafBillingNumber?.Trim() ?? "";
+            if (model.IsUndocumented && model.SeparateBaf)
+            {
+                if (!int.TryParse(basicNumber.AsSpan(1), out int sequence))
+                {
+                    return ServiceResult<List<Billing>>.Failure("Unable to generate the separate BAF billing number.");
+                }
+                bafNumber = $"B{sequence + 1:D6}";
+            }
             if (basicNumber.Length is 0 or > 10 || (model.SeparateBaf && (bafNumber.Length is 0 or > 10)))
             {
                 return ServiceResult<List<Billing>>.Failure("Each billing number must contain 1 to 10 characters.");
