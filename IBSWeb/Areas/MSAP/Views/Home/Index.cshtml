@@ -30,14 +30,11 @@ else
                 <p class="wf-page-description wf-caption wf-muted"><span class="dashboard-status">MMSI</span> @day.ToString("dddd, dd MMM yyyy") · Philippine time · Updated @Model.UpdatedAt.ToString("HH:mm") <a asp-action="Index">Refresh</a></p>
             </header>
 
-            @if (Model.CanApproveRates || Model.CanManageRates)
+            @if (Model.CanViewRates)
             {
                 <section class="wf-panel dashboard-rate" aria-label="Rate updates">
-                    <div><h2 class="wf-section-title">Tariff / BAF rate maintenance</h2><p class="wf-caption wf-muted">Rates apply by service date. Weekly upload and approval tracking is not yet available.</p></div>
-                    @if (Model.CanManageRates)
-                    {
-                        <a asp-controller="TariffRate" asp-action="Index" class="modern-btn-secondary">View rate tables</a>
-                    }
+                    <div><h2 class="wf-section-title">Tariff / BAF rate maintenance</h2><p class="wf-caption wf-muted">Rates apply by service date. Edit tariff and BAF separately, then submit selected changes for approval.</p></div>
+                    <a asp-controller="RateUpload" asp-action="Index" class="modern-btn-secondary">View rate updates</a>
                 </section>
             }
             @if (Model.DataError != null)
@@ -58,8 +55,9 @@ else
                     @if (Model.CanApproveRates)
                     {
                         <article class="wf-panel dashboard-metric">
-                            <h2 class="wf-section-title">Rate upload approvals</h2><strong aria-label="Not available">—</strong>
-                            <p class="wf-caption wf-muted">Upload approval tracking is not yet available.</p>
+                            <h2 class="wf-section-title">Rate updates for review</h2><strong>@Model.RateUploadReviews.ToString("N0")</strong>
+                            <p class="wf-caption wf-muted">Submitted comparisons · All dates</p>
+                            <a asp-controller="RateUpload" asp-action="Index" asp-route-awaitingReview="true" class="modern-btn-secondary">Review rate updates</a>
                         </article>
                     }
                     @if (Model.CanApproveBilling)
@@ -194,7 +192,7 @@ else
                     }
                     @if (Model.CanApproveRates)
                     {
-                        <div class="dashboard-review"><h3 class="wf-label">Rate uploads</h3><p class="wf-caption wf-muted">Upload approval tracking is not yet available.</p></div>
+                        <div class="dashboard-review"><h3 class="wf-label">Rate updates (@Model.RateUploadReviews)</h3><a asp-controller="RateUpload" asp-action="Index" asp-route-awaitingReview="true" class="wf-caption">Open submitted comparisons</a></div>
                     }
                     @if (Model.CanApproveBilling)
                     {
@@ -252,7 +250,7 @@ else
                                 <ul class="dashboard-upcoming">
                                     @foreach (var ticket in Model.PendingCalculationTickets)
                                     {
-                                        <li><div class="dashboard-heading"><span>@(ticket.CustomerOrderSlip?.CustomerOrderSlipNumber ?? ticket.DispatchNumber)</span><span class="wf-caption wf-muted">@(ticket.ExpectedServiceEntry?.BafMethod is BafCalculationMethod.Industry or BafCalculationMethod.Lumpsum ? $"{ticket.ExpectedServiceEntry!.BafMethod} BAF formula pending" : "Rate / terms calculation pending")</span></div>
+                                        <li><div class="dashboard-heading"><span>@(ticket.CustomerOrderSlip?.CustomerOrderSlipNumber ?? ticket.DispatchNumber)</span><span class="wf-caption wf-muted">Rate / terms calculation pending</span></div>
                                             @if (ticket.CustomerOrderSlipId.HasValue && (Model.CanViewDispatch || Model.CanCreateBilling || Model.CanApproveBilling || Model.CanCreateCollection || Model.CanApproveSchedule)) { <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@ticket.CustomerOrderSlipId" class="wf-caption">Open COS · Ticket @ticket.DispatchNumber</a> }
                                         </li>
                                     }

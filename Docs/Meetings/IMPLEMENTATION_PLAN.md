@@ -1,5 +1,20 @@
 # MSAP schedule/COS implementation plan
 
+
+## Rate maintenance clarification — 18 October 2026
+
+This later user clarification supersedes earlier upload-only and unresolved-formula instructions in this document.
+
+- Replace user-facing workbook upload with an in-app spreadsheet-style editor. Keep current and historical Excel exports.
+- Store tariff and BAF independently, with separate dated entries and submissions. Existing combined BAF values move to the separate BAF table; do not infer past approval.
+- Enter the supplied final BAF amount. Per hour applies billable hours; Per Move, Lumpsum and Industry apply it once per service entry. Missing is pending; explicitly entered zero is valid. Retain COS percentage discounts, taxes and rounding. Unknown external fuel formulas no longer block a supplied valid amount.
+- Fuel input/calculation personnel, formulas, VAT treatment and inventory remain deferred. Do not add unused fuel fields or derive customer charges from the example workbook.
+- Editor drafts and submitted comparisons do not change active rates. The authorized approver activates only selected changes after checking the current baseline. Retain immutable old/new comparison and approval evidence. Weekly changes add effective dates; explicit corrections update the selected dated rate.
+- Current implementation connects independent rate lookups to schedule estimates, actual ticket calculations and Job Progress. Old direct rate editing and CSV rate activation are retired. Existing ticket/billing amounts are not rewritten by rate approval; unresolved unbilled tickets retain the COS recalculation action.
+- Still pending: Tuesday cycle coverage/enforcement, impact preview for already-calculated unbilled tickets, their correction/recalculation policy, and confirmation of rate-matching fallback rules. No weekly freshness renewal is inferred from this editor milestone.
+- A schema migration is supplied but is not applied by the agent. Browser acceptance and database migration execution remain with the user.
+
+
 Prepared: 16 October 2026.
 
 Status: implementation started. Phase 0 source trace is recorded; phase 1a adds the three explicit approval permissions. The calendar milestone is complete. Phase 1b adds structural expected-service rows; phase 1c adds customer-default COS discount maintenance and exports; phase 1d stores schedule commercial settings and per-service charging choices/manual values; phase 1e adds revision-bound approval evidence to schedule and billing; phase 1f adds dispatch ticket linkage to expected service entries, rate provenance flags, and raw duration separation. Schedule preparation UI, commercial/service-row saving and revision-aware schedule review have been continued from the partial implementation; see the baseline for checks and limits. Authoritative rate resolution, expected-ticket completeness and the new financial approval gates remain subsequent slices. The complete new COS/ticket/rate/billing workflow is not enabled; schedule confirmation now uses the explicit schedule-approval permission. Production data has not been changed.

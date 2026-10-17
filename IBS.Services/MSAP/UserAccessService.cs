@@ -22,7 +22,7 @@ namespace IBS.Services.MSAP
             string? role = await roleService.GetUserRoleAsync(id);
             if (role is MsapRoles.Admin or MsapRoles.SuperAdmin)
             {
-                return procedure != ProcedureEnum.ApproveRateUpload;
+                return true;
             }
 
             if (role != MsapRoles.User)
@@ -55,6 +55,8 @@ namespace IBS.Services.MSAP
                 ProcedureEnum.DeleteCustomerOrderSlip => userAccess.CanDeleteCustomerOrderSlip,
                 ProcedureEnum.CloseCustomerOrderSlip => userAccess.CanCloseCustomerOrderSlip,
                 ProcedureEnum.ApproveSchedule => userAccess.CanApproveSchedule,
+                ProcedureEnum.ViewRates => userAccess.CanViewRates || userAccess.CanManageRates || userAccess.CanApproveRateUpload,
+                ProcedureEnum.ManageRates => userAccess.CanManageRates,
                 ProcedureEnum.ApproveRateUpload => userAccess.CanApproveRateUpload,
                 ProcedureEnum.ApproveFinalBilling => userAccess.CanApproveFinalBilling,
                 ProcedureEnum.AccessTreasury => userAccess.CanAccessTreasury,
@@ -74,7 +76,13 @@ namespace IBS.Services.MSAP
 
         public async Task<UserAccess?> GetByIdAsync(int id, CancellationToken cancellationToken)
         {
-            return await unitOfWork.UserAccess.GetAsync(ua => ua.Id == id, cancellationToken);
+            UserAccess? access = await unitOfWork.UserAccess.GetAsync(ua => ua.Id == id, cancellationToken);
+            if (access != null)
+            {
+                ApplicationUser? user = await userManager.FindByIdAsync(access.UserId);
+                access.DisplayName = string.IsNullOrWhiteSpace(user?.Name) ? "Name unavailable" : user.Name.Trim();
+            }
+            return access;
         }
 
         public async Task<UserAccess> PopulateUsersAsync(UserAccess? model, CancellationToken cancellationToken)
@@ -103,18 +111,19 @@ namespace IBS.Services.MSAP
                 var existing = await unitOfWork.UserAccess.GetAsync(ua => ua.UserId == model.UserId, cancellationToken);
                 if (existing != null)
                 {
-                    return ServiceResult.Failure($"Access for {existing.UserName} already exists.");
+                    return ServiceResult.Failure("User access already exists for this account.");
                 }
 
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
                     var selectedUser = await userManager.FindByIdAsync(model.UserId);
                     model.UserName = selectedUser?.UserName;
+                    model.DisplayName = string.IsNullOrWhiteSpace(selectedUser?.Name) ? "Name unavailable" : selectedUser.Name.Trim();
 
                     await unitOfWork.UserAccess.AddAsync(model, cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
 
-                    AuditTrail auditTrail = new(username, $"Created User Access for {model.UserName}", "User Access", model.Id);
+                    AuditTrail auditTrail = await CreateAuditAsync(username, $"Created User Access for {model.DisplayName}. Rate access: view={model.CanViewRates}, prepare={model.CanManageRates}, approve={model.CanApproveRateUpload}.", model.Id, model.UserId);
                     await unitOfWork.AuditTrail.AddAsync(auditTrail, cancellationToken);
 
                     await unitOfWork.SaveAsync(cancellationToken);
@@ -140,6 +149,18 @@ namespace IBS.Services.MSAP
                 }
 
                 var changes = new List<string>();
+                if (existing.CanViewRates != model.CanViewRates)
+                {
+                    changes.Add($"View Rates: {existing.CanViewRates} → {model.CanViewRates}");
+                }
+                if (existing.CanManageRates != model.CanManageRates)
+                {
+                    changes.Add($"Prepare Rates: {existing.CanManageRates} → {model.CanManageRates}");
+                }
+                if (existing.CanApproveRateUpload != model.CanApproveRateUpload)
+                {
+                    changes.Add($"Approve Rate Updates: {existing.CanApproveRateUpload} → {model.CanApproveRateUpload}");
+                }
                 if (existing.CanCreateDispatchTicket != model.CanCreateDispatchTicket) changes.Add($"Create DT: {existing.CanCreateDispatchTicket} → {model.CanCreateDispatchTicket}");
                 if (existing.CanEditDispatchTicket != model.CanEditDispatchTicket) changes.Add($"Edit DT: {existing.CanEditDispatchTicket} → {model.CanEditDispatchTicket}");
                 if (existing.CanDeleteDispatchTicket != model.CanDeleteDispatchTicket) changes.Add($"Delete DT: {existing.CanDeleteDispatchTicket} → {model.CanDeleteDispatchTicket}");
@@ -158,10 +179,6 @@ namespace IBS.Services.MSAP
                 {
                     changes.Add($"Approve Schedule: {existing.CanApproveSchedule} → {model.CanApproveSchedule}");
                 }
-                if (existing.CanApproveRateUpload != model.CanApproveRateUpload)
-                {
-                    changes.Add($"Approve Rate Upload: {existing.CanApproveRateUpload} → {model.CanApproveRateUpload}");
-                }
                 if (existing.CanApproveFinalBilling != model.CanApproveFinalBilling)
                 {
                     changes.Add($"Approve Final Billing: {existing.CanApproveFinalBilling} → {model.CanApproveFinalBilling}");
@@ -177,7 +194,7 @@ namespace IBS.Services.MSAP
                 {
                     if (changes.Any())
                     {
-                        AuditTrail auditTrail = new(username, $"Edited User Access for {existing.UserName}: {string.Join("; ", changes)}", "User Access", existing.Id);
+                        AuditTrail auditTrail = await CreateAuditAsync(username, $"Edited User Access for {existing.DisplayName}: {string.Join("; ", changes)}", existing.Id, existing.UserId);
                         await unitOfWork.AuditTrail.AddAsync(auditTrail, cancellationToken);
                     }
 
@@ -196,6 +213,8 @@ namespace IBS.Services.MSAP
                     existing.CanDeleteCustomerOrderSlip = model.CanDeleteCustomerOrderSlip;
                     existing.CanCloseCustomerOrderSlip = model.CanCloseCustomerOrderSlip;
                     existing.CanApproveSchedule = model.CanApproveSchedule;
+                    existing.CanViewRates = model.CanViewRates;
+                    existing.CanManageRates = model.CanManageRates;
                     existing.CanApproveRateUpload = model.CanApproveRateUpload;
                     existing.CanApproveFinalBilling = model.CanApproveFinalBilling;
                     existing.CanAccessTreasury = model.CanAccessTreasury;
@@ -216,5 +235,16 @@ namespace IBS.Services.MSAP
                 return ServiceResult.Failure($"Failed to edit user access: {ExceptionHelper.GetErrorMessage(ex)}");
             }
         }
+
+        private async Task<AuditTrail> CreateAuditAsync(string username, string activity, int recordId, string targetUserId)
+        {
+            ApplicationUser? actor = await userManager.FindByNameAsync(username);
+            return new AuditTrail(username, activity, "User Access", recordId, targetUserId)
+            {
+                UserId = actor?.Id,
+                ActorName = string.IsNullOrWhiteSpace(actor?.Name) ? null : actor.Name.Trim()
+            };
+        }
+
     }
 }

@@ -1,121 +1,40 @@
 using IBS.Models.MSAP.Enums;
-using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP;
 using IBS.Services.MSAP.Attributes;
-using Microsoft.AspNetCore.Identity;
+using IBS.Utility.MSAP.Helpers;
 using Microsoft.AspNetCore.Mvc;
-using ApplicationUser = IBS.Models.ApplicationUser;
 
 namespace IBSWeb.Areas.MSAP.Controllers
 {
     [Area("MSAP")]
-    [RequireAnyAccess("Access denied. You don't have permission to manage maritime master files.", ProcedureEnum.ManageMaritimeMasterFile)]
-    public class TariffRateController(
-        ITariffRateService tariffRateService,
-        UserManager<ApplicationUser> userManager)
-        : Controller
+    [RequireAnyAccess(ProcedureEnum.ViewRates, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload)]
+    public class TariffRateController : Controller
     {
-        public IActionResult Index()
-        {
-            return View();
-        }
+        private readonly ITariffRateService _rates;
 
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> GetTariffRateList(CancellationToken cancellationToken)
+        public TariffRateController(ITariffRateService rates)
         {
-            var list = await tariffRateService.GetAllAsync(cancellationToken);
-            return Json(new { data = list });
+            _rates = rates;
         }
 
         [HttpGet]
-        public async Task<IActionResult> Create(CancellationToken cancellationToken)
+        public async Task<IActionResult> Export(CancellationToken cancellationToken, DateOnly? asOfDate = null,
+            DateOnly? dateFrom = null, DateOnly? dateTo = null, bool history = false, RateTableKind kind = RateTableKind.Tariff)
         {
-            var model = new TariffRateViewModel();
-            await tariffRateService.PopulateSelectListsAsync(model, cancellationToken);
-            return View(model);
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(TariffRateViewModel model, CancellationToken cancellationToken = default)
-        {
-            await tariffRateService.PopulateSelectListsAsync(model, cancellationToken);
-
-            if (model is { Dispatch: <= 0, BAF: <= 0 })
+            if (!ModelState.IsValid || !Enum.IsDefined(kind) || history && (!dateFrom.HasValue || !dateTo.HasValue))
             {
-                ModelState.AddModelError(string.Empty, "Dispatch and BAF value cannot be both zero.");
-                await tariffRateService.PopulateSelectListsAsync(model, cancellationToken);
-                return View(model);
+                TempData["error"] = "Choose a valid rate table and effective dates for the export.";
+                return RedirectToAction("Editor", "RateUpload");
             }
-
-            var result = await tariffRateService.UpsertAsync(model, userManager.GetUserName(User)!, cancellationToken);
-
-            if (result.IsSuccess)
-            {
-                TempData["success"] = result.Message;
-                return RedirectToAction(nameof(Index));
-            }
-
-            TempData["error"] = result.Message;
-            await tariffRateService.PopulateSelectListsAsync(model, cancellationToken);
-            return View(model);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> Edit(int id, CancellationToken cancellationToken)
-        {
-            var entity = await tariffRateService.GetByIdAsync(id, cancellationToken);
-            if (entity == null)
-            {
-                return NotFound();
-            }
-
-            var model = new TariffRateViewModel(entity);
-            await tariffRateService.PopulateSelectListsAsync(model, cancellationToken);
-            return View(model);
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(TariffRateViewModel model, CancellationToken cancellationToken)
-        {
-            await tariffRateService.PopulateSelectListsAsync(model, cancellationToken);
-
-            var result = await tariffRateService.UpsertAsync(model, userManager.GetUserName(User)!, cancellationToken);
-
-            if (result.IsSuccess)
-            {
-                TempData["success"] = result.Message;
-                return RedirectToAction(nameof(Index));
-            }
-
-            TempData["error"] = result.Message;
-            await tariffRateService.PopulateSelectListsAsync(model, cancellationToken);
-            return View(model);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> ChangeTerminal(int portId, CancellationToken cancellationToken)
-        {
-            var list = await tariffRateService.GetTerminalsByPortAsync(portId, cancellationToken);
-            return Json(list);
-        }
-
-        public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
-        {
-            var result = await tariffRateService.DeleteAsync(id, userManager.GetUserName(User)!, cancellationToken);
-
-            if (result.IsSuccess)
-            {
-                TempData["success"] = result.Message;
-            }
-            else
+            DateOnly through = history ? dateTo!.Value : asOfDate ?? DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime());
+            ServiceResult<byte[]> result = await _rates.ExportAsync(history ? dateFrom : null, through, cancellationToken, kind);
+            if (!result.IsSuccess)
             {
                 TempData["error"] = result.Message;
+                return RedirectToAction("Editor", "RateUpload");
             }
-
-            return RedirectToAction(nameof(Index));
+            string filename = history ? $"MMSI_{kind}_History_{dateFrom:yyyyMMdd}_{through:yyyyMMdd}.xlsx" : $"MMSI_{kind}_Rates_{through:yyyyMMdd}.xlsx";
+            return File(result.Data!, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
         }
     }
 }

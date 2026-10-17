@@ -43,7 +43,7 @@
                                     @(entry.BafMethod.HasValue ? entry.BafMethod.Value.ToString() : "PerHour")
                                     @if (entry.BafMethod is BafCalculationMethod.Lumpsum or BafCalculationMethod.Industry)
                                     {
-                                        <span class="schedule-pending-notice text-xs">Pending confirmation</span>
+                                        <span class="schedule-pending-notice text-xs">Approved amount applied once per service</span>
                                     }
                                 </td>
                                 <td>

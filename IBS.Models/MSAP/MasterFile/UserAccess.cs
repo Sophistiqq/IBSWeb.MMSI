@@ -14,6 +14,9 @@ namespace IBS.Models.MSAP.MasterFile
         [Column(TypeName = "varchar(100)")]
         public string? UserName { get; set; }
 
+        [NotMapped]
+        public string DisplayName { get; set; } = "Name unavailable";
+
         #region -- MSAP Workflow --
 
         public bool CanCreateDispatchTicket { get; set; }
@@ -46,6 +49,10 @@ namespace IBS.Models.MSAP.MasterFile
         public bool CanCloseCustomerOrderSlip { get; set; }
 
         public bool CanApproveSchedule { get; set; }
+
+        public bool CanViewRates { get; set; }
+
+        public bool CanManageRates { get; set; }
 
         public bool CanApproveRateUpload { get; set; }
 

@@ -28,7 +28,15 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 query = query.Where(filter);
             }
 
-            return await query.ToListAsync(cancellationToken);
+            List<UserAccess> records = await query.ToListAsync(cancellationToken);
+            List<string> ids = records.Select(record => record.UserId).Distinct().ToList();
+            Dictionary<string, string> names = await _db.Users.AsNoTracking().Where(user => ids.Contains(user.Id))
+                .ToDictionaryAsync(user => user.Id, user => user.Name, cancellationToken);
+            foreach (UserAccess record in records)
+            {
+                record.DisplayName = names.TryGetValue(record.UserId, out string? name) && !string.IsNullOrWhiteSpace(name) ? name.Trim() : "Name unavailable";
+            }
+            return records;
         }
 
         public async Task<List<string>> GetUserIdsWithAccessAsync(ProcedureEnum procedure, CancellationToken cancellationToken = default)
@@ -64,7 +72,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
             var userIds = await query.Select(u => u.UserId).ToListAsync(cancellationToken);
 
-            if (procedure is ProcedureEnum.ApproveSchedule or ProcedureEnum.ApproveFinalBilling)
+            if (procedure is ProcedureEnum.ApproveSchedule or ProcedureEnum.ApproveRateUpload or ProcedureEnum.ApproveFinalBilling)
             {
                 var activeUsers = await _db.Users.AsNoTracking().Where(user => user.IsActive)
                     .Select(user => user.Id).ToListAsync(cancellationToken);
@@ -79,11 +87,6 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                     string? role = MsapRoles.GetRole(claims[id].Select(claim => claim.ToClaim()), sharedAdmins.Contains(id));
                     return role is MsapRoles.Admin or MsapRoles.SuperAdmin || role == MsapRoles.User && assignedUsers.Contains(id);
                 }).ToList();
-            }
-
-            if (procedure is ProcedureEnum.ApproveSchedule or ProcedureEnum.ApproveRateUpload or ProcedureEnum.ApproveFinalBilling)
-            {
-                return userIds;
             }
 
             // Also include all Admins

@@ -62,6 +62,7 @@ namespace IBS.DataAccess.MSAP.Repository.IRepository
         IReportRepository Report { get; }
         IServiceRepository Service { get; }
         ITariffTableRepository TariffTable { get; }
+        IBafTableRepository BafTable { get; }
         IPortRepository Port { get; }
         IPrincipalRepository Principal { get; }
         ITerminalRepository Terminal { get; }

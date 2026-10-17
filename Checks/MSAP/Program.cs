@@ -28,6 +28,18 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
+if (args.Contains("--rate-access-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.RateAccessCheck.RunAsync();
+    return;
+}
+
+if (args.Contains("--rate-export-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TariffExportCheck.RunAsync();
+    return;
+}
+
 Checks.MSAP.JobProgressCheck.Run();
 await Checks.MSAP.CollectionCheck.RunAsync();
 

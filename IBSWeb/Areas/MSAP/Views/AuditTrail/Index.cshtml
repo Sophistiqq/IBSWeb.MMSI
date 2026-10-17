@@ -149,7 +149,7 @@
                             return moment(data).format('MMM DD, YYYY HH:mm');
                         }
                     },
-                    { data: 'username', name: 'username' },
+                    { data: 'actorName', name: 'actorName', render: data => escapeHtml(data || 'Name unavailable') },
                     {
                         data: 'documentType',
                         name: 'documentType',
@@ -164,7 +164,7 @@
                             return data || '-';
                         }
                     },
-                    { data: 'activity', name: 'activity' },
+                    { data: 'activity', name: 'activity', render: data => escapeHtml(data ?? '') },
                     { data: 'machineName', name: 'machineName', className: 'text-xs' },
                     {
                         data: null,

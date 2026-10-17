@@ -334,17 +334,13 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             var rate = await unitOfWork.TariffTable.GetApplicableRateAsync(customerId, terminalId, serviceId, asOfDate, ct);
 
-            if (rate != null)
+            var bafRate = await unitOfWork.BafTable.GetApplicableRateAsync(customerId, terminalId, serviceId, asOfDate, ct);
+            return Json(new
             {
-                return Json(new
-                {
-                    exists = true,
-                    tariffRate = rate.Dispatch,
-                    bafRate = rate.BAF
-                });
-            }
-
-            return Json(new { exists = false });
+                exists = rate != null || bafRate != null,
+                tariffRate = rate?.Dispatch,
+                bafRate = bafRate?.Amount
+            });
         }
 
         [HttpGet]

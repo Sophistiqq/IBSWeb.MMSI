@@ -35,7 +35,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     var searchValue = parameters.Search.Value.ToLower();
                     queried = queried.Where(ua =>
                         (ua.UserId.ToLower().Contains(searchValue)) ||
-                        (ua.UserName != null && ua.UserName.ToLower().Contains(searchValue))
+                        ua.DisplayName.ToLower().Contains(searchValue)
                     ).ToList();
                 }
 
@@ -70,7 +70,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(UserAccess model, CancellationToken cancellationToken = default)
         {
-            var result = await userAccessService.CreateAsync(model, userManager.GetUserName(User)!, cancellationToken);
+            ApplicationUser? actor = await userManager.GetUserAsync(User);
+            if (actor == null)
+            {
+                return Challenge();
+            }
+            var result = await userAccessService.CreateAsync(model, actor.UserName!, cancellationToken);
 
             if (result.IsSuccess)
             {
@@ -101,7 +106,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(UserAccess model, CancellationToken cancellationToken = default)
         {
-            var result = await userAccessService.UpdateAsync(model, userManager.GetUserName(User)!, cancellationToken);
+            ApplicationUser? actor = await userManager.GetUserAsync(User);
+            if (actor == null)
+            {
+                return Challenge();
+            }
+            var result = await userAccessService.UpdateAsync(model, actor.UserName!, cancellationToken);
 
             if (result.IsSuccess)
             {

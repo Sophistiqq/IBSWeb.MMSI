@@ -60,5 +60,8 @@ namespace IBS.Models.MSAP.Enums
         ApproveFinalBilling = 24,
 
         #endregion -- Individual Workflow Approvals --
+
+        ViewRates = 25,
+        ManageRates = 26,
     }
 }

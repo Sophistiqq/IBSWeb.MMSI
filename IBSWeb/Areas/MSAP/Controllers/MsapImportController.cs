@@ -1117,79 +1117,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
             return $"Principals: {count} imported, {skipped} already existed.";
         }
 
-        private async Task<string> ImportTariffRatesAsync(IFormFile file, ImportMaps maps)
+        private Task<string> ImportTariffRatesAsync(IFormFile file, ImportMaps maps)
         {
-            using var reader = new StreamReader(file.OpenReadStream());
-            using var csv = new CsvReader(reader, _csvConfig);
-            var records = csv.GetRecords<dynamic>().Select(r => (IDictionary<string, object?>)r).ToList();
-            int count = 0, skipped = 0;
-            var newRecords = new List<TariffRate>();
-
-            var terminalToPortMap = await dbContext.MsapTerminals.AsNoTracking().ToDictionaryAsync(t => t.TerminalId, t => t.PortId);
-
-            foreach (var record in records)
-            {
-                string custNo = PadNumber(GetString(record, "custno"), 4);
-                string terminalRaw = GetString(record, "terminal");
-                string serviceNum = PadNumber(GetString(record, "service"), 3);
-
-                if (!maps.Customer.TryGetValue(custNo, out int customerId) && !maps.CustomerLegacyMap.TryGetValue(GetString(record, "custno"), out customerId))
-                {
-                    _importErrors.Add($"Tariff: Customer {custNo} not found. Skipping."); continue;
-                }
-
-                string? terminalKey = NormalizeTerminalCode(terminalRaw);
-                int? terminalId = null;
-                if (terminalKey != null && maps.Terminal.TryGetValue(terminalKey, out int tid))
-                {
-                    terminalId = tid;
-                }
-                else if (maps.TerminalLegacyMap.TryGetValue(terminalRaw, out var termInfo))
-                {
-                    terminalId = termInfo.TerminalId;
-                }
-
-                if (terminalId == null)
-                {
-                    _importErrors.Add($"Tariff: Terminal {terminalRaw} not found. Skipping.");
-                    continue;
-                }
-
-                if (!maps.Service.TryGetValue(serviceNum, out int serviceId) && !maps.ServiceLegacyMap.TryGetValue(GetString(record, "service"), out serviceId))
-                {
-                    _importErrors.Add($"Tariff: Service {serviceNum} not found. Skipping."); continue;
-                }
-
-                var asOfDate = ParseDateOnly(record, "date") ?? DateOnly.FromDateTime(DateTime.Today);
-                string key = $"{asOfDate:yyyy-MM-dd}|{customerId}|{terminalId}|{serviceId}";
-                if (maps.TariffRate.Contains(key)) { skipped++; continue; }
-
-                var entity = new TariffRate
-                {
-                    AsOfDate = asOfDate,
-                    CustomerId = customerId,
-                    TerminalId = terminalId.Value,
-                    ServiceId = serviceId,
-                    PortId = terminalToPortMap.GetValueOrDefault(terminalId.Value),
-                    Dispatch = ParseDecimal(record, "dispatch"),
-                    BAF = ParseDecimal(record, "baf"),
-                    CreatedBy = GetString(record, "createdby"),
-                    CreatedDate = ParseDateTime(record, "createddat") ?? DateTimeHelper.GetCurrentPhilippineTime()
-                };
-
-                if (entity.PortId == 0) { _importErrors.Add($"Tariff: Port not found for terminal {terminalRaw}. Skipping."); continue; }
-
-                newRecords.Add(entity);
-                count++;
-                maps.TariffRate.Add(key);
-            }
-
-            if (newRecords.Count > 0)
-            {
-                await dbContext.MsapTariffRates.AddRangeAsync(newRecords);
-            }
-
-            return $"Tariff Rates: {count} imported, {skipped} already existed.";
+            return Task.FromResult("Tariff/BAF import skipped. Enter rates in Rate Maintenance and submit them for approval.");
         }
 
         private async Task<string> ImportCollectionsAsync(IFormFile file, ImportMaps maps)

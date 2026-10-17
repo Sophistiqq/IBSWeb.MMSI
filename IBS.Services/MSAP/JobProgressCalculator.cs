@@ -43,7 +43,10 @@ namespace IBS.Services.MSAP
                     var rate = ticket.DateLeft.HasValue
                         ? await unitOfWork.TariffTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
                         : null;
-                    var reason = ScheduledTicketCharges.GetBlocker(ticket, schedule, entry, rate)
+                    var bafRate = ticket.DateLeft.HasValue
+                        ? await unitOfWork.BafTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
+                        : null;
+                    var reason = ScheduledTicketCharges.GetBlocker(ticket, schedule, entry, rate, bafRate)
                         ?? "Rates and terms are available. Recalculate charges to complete this ticket.";
                     progress.CalculationBlockers[ticket.DispatchTicketId] = $"{entry.Tugboat.TugboatName} / {entry.Service.ServiceName} ({ticket.DispatchNumber}): {reason}";
                 }

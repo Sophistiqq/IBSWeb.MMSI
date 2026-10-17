@@ -13,9 +13,11 @@ namespace IBS.Models.MSAP.ViewModels
         public bool CanApproveBilling { get; set; }
         public bool CanApproveRates { get; set; }
         public bool CanManageRates { get; set; }
+        public bool CanViewRates { get; set; }
         public bool CanViewReports { get; set; }
         public string? DataError { get; set; }
         public string? ScheduleError { get; set; }
+        public int RateUploadReviews { get; set; }
         public int ScheduleReviews { get; set; }
         public int ScheduleReapprovals { get; set; }
         public List<VesselSchedule> ScheduleReviewItems { get; set; } = [];

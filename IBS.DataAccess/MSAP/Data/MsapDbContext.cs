@@ -46,6 +46,9 @@ namespace IBS.DataAccess.MSAP.Data
         public DbSet<VesselScheduleServiceEntry> MsapVesselScheduleServiceEntries { get; set; }
         public DbSet<TariffRate> MsapTariffRates { get; set; }
 
+        public DbSet<BafRate> MsapBafRates { get; set; }
+        public DbSet<RateUpload> MsapRateUploads { get; set; }
+
         public DbSet<CollectionBill> MsapCollectionBills { get; set; }
 
         #endregion
@@ -91,6 +94,10 @@ namespace IBS.DataAccess.MSAP.Data
             builder.Entity<Service>().ToTable("mmsi_services");
             builder.Entity<Principal>().ToTable("mmsi_principals");
             builder.Entity<TariffRate>().ToTable("mmsi_tariff_rates");
+            builder.Entity<BafRate>().ToTable("mmsi_baf_rates");
+            builder.Entity<BafRate>().HasIndex(rate => new { rate.CustomerId, rate.TerminalId, rate.ServiceId, rate.AsOfDate });
+            builder.Entity<RateUpload>().ToTable("mmsi_rate_uploads");
+            builder.Entity<RateUpload>().HasIndex(upload => new { upload.Company, upload.UploadedAt });
             builder.Entity<Tugboat>().ToTable("mmsi_tugboats");
             builder.Entity<TugMaster>().ToTable("mmsi_tug_masters");
             builder.Entity<TugboatOwner>().ToTable("mmsi_tugboat_owners");

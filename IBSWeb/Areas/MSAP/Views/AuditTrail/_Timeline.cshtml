@@ -174,7 +174,7 @@ else
                             <time class="timeline-timestamp">@item.Date.ToString("MMM dd, HH:mm")</time>
                             <span class="timeline-username">
                                 <span class="material-symbols-outlined" style="font-size: 11px;">person</span>
-                                @(item.Username?.Split('@')[0] ?? "SYSTEM")
+                                @(string.IsNullOrWhiteSpace(item.ActorName) ? "Name unavailable" : item.ActorName)
                             </span>
                         </div>
                     </div>

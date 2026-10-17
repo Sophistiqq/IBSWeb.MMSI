@@ -36,7 +36,7 @@
                 <table class="modern-table" id="userAccessTable">
                     <thead>
                         <tr>
-                            <th>Username</th>
+                            <th>Name</th>
                             <th style="text-align: right !important">Actions</th>
                         </tr>
                     </thead>
@@ -53,7 +53,7 @@
             $('#userAccessTable').DataTable(ModernTable.config({
                 ajax: ModernTable.ajax('/MSAP/UserAccess/GetUserAccessList'),
                 columns: [
-                    { data: 'userName', render: data => `<span class="font-bold">${escapeHtml(data ?? '')}</span>` },
+                    { data: 'displayName', render: data => `<span class="font-bold">${escapeHtml(data ?? '')}</span>` },
                     {
                         data: null,
                         orderable: false,

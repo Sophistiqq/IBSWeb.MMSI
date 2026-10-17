@@ -1,0 +1,74 @@
+@model RateEditorViewModel
+@{
+    ViewData["Title"] = $"{Model.Kind} rate editor";
+    ViewData["IsFullWidth"] = true;
+    bool canEdit = ViewData["CanEditRates"] is true;
+}
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/rate-maintenance.css" asp-append-version="true" />
+<div class="modern-layout">
+    <main class="msap-workflow rate-workspace wf-stack" id="rateEditor" data-save-url="@Url.Action("SaveDraft")" data-can-edit="@canEdit.ToString().ToLowerInvariant()">
+        <header class="wf-page-header">
+            <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb"><li><a asp-controller="Home" asp-action="Index">MSAP</a></li><li aria-current="page">Rate maintenance</li></ol></nav>
+            <h1 class="wf-page-title" data-page-header>@Model.Kind rates</h1>
+            <a asp-action="Index" class="modern-btn-secondary wf-page-action">Rate updates / approvals</a>
+            <p class="wf-page-description wf-caption wf-muted">@(Model.Kind == RateTableKind.BAF ? "Enter the final calculated BAF amount. Charging follows the approved COS method." : "Maintain base service charges independently of BAF.") @(canEdit ? "Saving a draft leaves live rates unchanged." : "View and export access only.")</p>
+        </header>
+        <nav class="rate-list-filters" aria-label="Rate table">
+            <a asp-action="Editor" asp-route-kind="Tariff" asp-route-asOfDate="@Model.AsOfDate.ToString("yyyy-MM-dd")" class="modern-btn-secondary" aria-current="@(Model.Kind == RateTableKind.Tariff ? "page" : null)">Tariff rates</a>
+            <a asp-action="Editor" asp-route-kind="BAF" asp-route-asOfDate="@Model.AsOfDate.ToString("yyyy-MM-dd")" class="modern-btn-secondary" aria-current="@(Model.Kind == RateTableKind.BAF ? "page" : null)">BAF rates</a>
+        </nav>
+        <section class="wf-panel wf-stack">
+            <div class="rate-editor-filters">
+                <div class="wf-field"><label class="wf-label" for="rateCustomer">Customer</label><select id="rateCustomer" class="js-modern-select"><option value="">All customers</option>@foreach (var item in Model.Customers) { <option value="@item.Id">@item.Code - @item.Name</option> }</select></div>
+                <div class="wf-field"><label class="wf-label" for="ratePort">Port</label><select id="ratePort" class="js-modern-select"><option value="">All ports</option>@foreach (var item in Model.Ports) { <option value="@item.Id">@item.Name</option> }</select></div>
+                <div class="wf-field"><label class="wf-label" for="rateTerminal">Terminal</label><select id="rateTerminal" class="js-modern-select"><option value="">All terminals</option>@foreach (var item in Model.Terminals) { <option value="@item.Id" data-port="@item.PortId">@item.Name</option> }</select></div>
+                <div class="wf-field"><label class="wf-label" for="rateService">Service</label><select id="rateService" class="js-modern-select"><option value="">All services</option>@foreach (var item in Model.Services) { <option value="@item.Id">@item.Name</option> }</select></div>
+                <div class="wf-field"><label class="wf-label" for="rateSearch">Search</label><input id="rateSearch" type="search" class="modern-input" placeholder="Customer / location / service" /></div>
+            </div>
+            <div class="rate-upload-heading">
+                <label class="wf-caption"><input id="rateChangedOnly" type="checkbox" /> Show changed rows only</label>
+                @if (canEdit) { <button id="rateAdd" type="button" class="modern-btn-secondary">+ Add rate for selected combination</button> }
+            </div>
+            @if (canEdit)
+            {
+                <p class="wf-caption wf-muted">Select a customer, port, terminal and service to add a new combination. Existing references are locked. For a new weekly rate, change the effective date; retain the date only when correcting that dated rate.</p>
+            }
+        </section>
+        <section class="wf-panel wf-stack">
+            <div class="rate-upload-heading"><h2 class="wf-section-title">@(Model.Id.HasValue ? "Saved draft" : $"Rates effective on {Model.AsOfDate:dd MMM yyyy}")</h2><span id="rateCounts" class="wf-caption" aria-live="polite"></span></div>
+            @if (canEdit)
+            {
+                <p class="wf-caption wf-muted">Tab moves between cells; Enter moves down. Paste amounts or two columns (ISO date + amount) from Excel into existing rows. Yellow marks edits; blue marks new dated entries. Blank is missing; 0 is valid.</p>
+            }
+            <div id="rateEditorError" class="rate-editor-error wf-caption" role="alert" hidden></div>
+            <div class="rate-table-scroll rate-editor-scroll">
+                <table class="modern-table rate-editor-table">
+                    <caption class="visually-hidden">Editable effective dates and @Model.Kind amounts. Reference columns are read only.</caption>
+                    <thead><tr><th scope="col">Customer</th><th scope="col">Port / terminal</th><th scope="col">Service</th><th scope="col">Previous date / amount</th><th scope="col">Effective date</th><th scope="col">@Model.Kind amount</th><th scope="col">Change</th></tr></thead>
+                    <tbody id="rateEditorRows"></tbody>
+                </table>
+            </div>
+            <div class="rate-upload-actions">
+                @Html.AntiForgeryToken()
+                @if (canEdit) { <button id="rateSave" type="button" class="modern-btn-primary">Save draft and compare</button> }
+            </div>
+        </section>
+        <section class="rate-exports" aria-label="Export rates">
+            <form asp-controller="RateUpload" asp-action="Editor" method="get" class="wf-panel wf-stack">
+                <input type="hidden" name="kind" value="@Model.Kind" />
+                <h2 class="wf-section-title">Load / export current @Model.Kind rates</h2>
+                <div class="rate-export-fields"><div class="wf-field"><label class="wf-label" for="asOfDate">As of date</label><input id="asOfDate" name="asOfDate" type="date" class="modern-input" value="@Model.AsOfDate.ToString("yyyy-MM-dd")" min="1900-01-01" max="9998-12-31" required /></div><button type="submit" class="modern-btn-secondary">Load rates</button><button type="submit" formaction="@Url.Action("Export", "TariffRate")" data-export class="modern-btn-secondary">Export current</button></div>
+            </form>
+            <form asp-controller="TariffRate" asp-action="Export" method="get" class="wf-panel wf-stack">
+                <input type="hidden" name="kind" value="@Model.Kind" /><input type="hidden" name="history" value="true" />
+                <h2 class="wf-section-title">Export @Model.Kind history</h2>
+                <div class="rate-export-fields"><div class="wf-field"><label class="wf-label" for="dateFrom">Effective from</label><input id="dateFrom" name="dateFrom" type="date" class="modern-input" min="1900-01-01" max="9998-12-31" required /></div><div class="wf-field"><label class="wf-label" for="dateTo">Effective through</label><input id="dateTo" name="dateTo" type="date" class="modern-input" value="@Model.AsOfDate.ToString("yyyy-MM-dd")" min="1900-01-01" max="9998-12-31" required /></div><button type="submit" class="modern-btn-secondary" data-export>Export history</button></div>
+            </form>
+        </section>
+    </main>
+</div>
+<script type="application/json" id="rateEditorData">@Json.Serialize(Model)</script>
+@section Scripts {
+    <script src="~/msap/js/rate-editor.js" asp-append-version="true"></script>
+}

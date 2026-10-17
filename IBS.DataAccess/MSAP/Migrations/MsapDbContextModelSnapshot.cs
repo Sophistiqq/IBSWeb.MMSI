@@ -158,6 +158,11 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("text")
                         .HasColumnName("activity");
 
+                    b.Property<string>("ActorName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("actor_name");
+
                     b.Property<DateTime>("Date")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("date");
@@ -180,6 +185,11 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("text")
                         .HasColumnName("reference_number");
 
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("user_id");
+
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasColumnType("text")
@@ -201,6 +211,82 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasDatabaseName("ix_audit_trails_reference_number");
 
                     b.ToTable("audit_trails", "msap");
+                });
+
+            modelBuilder.Entity("IBS.Models.MSAP.BafRate", b =>
+                {
+                    b.Property<int>("BafRateId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("baf_rate_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("BafRateId"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("approved_by");
+
+                    b.Property<DateOnly>("AsOfDate")
+                        .HasColumnType("date")
+                        .HasColumnName("as_of_date");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("CreatedDate")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_date");
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("integer")
+                        .HasColumnName("customer_id");
+
+                    b.Property<int>("PortId")
+                        .HasColumnType("integer")
+                        .HasColumnName("port_id");
+
+                    b.Property<int>("ServiceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("service_id");
+
+                    b.Property<int>("TerminalId")
+                        .HasColumnType("integer")
+                        .HasColumnName("terminal_id");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("text")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("update_date");
+
+                    b.HasKey("BafRateId")
+                        .HasName("pk_mmsi_baf_rates");
+
+                    b.HasIndex("PortId")
+                        .HasDatabaseName("ix_mmsi_baf_rates_port_id");
+
+                    b.HasIndex("ServiceId")
+                        .HasDatabaseName("ix_mmsi_baf_rates_service_id");
+
+                    b.HasIndex("TerminalId")
+                        .HasDatabaseName("ix_mmsi_baf_rates_terminal_id");
+
+                    b.HasIndex("CustomerId", "TerminalId", "ServiceId", "AsOfDate")
+                        .HasDatabaseName("ix_mmsi_baf_rates_customer_id_terminal_id_service_id_as_of_date");
+
+                    b.ToTable("mmsi_baf_rates", "msap");
                 });
 
             modelBuilder.Entity("IBS.Models.MSAP.Billing", b =>
@@ -2246,6 +2332,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("can_manage_msap_import");
 
+                    b.Property<bool>("CanManageRates")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_manage_rates");
+
                     b.Property<bool>("CanReverseBilling")
                         .HasColumnType("boolean")
                         .HasColumnName("can_reverse_billing");
@@ -2261,6 +2351,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Property<bool>("CanViewMaritimeReport")
                         .HasColumnType("boolean")
                         .HasColumnName("can_view_maritime_report");
+
+                    b.Property<bool>("CanViewRates")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_view_rates");
 
                     b.Property<string>("UserId")
                         .IsRequired()
@@ -2315,6 +2409,80 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.ToTable("mmsi_vessels", "msap");
                 });
 
+            modelBuilder.Entity("IBS.Models.MSAP.RateUpload", b =>
+                {
+                    b.Property<Guid>("RateUploadId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("rate_upload_id");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("approved_by");
+
+                    b.Property<int>("ChangedRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("changed_rows");
+
+                    b.Property<string>("Company")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("company");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("file_name");
+
+                    b.Property<int>("RateKind")
+                        .HasColumnType("integer")
+                        .HasColumnName("rate_kind");
+
+                    b.Property<string>("RowsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("rows_json");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<int>("TotalRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_rows");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("uploaded_at");
+
+                    b.Property<string>("UploadedBy")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("uploaded_by");
+
+                    b.Property<string>("UploadedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("uploaded_by_user_id");
+
+                    b.HasKey("RateUploadId")
+                        .HasName("pk_mmsi_rate_uploads");
+
+                    b.HasIndex("Company", "UploadedAt")
+                        .HasDatabaseName("ix_mmsi_rate_uploads_company_uploaded_at");
+
+                    b.ToTable("mmsi_rate_uploads", "msap");
+                });
+
             modelBuilder.Entity("IBS.Models.MSAP.TariffRate", b =>
                 {
                     b.Property<int>("TariffRateId")
@@ -2324,19 +2492,17 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("TariffRateId"));
 
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("approved_by");
+
                     b.Property<DateOnly>("AsOfDate")
                         .HasColumnType("date")
                         .HasColumnName("as_of_date");
-
-                    b.Property<decimal>("BAF")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)")
-                        .HasColumnName("baf");
-
-                    b.Property<decimal>("BAFDiscount")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)")
-                        .HasColumnName("baf_discount");
 
                     b.Property<string>("CreatedBy")
                         .HasColumnType("text")
@@ -2713,6 +2879,45 @@ namespace IBS.DataAccess.MSAP.Migrations
                         });
                 });
 
+            modelBuilder.Entity("IBS.Models.MSAP.BafRate", b =>
+                {
+                    b.HasOne("IBS.Models.MSAP.MasterFile.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mmsi_baf_rates_customers_customer_id");
+
+                    b.HasOne("IBS.Models.MSAP.MasterFile.Port", "Port")
+                        .WithMany()
+                        .HasForeignKey("PortId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mmsi_baf_rates_mmsi_ports_port_id");
+
+                    b.HasOne("IBS.Models.MSAP.MasterFile.Service", "Service")
+                        .WithMany()
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mmsi_baf_rates_mmsi_services_service_id");
+
+                    b.HasOne("IBS.Models.MSAP.MasterFile.Terminal", "Terminal")
+                        .WithMany()
+                        .HasForeignKey("TerminalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mmsi_baf_rates_mmsi_terminals_terminal_id");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Port");
+
+                    b.Navigation("Service");
+
+                    b.Navigation("Terminal");
+                });
+
             modelBuilder.Entity("IBS.Models.MSAP.Billing", b =>
                 {
                     b.HasOne("IBS.Models.ApplicationUser", "ApprovedByUser")
@@ -2776,8 +2981,6 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Navigation("ApprovedByUser");
 
                     b.Navigation("BasicBilling");
-
-                    b.Navigation("BafBilling");
 
                     b.Navigation("Collection");
 
@@ -3175,6 +3378,11 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Navigation("Notification");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("IBS.Models.MSAP.Billing", b =>
+                {
+                    b.Navigation("BafBilling");
                 });
 
             modelBuilder.Entity("IBS.Models.MSAP.Collection", b =>

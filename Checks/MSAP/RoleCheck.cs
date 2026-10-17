@@ -135,14 +135,14 @@ namespace Checks.MSAP
             Check((await users.RemoveFromRoleAsync(user, "Admin")).Succeeded, "Cannot clean up Filpride test membership.");
             Check((await roles.DeleteAsync((await roles.FindByNameAsync("Admin"))!)).Succeeded, "Cannot clean up Filpride test role.");
             Console.WriteLine("PASS: MSAP Admin defaults, explicit role overrides, procedure permissions, shared role preservation, inactive accounts and stale cookies.");
-            Console.WriteLine("PASS: explicit workflow approval grants/revocation, stable procedure values, Admin/SuperAdmin schedule and final-bill approval, separate rate approval grants and inactive-account denial.");
+            Console.WriteLine("PASS: explicit workflow approval grants/revocation, stable procedure values, Admin/SuperAdmin approval access, explicit User approval grants and inactive-account denial.");
         }
 
         private static async Task CheckApprovalsAsync(UserManager<ApplicationUser> users, IUnitOfWork work, string userId, bool expected, bool scheduleAdmin = false)
         {
             foreach (ProcedureEnum procedure in new[] { ProcedureEnum.ApproveSchedule, ProcedureEnum.ApproveRateUpload, ProcedureEnum.ApproveFinalBilling })
             {
-                bool allowed = expected || (procedure is ProcedureEnum.ApproveSchedule or ProcedureEnum.ApproveFinalBilling) && scheduleAdmin;
+                bool allowed = expected || scheduleAdmin;
                 Check(await HasProcedureAsync(users, work, userId, procedure) == allowed, $"Unexpected access to {procedure}.");
             }
         }

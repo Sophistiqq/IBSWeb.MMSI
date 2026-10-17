@@ -9,6 +9,12 @@ namespace IBS.Models.MSAP
 
         public string Username { get; set; } = username;
 
+        [MaxLength(450)]
+        public string? UserId { get; set; }
+
+        [MaxLength(255)]
+        public string? ActorName { get; set; }
+
         [Column(TypeName = "timestamp without time zone")]
         public DateTime Date { get; set; } = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow,
             TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila"));

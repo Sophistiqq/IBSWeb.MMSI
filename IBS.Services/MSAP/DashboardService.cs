@@ -26,6 +26,11 @@ namespace IBS.Services.MSAP
             var monthStart = new DateOnly(today.Year, today.Month, 1);
             try
             {
+                if (model.CanApproveRates)
+                {
+                    model.RateUploadReviews = await _dbContext.MsapRateUploads.AsNoTracking()
+                        .CountAsync(upload => upload.Company == MsapConstants.Company_MMSI && upload.SubmittedAt != null && upload.ApprovedAt == null, ct);
+                }
                 var bills = _dbContext.MsapBillings.AsNoTracking()
                     .Where(b => b.Company == MsapConstants.Company_MMSI && b.CanceledDate == null && b.VoidedDate == null);
                 if (model.CanApproveSchedule)

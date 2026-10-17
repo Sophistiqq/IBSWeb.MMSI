@@ -46,7 +46,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
             model.CanApproveSchedule = await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveSchedule);
             model.CanApproveBilling = await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveFinalBilling);
             model.CanApproveRates = await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveRateUpload);
-            model.CanManageRates = await accessControl.HasAccessAsync(userId, ProcedureEnum.ManageMaritimeMasterFile);
+            model.CanManageRates = await accessControl.HasAccessAsync(userId, ProcedureEnum.ManageRates);
+            model.CanViewRates = await accessControl.HasAccessAsync(userId, ProcedureEnum.ViewRates);
             model.CanViewReports = await accessControl.HasAccessAsync(userId, ProcedureEnum.ViewMaritimeReport);
             model.CanViewFinance = model.CanViewBilling || model.CanCreateCollection
                 || model.CanViewReports;

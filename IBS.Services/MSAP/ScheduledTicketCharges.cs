@@ -7,7 +7,7 @@ namespace IBS.Services.MSAP
 {
     public static class ScheduledTicketCharges
     {
-        public static string? Apply(DispatchTicket ticket, VesselSchedule schedule, VesselScheduleServiceEntry entry, TariffRate? rate)
+        public static string? Apply(DispatchTicket ticket, VesselSchedule schedule, VesselScheduleServiceEntry entry, TariffRate? rate, BafRate? bafRate)
         {
             ticket.Status = MsapConstants.DispatchTicketStatus.CalculationPending;
             ticket.DispatchChargeType = null;
@@ -24,7 +24,7 @@ namespace IBS.Services.MSAP
             ticket.BAFNetRevenue = 0;
             ticket.TotalBilling = 0;
             ticket.TotalNetRevenue = 0;
-            var blocker = GetBlocker(ticket, schedule, entry, rate);
+            var blocker = GetBlocker(ticket, schedule, entry, rate, bafRate);
             if (blocker != null)
             {
                 return blocker;
@@ -35,19 +35,26 @@ namespace IBS.Services.MSAP
             ticket.RawDurationHours = (decimal)duration.TotalHours;
             ticket.TotalHours = Math.Round(Math.Max(ticket.RawDurationHours.Value, 1m), 2);
             var dispatchRate = entry.ManualTariffRate ?? rate!.Dispatch;
-            var bafRate = entry.ManualBafRate ?? rate!.BAF;
+            var bafAmount = entry.ManualBafRate ?? bafRate!.Amount;
             var discount = schedule.SkipCosDiscount ? 0m : schedule.CosDiscountPercent.GetValueOrDefault();
             var hours = Math.Max(ticket.RawDurationHours.Value, 1m);
             ticket.DispatchChargeType = entry.TariffBasis == TariffChargeBasis.PerHour ? "Per hour" : "Per move";
-            ticket.BAFChargeType = entry.BafMethod == BafCalculationMethod.PerHour ? "Per hour" : "Per move";
+            ticket.BAFChargeType = entry.BafMethod switch
+            {
+                BafCalculationMethod.PerHour => "Per hour",
+                BafCalculationMethod.PerMove => "Per move",
+                BafCalculationMethod.Lumpsum => "Lumpsum",
+                BafCalculationMethod.Industry => "Industry",
+                _ => throw new InvalidOperationException("Invalid BAF method.")
+            };
             ticket.DispatchRate = dispatchRate;
-            ticket.BAFRate = bafRate;
+            ticket.BAFRate = bafAmount;
             ticket.IsManualTariffRate = entry.ManualTariffRate.HasValue;
             ticket.IsManualBafRate = entry.ManualBafRate.HasValue;
             ticket.DispatchDiscount = discount;
             ticket.BAFDiscount = discount;
             var dispatchGross = dispatchRate * (entry.TariffBasis == TariffChargeBasis.PerHour ? hours : 1m);
-            var bafGross = bafRate * (entry.BafMethod == BafCalculationMethod.PerHour ? hours : 1m);
+            var bafGross = bafAmount * (entry.BafMethod == BafCalculationMethod.PerHour ? hours : 1m);
             ticket.DispatchBillingAmount = Math.Round(dispatchGross, 2);
             ticket.BAFBillingAmount = Math.Round(bafGross, 2);
             ticket.DispatchNetRevenue = Math.Round(dispatchGross * (1m - discount / 100m), 2);
@@ -58,7 +65,7 @@ namespace IBS.Services.MSAP
             return null;
         }
 
-        public static string? GetBlocker(DispatchTicket ticket, VesselSchedule schedule, VesselScheduleServiceEntry entry, TariffRate? rate)
+        public static string? GetBlocker(DispatchTicket ticket, VesselSchedule schedule, VesselScheduleServiceEntry entry, TariffRate? rate, BafRate? bafRate)
         {
             if (entry.VesselScheduleServiceEntryId != ticket.VesselScheduleServiceEntryId
                 || entry.TugboatId != ticket.TugBoatId || entry.ServiceId != ticket.ServiceId)
@@ -87,17 +94,13 @@ namespace IBS.Services.MSAP
             {
                 return "The approved service has no valid BAF method.";
             }
-            if (entry.BafMethod is BafCalculationMethod.Lumpsum or BafCalculationMethod.Industry)
-            {
-                return $"The {entry.BafMethod} BAF formula is awaiting confirmation.";
-            }
             var dispatchRate = entry.ManualTariffRate ?? rate?.Dispatch;
-            var bafRate = entry.ManualBafRate ?? rate?.BAF;
+            var bafAmount = entry.ManualBafRate ?? bafRate?.Amount;
             if (!dispatchRate.HasValue || dispatchRate < 0)
             {
                 return $"No valid tariff rate applies on {ticket.DateLeft:dd MMM yyyy}. Check rate maintenance or the approved manual tariff.";
             }
-            if (!bafRate.HasValue || bafRate < 0)
+            if (!bafAmount.HasValue || bafAmount < 0)
             {
                 return $"No valid BAF rate applies on {ticket.DateLeft:dd MMM yyyy}. Check rate maintenance or the approved manual BAF.";
             }

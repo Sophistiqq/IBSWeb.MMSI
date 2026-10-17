@@ -211,7 +211,7 @@
                                                         <option value="Lumpsum" selected="@(entry.BafMethod == BafCalculationMethod.Lumpsum)">Lumpsum</option>
                                                         <option value="Industry" selected="@(entry.BafMethod == BafCalculationMethod.Industry)">Industry</option>
                                                     </select>
-                                                    <span class="schedule-pending-notice wf-caption" @(entry.BafMethod is BafCalculationMethod.Lumpsum or BafCalculationMethod.Industry ? "" : "hidden")>Calculation pending confirmation</span>
+                                                    <span class="schedule-pending-notice wf-caption" @(entry.BafMethod is BafCalculationMethod.Lumpsum or BafCalculationMethod.Industry ? "" : "hidden")>Approved amount applied once per service</span>
                                                 </div>
                                                 <div class="col-baf-rate">
                                                     <input name="ServiceEntries[@rowKey].ManualBafRate" value="@(entry.ManualBafRate.HasValue ? entry.ManualBafRate.Value.ToString("0.00##") : "")" type="number" step="0.0001" min="0" placeholder="From table" class="modern-input js-baf-rate" aria-label="Manual BAF rate" readonly />
@@ -389,7 +389,7 @@
                 <option value="Lumpsum">Lumpsum</option>
                 <option value="Industry">Industry</option>
             </select>
-            <span class="schedule-pending-notice wf-caption" hidden>Calculation pending confirmation</span>
+            <span class="schedule-pending-notice wf-caption" hidden>Approved amount applied once per service</span>
         </div>
         <div class="col-baf-rate">
             <input name="ServiceEntries[__KEY__].ManualBafRate" type="number" step="0.0001" min="0" placeholder="From table" class="modern-input js-baf-rate" aria-label="Manual BAF rate" readonly />

@@ -1221,19 +1221,17 @@ namespace IBS.Services.MSAP
                 ? await unitOfWork.TariffTable.GetApplicableRateAsync(customerId, dispatchModel.TerminalId, dispatchModel.ServiceId, dispatchModel.DateLeft.Value, cancellationToken)
                 : null;
 
-            if (tariffRate != null)
+            var bafRate = dispatchModel.DateLeft.HasValue
+                ? await unitOfWork.BafTable.GetApplicableRateAsync(customerId, dispatchModel.TerminalId, dispatchModel.ServiceId, dispatchModel.DateLeft.Value, cancellationToken)
+                : null;
+            return ServiceResult<object>.Success(new
             {
-                return ServiceResult<object>.Success(new
-                {
-                    tariffRate.Dispatch,
-                    tariffRate.BAF,
-                    tariffRate.DispatchDiscount,
-                    tariffRate.BAFDiscount,
-                    Exists = true
-                });
-            }
-
-            return ServiceResult<object>.Success(new { Exists = false });
+                Dispatch = tariffRate?.Dispatch,
+                BAF = bafRate?.Amount,
+                DispatchDiscount = tariffRate?.DispatchDiscount ?? 0m,
+                BAFDiscount = 0m,
+                Exists = tariffRate != null || bafRate != null
+            });
         }
 
         public async Task<bool> IsCustomerOrderSlipEditableAsync(int? customerOrderSlipId, CancellationToken cancellationToken)
@@ -1330,7 +1328,10 @@ namespace IBS.Services.MSAP
             var rate = ticket.DateLeft.HasValue
                 ? await unitOfWork.TariffTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
                 : null;
-            var blocker = ScheduledTicketCharges.Apply(ticket, schedule, entry, rate);
+            var bafRate = ticket.DateLeft.HasValue
+                ? await unitOfWork.BafTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
+                : null;
+            var blocker = ScheduledTicketCharges.Apply(ticket, schedule, entry, rate, bafRate);
             ticket.TariffBy = username;
             ticket.TariffDate = DateTimeHelper.GetCurrentPhilippineTime();
             return blocker;

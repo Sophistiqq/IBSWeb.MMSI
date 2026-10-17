@@ -15,10 +15,10 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
             var list = await db.Users
                 .Where(u => !existingUserIds.Contains(u.Id))
-                .OrderBy(dt => dt.UserName).Select(s => new SelectListItem
+                .OrderBy(dt => dt.Name).Select(s => new SelectListItem
                 {
                     Value = s.Id.ToString(),
-                    Text = $"{s.UserName}"
+                    Text = s.Name ?? "Name unavailable"
                 }).ToListAsync(cancellationToken);
 
             return list;

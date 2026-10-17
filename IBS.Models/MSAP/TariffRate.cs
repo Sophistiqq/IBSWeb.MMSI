@@ -34,7 +34,9 @@ namespace IBS.Models.MSAP
 
         public decimal Dispatch { get; set; }
 
-        public decimal BAF { get; set; }
+        public string? ApprovedBy { get; set; }
+        [Column(TypeName = "timestamp without time zone")]
+        public DateTime? ApprovedAt { get; set; }
 
         public string? CreatedBy { get; set; }
 
@@ -47,8 +49,6 @@ namespace IBS.Models.MSAP
         public DateTime? UpdateDate { get; set; }
 
         public decimal DispatchDiscount { get; set; }
-
-        public decimal BAFDiscount { get; set; }
 
         #region -- Select Lists --
 

@@ -10,7 +10,7 @@
 @inject IBS.Services.MSAP.IRoleService MsapRoleService
 
 @{
-    var userName   = UserManager.GetUserName(User);
+    string? userName = (await UserManager.GetUserAsync(User))?.Name;
     var userId     = UserManager.GetUserId(User);
     string? msapRole = userId is not null ? await MsapRoleService.GetUserRoleAsync(userId) : null;
     var company    = User.Claims.FirstOrDefault(c => c.Type == "Company")?.Value ?? string.Empty;
@@ -44,6 +44,8 @@
         if (string.IsNullOrEmpty(userId)) return false;
         return await AccessControl.HasMsapImportAccessAsync(userId);
     }
+    bool canManageReferences = await ModernHasAnyAccess(ProcedureEnum.ManageMaritimeMasterFile);
+    bool canAccessRates = await ModernHasAnyAccess(ProcedureEnum.ViewRates, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload);
 
 }
 
@@ -328,7 +330,7 @@
                     </li>
                 }
 
-                @if (await ModernHasAnyAccess(ProcedureEnum.ManageMaritimeMasterFile))
+                @if (canManageReferences)
                 {
                     <!-- MSAP References mega menu -->
                     <li class="mnav-item" data-mega role="none">
@@ -338,8 +340,6 @@
                         </button>
                         <div class="mnav-mega" style="--mnav-cols:2; min-width:560px;" role="menu">
                             <div class="mnav-mega-grid">
-                                @if (await ModernHasAnyAccess(ProcedureEnum.ManageMaritimeMasterFile))
-                                {
                                 <div>
                                     <div class="mnav-section-label">Maritime &amp; MSAP</div>
                                     <div class="mnav-link-list">
@@ -361,12 +361,15 @@
                                             <span class="material-symbols-outlined">corporate_fare</span>
                                             <div><div class="mnav-link-title">Principals</div></div>
                                         </a>
-                                        <a class="mnav-mega-link"
-                                           asp-area="MSAP" asp-controller="TariffRate" asp-action="Index"
-                                           role="menuitem">
-                                            <span class="material-symbols-outlined">price_change</span>
-                                            <div><div class="mnav-link-title">Tariff Rates</div></div>
-                                        </a>
+                                        @if (canAccessRates)
+                                        {
+                                            <a class="mnav-mega-link"
+                                               asp-area="MSAP" asp-controller="RateUpload" asp-action="Editor"
+                                               role="menuitem">
+                                                <span class="material-symbols-outlined">price_change</span>
+                                                <div><div class="mnav-link-title">Rates</div></div>
+                                            </a>
+                                        }
                                         <a class="mnav-mega-link"
                                            asp-area="MSAP" asp-controller="Terminal" asp-action="Index"
                                            role="menuitem">
@@ -399,7 +402,6 @@
                                         </a>
                                     </div>
                                 </div>
-                                }
                                 <div>
                                     <div class="mnav-section-label">Sales &amp; MSAP</div>
                                     <div class="mnav-link-list">

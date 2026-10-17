@@ -97,7 +97,7 @@
                                                     @(entry.BafMethod == BafCalculationMethod.PerMove ? "Per move" : entry.BafMethod == BafCalculationMethod.PerHour ? "Per hour" : entry.BafMethod.HasValue ? entry.BafMethod.Value.ToString() : "Not specified")
                                                     @if (entry.BafMethod == BafCalculationMethod.Lumpsum || entry.BafMethod == BafCalculationMethod.Industry)
                                                     {
-                                                        <small class="wf-caption">Calculation pending confirmation</small>
+                                                        <small class="wf-caption">Approved amount applied once per service</small>
                                                     }
                                                 </td>
                                                 <td><span class="@(entry.ManualBafRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="baf" data-manual="@entry.ManualBafRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualBafRate.HasValue ? entry.ManualBafRate.Value.ToString("N2") : "Checking table…")</span><small class="wf-caption wf-muted" data-rate-source>@(entry.ManualBafRate.HasValue ? "Saved manual rate" : "Table estimate pending")</small></td>
