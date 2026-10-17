@@ -249,6 +249,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("balance");
 
+                    b.Property<int?>("BasicBillingId")
+                        .HasColumnType("integer")
+                        .HasColumnName("basic_billing_id");
+
                     b.Property<string>("BilledTo")
                         .IsRequired()
                         .HasColumnType("varchar(10)")
@@ -432,6 +436,10 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     b.HasIndex("ApprovedByUserId")
                         .HasDatabaseName("ix_mmsi_billings_approved_by_user_id");
+
+                    b.HasIndex("BasicBillingId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_mmsi_billings_basic_billing_id");
 
                     b.HasIndex("CollectionId")
                         .HasDatabaseName("ix_mmsi_billings_crnum");
@@ -2713,6 +2721,12 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_mmsi_billings_application_user_approved_by_user_id");
 
+                    b.HasOne("IBS.Models.MSAP.Billing", "BasicBilling")
+                        .WithOne("BafBilling")
+                        .HasForeignKey("IBS.Models.MSAP.Billing", "BasicBillingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_mmsi_billings_mmsi_billings_basic_billing_id");
+
                     b.HasOne("IBS.Models.MSAP.Collection", "Collection")
                         .WithMany("PaidBills")
                         .HasForeignKey("CollectionId")
@@ -2760,6 +2774,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasConstraintName("fk_mmsi_billings_msap_vessels_vesselnum");
 
                     b.Navigation("ApprovedByUser");
+
+                    b.Navigation("BasicBilling");
+
+                    b.Navigation("BafBilling");
 
                     b.Navigation("Collection");
 

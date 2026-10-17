@@ -1,0 +1,41 @@
+.billing-preview .billing-preview-layout {
+    display: grid;
+    grid-template-columns: 16rem minmax(0, 1fr);
+    align-items: start;
+    gap: 1.5rem;
+    padding: 1.5rem;
+}
+
+.billing-preview .billing-preview-layout--standalone {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.billing-preview .billing-preview-progress {
+    position: sticky;
+    top: 1.5rem;
+}
+
+.billing-preview .billing-preview-content {
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+}
+
+@media (max-width: 767px) {
+    .billing-preview .billing-preview-layout {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 1rem;
+    }
+
+    .billing-preview .billing-preview-progress {
+        position: static;
+    }
+}
+
+@media print {
+    .billing-preview .billing-preview-layout {
+        display: block;
+        padding: 0;
+    }
+}

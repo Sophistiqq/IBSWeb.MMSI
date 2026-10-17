@@ -81,6 +81,8 @@ namespace IBS.DataAccess.MSAP.Data
             builder.Entity<CustomerOrderSlip>().ToTable("mmsi_customer_order_slips");
             builder.Entity<DispatchTicket>().ToTable("mmsi_dispatch_tickets");
             builder.Entity<Billing>().ToTable("mmsi_billings");
+            builder.Entity<Billing>().HasOne(b => b.BasicBilling).WithOne(b => b.BafBilling)
+                .HasForeignKey<Billing>(b => b.BasicBillingId).OnDelete(DeleteBehavior.Restrict);
             builder.Entity<Collection>().ToTable("mmsi_collections");
             builder.Entity<CollectionBill>().ToTable("mmsi_collection_bills");
             builder.Entity<Port>().ToTable("mmsi_ports");

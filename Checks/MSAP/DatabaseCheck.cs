@@ -178,7 +178,7 @@ namespace Checks.MSAP
                 var billingService = new BillingService(work, service, NullLogger<BillingService>.Instance);
                 var bill = new Billing
                 {
-                    CustomerOrderSlipId = job.CustomerOrderSlipId, Date = job.Date, CustomerId = customer.CustomerId, BilledTo = "CHECK01",
+                    CustomerOrderSlipId = job.CustomerOrderSlipId, Date = job.Date, CustomerId = customer.CustomerId, BilledTo = "CHECK01", MsapBillingNumber = "B-CHECK",
                     IsUndocumented = true, IsVatable = true, IsVatInclusive = false,
                     ToBillDispatchTickets = [ticket.DispatchTicketId.ToString()]
                 };
@@ -186,36 +186,57 @@ namespace Checks.MSAP
                 Check(createdBill.IsSuccess, createdBill.Message ?? "Billing creation failed.");
                 Check(bill.Terms == "CHECK17" && bill.DueDate == job.Date.AddDays(17),
                     "MSAP billing did not use the shared Filpride term with an empty local terms table.");
-                Check(bill.Amount == 112m && bill.Balance == 112m, "VAT billing totals changed.");
+                Check(bill.Amount == 100m && bill.Balance == 100m && bill.IsVatInclusive && bill.IsVatable && !bill.PrintWht, "Billing accepted tax overrides instead of customer settings.");
                 Check((await audits.GetAuditTrailsByEntityAsync("Billing", bill.MsapBillingId, default)).Any(a => a.ReferenceNumber == bill.MsapBillingNumber), "Billing creation audit lost its ID.");
                 var posted = await billingService.PostBillingAsync(bill.MsapBillingId, "check", default);
                 Check(posted.IsSuccess, posted.Message ?? "Billing posting failed.");
                 var collectionService = new CollectionService(work, NullLogger<CollectionService>.Instance);
                 var collection = await collectionService.CreateCollectionAsync(new CreateCollectionViewModel
                 {
-                    Date = job.Date, CustomerId = customer.CustomerId, MsapCollectionNumber = "C-CHECK", Amount = 112m, CashAmount = 112m,
-                    BillingPayments = [new BillingPaymentViewModel { BillingId = bill.MsapBillingId, AmountToPay = 112m }]
+                    Date = job.Date, CustomerId = customer.CustomerId, MsapCollectionNumber = "C-CHECK", Amount = 100m, CashAmount = 100m,
+                    BillingPayments = [new BillingPaymentViewModel { BillingId = bill.MsapBillingId, AmountToPay = 100m }]
                 }, "check", default);
                 Check(collection.IsSuccess, collection.Message ?? "Collection failed.");
                 Check(bill.Status == MsapConstants.BillingStatus.Collected && bill.Balance == 0m, "Full collection did not settle the billing.");
                 Check((await audits.GetCustomerOrderSlipTimelineAsync(job.CustomerOrderSlipId, default)).Any(a => a.DocumentType == "Collection" && a.RecordId == collection.Data), "Collection is missing from the MSAP timeline.");
                 Check(await original.FilprideAuditTrails.CountAsync() == 1 && await original.FilprideAuditTrails.AnyAsync(a => a.Id == originalAudit.Id), "Base audits were changed.");
+                var splitJob = new CustomerOrderSlip { Date = job.Date, CustomerId = customer.CustomerId, VesselId = vessel.VesselId, PortId = port.PortId, TerminalId = terminal.TerminalId };
+                Check((await service.CreateCustomerOrderSlipAsync(splitJob, "check", default)).IsSuccess, "Split COS creation failed.");
                 var splitTicket = new DispatchTicket
                 {
-                    CustomerOrderSlipId = job.CustomerOrderSlipId, CreatedBy = "check", DispatchNumber = "D-SPLIT", TugBoatId = tug.TugboatId,
+                    Date = job.Date, DateLeft = job.Date, DateArrived = job.Date, TimeLeft = new TimeOnly(8, 0), TimeArrived = new TimeOnly(9, 0),
+                    CustomerOrderSlipId = splitJob.CustomerOrderSlipId, CreatedBy = "check", DispatchNumber = "D-SPLIT", TugBoatId = tug.TugboatId,
                     CustomerId = customer.CustomerId, VesselId = vessel.VesselId, PortId = port.PortId, TerminalId = terminal.TerminalId,
                     ServiceId = maritimeService.ServiceId, Status = MsapConstants.DispatchTicketStatus.ForBilling,
                     DispatchNetRevenue = 100m, BAFNetRevenue = 10m, TotalNetRevenue = 110m
                 };
                 module.MsapDispatchTickets.Add(splitTicket);
                 await module.SaveChangesAsync();
+                var principal = new Principal { PrincipalNumber = "P001", PrincipalName = "Check Principal", CustomerId = customer.CustomerId,
+                    Address1 = "Principal Address", TIN = "111-111-111-11111", Terms = "CHECK17", IsActive = true };
+                module.MsapPrincipals.Add(principal);
+                await module.SaveChangesAsync();
                 ServiceResult<(int DispatchBillingId, int BafBillingId)> split = await billingService.CreatePhilCebSplitAsync(new Billing
                 {
                     MsapBillingNumber = "SPLIT01", Date = job.Date, CustomerId = customer.CustomerId,
-                    CustomerOrderSlipId = job.CustomerOrderSlipId, VesselId = vessel.VesselId, PortId = port.PortId, TerminalId = terminal.TerminalId,
-                    BilledTo = "CHECK01", ToBillDispatchTickets = [splitTicket.DispatchTicketId.ToString()]
+                    CustomerOrderSlipId = splitJob.CustomerOrderSlipId, VesselId = vessel.VesselId, PortId = port.PortId, TerminalId = terminal.TerminalId,
+                    BilledTo = "PRINCIPAL", PrincipalId = principal.PrincipalId, ToBillDispatchTickets = [splitTicket.DispatchTicketId.ToString()]
                 }, "BAF-CHECK", "check", "MMSI", default);
                 Check(split.IsSuccess, split.Message ?? "Split billing creation failed.");
+                Check(await module.MsapDispatchTickets.CountAsync() == 2 && splitTicket.BAFNetRevenue == 10m && splitTicket.TotalNetRevenue == 110m,
+                    "Split preparation duplicated or changed actual service tickets.");
+                var splitBasic = await work.Billing.GetAsync(b => b.MsapBillingId == split.Data.DispatchBillingId, default);
+                var splitBaf = await work.Billing.GetAsync(b => b.MsapBillingId == split.Data.BafBillingId, default);
+                Check(splitBasic is { Amount: 100m } && splitBaf is { Amount: 10m } && splitBaf.BasicBillingId == splitBasic.MsapBillingId
+                    && splitBasic.PrincipalId == principal.PrincipalId && splitBaf.PrincipalId == principal.PrincipalId,
+                    "Basic and BAF did not retain separate linked balances and the principal recipient.");
+                Check((await work.Billing.GetPaidDispatchTicketsAsync(split.Data.BafBillingId))?.Single().DispatchTicketId == splitTicket.DispatchTicketId,
+                    "BAF statement did not reuse the actual service ticket.");
+                Check((await billingService.PostBillingAsync(split.Data.BafBillingId, "check", default)).IsSuccess, "BAF could not be posted independently.");
+                Check(await JobProgressCalculator.GetBillingBlockerAsync(work, splitBaf!, JobProgressCalculator.CollectionStage, default) == null,
+                    "Posted BAF cannot receive collection while Basic awaits posting.");
+                Check(splitTicket.Status == MsapConstants.DispatchTicketStatus.ForBilling && splitBasic!.Status == MsapConstants.BillingStatus.ForPosting,
+                    "Posting BAF incorrectly posted Basic or completed actual-ticket billing.");
                 Check(await module.MsapBillings.CountAsync(b =>
                     (b.MsapBillingNumber == "SPLIT01" || b.MsapBillingNumber == "BAF-CHECK")
                     && b.Terms == "CHECK17" && b.DueDate == job.Date.AddDays(17)) == 2,

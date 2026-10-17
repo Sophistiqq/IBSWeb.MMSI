@@ -43,6 +43,27 @@ namespace IBS.Models.MSAP
         [Column(TypeName = "timestamp without time zone")]
         public DateTime? ApprovedAt { get; set; }
 
+        [BindNever]
+        public int? BasicBillingId { get; set; }
+
+        [BindNever, JsonIgnore]
+        public Billing? BasicBilling { get; set; }
+
+        [BindNever, JsonIgnore]
+        public Billing? BafBilling { get; set; }
+
+        [NotMapped]
+        public bool SeparateBaf { get; set; }
+
+        [NotMapped]
+        public string? BafBillingNumber { get; set; }
+
+        [NotMapped]
+        public bool IncludeTicketImages { get; set; }
+
+        [NotMapped]
+        public bool CombineMatchingBafRates { get; set; }
+
         public bool IsUndocumented { get; set; }
 
         [Column("CUSTNO", TypeName = "varchar(10)")]

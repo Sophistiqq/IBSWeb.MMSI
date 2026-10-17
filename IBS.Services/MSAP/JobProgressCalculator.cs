@@ -100,11 +100,14 @@ namespace IBS.Services.MSAP
 
         public static async Task<string?> GetBillingBlockerAsync(IUnitOfWork unitOfWork, Billing billing, int requiredStage, CancellationToken ct)
         {
+            // A posted split component can be collected while its partner still awaits posting.
+            int serviceStage = requiredStage == CollectionStage && (billing.BasicBillingId.HasValue || billing.BafBilling != null)
+                ? BillingStage : requiredStage;
             IEnumerable<DispatchTicket> tickets = await unitOfWork.DispatchTicket.GetAllAsync(t => t.BillingId == billing.MsapBillingId, ct);
             IEnumerable<int?> jobIds = tickets.Select(t => t.CustomerOrderSlipId).Append(billing.CustomerOrderSlipId).Where(id => id.HasValue).Distinct();
             foreach (var jobId in jobIds)
             {
-                string? blocker = await GetBlockerAsync(unitOfWork, jobId, requiredStage, ct);
+                string? blocker = await GetBlockerAsync(unitOfWork, jobId, serviceStage, ct);
                 if (blocker != null)
                 {
                     return blocker;

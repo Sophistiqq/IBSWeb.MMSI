@@ -18,6 +18,15 @@ namespace IBS.DTOs.MSAP
 
         public string? COSNumber { get; set; }
 
+        public string? CustomerOrderSlipNumber { get; set; }
+        public string? VesselName { get; set; }
+        public string? PortName { get; set; }
+        public string? TerminalName { get; set; }
+        public DateOnly? ServiceStart { get; set; }
+        public DateOnly? ServiceEnd { get; set; }
+        public decimal? CosDiscountPercent { get; set; }
+        public bool SkipCosDiscount { get; set; }
+
         public bool IsVatable { get; set; }
 
         public bool IsVatInclusive { get; set; }
@@ -32,6 +41,12 @@ namespace IBS.DTOs.MSAP
         public string Tugboat { get; set; } = string.Empty;
         public string Service { get; set; } = string.Empty;
         public decimal Duration { get; set; }
+        public decimal? ActualHours { get; set; }
+        public decimal DispatchNetAmount { get; set; }
+        public decimal BafNetAmount { get; set; }
+        public bool IsCompanyOwned { get; set; }
+        public bool IsManualTariffRate { get; set; }
+        public bool IsManualBafRate { get; set; }
         public decimal DispatchRate { get; set; }
         public decimal DispatchAmount { get; set; }
         public decimal BAFRate { get; set; }

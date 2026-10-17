@@ -35,6 +35,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Include(a => a.Terminal)
                 .Include(a => a.Vessel)
                 .Include(a => a.Customer)
+                .Include(a => a.BasicBilling)
+                .Include(a => a.BafBilling)
                 .Include(a => a.Port);
 
             if (filter != null)
@@ -53,6 +55,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Include(b => b.Vessel)
                 .Include(b => b.Customer)
                 .Include(b => b.Principal)
+                .Include(b => b.BasicBilling)
+                .Include(b => b.BafBilling)
                 .Include(b => b.CustomerOrderSlip);
 
             if (filter != null)
@@ -71,8 +75,10 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<List<string>?> GetUniqueTugboatsListAsync(int billingId, CancellationToken cancellationToken = default)
         {
+            int sourceId = await _db.MsapBillings.Where(b => b.MsapBillingId == billingId)
+                .Select(b => b.BasicBillingId ?? b.MsapBillingId).SingleAsync(cancellationToken);
             return await _db.MsapDispatchTickets
-                .Where(dt => dt.BillingId == billingId)
+                .Where(dt => dt.BillingId == sourceId)
                 .Select(dt => dt.Tugboat.TugboatName.ToString())
                 .Distinct() // Ensures unique values
                 .ToListAsync(cancellationToken);
@@ -80,8 +86,10 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<List<DispatchTicket>?> GetPaidDispatchTicketsAsync(int billingId, CancellationToken cancellationToken = default)
         {
-            return await _db.MsapDispatchTickets
-                .Where(dt => dt.BillingId == billingId)
+            int sourceId = await _db.MsapBillings.Where(b => b.MsapBillingId == billingId)
+                .Select(b => b.BasicBillingId ?? b.MsapBillingId).SingleAsync(cancellationToken);
+            return await _db.MsapDispatchTickets.AsNoTracking()
+                .Where(dt => dt.BillingId == sourceId)
                 .Include(a => a.Service)
                 .Include(a => a.Terminal).ThenInclude(t => t.Port)
                 .Include(a => a.Tugboat)

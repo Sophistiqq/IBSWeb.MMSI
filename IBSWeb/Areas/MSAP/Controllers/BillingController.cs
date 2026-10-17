@@ -92,7 +92,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to create Billings.")]
-        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,IsUndocumented,Date,VoyageNumber,COSNumber,PortId,TerminalId,VesselId,IsVatable,IsVatInclusive,PrintWht,CustomerOrderSlipId,ToBillDispatchTickets,BafRates,BafChargeTypes")] Billing model, CancellationToken cancellationToken)
+        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IncludeTicketImages,CombineMatchingBafRates")] Billing model, CancellationToken cancellationToken)
         {
             try
             {
@@ -103,8 +103,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
                 if (result.IsSuccess)
                 {
-                    var msg = model.IsUndocumented ? $"Created. Billing No: {model.MsapBillingNumber}" : "Billing created successfully.";
-                    return Json(new { success = true, message = msg, redirectUrl = model.CustomerOrderSlipId.HasValue ? Url.Action(nameof(Index), new { customerOrderSlipId = model.CustomerOrderSlipId }) : Url.Action(nameof(Preview), new { id = result.Data }) });
+                    return Json(new { success = true, message = result.Message, redirectUrl = Url.Action(nameof(Preview), new { id = result.Data, includeTicketImages = model.IncludeTicketImages, combineMatchingBafRates = model.CombineMatchingBafRates }) });
                 }
 
                 return Json(new { success = false, message = result.Message });
@@ -114,6 +113,27 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 logger.LogError(ex, "Failed to create billing");
                 return Json(new { success = false, message = ExceptionHelper.GetErrorMessage(ex) });
             }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.CreateBilling)]
+        public async Task<IActionResult> PreviewPreparation(
+            [Bind("CustomerId,CustomerOrderSlipId,PrincipalId,BilledTo,MsapBillingNumber,Date,SeparateBaf,BafBillingNumber,IncludeTicketImages,CombineMatchingBafRates")] Billing model,
+            CancellationToken cancellationToken)
+        {
+            var company = User.Claims.FirstOrDefault(c => c.Type == "Company")?.Value ?? MsapConstants.Company_MMSI;
+            var result = await billingService.PrepareBillingAsync(model, User.Identity?.Name ?? "System", company, cancellationToken);
+            if (!result.IsSuccess || result.Data == null)
+            {
+                return BadRequest(result.Message);
+            }
+            await PrepareStatementImagesAsync(model, model.IncludeTicketImages);
+            ViewData["Statements"] = result.Data;
+            ViewData["IsDraft"] = true;
+            ViewData["IncludeTicketImages"] = model.IncludeTicketImages;
+            ViewData["CombineMatchingBafRates"] = model.CombineMatchingBafRates;
+            return View("Preview", model);
         }
 
         #endregion
@@ -133,12 +153,18 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return NotFound();
             }
 
+            if (model.BasicBillingId.HasValue || model.BafBilling != null)
+            {
+                TempData["error"] = "Split billings must be corrected together. Delete the unposted preparation and prepare it again.";
+                return RedirectToAction(nameof(Preview), new { id });
+            }
             if (model.Status != MsapConstants.BillingStatus.ForPosting)
             {
                 TempData["error"] = "Only billings with 'For Posting' status can be edited.";
                 return RedirectToAction(nameof(Index));
             }
 
+            BillingService.ApplyCustomerTaxSettings(model);
             model = await billingService.PopulateBillingSelectListsAsync(model, cancellationToken);
             model.UnbilledDispatchTickets = await billingService.GetEditTicketsSelectListAsync(model.CustomerId, model.MsapBillingId, cancellationToken);
 
@@ -287,35 +313,56 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// Displays a preview of the Billing, including associated tickets and tugboats.
         /// </summary>
         [RequireAnyAccess("Access denied. You don't have permission to view Billings.", ProcedureEnum.CreateBilling)]
-        public async Task<IActionResult> Preview(int id, CancellationToken cancellationToken)
+        public async Task<IActionResult> Preview(int id, CancellationToken cancellationToken, bool includeTicketImages = false, bool combineMatchingBafRates = false)
         {
             var model = await billingService.GetBillingByIdAsync(id, cancellationToken);
-
             if (model == null)
             {
                 return NotFound();
             }
-
-            model = await billingService.PopulateTicketListsAsync(model, cancellationToken);
-            if (model.PaidDispatchTickets != null)
+            if (model.BasicBillingId.HasValue)
             {
-                foreach (var ticket in model.PaidDispatchTickets)
+                model = await billingService.GetBillingByIdAsync(model.BasicBillingId.Value, cancellationToken);
+                if (model == null)
                 {
-                    if (!string.IsNullOrEmpty(ticket.ImageName))
-                    {
-                        try
-                        {
-                            ticket.ImageSignedUrl = await cloudStorageService.GetSignedUrlAsync(ticket.ImageName);
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogWarning(ex, "Failed to get signed URL for ticket {TicketId}", ticket.DispatchTicketId);
-                        }
-                    }
+                    return NotFound();
                 }
             }
+            model = await billingService.PopulateTicketListsAsync(model, cancellationToken);
+            var statements = new List<Billing> { model };
+            if (model.BafBilling != null)
+            {
+                var baf = await billingService.GetBillingByIdAsync(model.BafBilling.MsapBillingId, cancellationToken);
+                if (baf != null)
+                {
+                    statements.Add(await billingService.PopulateTicketListsAsync(baf, cancellationToken));
+                }
+            }
+            await PrepareStatementImagesAsync(model, true);
+            ViewData["Statements"] = statements;
+            ViewData["IncludeTicketImages"] = includeTicketImages;
+            ViewData["CombineMatchingBafRates"] = combineMatchingBafRates;
             ViewBag.JobProgressItems = await JobProgressCalculator.LoadForBillingsAsync(unitOfWork, [model.MsapBillingId], cancellationToken);
             return View(model);
+        }
+
+        private async Task PrepareStatementImagesAsync(Billing model, bool includeImages)
+        {
+            if (!includeImages || model.PaidDispatchTickets == null)
+            {
+                return;
+            }
+            foreach (var ticket in model.PaidDispatchTickets.Where(t => !string.IsNullOrEmpty(t.ImageName)))
+            {
+                try
+                {
+                    ticket.ImageSignedUrl = await cloudStorageService.GetSignedUrlAsync(ticket.ImageName!);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to get signed URL for ticket {TicketId}", ticket.DispatchTicketId);
+                }
+            }
         }
 
         /// <summary>
@@ -338,17 +385,17 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 using var package = new ExcelPackage();
                 var worksheet = package.Workbook.Worksheets.Add($"Billing #{billing.MsapBillingNumber}");
                 worksheet.Cells.Style.Font.Name = "Calibri";
-                worksheet.Cells["B2"].Value = $"{billing.Customer.CustomerName}";
+                worksheet.Cells["B2"].Value = billing.Principal?.PrincipalName ?? billing.Customer.CustomerName;
                 worksheet.Cells["E2"].Value = $"{billing.Date}";
                 worksheet.Cells["E2"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
-                worksheet.Cells["B3"].Value = $"{billing.Customer.CustomerAddress} TERMS: {billing.Customer.CustomerTerms}";
-                worksheet.Cells["B4"].Value = $"{billing.Customer.CustomerTin}";
+                worksheet.Cells["B3"].Value = $"{billing.Principal?.Address1 ?? billing.Customer.CustomerAddress} TERMS: {billing.Terms}";
+                worksheet.Cells["B4"].Value = billing.Principal?.TIN ?? billing.Customer.CustomerTin;
                 worksheet.Cells["E4"].Value = $"VOYAGE NO. {billing.VoyageNumber}";
                 worksheet.Cells["B6"].Value = $"FOR THE SERVICE RE: {billing.Vessel.VesselName}";
                 worksheet.Cells["B7"].Value = $"LOCATION PORT: {billing.Port.PortName}";
 
                 var row = 9;
-                if (billing.UniqueTugboats != null)
+                if (billing.BasicBillingId == null && billing.UniqueTugboats != null)
                 {
                     foreach (var tugboat in billing.UniqueTugboats)
                     {
@@ -370,7 +417,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     }
                 }
 
-                if (billing.PaidDispatchTickets != null)
+                if (billing.BafBilling == null && billing.PaidDispatchTickets != null)
                 {
                     foreach (var ticket in billing.PaidDispatchTickets.Where(t => t.BAFNetRevenue != 0))
                     {
@@ -662,7 +709,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         /// <summary>
-        /// Creates two billings for PHIL-CEB / THERMA SOUTH: one for dispatch tickets, one for BAF only.
+        /// Compatibility route for separate Basic and BAF billing preparation.
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -688,7 +735,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to create PHIL-CEB split billing");
+                logger.LogError(ex, "Failed to create split billing");
                 return Json(new { success = false, message = ExceptionHelper.GetErrorMessage(ex) });
             }
         }
