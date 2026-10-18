@@ -10,6 +10,9 @@ namespace IBS.Models.MSAP
         [Column("RECID")]
         public int DispatchTicketId { get; set; }
 
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        public Guid AccountingSourceId { get; set; } = Guid.NewGuid();
+
         [Column("DATE")]
         [Display(Name = "Date")]
         public DateOnly Date { get; set; }

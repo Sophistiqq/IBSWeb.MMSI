@@ -564,6 +564,150 @@ namespace IBS.DataAccess.MSAP.Migrations
                         });
                 });
 
+            modelBuilder.Entity("IBS.Models.MSAP.Books.SalesBook", b =>
+                {
+                    b.Property<int>("SalesBookId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("sales_book_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("SalesBookId"));
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("address");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<string>("ApprovedByName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("approved_by_name");
+
+                    b.Property<string>("ApprovedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("approved_by_user_id");
+
+                    b.Property<DateOnly>("BillingDate")
+                        .HasColumnType("date")
+                        .HasColumnName("billing_date");
+
+                    b.Property<int>("BillingRevision")
+                        .HasColumnType("integer")
+                        .HasColumnName("billing_revision");
+
+                    b.Property<string>("Company")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("company");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_date");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<decimal>("Discount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("discount");
+
+                    b.Property<int?>("DocumentId")
+                        .HasColumnType("integer")
+                        .HasColumnName("document_id");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<bool>("IsUndocumented")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_undocumented");
+
+                    b.Property<decimal>("NetSales")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("net_sales");
+
+                    b.Property<string>("SerialNo")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("serial_no");
+
+                    b.Property<string>("SoldTo")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("sold_to");
+
+                    b.Property<string>("TinNo")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("tin_no");
+
+                    b.Property<DateOnly>("TransactionDate")
+                        .HasColumnType("date")
+                        .HasColumnName("transaction_date");
+
+                    b.Property<decimal>("VatAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("vat_amount");
+
+                    b.Property<decimal>("VatExemptSales")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("vat_exempt_sales");
+
+                    b.Property<decimal>("VatableSales")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("vatable_sales");
+
+                    b.Property<string>("VoidReason")
+                        .HasColumnType("text")
+                        .HasColumnName("void_reason");
+
+                    b.Property<DateTime?>("VoidedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("voided_at");
+
+                    b.Property<string>("VoidedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("voided_by");
+
+                    b.Property<decimal>("ZeroRated")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("zero_rated");
+
+                    b.HasKey("SalesBookId")
+                        .HasName("pk_mmsi_sales_books");
+
+                    b.HasIndex("Company", "TransactionDate")
+                        .HasDatabaseName("ix_mmsi_sales_books_company_transaction_date");
+
+                    b.HasIndex("DocumentId", "BillingRevision")
+                        .IsUnique()
+                        .HasDatabaseName("ix_mmsi_sales_books_document_id_billing_revision");
+
+                    b.ToTable("mmsi_sales_books", "msap");
+                });
+
             modelBuilder.Entity("IBS.Models.MSAP.Collection", b =>
                 {
                     b.Property<int>("MsapCollectionId")
@@ -946,6 +1090,12 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("DispatchTicketId"));
 
+                    b.Property<Guid>("AccountingSourceId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("accounting_source_id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
                     b.Property<decimal>("ApOtherTugs")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
@@ -1182,6 +1332,10 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     b.HasKey("DispatchTicketId")
                         .HasName("pk_mmsi_dispatch_tickets");
+
+                    b.HasIndex("AccountingSourceId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_mmsi_dispatch_tickets_accounting_source_id");
 
                     b.HasIndex("BillingId")
                         .HasDatabaseName("ix_mmsi_dispatch_tickets_billnum");
@@ -2467,8 +2621,8 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     b.Property<string>("ProviderName")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
                         .HasColumnName("provider_name");
 
                     b.Property<string>("ProviderReference")
@@ -3147,6 +3301,15 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Navigation("Terminal");
 
                     b.Navigation("Vessel");
+                });
+
+            modelBuilder.Entity("IBS.Models.MSAP.Books.SalesBook", b =>
+                {
+                    b.HasOne("IBS.Models.MSAP.Billing", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_mmsi_sales_books_msap_billings_document_id");
                 });
 
             modelBuilder.Entity("IBS.Models.MSAP.Collection", b =>

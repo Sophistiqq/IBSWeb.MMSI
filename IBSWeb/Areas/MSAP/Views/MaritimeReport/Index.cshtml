@@ -19,6 +19,20 @@
             <div class="modern-col-12">
                 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 1.5rem;">
                     <div class="modern-card">
+                        <div class="modern-card-header-info"><span class="material-symbols-outlined">menu_book</span><h2 class="modern-headline-md">Sales Book</h2></div>
+                        <div class="modern-card-body">
+                            <p class="text-sm">Approved numbered bills by final approval date. Reversed entries are excluded; billing dates are retained separately.</p>
+                            <form asp-action="SalesBook" method="post" data-download>
+                                <div class="modern-grid-compact">
+                                    <div><label for="bookFrom" class="modern-label">Approval from</label><input id="bookFrom" name="dateFrom" type="date" value="@monthStart.ToString("yyyy-MM-dd")" class="modern-input" required /></div>
+                                    <div><label for="bookTo" class="modern-label">Approval to</label><input id="bookTo" name="dateTo" type="date" value="@philippineToday.ToString("yyyy-MM-dd")" class="modern-input" required /></div>
+                                </div>
+                                <button type="submit" class="modern-btn-primary w-100">Download Sales Book</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="modern-card">
                         <div class="modern-card-header-info">
                             <span class="material-symbols-outlined">receipt_long</span>
                             <h2 class="modern-headline-md">Dispatch for Billing</h2>

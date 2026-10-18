@@ -38,6 +38,8 @@ namespace IBS.DataAccess.MSAP.Data
         #endregion
 
         #region --MSAP
+        public DbSet<IBS.Models.MSAP.Books.SalesBook> MsapSalesBooks { get; set; }
+
         public DbSet<Billing> MsapBillings { get; set; }
         public DbSet<Collection> MsapCollections { get; set; }
         public DbSet<DispatchTicket> MsapDispatchTickets { get; set; }
@@ -86,6 +88,15 @@ namespace IBS.DataAccess.MSAP.Data
             builder.HasDefaultSchema("msap");
             builder.Entity<CustomerOrderSlip>().ToTable("mmsi_customer_order_slips");
             builder.Entity<DispatchTicket>().ToTable("mmsi_dispatch_tickets");
+            builder.Entity<DispatchTicket>().Property(t => t.AccountingSourceId).HasDefaultValueSql("gen_random_uuid()");
+            builder.Entity<DispatchTicket>().HasIndex(t => t.AccountingSourceId).IsUnique();
+            builder.Entity<IBS.Models.MSAP.Books.SalesBook>(book =>
+            {
+                book.ToTable("mmsi_sales_books");
+                book.HasIndex(b => new { b.DocumentId, b.BillingRevision }).IsUnique();
+                book.HasIndex(b => new { b.Company, b.TransactionDate });
+                book.HasOne<Billing>().WithMany().HasForeignKey(b => b.DocumentId).OnDelete(DeleteBehavior.Restrict);
+            });
             builder.Entity<Billing>().ToTable("mmsi_billings");
             builder.Entity<Billing>().HasOne(b => b.BasicBilling).WithOne(b => b.BafBilling)
                 .HasForeignKey<Billing>(b => b.BasicBillingId).OnDelete(DeleteBehavior.Restrict);

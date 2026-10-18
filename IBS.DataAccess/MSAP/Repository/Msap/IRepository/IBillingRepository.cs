@@ -10,6 +10,12 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
 
         Task SaveAsync(CancellationToken cancellationToken);
 
+        Task AddSalesBookAsync(IBS.Models.MSAP.Books.SalesBook entry, CancellationToken ct);
+
+        Task<bool> HasSalesBookAsync(int billingId, CancellationToken ct);
+
+        Task VoidSalesBookAsync(int billingId, string actor, string? reason, DateTime voidedAt, CancellationToken ct);
+
         Task<List<string>?> GetToBillDispatchTicketListAsync(int billingId, CancellationToken cancellationToken = default);
 
         Task<List<string>?> GetUniqueTugboatsListAsync(int billingId, CancellationToken cancellationToken = default);

@@ -1,6 +1,5 @@
 using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
-using IBS.Models.MSAP.Books;
 using IBS.Models.MSAP.Enums;
 using IBS.Services.MSAP.AccessControl;
 using IBS.Utility.MSAP.Constants;
@@ -350,46 +349,17 @@ namespace IBS.Services.MSAP
                     }
                     model.Vessel = await unitOfWork.Vessel.GetAsync(v => v.VesselId == model.VesselId, cancellationToken) ?? null!;
 
-                    var soldToName = (model.PrincipalId != null ? model.Principal?.PrincipalName : customer.CustomerName) ?? string.Empty;
-                    var tinNo = (model.PrincipalId != null ? model.Principal?.TIN : customer.CustomerTin) ?? string.Empty;
-                    var address = (model.PrincipalId != null ? model.Principal?.Address1 : customer.CustomerAddress) ?? string.Empty;
-
-                    var salesBook = new SalesBook
-                    {
-                        TransactionDate = model.Date,
-                        SerialNo = model.MsapBillingNumber,
-                        SoldTo = soldToName,
-                        TinNo = tinNo,
-                        Address = address,
-                        Description = model.Vessel.VesselName,
-                        Amount = model.Amount - model.Discount
-                    };
-
-                    if (model.IsVatable)
-                    {
-                        salesBook.VatableSales = unitOfWork.Billing.ComputeNetOfVat(salesBook.Amount);
-                        salesBook.VatAmount = unitOfWork.Billing.ComputeVatAmount(salesBook.VatableSales);
-                        salesBook.NetSales = salesBook.VatableSales - salesBook.Discount;
-                    }
-                    else
-                    {
-                        salesBook.ZeroRated = salesBook.Amount;
-                        salesBook.NetSales = salesBook.ZeroRated - salesBook.Discount;
-                    }
-
-                    salesBook.Discount = model.Discount;
-                    salesBook.CreatedBy = username;
-                    salesBook.CreatedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                    salesBook.DueDate = model.DueDate;
-                    salesBook.DocumentId = model.MsapBillingId;
-                    salesBook.Company = model.Company;
+                    DateTime approvedAt = DateTimeHelper.GetCurrentPhilippineTime();
+                    var salesBook = BillingBookEntries.Create(model, approvedAt, username, approverUserId);
+                    await unitOfWork.Billing.AddSalesBookAsync(salesBook, cancellationToken);
 
                     model.ApprovedRevision = model.Revision;
                     model.ApprovedByUserId = approverUserId;
-                    model.ApprovedAt = DateTimeHelper.GetCurrentPhilippineTime();
+                    model.ApprovedAt = approvedAt;
                     model.Status = MsapConstants.BillingStatus.ForCollection;
 
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Approved final billing #{model.MsapBillingNumber}, revision {model.Revision}", "Billing", model.MsapBillingId, model.MsapBillingNumber), cancellationToken);
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Approved final billing #{model.MsapBillingNumber}, revision {model.Revision}", "Billing", model.MsapBillingId, model.MsapBillingNumber)
+                    { UserId = approverUserId, ActorName = salesBook.ApprovedByName }, cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
 
                     if (model.CustomerOrderSlipId.HasValue)
@@ -598,6 +568,10 @@ namespace IBS.Services.MSAP
                         {
                             throw new InvalidOperationException("Only unposted, unpaid billings can be deleted. Both split components must qualify.");
                         }
+                        if (await unitOfWork.Billing.HasSalesBookAsync(bill.MsapBillingId, cancellationToken))
+                        {
+                            throw new InvalidOperationException("This billing has Sales Book history and cannot be deleted. Revise and resubmit the reversed bill instead.");
+                        }
                         var guard = await GuardClosedPeriodAsync(bill.Date, cancellationToken);
                         if (guard != null)
                         {
@@ -688,9 +662,8 @@ namespace IBS.Services.MSAP
                     billing.UnpostedDate = DateTimeHelper.GetCurrentPhilippineTime();
                     billing.UnpostRemarks = remarks;
 
-                    //  GL contra entries skipped — GL module is still TODO
-                    // When GL posting is fixed, create reverse entries here:
-                    // Debit Credit (original) → Credit Debit (contra) with reference "REV-#{number}"
+                    await unitOfWork.Billing.VoidSalesBookAsync(billing.MsapBillingId, username, remarks,
+                        DateTimeHelper.GetCurrentPhilippineTime(), cancellationToken);
 
                     await unitOfWork.AuditTrail.AddAsync(
                         new AuditTrail(username, $"Reversed (unposted) Billing #{billingNumber}", "Billing", billing.MsapBillingId, billingNumber),

@@ -75,5 +75,18 @@ namespace IBS.Models.MSAP.Books
         public int? DocumentId { get; set; }
 
         public string Company { get; set; } = string.Empty;
+
+        [MaxLength(255)]
+        public string ApprovedByName { get; set; } = "";
+        public bool IsUndocumented { get; set; }
+        public int BillingRevision { get; set; }
+        public DateOnly BillingDate { get; set; }
+        [MaxLength(450)]
+        public string ApprovedByUserId { get; set; } = "";
+        [Column(TypeName = "timestamp without time zone")]
+        public DateTime? VoidedAt { get; set; }
+        [MaxLength(100)]
+        public string? VoidedBy { get; set; }
+        public string? VoidReason { get; set; }
     }
 }

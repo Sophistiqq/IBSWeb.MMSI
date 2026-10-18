@@ -18,6 +18,10 @@
             <a asp-action="Editor" asp-route-kind="Tariff" asp-route-asOfDate="@Model.AsOfDate.ToString("yyyy-MM-dd")" class="modern-btn-secondary" aria-current="@(Model.Kind == RateTableKind.Tariff ? "page" : null)">Tariff rates</a>
             <a asp-action="Editor" asp-route-kind="BAF" asp-route-asOfDate="@Model.AsOfDate.ToString("yyyy-MM-dd")" class="modern-btn-secondary" aria-current="@(Model.Kind == RateTableKind.BAF ? "page" : null)">BAF rates</a>
         </nav>
+        @if (Model.Kind == RateTableKind.BAF)
+        {
+            <p class="wf-caption wf-muted">BAF coverage runs Tuesday through Monday by actual service date. Add and approve a dated entry for each applicable service week, even if the amount stays the same. Tickets can be recorded while coverage is pending; review and recalculate their charges after approval.</p>
+        }
         <section class="wf-panel wf-stack">
             <div class="rate-editor-filters">
                 <div class="wf-field"><label class="wf-label" for="rateCustomer">Customer</label><select id="rateCustomer" class="js-modern-select"><option value="">All customers</option>@foreach (var item in Model.Customers) { <option value="@item.Id">@item.Code - @item.Name</option> }</select></div>

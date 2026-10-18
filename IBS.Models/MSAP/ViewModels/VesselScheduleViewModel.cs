@@ -56,7 +56,7 @@ namespace IBS.Models.MSAP.ViewModels
         [Display(Name = "Skip COS Discount")]
         public bool SkipCosDiscount { get; set; }
 
-        [Display(Name = "SBMA (₱87.50 / hour)")]
+        [Display(Name = "SBMA (₱87.50 / actual minute)")]
         public bool SbmaEnabled { get; set; }
 
         public int Revision { get; set; } = 1;

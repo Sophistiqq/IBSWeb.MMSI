@@ -15,7 +15,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
         public async Task<BafRate?> GetApplicableRateAsync(int customerId, int terminalId, int serviceId, DateOnly serviceDate, CancellationToken ct)
         {
             return await dbSet.AsNoTracking()
-                .Where(rate => rate.CustomerId == customerId && rate.AsOfDate <= serviceDate)
+                .Where(rate => rate.CustomerId == customerId && rate.ApprovedAt != null && rate.AsOfDate <= serviceDate)
                 .OrderByDescending(rate => rate.TerminalId == terminalId && rate.ServiceId == serviceId)
                 .ThenByDescending(rate => rate.TerminalId == terminalId)
                 .ThenByDescending(rate => rate.ServiceId == serviceId)

@@ -24,6 +24,33 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             return record;
         }
 
+        public async Task AddSalesBookAsync(IBS.Models.MSAP.Books.SalesBook entry, CancellationToken ct)
+        {
+            var actor = await _db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == entry.ApprovedByUserId && u.IsActive, ct);
+            if (actor == null || string.IsNullOrWhiteSpace(actor.Name) || actor.Name.Trim().Length > 255)
+            {
+                throw new InvalidOperationException("The approver needs an active account with a full name.");
+            }
+            entry.ApprovedByName = actor.Name.Trim();
+            await _db.MsapSalesBooks.AddAsync(entry, ct);
+        }
+
+        public async Task<bool> HasSalesBookAsync(int billingId, CancellationToken ct)
+        {
+            return await _db.MsapSalesBooks.AnyAsync(b => b.DocumentId == billingId, ct);
+        }
+
+        public async Task VoidSalesBookAsync(int billingId, string actor, string? reason, DateTime voidedAt, CancellationToken ct)
+        {
+            var entries = await _db.MsapSalesBooks.Where(b => b.DocumentId == billingId && b.VoidedAt == null).ToListAsync(ct);
+            foreach (var entry in entries)
+            {
+                entry.VoidedAt = voidedAt;
+                entry.VoidedBy = actor;
+                entry.VoidReason = reason;
+            }
+        }
+
         public async Task SaveAsync(CancellationToken cancellationToken)
         {
             await _db.SaveChangesAsync(cancellationToken);

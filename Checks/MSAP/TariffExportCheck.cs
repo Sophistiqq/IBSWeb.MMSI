@@ -118,7 +118,7 @@ namespace Checks.MSAP
             foreach (var method in Enum.GetValues<BafCalculationMethod>())
             {
                 entry.BafMethod = method;
-                Check(ScheduledTicketCharges.Apply(ticket, schedule, entry, new TariffRate { Dispatch = 100m }, new BafRate { Amount = 35000m }) == null,
+                Check(ScheduledTicketCharges.Apply(ticket, schedule, entry, new TariffRate { Dispatch = 100m }, new BafRate { Amount = 35000m, AsOfDate = new DateOnly(2025, 12, 30), ApprovedAt = new DateTime(2025, 12, 30) }) == null,
                     $"{method} blocked despite final amount.");
                 Check(ticket.BAFBillingAmount == (method == BafCalculationMethod.PerHour ? 70000m : 35000m)
                     && ticket.BAFNetRevenue == (method == BafCalculationMethod.PerHour ? 63000m : 31500m)

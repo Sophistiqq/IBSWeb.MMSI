@@ -20,6 +20,45 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SalesBook(DateOnly dateFrom, DateOnly dateTo, CancellationToken ct)
+        {
+            if (!ModelState.IsValid || dateFrom == default || dateTo == default || dateFrom > dateTo)
+            {
+                return BadRequest("From must not be later than To.");
+            }
+            var entries = await unitOfWork.Report.GetSalesBookAsync(dateFrom, dateTo, ct);
+            using var package = new ExcelPackage();
+            var sheet = package.Workbook.Worksheets.Add("Sales Book");
+            WriteCompanyHeader(sheet);
+            sheet.Cells[2, 1].Value = $"SALES BOOK · FINAL APPROVAL {dateFrom:dd MMM yyyy} – {dateTo:dd MMM yyyy}";
+            string[] headers = ["Approval date", "Billing date", "Billing number", "Billed to", "TIN", "Amount after discount", "VATable sales", "VAT", "VAT exempt", "Zero rated", "Discount", "Net sales", "Revision", "Approved by", "Undocumented"];
+            for (int column = 0; column < headers.Length; column++)
+            {
+                sheet.Cells[4, column + 1].Value = headers[column];
+            }
+            StyleHeader(sheet, 4, headers.Length);
+            int row = 5;
+            foreach (var entry in entries)
+            {
+                object[] values = [entry.TransactionDate.ToString("yyyy-MM-dd"), entry.BillingDate.ToString("yyyy-MM-dd"),
+                    entry.SerialNo, entry.SoldTo, entry.TinNo, entry.Amount, entry.VatableSales, entry.VatAmount,
+                    entry.VatExemptSales, entry.ZeroRated, entry.Discount, entry.NetSales, entry.BillingRevision,
+                    entry.ApprovedByName, entry.IsUndocumented ? "Yes" : "No"];
+                for (int column = 0; column < values.Length; column++)
+                {
+                    sheet.Cells[row, column + 1].Value = values[column];
+                }
+                sheet.Cells[row, 6, row, 12].Style.Numberformat.Format = "#,##0.00";
+                row++;
+            }
+            sheet.Cells.AutoFitColumns();
+            sheet.View.FreezePanes(5, 1);
+            return File(await package.GetAsByteArrayAsync(ct), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"MSAP-Sales-Book-{dateFrom:yyyyMMdd}-{dateTo:yyyyMMdd}.xlsx");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> DispatchForBilling(DateOnly dateFrom, DateOnly dateTo, CancellationToken ct)
         {
             try
@@ -279,6 +318,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 // Includes billed records by billing date and qualifying unbilled records by dispatch date.
                 var data = await unitOfWork.Report.GetDispatchReportData(dateFrom, dateTo, ct, filterByBillingDate: true);
                 var collectionShares = await AllocateCollectionsByTicketAsync(data, ct);
+                var sbmaShares = IBS.Services.MSAP.SbmaShareCalculator.Allocate(data);
 
                 // Load all masterfile entities required for dynamic columns (as in old system curtug, curowner, curcustomer)
                 var companyOwnedTugboats = (await unitOfWork.Tugboat.GetAllAsync(cancellationToken: ct))
@@ -556,7 +596,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     ws.Cells[row, 25].Value = vatableAmount;
                     ws.Cells[row, 26].Value = ewt;
                     ws.Cells[row, 27].Value = amountDeposited;
-                    ws.Cells[row, 28].Value = t.Port?.HasSBMA == true ? Math.Round(t.TotalHours, 2) * 60m * 87.5m : 0m;
+                    ws.Cells[row, 28].Value = sbmaShares[t.DispatchTicketId];
                     ws.Cells[row, 29].Value = 0m;
                     ws.Cells[row, 30].Value = 0m;
                     ws.Cells[row, 31].Value = 0m;
@@ -719,7 +759,11 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 int dataStartRow = 7, lastDataRow = row - 1, totalRow = row;
                 ws.Cells[totalRow, 1].Value = "TOTAL";
                 ws.Cells[totalRow, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-                decimal Number(int r, int c) => Convert.ToDecimal(ws.Cells[r, c].Value ?? 0m);
+                decimal Number(int r, int c)
+                {
+                    object? value = ws.Cells[r, c].Value;
+                    return value is null or "Pending" ? 0m : Convert.ToDecimal(value);
+                }
                 // ponytail: scans report rows for each lower-summary line; group first if exports become slow.
                 void WriteActivity(int targetRow, string? tugName, bool owned, bool? ioc, bool foreign)
                 {
@@ -742,19 +786,27 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     var (label, sec) = colInfo[c - 1];
                     if (c is 15 or 16 or 17 or 18 or 19 or 20 or 25 or 26 or 27 or 28 or 29 or 30 or 31 or 32 or 33 or 34 or 35 || sec == 1 || sec == 2 || sec == 3)
                     {
-                        ws.Cells[totalRow, c].Value = Enumerable.Range(dataStartRow, Math.Max(0, lastDataRow - dataStartRow + 1)).Sum(r => Convert.ToDecimal(ws.Cells[r, c].Value ?? 0m));
+                        ws.Cells[totalRow, c].Value = Enumerable.Range(dataStartRow, Math.Max(0, lastDataRow - dataStartRow + 1)).Sum(r => Number(r, c));
                         ws.Cells[totalRow, c].Style.Numberformat.Format = "#,##0.00_);[Red](#,##0.00);";
                     }
                     else if (sec == 4 || sec == 5)
                     {
-                        ws.Cells[totalRow, c].Value = Enumerable.Range(dataStartRow, Math.Max(0, lastDataRow - dataStartRow + 1)).Sum(r => Convert.ToDecimal(ws.Cells[r, c].Value ?? 0m));
+                        ws.Cells[totalRow, c].Value = Enumerable.Range(dataStartRow, Math.Max(0, lastDataRow - dataStartRow + 1)).Sum(r => Number(r, c));
                         ws.Cells[totalRow, c].Style.Numberformat.Format = "##0_);(##0);";
                         ws.Cells[totalRow, c].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
                     }
                     else if (sec == 6 && label != "" && label != "DOC/UNDOC" && label != "PRINCIPAL")
                     {
-                        ws.Cells[totalRow, c].Value = Enumerable.Range(dataStartRow, Math.Max(0, lastDataRow - dataStartRow + 1)).Sum(r => Convert.ToDecimal(ws.Cells[r, c].Value ?? 0m));
+                        ws.Cells[totalRow, c].Value = Enumerable.Range(dataStartRow, Math.Max(0, lastDataRow - dataStartRow + 1)).Sum(r => Number(r, c));
                         ws.Cells[totalRow, c].Style.Numberformat.Format = "#,##0.00_);(#,##0.00);";
+                    }
+                }
+
+                if (data.Any(t => t.OtherTugCostPending))
+                {
+                    foreach (int column in new[] { 33, 34, 35 })
+                    {
+                        ws.Cells[totalRow, column].AddComment("Known amounts only. Pending provider costs are excluded and are not confirmed zero.", "MMSI");
                     }
                 }
 

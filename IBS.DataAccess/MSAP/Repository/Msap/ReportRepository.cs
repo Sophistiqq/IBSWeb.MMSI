@@ -8,6 +8,13 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 {
     public class ReportRepository(MsapDbContext db): IReportRepository
     {
+        public async Task<List<IBS.Models.MSAP.Books.SalesBook>> GetSalesBookAsync(DateOnly from, DateOnly to, CancellationToken ct)
+        {
+            return await db.MsapSalesBooks.AsNoTracking().Where(b => b.Company == MsapConstants.Company_MMSI
+                && b.TransactionDate >= from && b.TransactionDate <= to && b.VoidedAt == null)
+                .OrderBy(b => b.TransactionDate).ThenBy(b => b.SerialNo).ToListAsync(ct);
+        }
+
         public async Task<List<DispatchTicket>> GetDispatchReportData(DateOnly dateFrom, DateOnly dateTo, CancellationToken cancellationToken = default, bool filterByBillingDate = false)
         {
             if (dateFrom > dateTo)
@@ -32,6 +39,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
             var tickets = filterByBillingDate
                 ? await query
+                    .Include(dt => dt.ExpectedServiceEntry).ThenInclude(entry => entry!.VesselSchedule)
                     .Include(dt => dt.OtherTugChargeLine).ThenInclude(line => line!.Charge)
                     .Include(dt => dt.Customer)
                     .Include(dt => dt.Vessel)
@@ -46,6 +54,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                     .ThenBy(dt => dt.DispatchNumber)
                     .ToListAsync(cancellationToken)
                 : await query
+                    .Include(dt => dt.ExpectedServiceEntry).ThenInclude(entry => entry!.VesselSchedule)
                     .Include(dt => dt.OtherTugChargeLine).ThenInclude(line => line!.Charge)
                     .Include(dt => dt.Customer)
                     .Include(dt => dt.Vessel)

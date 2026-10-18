@@ -9,7 +9,7 @@ namespace IBS.Models.MSAP
         public int OtherTugChargeId { get; set; }
         public int TugboatOwnerId { get; set; }
         public TugboatOwner TugboatOwner { get; set; } = null!;
-        [MaxLength(50)]
+        [MaxLength(200)]
         public string ProviderName { get; set; } = "";
         [MaxLength(100)]
         public string ProviderReference { get; set; } = "";

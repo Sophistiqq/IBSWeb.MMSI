@@ -138,6 +138,12 @@ namespace IBS.Services.MSAP
             return null;
         }
 
+        public static DateOnly BafCycleStart(DateOnly serviceDate)
+        {
+            int daysSinceTuesday = ((int)serviceDate.DayOfWeek - (int)DayOfWeek.Tuesday + 7) % 7;
+            return serviceDate.AddDays(-daysSinceTuesday);
+        }
+
         public static string? GetBlocker(DispatchTicket ticket, VesselSchedule schedule, VesselScheduleServiceEntry entry, TariffRate? rate, BafRate? bafRate)
         {
             if (entry.CancelledAt.HasValue)
@@ -180,6 +186,11 @@ namespace IBS.Services.MSAP
             if (!bafAmount.HasValue || bafAmount < 0)
             {
                 return $"No valid BAF rate applies on {ticket.DateLeft:dd MMM yyyy}. Check rate maintenance or the approved manual BAF.";
+            }
+            if (!entry.ManualBafRate.HasValue && (bafRate == null || !bafRate.ApprovedAt.HasValue
+                || bafRate.AsOfDate < BafCycleStart(ticket.DateLeft.Value)))
+            {
+                return $"BAF coverage is awaiting approval for the week beginning {BafCycleStart(ticket.DateLeft.Value):dd MMM yyyy}. The actual ticket is retained; approve the applicable BAF and recalculate charges before billing.";
             }
             var discount = schedule.SkipCosDiscount ? 0m : schedule.CosDiscountPercent.GetValueOrDefault();
             return discount is < 0 or > 100 ? "The approved COS discount must be between 0% and 100%." : null;
