@@ -36,6 +36,15 @@ namespace IBS.Models.MSAP
         [Column(TypeName = "numeric(18,4)")]
         public decimal? ManualBafRate { get; set; }
 
+        [Column(TypeName = "timestamp without time zone")]
+        public DateTime? CancelledAt { get; set; }
+
+        [MaxLength(450)]
+        public string? CancelledByUserId { get; set; }
+
+        [MaxLength(500)]
+        public string? CancellationReason { get; set; }
+
         public List<DispatchTicket> DispatchTickets { get; set; } = [];
     }
 }

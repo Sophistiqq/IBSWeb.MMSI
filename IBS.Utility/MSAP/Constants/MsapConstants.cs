@@ -4,6 +4,9 @@ namespace IBS.Utility.MSAP.Constants
     {
         public const string Company_MMSI = "MMSI";
 
+        // shortcut: MSAP month locks are suspended until the late-ticket closing policy is agreed.
+        public static bool EnforceClosedPeriods => false;
+
 
         #region Vat Type
 

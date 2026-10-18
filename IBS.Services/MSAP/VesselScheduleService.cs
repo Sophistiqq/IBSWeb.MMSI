@@ -194,7 +194,7 @@ namespace IBS.Services.MSAP
                     bool hasTickets = existingTickets.Count > 0 || entryTickets.Count > 0;
                     bool hasBilling = existing.CustomerOrderSlipId.HasValue && await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == existing.CustomerOrderSlipId.Value, ct) != null;
 
-                    if (hasTickets || hasBilling)
+                    if (hasTickets || hasBilling || existing.ServiceEntries.Any(e => e.CancelledAt.HasValue))
                     {
                         result = ServiceResult.Failure("This booking already has service records or billing, or its COS is no longer open. Schedule revision is only available before Dispatch Tickets or billing exist.", ServiceResultStatus.ValidationError);
                         return;

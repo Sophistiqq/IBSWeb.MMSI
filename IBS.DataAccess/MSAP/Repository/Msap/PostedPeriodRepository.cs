@@ -1,6 +1,7 @@
 using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository.Msap.IRepository;
 using IBS.Models.MSAP.MasterFile;
+using IBS.Utility.MSAP.Constants;
 using Microsoft.EntityFrameworkCore;
 
 namespace IBS.DataAccess.MSAP.Repository.Msap
@@ -11,6 +12,10 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<bool> IsMonthClosedAsync(int year, int month, CancellationToken cancellationToken = default)
         {
+            if (!MsapConstants.EnforceClosedPeriods)
+            {
+                return false;
+            }
             var period = await _db.MsapPostedPeriods
                 .FirstOrDefaultAsync(p => p.Year == year && p.Month == month, cancellationToken);
             return period?.IsClosed ?? false;

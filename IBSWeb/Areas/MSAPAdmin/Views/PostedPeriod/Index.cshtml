@@ -16,10 +16,10 @@
                     <span class="modern-label" style="color: var(--on-surface)">Posting Periods</span>
                 </div>
                 <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
-                <p class="modern-body-md" style="color: var(--on-surface-variant)">Close or open monthly posting periods. Closed months cannot be modified.</p>
+                <p class="modern-body-md" style="color: var(--on-surface-variant)">MSAP month restrictions are suspended while the late-ticket policy is reviewed. Stored period history is retained; shared IBS/Filpride controls are unchanged.</p>
             </div>
             <div class="flex gap-2">
-                <form asp-action="Close" method="post" class="flex items-center gap-2" onsubmit="return confirmPostPeriod(event)">
+                <form style="@(IBS.Utility.MSAP.Constants.MsapConstants.EnforceClosedPeriods ? null : "display:none")" asp-action="Close" method="post" class="flex items-center gap-2" onsubmit="return confirmPostPeriod(event)">
                     @Html.AntiForgeryToken()
                     <select name="month" class="modern-input" style="width:140px;height:32px;padding:0 8px;font-size:0.875rem" required>
                         @for (var m = 1; m <= 12; m++)
@@ -97,7 +97,7 @@
                                         }
                                         else
                                         {
-                                            <form asp-action="Close" method="post" style="display:inline" onsubmit="return confirmClose(event, '@(new DateOnly(period.Year, period.Month, 1).ToString("MMMM yyyy"))')">
+                                            <form asp-action="Close" method="post" style="@(IBS.Utility.MSAP.Constants.MsapConstants.EnforceClosedPeriods ? "display:inline" : "display:none")" onsubmit="return confirmClose(event, '@(new DateOnly(period.Year, period.Month, 1).ToString("MMMM yyyy"))')">
                                                 @Html.AntiForgeryToken()
                                                 <input type="hidden" name="year" value="@period.Year" />
                                                 <input type="hidden" name="month" value="@period.Month" />
@@ -114,7 +114,7 @@
                                 <tr>
                                     <td colspan="8" class="text-center" style="padding: 40px; color: var(--on-surface-variant);">
                                         <span class="material-symbols-outlined" style="font-size: 40px; display: block; margin-bottom: 8px;">calendar_month</span>
-                                        No periods found. Select a month and click POST PERIOD above.
+                                        No stored posting periods. Month closing is currently suspended.
                                     </td>
                                 </tr>
                             }

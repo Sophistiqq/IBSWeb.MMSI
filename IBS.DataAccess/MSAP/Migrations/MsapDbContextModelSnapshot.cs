@@ -2721,6 +2721,20 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("smallint")
                         .HasColumnName("baf_method");
 
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cancellation_reason");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<string>("CancelledByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("cancelled_by_user_id");
+
                     b.Property<decimal?>("ManualBafRate")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
@@ -2762,6 +2776,8 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.ToTable("mmsi_vessel_schedule_service_entries", "msap", t =>
                         {
                             t.HasCheckConstraint("ck_schedule_service_entries_baf_method", "baf_method IN (1, 2, 3, 4)");
+
+                            t.HasCheckConstraint("ck_schedule_service_entries_cancellation", "(cancelled_at IS NULL AND cancelled_by_user_id IS NULL AND cancellation_reason IS NULL) OR (cancelled_at IS NOT NULL AND cancelled_by_user_id IS NOT NULL AND length(trim(cancellation_reason)) > 0 AND cancellation_reason IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_schedule_service_entries_manual_baf_rate", "manual_baf_rate >= 0");
 

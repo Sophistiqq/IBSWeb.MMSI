@@ -50,11 +50,16 @@ namespace IBS.Services.MSAP
             }
             await PopulateNamesAsync([update], ct);
             List<RateUploadRowViewModel> rows = JsonSerializer.Deserialize<List<RateUploadRowViewModel>>(update.RowsJson)!;
-            return new RateUploadViewModel
+            var model = new RateUploadViewModel
             {
                 Upload = update, Rows = rows, IsOwner = update.UploadedByUserId == userId,
                 BaselineChanged = !update.ApprovedAt.HasValue && await UpdateBaselineAsync(rows, update.RateKind, false, ct)
             };
+            if (update.ApprovedAt.HasValue && update.RateKind == RateTableKind.BAF)
+            {
+                await PopulateAffectedTicketsAsync(model, ct);
+            }
+            return model;
         }
 
         public async Task<RateEditorViewModel?> GetEditorAsync(RateTableKind kind, DateOnly asOf, Guid? id, string userId, CancellationToken ct)
@@ -335,6 +340,43 @@ namespace IBS.Services.MSAP
             await _db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
             return ServiceResult.Success("Selected rates approved and activated. Existing ticket amounts were not changed; pending charges can now be recalculated from the COS.");
+        }
+
+        private async Task PopulateAffectedTicketsAsync(RateUploadViewModel model, CancellationToken ct)
+        {
+            var included = model.Rows.Where(row => row.Selected).ToList();
+            if (included.Count == 0)
+            {
+                return;
+            }
+            List<int> customers = included.Select(row => row.CustomerId).Distinct().ToList();
+            DateOnly from = included.Min(row => row.EffectiveDate);
+            // shortcut: review the latest 200 candidate tickets; use the COS review for older jobs until impact paging is needed.
+            var candidates = await _db.MsapDispatchTickets.AsNoTracking().Include(ticket => ticket.CustomerOrderSlip)
+                .Where(ticket => customers.Contains(ticket.CustomerId) && ticket.Customer.Company == MsapConstants.Company_MMSI
+                    && ticket.DateLeft >= from && ticket.CustomerOrderSlipId != null && !ticket.IsManualBafRate
+                    && ticket.BillingId == null && ticket.CustomerOrderSlip!.Status == MsapConstants.CustomerOrderSlipStatus.Open
+                    && (ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending)
+                    && !_db.MsapBillings.Any(bill => bill.CustomerOrderSlipId == ticket.CustomerOrderSlipId))
+                .OrderByDescending(ticket => ticket.DateLeft).ThenByDescending(ticket => ticket.DispatchTicketId).Take(201).ToListAsync(ct);
+            model.ImpactLimitReached = candidates.Count > 200;
+            foreach (var ticket in candidates.Take(200))
+            {
+                var rate = await _work.BafTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft!.Value, ct);
+                if (rate == null || !included.Any(row => row.CustomerId == rate.CustomerId && row.TerminalId == rate.TerminalId
+                    && row.ServiceId == rate.ServiceId && row.EffectiveDate == rate.AsOfDate)
+                    || ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling && ticket.BAFRate == rate.Amount)
+                {
+                    continue;
+                }
+                model.AffectedTickets.Add(new TicketChargeReviewViewModel
+                {
+                    DispatchTicketId = ticket.DispatchTicketId, CustomerOrderSlipId = ticket.CustomerOrderSlipId!.Value,
+                    TicketNumber = ticket.DispatchNumber, CosNumber = ticket.CustomerOrderSlip!.CustomerOrderSlipNumber,
+                    HasSavedCharges = ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling,
+                    SavedBafRate = ticket.BAFRate, ProposedBafRate = rate.Amount
+                });
+            }
         }
 
         private async Task PopulateNamesAsync(List<RateUpload> updates, CancellationToken ct)

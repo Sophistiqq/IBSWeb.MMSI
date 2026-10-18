@@ -6,6 +6,7 @@ using IBS.DataAccess.MSAP.Repository.Msap.IRepository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.MasterFile;
+using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
@@ -80,6 +81,54 @@ namespace Checks.MSAP
             await Expect(CollectionBankingAction.ReturnCheck, today, false);
             await Expect((CollectionBankingAction)99, today, false);
             Console.WriteLine("PASS: collection deposit, return, redeposit, clearing, date guards, bank ownership, closed periods and audits.");
+            await CheckFullSettlementAsync();
+        }
+
+        private static async Task CheckFullSettlementAsync()
+        {
+            var customer = new Customer { CustomerId = 1, WithHoldingTax = true };
+            var bill = new Billing
+            {
+                MsapBillingId = 1, CustomerId = 1, MsapBillingNumber = "FULL",
+                Balance = 11200m, IsVatable = true, BilledTo = MsapConstants.BilledToLocal,
+                Status = MsapConstants.BillingStatus.ForCollection,
+                Revision = 1, ApprovedRevision = 1, ApprovedByUserId = "check", ApprovedAt = DateTime.Now
+            };
+            var customers = Proxy<ICustomerRepository>((_, _) => Task.FromResult<Customer?>(customer));
+            var billings = Proxy<IBillingRepository>((_, _) => Task.FromResult<Billing?>(bill));
+            var tickets = Proxy<IDispatchTicketRepository>((_, _) => Task.FromResult<IEnumerable<DispatchTicket>>([]));
+            var work = Proxy<IUnitOfWork>((method, _) => method.Name switch
+            {
+                "get_Customer" => customers,
+                "get_Billing" => billings,
+                "get_DispatchTicket" => tickets,
+                _ => throw new NotSupportedException(method.Name)
+            });
+            var service = new CollectionService(work, NullLogger<CollectionService>.Instance);
+            var model = new CreateCollectionViewModel
+            {
+                CustomerId = 1, MsapCollectionNumber = "FULL", Date = new DateOnly(2026, 1, 1),
+                Amount = 11000m, CashAmount = 11000m, EWT = 200m,
+                BillingPayments = [new BillingPaymentViewModel { BillingId = 1, AmountToPay = 11000m }]
+            };
+            var method = typeof(CollectionService).GetMethod("GetSettlementAllocationsAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            async Task<Dictionary<int, decimal>> AllocateAsync()
+            {
+                return await (Task<Dictionary<int, decimal>>)method.Invoke(service, [model, CancellationToken.None])!;
+            }
+            Check((await AllocateAsync())[1] == 11200m, "Full net settlement must clear gross balance including withholding.");
+            model.BillingPayments[0].AmountToPay = model.Amount = model.CashAmount = 5500m;
+            model.EWT = 100m;
+            try
+            {
+                await AllocateAsync();
+                throw new InvalidOperationException("Partial collection was accepted.");
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("must be paid in full", StringComparison.Ordinal))
+            {
+                Check(bill.Balance == 11200m && bill.CollectionId == null, "Rejected partial collection changed the bill.");
+            }
+            Console.WriteLine("PASS: server requires full net settlement with withholding and rejects partial payment without changing the bill.");
         }
 
         private static T Proxy<T>(Func<MethodInfo, object?[]?, object?> handler) where T : class

@@ -96,7 +96,7 @@
                                         @foreach (var entry in entries)
                                         {
                                             <tr data-review-service="@entry.ServiceId">
-                                                <td>@(entry.Service?.ServiceName ?? $"Service #{entry.ServiceId}")</td>
+                                                <td>@(entry.Service?.ServiceName ?? $"Service #{entry.ServiceId}")@if (entry.CancelledAt.HasValue) { <small class="wf-caption wf-muted">Cancelled · @entry.CancellationReason</small> }</td>
                                                 <td>@(entry.TariffBasis == TariffChargeBasis.PerMove ? "Per move" : entry.TariffBasis == TariffChargeBasis.PerHour ? "Per hour" : "Not specified")</td>
                                                 <td><span class="@(entry.ManualTariffRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="tariff" data-manual="@entry.ManualTariffRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("N2") : "Checking table…")</span><small class="wf-caption wf-muted" data-rate-source>@(entry.ManualTariffRate.HasValue ? "Saved manual rate" : "Table estimate pending")</small></td>
                                                 <td>

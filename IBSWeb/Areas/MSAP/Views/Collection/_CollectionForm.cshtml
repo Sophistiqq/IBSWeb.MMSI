@@ -49,11 +49,11 @@
                     <div class="collection-heading"><h2 id="allocationHeading" class="wf-section-title">Billing allocation</h2><input id="billingSearch" class="modern-input" type="search" placeholder="Search billing number or COS..." aria-label="Search billing number or COS" /></div>
                     <div class="collection-table-scroll">
                         <table class="collection-table">
-                            <thead><tr><th><input id="selectAllBillings" type="checkbox" aria-label="Select all visible eligible bills" /></th><th>Billing / COS</th><th>Gross balance</th><th>Withholding</th><th>Net available</th><th>Payment allocation</th><th>Balance after allocation</th></tr></thead>
+                            <thead><tr><th><input id="selectAllBillings" type="checkbox" aria-label="Select all visible eligible bills" /></th><th>Billing / COS</th><th>Gross balance</th><th>Withholding</th><th>Net available</th><th>Full net payment</th><th>Balance after allocation</th></tr></thead>
                             <tbody id="collectionBillings"><tr><td colspan="7">Select a customer to load billings.</td></tr></tbody>
                         </table>
                     </div>
-                    <p class="wf-caption wf-muted">Select approved bills and enter the net payment for each. Unapproved bills cannot be selected. Bills on another receipt must be reviewed on that receipt.</p>
+                    <p class="wf-caption wf-muted">Each selected bill is paid in full at its net balance after withholding. One receipt can cover multiple bills. Unapproved bills cannot be selected. Bills on another receipt must be reviewed on that receipt.</p>
                 </section>
                 <section class="wf-panel wf-stack" aria-labelledby="collectionDetailsHeading">
                     <div class="collection-heading"><h2 id="collectionDetailsHeading" class="wf-section-title">Collection details</h2><label class="collection-check"><input asp-for="IsUndocumented" /> Undocumented</label></div>

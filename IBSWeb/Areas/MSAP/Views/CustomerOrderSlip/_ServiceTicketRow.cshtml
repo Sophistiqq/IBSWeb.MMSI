@@ -12,7 +12,11 @@
 }
 <tr>
     <td>@service.ServiceName</td>
-    @if (ticket == null && entry != null)
+    @if (entry?.CancelledAt.HasValue == true)
+    {
+        <td colspan="4"><span class="schedule-status-pill">Service cancelled</span><small class="wf-caption wf-muted">@entry.CancellationReason · @entry.CancelledAt.Value.ToString("dd MMM yyyy, HH:mm")</small></td><td>—</td>
+    }
+    else if (ticket == null && entry != null)
     {
         <td>Not entered</td><td>Pending</td><td>Pending</td><td>Awaiting ticket</td>
         <td>
@@ -27,6 +31,10 @@
                     <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@cos.CustomerOrderSlipId"
                        asp-route-expectedServiceEntryId="@entry.VesselScheduleServiceEntryId" asp-fragment="actualTicketEntry" class="cos-ticket-link">Record ticket</a>
                 }
+            }
+            @if (ViewData["CanCancelExpectedService"] is true)
+            {
+                <button type="button" class="cos-ticket-link" data-cancel-service="@entry.VesselScheduleServiceEntryId" data-cos-id="@cos.CustomerOrderSlipId" data-url="@Url.Action("CancelService", "CustomerOrderSlip")">Cancel service</button>
             }
         </td>
     }

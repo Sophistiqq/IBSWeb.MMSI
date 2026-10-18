@@ -575,7 +575,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 var (data, filtered, total) = await billingService.GetPagedBillingsAsync(parameters, cancellationToken, customerOrderSlipId);
 
                 var closedMonths = (await unitOfWork.PostedPeriod.GetAllAsync(cancellationToken))
-                    .Where(p => p.IsClosed)
+                    .Where(p => MsapConstants.EnforceClosedPeriods && p.IsClosed)
                     .Select(p => (p.Year, p.Month))
                     .ToHashSet();
                 foreach (var item in data)

@@ -6,11 +6,10 @@ const CollectionAllocation = {
             ? (floor % 2 === 0 ? floor : floor + 1) : Math.round(scaled)) / 100;
     },
     calculate(bill, payment) {
-        const proportion = bill.net > 0 ? payment / bill.net : 0;
-        const ewt = this.round(bill.ewt * proportion);
-        const wvat = this.round(bill.wvat * proportion);
-        const gross = payment === bill.net ? bill.amount : this.round(payment + ewt + wvat);
-        return { ewt, wvat, gross, remaining: this.round(bill.amount - gross) };
+        if (!Number.isFinite(payment) || payment <= 0 || payment !== bill.net) {
+            throw new RangeError('Each selected billing must be paid in full.');
+        }
+        return { ewt: bill.ewt, wvat: bill.wvat, gross: bill.amount, remaining: 0 };
     }
 };
 if (typeof module !== 'undefined') module.exports = CollectionAllocation;
@@ -81,16 +80,9 @@ if (typeof document !== 'undefined') $(function () {
             row.append($('<td>').text(money(b.amount)));
             row.append($('<td>').append($('<div class="wf-caption">').text(`EWT ${money(b.ewt)}`), $('<div class="wf-caption">').text(`WVAT ${money(b.wvat)}`)));
             row.append($('<td>').text(money(b.net)));
-            const input = $('<input type="number" class="modern-input" min="0.01" step="0.01">').attr({ max: b.net, 'aria-label': `Net payment for ${b.msapBillingNumber}` }).val(b.payment.toFixed(2)).prop('disabled', !b.selected);
-            row.append($('<td>').append(b.eligible ? input : $('<span>').text('Not eligible')));
-            const remaining = $('<td>').text(money(b.selected ? CollectionAllocation.calculate(b, b.payment).remaining : b.amount));
-            row.append(remaining); body.append(row);
+            row.append($('<td>').text(b.eligible ? money(b.net) : 'Not eligible'));
+            row.append($('<td>').text(money(b.selected ? 0 : b.amount))); body.append(row);
             checkbox.on('change', function () { b.selected = this.checked; render(); updateTotals(true); });
-            input.on('input', function () {
-                b.payment = Number(this.value);
-                remaining.text(money(CollectionAllocation.calculate(b, b.payment).remaining));
-                updateTotals();
-            });
         });
         if (!body.children().length) body.append($('<tr>').append($('<td colspan="7">').text(loading ? 'Loading billings...' : 'No billings match the current filters.')));
         const eligible = bills.filter(b => b.eligible && visible(b));
@@ -114,7 +106,7 @@ if (typeof document !== 'undefined') $(function () {
             if (!result.success) throw new Error(result.message || 'Unable to load billings.');
             bills = result.data.map(b => {
                 const payment = restoreSubmitted ? submitted.find(p => p.billingId === b.msapBillingId) : null;
-                return { ...b, selected: b.eligible && (restoreSubmitted && submitted.length ? !!payment : b.isSelected), payment: payment ? payment.amountToPay : b.paymentAmount };
+                return { ...b, selected: b.eligible && (restoreSubmitted && submitted.length ? !!payment : b.isSelected), payment: b.net };
             });
             restoreSubmitted = false;
             [...new Set(bills.map(b => b.billedParty))].sort().forEach(party => $('#billedParty').append(new Option(party, party)));
@@ -143,8 +135,8 @@ if (typeof document !== 'undefined') $(function () {
         error(''); updateTotals();
         if (!form.reportValidity()) return;
         const payments = selected();
-        if (!payments.length || payments.some(b => !b.eligible || !Number.isFinite(b.payment) || b.payment <= 0 || b.payment > b.net)) {
-            error('Select approved billings and enter positive payments within their net balances.'); return;
+        if (!payments.length || payments.some(b => !b.eligible || !Number.isFinite(b.payment) || b.payment <= 0 || b.payment !== b.net)) {
+            error('Select approved billings to settle their full net balances.'); return;
         }
         if (CollectionAllocation.round(Number($('#Amount').val()) - payments.reduce((sum, b) => sum + b.payment, 0)) !== 0) {
             error('Cash plus check must match the allocated net payments.'); return;

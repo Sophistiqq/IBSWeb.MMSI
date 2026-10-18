@@ -26,6 +26,16 @@ namespace IBSWeb.Areas.MSAP.Controllers
         IAccessControlService accessControl,
         ILogger<CustomerOrderSlipController> logger) : Controller
     {
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.EditCustomerOrderSlip)]
+        public async Task<IActionResult> CancelService(int id, int entryId, string? reason, CancellationToken ct)
+        {
+            var result = await customerOrderSlipService.CancelServiceAsync(id, entryId, reason,
+                User.Identity?.Name ?? "System", User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
+            return Json(new { success = result.IsSuccess, message = result.Message });
+        }
+
         #region Index
 
         /// <summary>
@@ -63,7 +73,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 var (data, filtered, total) = await customerOrderSlipService.GetPagedCustomerOrderSlipsAsync(parameters, cancellationToken);
 
                 var closedMonths = (await unitOfWork.PostedPeriod.GetAllAsync(cancellationToken))
-                    .Where(p => p.IsClosed)
+                    .Where(p => MsapConstants.EnforceClosedPeriods && p.IsClosed)
                     .Select(p => (p.Year, p.Month))
                     .ToHashSet();
                 foreach (var item in data)
@@ -182,7 +192,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 {
                     return Forbid();
                 }
-                if (schedule?.ServiceEntries.Any(entry => entry.VesselScheduleServiceEntryId == expectedServiceEntryId.Value) != true
+                if (schedule?.ServiceEntries.Any(entry => entry.VesselScheduleServiceEntryId == expectedServiceEntryId.Value && !entry.CancelledAt.HasValue) != true
                     || customerOrderSlip.DispatchTickets.Any(ticket => ticket.VesselScheduleServiceEntryId == expectedServiceEntryId.Value))
                 {
                     return NotFound();

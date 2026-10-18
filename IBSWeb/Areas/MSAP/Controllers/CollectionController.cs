@@ -5,6 +5,7 @@ using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP;
 using IBS.Services.MSAP.Attributes;
 using IBS.Utility.MSAP.Helpers;
+using IBS.Utility.MSAP.Constants;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IBSWeb.Areas.MSAP.Controllers
@@ -168,7 +169,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 var (data, filtered, total) = await collectionService.GetPagedCollectionsAsync(parameters, cancellationToken);
 
                 var closedMonths = (await unitOfWork.PostedPeriod.GetAllAsync(cancellationToken))
-                    .Where(p => p.IsClosed)
+                    .Where(p => MsapConstants.EnforceClosedPeriods && p.IsClosed)
                     .Select(p => (p.Year, p.Month))
                     .ToHashSet();
                 IEnumerable<Collection> collections = data as Collection[] ?? data.ToArray();

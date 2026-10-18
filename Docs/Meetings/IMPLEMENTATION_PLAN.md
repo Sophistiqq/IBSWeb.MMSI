@@ -1,5 +1,25 @@
 # MSAP schedule/COS implementation plan
 
+## Important deferred direction — tugboat workspaces and IBS integration
+
+User decision, 18 October 2026: keep the current implementation focused on MSAP. Record the following as important future work; do not introduce the navbar selector or restructure company scope in this phase.
+
+- A navbar workspace selector should offer MMSI / All tugboats and individual authorized tugboats, remember the selection, and consistently scope supported pages. Selecting a workspace must never reassign existing transactions or their allocations.
+- MMSI intends to track performance, operating expenses and finance per tugboat. Preserve actual service-tugboat identities and source references in MSAP. Later income/expense allocations must retain tugboat attribution alongside supplier/bank identities, including documents covering several tugboats. IBS already has a Tugboat subaccount type; inspect/reuse that path when integration resumes.
+- A separate **Tugboat** Trade Type, alongside Supplier, Commission and Hauler, is the preferred direction for IBS payments of confirmed external-tug charges. The supplier identifies the provider; the tugboat identifies the service asset. Link providers explicitly to existing IBS suppliers rather than matching names or creating duplicate suppliers. This IBS payment integration is deferred while MSAP remains the focus.
+- Treating tugboats as company-like operating workspaces is a proposed design, not a decision to create separate legal/company books now. Actual company segregation, numbering, permissions, banking and reporting require their own defined scope.
+- AP Other Tugs storage and report fields already exist, but the redesigned MSAP flow still needs charge capture/review. The proposed owner-to-supplier link, Finance confirmation of provider charges and allocations across tickets/COS remain to be finalized before implementation. Do not infer tax rules or create a payable merely by selecting an external tugboat.
+
+## Accounting and remaining-gap decisions — 18 October 2026
+
+These user decisions supersede conflicting earlier proposals below:
+
+- Weekly freshness applies to BAF only; tariff has no weekly renewal requirement. Approved BAF updates now show an affected-unbilled-ticket review list. Saved unbilled charges are checked against service-date rates before billing and can be recalculated after an explicit before/after comparison. The comparison fingerprint is rechecked while applying the change. Bills and approved manual terms remain protected. Historical service dates continue to determine the applicable BAF.
+- Each selected numbered billing must be settled in full after withholding. One receipt/check may cover multiple fully paid bills. Partial payments and repeat receipts against partially paid bills are not part of the requested workflow.
+- Management accounting needs GL capture once the approved COS, complete actual tickets and applicable charges are reliable, before final billing. Finance needs a separate Sales Book event at final billing approval. Link both events to the COS/tickets/billings and avoid duplicate revenue. Exact debit/credit account mapping and billed/unbilled reclassification must use an accountant-approved example; no mapping has yet been identified in MSAP.
+- Pending COS may span months because actual tickets arrive late. Preserve actual service dates separately from entry dates and billing dates. Month-closing policy is deferred for a meeting. Following the instruction to proceed, existing MSAP month restrictions and new closing actions are suspended; stored period history is retained. Shared IBS/Filpride controls are outside this change.
+- Unperformed services can now be cancelled with reason, stable actor ID and audit, without deleting their planned rows. Cancelled rows do not count as missing tickets; a row with any actual ticket or a COS with billing cannot be cancelled. Cancelling every planned service cancels the empty COS/booking. No reactivation or ticket cancellation was introduced. Migration `20261018005410_AddPlannedServiceCancellation` adds the nullable cancellation metadata and consistency constraint; it has not been applied by the agent. Finance reconciliation of principal withholding, SBMA and reports remains pending their clarification. Fuel tracking remains deferred.
+
 ## Urgent service entry — 18 October 2026
 
 Pending schedules can open the existing COS ticket form through **Record urgent service**, using the existing Create Dispatch Ticket permission. This creates/reuses the linked COS without approving the schedule. Factual tickets retain their stable service-row links, actual dates/times and supporting files; charges remain pending and billing stays blocked. Schedule approval retains the COS/tickets and applies the normal service-date rates and approved terms. Missing rates still leave calculation pending. Existing closed-period, completeness, approval and audit controls remain in force. Bookings with tickets cannot be revised. No automatic approval or separate urgent-entry permission/deadline was introduced.

@@ -63,7 +63,7 @@ namespace IBS.Services.MSAP
                             && s.CustomerOrderSlipId != null && s.CustomerOrderSlip!.Status == MsapConstants.CustomerOrderSlipStatus.Open
                             && s.Status != MsapConstants.VesselScheduleStatus.Cancelled
                             && s.ApprovedRevision == s.Revision && s.PlannedStart <= model.UpdatedAt
-                            && s.ServiceEntries.Any(e => e.DispatchTickets.Count(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted
+                            && s.ServiceEntries.Where(e => !e.CancelledAt.HasValue).Any(e => e.DispatchTickets.Count(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted
                                 && t.TugBoatId == e.TugboatId && t.ServiceId == e.ServiceId) != 1
                                 || e.DispatchTickets.Any(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted
                                     && (t.DateLeft == null || t.TimeLeft == null || t.DateArrived == null || t.TimeArrived == null
@@ -75,7 +75,7 @@ namespace IBS.Services.MSAP
                         .AsSplitQuery().OrderBy(s => s.PlannedStart).ThenBy(s => s.VesselScheduleId).Take(6).ToListAsync(ct);
                     foreach (var schedule in model.MissingTicketSchedules)
                     {
-                        model.CompleteTicketsBySchedule[schedule.VesselScheduleId] = schedule.ServiceEntries.Count(e =>
+                        model.CompleteTicketsBySchedule[schedule.VesselScheduleId] = schedule.ServiceEntries.Count(e => !e.CancelledAt.HasValue &&
                             e.DispatchTickets.Count(t => t.TugBoatId == e.TugboatId && t.ServiceId == e.ServiceId) == 1
                             && e.DispatchTickets.Any(t => t.TugBoatId == e.TugboatId && t.ServiceId == e.ServiceId
                                 && t.DateLeft.HasValue && t.TimeLeft.HasValue && t.DateArrived.HasValue && t.TimeArrived.HasValue

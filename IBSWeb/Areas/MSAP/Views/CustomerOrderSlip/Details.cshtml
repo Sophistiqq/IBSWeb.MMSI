@@ -6,12 +6,14 @@
     var booking = ViewBag.VesselSchedule as VesselSchedule;
     var progress = (JobProgressViewModel)ViewBag.JobProgress;
     var entries = booking?.ServiceEntries ?? new List<VesselScheduleServiceEntry>();
-    var pendingServices = entries.Where(entry => !Model.DispatchTickets.Any(ticket => ticket.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId)).ToList();
+    var pendingServices = entries.Where(entry => !entry.CancelledAt.HasValue && !Model.DispatchTickets.Any(ticket => ticket.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId)).ToList();
     var approvalPending = booking != null && (booking.ApprovedRevision != booking.Revision || booking.Status == MsapConstants.VesselScheduleStatus.Tentative);
     var bookingClosed = booking?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
     var canRecord = ViewBag.CanCreateDispatchTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open
         && !bookingClosed && ViewBag.HasBilling != true;
     ViewData["CanRecordExpectedService"] = canRecord;
+    ViewData["CanCancelExpectedService"] = ViewBag.CanEditCustomerOrderSlip == true && !bookingClosed
+        && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && ViewBag.HasBilling != true;
     var tugIds = entries.Select(entry => entry.TugboatId).Concat(Model.DispatchTickets.Select(ticket => ticket.TugBoatId)).Distinct().ToList();
     var statusLabel = bookingClosed && booking != null ? MsapConstants.VesselScheduleStatus.GetDisplayName(booking.Status)
         : approvalPending ? booking!.ApprovedRevision.HasValue ? "Pending reapproval" : "Approval pending"
@@ -37,7 +39,7 @@
                 <span class="wf-body wf-muted">@Model.CustomerOrderSlipNumber</span>
                 @if (entries.Count > 0)
                 {
-                    <span class="wf-body wf-muted">@(entries.Count - pendingServices.Count) of @entries.Count tickets entered · @pendingServices.Count pending</span>
+                    <span class="wf-body wf-muted">@(entries.Count(entry => !entry.CancelledAt.HasValue) - pendingServices.Count) of @entries.Count(entry => !entry.CancelledAt.HasValue) tickets entered · @pendingServices.Count pending</span>
                 }
             </div>
         </header>

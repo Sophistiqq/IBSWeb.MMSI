@@ -228,7 +228,7 @@ else
                                     <tbody>
                                     @foreach (var schedule in Model.MissingTicketSchedules)
                                     {
-                                        <tr><td>@(schedule.CustomerOrderSlip!.CustomerOrderSlipNumber)</td><td>@(schedule.Customer!.CustomerName)<small>@schedule.Vessel.VesselName</small></td><td>@Model.CompleteTicketsBySchedule.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.ServiceEntries.Count complete</td><td><a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@schedule.CustomerOrderSlipId">Open COS</a></td></tr>
+                                        <tr><td>@(schedule.CustomerOrderSlip!.CustomerOrderSlipNumber)</td><td>@(schedule.Customer!.CustomerName)<small>@schedule.Vessel.VesselName</small></td><td>@Model.CompleteTicketsBySchedule.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.ServiceEntries.Count(e => !e.CancelledAt.HasValue) complete</td><td><a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@schedule.CustomerOrderSlipId">Open COS</a></td></tr>
                                     }
                                     @if (Model.MissingTicketSchedules.Count == 0) { <tr><td colspan="4" class="dashboard-empty">No missing tickets for services started by now.</td></tr> }
                                     </tbody>

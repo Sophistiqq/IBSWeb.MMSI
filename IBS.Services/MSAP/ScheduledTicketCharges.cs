@@ -1,3 +1,7 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.Enums;
@@ -11,16 +15,69 @@ namespace IBS.Services.MSAP
         public static async Task<string?> ApplyAsync(IUnitOfWork unitOfWork, DispatchTicket ticket, VesselSchedule schedule, string username, CancellationToken ct)
         {
             var entry = schedule.ServiceEntries.Single(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
+            var (rate, bafRate) = await ResolveRatesAsync(unitOfWork, ticket, ct);
+            var blocker = Apply(ticket, schedule, entry, rate, bafRate);
+            ticket.TariffBy = username;
+            ticket.TariffDate = DateTimeHelper.GetCurrentPhilippineTime();
+            return blocker;
+        }
+
+        private static async Task<(TariffRate? Tariff, BafRate? Baf)> ResolveRatesAsync(IUnitOfWork unitOfWork, DispatchTicket ticket, CancellationToken ct)
+        {
             var rate = ticket.DateLeft.HasValue
                 ? await unitOfWork.TariffTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
                 : null;
             var bafRate = ticket.DateLeft.HasValue
                 ? await unitOfWork.BafTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
                 : null;
-            var blocker = Apply(ticket, schedule, entry, rate, bafRate);
-            ticket.TariffBy = username;
-            ticket.TariffDate = DateTimeHelper.GetCurrentPhilippineTime();
-            return blocker;
+            return (rate, bafRate);
+        }
+
+        public static async Task<(DispatchTicket Ticket, TariffRate? Tariff, BafRate? Baf)> PreviewAsync(IUnitOfWork work, DispatchTicket ticket, VesselSchedule schedule, CancellationToken ct)
+        {
+            var preview = new DispatchTicket
+            {
+                DispatchTicketId = ticket.DispatchTicketId, CustomerOrderSlipId = ticket.CustomerOrderSlipId,
+                VesselScheduleServiceEntryId = ticket.VesselScheduleServiceEntryId,
+                CustomerId = ticket.CustomerId, TerminalId = ticket.TerminalId, TugBoatId = ticket.TugBoatId, ServiceId = ticket.ServiceId,
+                Date = ticket.Date, DateLeft = ticket.DateLeft, DateArrived = ticket.DateArrived,
+                TimeLeft = ticket.TimeLeft, TimeArrived = ticket.TimeArrived
+            };
+            var (tariff, baf) = await ResolveRatesAsync(work, ticket, ct);
+            var entry = schedule.ServiceEntries.Single(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
+            Apply(preview, schedule, entry, tariff, baf);
+            return (preview, tariff, baf);
+        }
+
+        private static string ChargeSnapshot(DispatchTicket ticket)
+        {
+            static string Amount(decimal value)
+            {
+                return value.ToString("G29", CultureInfo.InvariantCulture);
+            }
+            return JsonSerializer.Serialize(new
+            {
+                DispatchRate = Amount(ticket.DispatchRate), BafRate = Amount(ticket.BAFRate), ticket.DispatchChargeType, ticket.BAFChargeType,
+                DispatchDiscount = Amount(ticket.DispatchDiscount), BafDiscount = Amount(ticket.BAFDiscount),
+                DispatchGross = Amount(ticket.DispatchBillingAmount), BafGross = Amount(ticket.BAFBillingAmount),
+                DispatchNet = Amount(ticket.DispatchNetRevenue), BafNet = Amount(ticket.BAFNetRevenue),
+                Gross = Amount(ticket.TotalBilling), Net = Amount(ticket.TotalNetRevenue), ticket.IsManualTariffRate, ticket.IsManualBafRate
+            });
+        }
+
+        public static bool HasChanges(DispatchTicket ticket, DispatchTicket preview)
+        {
+            return ChargeSnapshot(ticket) != ChargeSnapshot(preview);
+        }
+
+        public static string ReviewFingerprint(DispatchTicket ticket, DispatchTicket preview, VesselSchedule schedule)
+        {
+            string snapshot = JsonSerializer.Serialize(new
+            {
+                ticket.DispatchTicketId, ticket.Status, ticket.EditedDate, ticket.DateLeft, ticket.DateArrived, ticket.TimeLeft, ticket.TimeArrived,
+                schedule.Revision, schedule.ApprovedRevision, Stored = ChargeSnapshot(ticket), Proposed = ChargeSnapshot(preview)
+            });
+            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot)));
         }
 
         public static string? Apply(DispatchTicket ticket, VesselSchedule schedule, VesselScheduleServiceEntry entry, TariffRate? rate, BafRate? bafRate)
@@ -83,6 +140,10 @@ namespace IBS.Services.MSAP
 
         public static string? GetBlocker(DispatchTicket ticket, VesselSchedule schedule, VesselScheduleServiceEntry entry, TariffRate? rate, BafRate? bafRate)
         {
+            if (entry.CancelledAt.HasValue)
+            {
+                return "This planned service was cancelled and cannot receive charges.";
+            }
             if (entry.VesselScheduleServiceEntryId != ticket.VesselScheduleServiceEntryId
                 || entry.TugboatId != ticket.TugBoatId || entry.ServiceId != ticket.ServiceId)
             {

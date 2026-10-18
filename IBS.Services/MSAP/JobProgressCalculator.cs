@@ -33,6 +33,28 @@ namespace IBS.Services.MSAP
             var progress = Calculate(job, schedule, tickets, billings, collections);
             if (schedule != null)
             {
+                foreach (var ticket in tickets.Where(t => t.Status == MsapConstants.DispatchTicketStatus.ForBilling && !t.BillingId.HasValue && billings.Count == 0))
+                {
+                    var entry = schedule.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
+                    if (entry == null)
+                    {
+                        continue;
+                    }
+                    var preview = await ScheduledTicketCharges.PreviewAsync(unitOfWork, ticket, schedule, ct);
+                    string? blocker = ScheduledTicketCharges.GetBlocker(preview.Ticket, schedule, entry, preview.Tariff, preview.Baf);
+                    if (blocker == null && !ScheduledTicketCharges.HasChanges(ticket, preview.Ticket))
+                    {
+                        continue;
+                    }
+                    progress.CalculationBlockers[ticket.DispatchTicketId] = $"{ticket.DispatchNumber}: {blocker ?? "Applicable rates changed. Review and recalculate the saved ticket charges."}";
+                    if (progress.Stage >= TariffStage && !progress.Stopped)
+                    {
+                        progress.Stage = TariffStage;
+                        progress.Guidance = "Saved unbilled charges need review against applicable service-date rates. Review and recalculate before preparing billing.";
+                        SetAction(progress, "Review ticket charges", "CustomerOrderSlip", "Details", job!.CustomerOrderSlipId,
+                            ProcedureEnum.EditDispatchTicket, "charge review");
+                    }
+                }
                 foreach (var ticket in tickets.Where(t => t.Status is not (MsapConstants.DispatchTicketStatus.ForBilling or MsapConstants.DispatchTicketStatus.Billed or MsapConstants.DispatchTicketStatus.Deleted)))
                 {
                     var entry = schedule.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
@@ -127,7 +149,7 @@ namespace IBS.Services.MSAP
                 VesselScheduleId = schedule?.VesselScheduleId,
                 CustomerOrderSlipId = job?.CustomerOrderSlipId,
                 CustomerOrderSlipNumber = job?.CustomerOrderSlipNumber,
-                ExpectedTicketCount = schedule?.ServiceEntries.Count ?? 0
+                ExpectedTicketCount = schedule?.ServiceEntries.Count(e => !e.CancelledAt.HasValue) ?? 0
             };
             List<DispatchTicket> active = tickets.Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted).OrderBy(t => t.DispatchTicketId).ToList();
             List<Billing> bills = billings.OrderBy(b => b.MsapBillingId).ToList();
@@ -195,7 +217,7 @@ namespace IBS.Services.MSAP
                 result.Guidance = "Linked records have an unresolved status or billing reference. Ask an authorized user to review them before proceeding.";
                 return result;
             }
-            if (schedule?.ServiceEntries.Any(entry => active.Count(t => t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId
+            if (schedule?.ServiceEntries.Where(entry => !entry.CancelledAt.HasValue).Any(entry => active.Count(t => t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId
                 && t.TugBoatId == entry.TugboatId && t.ServiceId == entry.ServiceId) != 1) == true)
             {
                 result.Stage = 2;

@@ -28,6 +28,11 @@ namespace IBSWeb.Areas.MSAPAdmin.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Close(int year, int month, CancellationToken cancellationToken)
         {
+            if (!MsapConstants.EnforceClosedPeriods)
+            {
+                TempData["error"] = "MSAP month closing is suspended pending agreement on late-ticket handling.";
+                return RedirectToAction(nameof(Index));
+            }
             try
             {
                 var username = User.Identity?.Name ?? "System";

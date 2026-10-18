@@ -10,6 +10,62 @@ namespace IBS.Services.MSAP
 {
     public class CustomerOrderSlipService(IUnitOfWork unitOfWork, ILogger<CustomerOrderSlipService> logger)
     {
+        public async Task<ServiceResult> CancelServiceAsync(int customerOrderSlipId, int entryId, string? reason, string username, string userId, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length > 500 || string.IsNullOrWhiteSpace(userId))
+            {
+                return ServiceResult.Failure("Enter a cancellation reason of up to 500 characters.");
+            }
+            var result = ServiceResult.Failure("The planned service cannot be cancelled in its current state.");
+            try
+            {
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId, ct);
+                    if (schedule == null)
+                    {
+                        return;
+                    }
+                    schedule = await unitOfWork.VesselSchedule.GetForUpdateAsync(schedule.VesselScheduleId, ct);
+                    var job = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(customerOrderSlipId, ct);
+                    var entry = schedule?.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == entryId);
+                    if (entry == null || job?.Status != MsapConstants.CustomerOrderSlipStatus.Open
+                        || schedule!.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled
+                        || await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == customerOrderSlipId, ct) != null
+                        || await unitOfWork.DispatchTicket.GetAsync(t => t.VesselScheduleServiceEntryId == entryId, ct) != null)
+                    {
+                        return;
+                    }
+                    if (entry.CancelledAt.HasValue)
+                    {
+                        result = ServiceResult.Success("This service is already cancelled.");
+                        return;
+                    }
+                    entry.CancelledAt = DateTimeHelper.GetCurrentPhilippineTime();
+                    entry.CancelledByUserId = userId;
+                    entry.CancellationReason = reason.Trim();
+                    if (schedule.ServiceEntries.All(e => e.CancelledAt.HasValue))
+                    {
+                        schedule.Status = MsapConstants.VesselScheduleStatus.Cancelled;
+                        job.Status = MsapConstants.CustomerOrderSlipStatus.Cancelled;
+                    }
+                    schedule.EditedBy = username;
+                    schedule.EditedDate = entry.CancelledAt;
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
+                        $"Cancelled unperformed service #{entryId} on COS #{job.CustomerOrderSlipNumber}. Reason: {entry.CancellationReason}",
+                        "Customer Order Slip", job.CustomerOrderSlipId, job.CustomerOrderSlipNumber) { UserId = userId }, ct);
+                    await unitOfWork.SaveAsync(ct);
+                    result = ServiceResult.Success("Unperformed service cancelled. Its planned row and reason were retained.");
+                }, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to cancel planned service {EntryId}", entryId);
+                return ServiceResult.Failure("Unable to cancel the service. Refresh the COS and try again.");
+            }
+            return result;
+        }
+
         public async Task<IEnumerable<CustomerOrderSlip>> GetAllCustomerOrderSlipsAsync(CancellationToken cancellationToken)
         {
             var customerOrderSlips = await unitOfWork.CustomerOrderSlip.GetAllCustomerOrderSlipsWithDetailsAsync(cancellationToken);

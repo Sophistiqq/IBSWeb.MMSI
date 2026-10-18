@@ -23,7 +23,7 @@
         BafCalculationMethod.Industry => "Industry",
         _ => "Not specified"
     };
-    var canRecalculate = !editing && !calculated && Model.VesselScheduleServiceEntryId.HasValue
+    var canRecalculate = !editing && Model.VesselScheduleServiceEntryId.HasValue
         && ViewData["CanEditTicket"] is true && ViewData["HasBilling"] is not true
         && cos != null && cos.Status == MsapConstants.CustomerOrderSlipStatus.Open
         && !cos.DispatchTickets.Any(t => t.BillingId.HasValue || t.Status == MsapConstants.DispatchTicketStatus.Billed)
@@ -36,7 +36,7 @@
         @if (canRecalculate)
         {
             <button type="button" class="modern-btn-secondary" data-recalculate-ticket="@Model.DispatchTicketId"
-                    data-cos-id="@Model.CustomerOrderSlipId" data-url="@Url.Action("RecalculateCharges", "DispatchTicket")">Recalculate charges</button>
+                    data-cos-id="@Model.CustomerOrderSlipId" data-preview-url="@Url.Action("PreviewCharges", "DispatchTicket")" data-url="@Url.Action("RecalculateCharges", "DispatchTicket")">Recalculate charges</button>
         }
     </div>
     <p class="wf-caption wf-muted">Service date: @(Model.DateLeft?.ToString("dd MMM yyyy") ?? "Not entered") · @(approvalPending ? "Proposed COS discount" : "Approved COS discount"): @(booking?.SkipCosDiscount == true ? "0% · Skipped" : $"{cosDiscount:0.##}%")</p>

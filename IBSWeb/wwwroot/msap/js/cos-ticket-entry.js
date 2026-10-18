@@ -1,12 +1,44 @@
 const initializeCosTicketEntry = () => {
+    document.querySelectorAll('[data-cancel-service]').forEach(button => button.addEventListener('click', async () => {
+        if (button.disabled) return;
+        button.disabled = true;
+        try {
+            const result = await ModernAlert.prompt({
+                title: 'Cancel unperformed service?',
+                text: 'Use this only when the service did not happen. Its planned row and your reason will be retained.',
+                placeholder: 'Reason for cancellation', confirmText: 'Cancel service', cancelText: 'Keep service',
+                validator: value => !value?.trim() || value.trim().length > 500 ? 'Enter a reason of up to 500 characters.' : null
+            });
+            if (!result.isConfirmed) return;
+            const body = new FormData();
+            body.set('__RequestVerificationToken', document.querySelector('input[name="__RequestVerificationToken"]').value);
+            body.set('id', button.dataset.cosId); body.set('entryId', button.dataset.cancelService); body.set('reason', result.value.trim());
+            const response = await fetch(button.dataset.url, { method: 'POST', body, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!response.ok || response.redirected) throw new Error('Cancellation failed');
+            const saved = await response.json();
+            if (!saved.success) { await ModernAlert.error(saved.message || 'The service could not be cancelled.'); return; }
+            await ModernAlert.success(saved.message);
+            window.location.reload();
+        } catch {
+            await ModernAlert.error('Unable to cancel the service. Refresh the COS and try again.');
+        } finally { button.disabled = false; }
+    }));
     const recalculate = document.querySelector('[data-recalculate-ticket]');
     recalculate?.addEventListener('click', async () => {
         if (recalculate.disabled) return;
         recalculate.disabled = true;
         try {
+            const params = new URLSearchParams({ id: recalculate.dataset.recalculateTicket, customerOrderSlipId: recalculate.dataset.cosId });
+            const previewResponse = await fetch(`${recalculate.dataset.previewUrl}?${params}`);
+            if (!previewResponse.ok || previewResponse.redirected) throw new Error('Comparison failed');
+            const review = await previewResponse.json();
+            if (!review.success || !review.data?.fingerprint) { await ModernAlert.error(review.message || 'Unable to compare charges.'); return; }
+            const amount = value => Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const data = review.data;
+            const savedAmount = value => data.hasSavedCharges ? amount(value) : 'Pending';
             const confirmation = await ModernAlert.confirm({
-                title: 'Recalculate ticket charges?',
-                text: 'Use the recorded service times, approved COS terms and applicable service-date rates.',
+                title: 'Apply reviewed ticket charges?',
+                text: `BAF rate: ${savedAmount(data.savedBafRate)} → ${amount(data.proposedBafRate)}<br>Gross charges: ${savedAmount(data.savedGross)} → ${amount(data.proposedGross)}<br>After COS discount: ${savedAmount(data.savedNet)} → ${amount(data.proposedNet)}<br>Uses the actual service date and approved COS terms.`,
                 confirmText: 'Recalculate charges',
                 cancelText: 'Keep reviewing'
             });
@@ -14,6 +46,7 @@ const initializeCosTicketEntry = () => {
             ModernAlert.showLoading('Recalculating charges…');
             const body = new FormData(recalculate.form);
             body.set('id', recalculate.dataset.recalculateTicket);
+            body.set('reviewedFingerprint', data.fingerprint);
             body.set('CustomerOrderSlipId', recalculate.dataset.cosId);
             const response = await fetch(recalculate.dataset.url, {
                 method: 'POST', body, headers: { 'X-Requested-With': 'XMLHttpRequest' }

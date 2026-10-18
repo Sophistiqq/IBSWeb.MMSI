@@ -245,6 +245,9 @@ namespace IBS.DataAccess.MSAP.Data
                 entry.Property(x => x.BafMethod).HasConversion<short>();
                 entry.ToTable(table =>
                 {
+                    table.HasCheckConstraint("ck_schedule_service_entries_cancellation",
+                        "(cancelled_at IS NULL AND cancelled_by_user_id IS NULL AND cancellation_reason IS NULL) OR "
+                        + "(cancelled_at IS NOT NULL AND cancelled_by_user_id IS NOT NULL AND length(trim(cancellation_reason)) > 0 AND cancellation_reason IS NOT NULL)");
                     table.HasCheckConstraint("ck_schedule_service_entries_tariff_basis", "tariff_basis IN (1, 2)");
                     table.HasCheckConstraint("ck_schedule_service_entries_baf_method", "baf_method IN (1, 2, 3, 4)");
                     table.HasCheckConstraint("ck_schedule_service_entries_manual_tariff_rate", "manual_tariff_rate >= 0");

@@ -56,6 +56,24 @@
             </div>
             <p class="wf-caption wf-muted">New dates retain earlier rates. Corrections update only the selected dated entry. Unselected or omitted rows are retained. Approved updates keep this comparison as audit evidence.</p>
         </section>
+        @if (approved && update.RateKind == RateTableKind.BAF)
+        {
+            <section class="wf-panel wf-stack">
+                <h2 class="wf-section-title">Unbilled tickets to review</h2>
+                <p class="wf-caption wf-muted">Saved amounts remain unchanged. Open each ticket to compare and explicitly apply the current service-date charges. Manual BAF and COS with billing are excluded.</p>
+                @if (Model.ImpactLimitReached) { <p class="wf-body">This list checks the latest 200 candidate tickets. Older jobs still check current rates when opened or billed.</p> }
+                <div class="rate-table-scroll"><table class="modern-table">
+                    <thead><tr><th>COS / ticket</th><th>Saved BAF rate</th><th>Applicable BAF rate</th><th>Action</th></tr></thead>
+                    <tbody>
+                    @foreach (var ticket in Model.AffectedTickets)
+                    {
+                        <tr><td>@ticket.CosNumber / @ticket.TicketNumber</td><td>@(ticket.HasSavedCharges ? ticket.SavedBafRate.ToString("N2") : "Pending")</td><td>@ticket.ProposedBafRate.ToString("N2")</td><td>@if (ViewData["CanReviewTickets"] is true) { <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@ticket.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId">Review ticket</a> } else { <span>Operations review required</span> }</td></tr>
+                    }
+                    @if (Model.AffectedTickets.Count == 0) { <tr><td colspan="4">No affected tickets found in the checked unbilled jobs.</td></tr> }
+                    </tbody>
+                </table></div>
+            </section>
+        }
         <section class="wf-panel wf-stack rate-review-notes">
             <h2 class="wf-section-title">Ticket charges and billing</h2>
             <p class="wf-body">Approval activates rates for the applicable service dates. It does not rewrite saved ticket charges, approved manual COS amounts, existing bills or posted records.</p>

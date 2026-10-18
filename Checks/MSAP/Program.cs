@@ -28,6 +28,18 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
+if (args.Contains("--workflow-gaps-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.WorkflowGapCheck.RunAsync();
+    return;
+}
+
+if (args.Contains("--collection-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.CollectionCheck.RunAsync();
+    return;
+}
+
 if (args.Contains("--urgent-entry-only", StringComparer.Ordinal))
 {
     Checks.MSAP.JobProgressCheck.Run();

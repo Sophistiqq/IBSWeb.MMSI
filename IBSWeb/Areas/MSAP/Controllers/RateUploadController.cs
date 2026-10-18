@@ -83,6 +83,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
             ViewData["CanUpload"] = await _access.HasAccessAsync(UserId, ProcedureEnum.ManageRates);
             ViewData["CanApprove"] = await _access.HasAccessAsync(UserId, ProcedureEnum.ApproveRateUpload);
+            ViewData["CanReviewTickets"] = await _access.HasAccessAsync(UserId, ProcedureEnum.EditDispatchTicket);
             return View(model);
         }
 

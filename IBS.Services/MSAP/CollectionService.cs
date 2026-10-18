@@ -191,16 +191,13 @@ namespace IBS.Services.MSAP
                 }
                 decimal available = billing.Balance + (billing.CollectionId.HasValue ? billing.AmountPaid : 0);
                 var due = GetSettlementAmounts(billing, customer, available);
-                if (available <= 0 || payment.AmountToPay <= 0 || payment.AmountToPay > due.Net)
+                if (available <= 0 || payment.AmountToPay <= 0 || payment.AmountToPay != due.Net)
                 {
-                    throw new InvalidOperationException($"Payment for billing #{billing.MsapBillingNumber} must be positive and cannot exceed its remaining net balance ({due.Net:N2}).");
+                    throw new InvalidOperationException($"Billing #{billing.MsapBillingNumber} must be paid in full at its remaining net balance ({due.Net:N2}). Partial payments are not supported.");
                 }
-                decimal proportion = payment.AmountToPay / due.Net;
-                decimal ewt = Math.Round(due.Ewt * proportion, 2);
-                decimal wvat = Math.Round(due.Wvat * proportion, 2);
-                allocations[payment.BillingId] = payment.AmountToPay == due.Net ? available : payment.AmountToPay + ewt + wvat;
-                totalEwt += ewt;
-                totalWvat += wvat;
+                allocations[payment.BillingId] = available;
+                totalEwt += due.Ewt;
+                totalWvat += due.Wvat;
             }
             if (model.EWT != totalEwt || model.WVAT != totalWvat)
             {

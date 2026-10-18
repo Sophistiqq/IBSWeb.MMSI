@@ -519,12 +519,20 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         #endregion
 
+        [HttpGet]
+        [RequireAccess(ProcedureEnum.EditDispatchTicket)]
+        public async Task<IActionResult> PreviewCharges(int id, int customerOrderSlipId, CancellationToken ct)
+        {
+            var result = await dispatchTicketService.PreviewChargesAsync(id, customerOrderSlipId, ct);
+            return Json(new { success = result.IsSuccess, message = result.Message, data = result.Data });
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.EditDispatchTicket, "Access denied. You don't have permission to recalculate ticket charges.")]
-        public async Task<IActionResult> RecalculateCharges(int id, int customerOrderSlipId, CancellationToken ct)
+        public async Task<IActionResult> RecalculateCharges(int id, int customerOrderSlipId, CancellationToken ct, string? reviewedFingerprint)
         {
-            var result = await dispatchTicketService.RecalculateChargesAsync(id, customerOrderSlipId, User.Identity?.Name ?? "System", ct);
+            var result = await dispatchTicketService.RecalculateChargesAsync(id, customerOrderSlipId, User.Identity?.Name ?? "System", ct, reviewedFingerprint);
             return Json(new
             {
                 success = result.IsSuccess,
@@ -697,7 +705,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 }
 
                 var closedMonths = (await unitOfWork.PostedPeriod.GetAllAsync(cancellationToken))
-                    .Where(p => p.IsClosed)
+                    .Where(p => MsapConstants.EnforceClosedPeriods && p.IsClosed)
                     .Select(p => (p.Year, p.Month))
                     .ToHashSet();
                 foreach (var dt in data)
