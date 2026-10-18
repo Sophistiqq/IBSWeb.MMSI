@@ -32,6 +32,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
             var tickets = filterByBillingDate
                 ? await query
+                    .Include(dt => dt.OtherTugChargeLine).ThenInclude(line => line!.Charge)
                     .Include(dt => dt.Customer)
                     .Include(dt => dt.Vessel)
                     .Include(dt => dt.Tugboat)
@@ -45,6 +46,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                     .ThenBy(dt => dt.DispatchNumber)
                     .ToListAsync(cancellationToken)
                 : await query
+                    .Include(dt => dt.OtherTugChargeLine).ThenInclude(line => line!.Charge)
                     .Include(dt => dt.Customer)
                     .Include(dt => dt.Vessel)
                     .Include(dt => dt.Tugboat)

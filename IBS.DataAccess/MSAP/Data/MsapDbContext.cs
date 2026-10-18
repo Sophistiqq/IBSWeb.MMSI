@@ -49,6 +49,9 @@ namespace IBS.DataAccess.MSAP.Data
         public DbSet<BafRate> MsapBafRates { get; set; }
         public DbSet<RateUpload> MsapRateUploads { get; set; }
 
+        public DbSet<OtherTugCharge> MsapOtherTugCharges { get; set; }
+        public DbSet<OtherTugChargeLine> MsapOtherTugChargeLines { get; set; }
+
         public DbSet<CollectionBill> MsapCollectionBills { get; set; }
 
         #endregion
@@ -87,6 +90,22 @@ namespace IBS.DataAccess.MSAP.Data
             builder.Entity<Billing>().HasOne(b => b.BasicBilling).WithOne(b => b.BafBilling)
                 .HasForeignKey<Billing>(b => b.BasicBillingId).OnDelete(DeleteBehavior.Restrict);
             builder.Entity<Collection>().ToTable("mmsi_collections");
+            builder.Entity<OtherTugCharge>(charge =>
+            {
+                charge.ToTable("mmsi_other_tug_charges", table => table.HasCheckConstraint("ck_other_tug_charge_confirmation",
+                    "revision >= 1 AND length(trim(provider_reference)) > 0 AND ((confirmed_at IS NULL AND confirmed_by_user_id IS NULL AND confirmed_by_name IS NULL) OR "
+                    + "(confirmed_at IS NOT NULL AND confirmed_by_user_id IS NOT NULL AND confirmed_by_name IS NOT NULL))"));
+                charge.HasIndex(x => new { x.TugboatOwnerId, x.ProviderReference }).IsUnique();
+                charge.HasOne(x => x.TugboatOwner).WithMany().HasForeignKey(x => x.TugboatOwnerId).OnDelete(DeleteBehavior.Restrict);
+            });
+            builder.Entity<OtherTugChargeLine>(line =>
+            {
+                line.ToTable("mmsi_other_tug_charge_lines", table => table.HasCheckConstraint("ck_other_tug_charge_line_amount", "amount >= 0 AND amount <= 99999999999999.99"));
+                line.Property(x => x.Amount).HasPrecision(18, 2);
+                line.HasIndex(x => x.DispatchTicketId).IsUnique();
+                line.HasOne(x => x.Charge).WithMany(x => x.Lines).HasForeignKey(x => x.OtherTugChargeId).OnDelete(DeleteBehavior.Restrict);
+                line.HasOne(x => x.Ticket).WithOne(x => x.OtherTugChargeLine).HasForeignKey<OtherTugChargeLine>(x => x.DispatchTicketId).OnDelete(DeleteBehavior.Restrict);
+            });
             builder.Entity<CollectionBill>().ToTable("mmsi_collection_bills");
             builder.Entity<Port>().ToTable("mmsi_ports");
             builder.Entity<Terminal>().ToTable("mmsi_terminals");

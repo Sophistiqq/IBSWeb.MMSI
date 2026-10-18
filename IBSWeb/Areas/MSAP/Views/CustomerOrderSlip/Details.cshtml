@@ -123,6 +123,7 @@
                 <partial name="_ActualTicketEntry" model="ticketEntry" />
             </section>
         }
+        <partial name="_OtherTugCharges" model="Model" />
         @if (!string.IsNullOrWhiteSpace(Model.Remarks))
         {
             <section class="wf-panel wf-stack"><h2 class="wf-section-title">Planning notes</h2><p class="wf-body schedule-note">@Model.Remarks</p></section>

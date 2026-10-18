@@ -63,5 +63,7 @@ namespace IBS.Models.MSAP.Enums
 
         ViewRates = 25,
         ManageRates = 26,
+        ManageOtherTugCharges = 27,
+        ConfirmOtherTugCharges = 28,
     }
 }

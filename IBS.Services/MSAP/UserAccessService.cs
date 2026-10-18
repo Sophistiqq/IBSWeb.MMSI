@@ -57,6 +57,8 @@ namespace IBS.Services.MSAP
                 ProcedureEnum.ApproveSchedule => userAccess.CanApproveSchedule,
                 ProcedureEnum.ViewRates => userAccess.CanViewRates || userAccess.CanManageRates || userAccess.CanApproveRateUpload,
                 ProcedureEnum.ManageRates => userAccess.CanManageRates,
+                ProcedureEnum.ManageOtherTugCharges => userAccess.CanManageOtherTugCharges,
+                ProcedureEnum.ConfirmOtherTugCharges => userAccess.CanConfirmOtherTugCharges,
                 ProcedureEnum.ApproveRateUpload => userAccess.CanApproveRateUpload,
                 ProcedureEnum.ApproveFinalBilling => userAccess.CanApproveFinalBilling,
                 ProcedureEnum.AccessTreasury => userAccess.CanAccessTreasury,
@@ -123,7 +125,7 @@ namespace IBS.Services.MSAP
                     await unitOfWork.UserAccess.AddAsync(model, cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
 
-                    AuditTrail auditTrail = await CreateAuditAsync(username, $"Created User Access for {model.DisplayName}. Rate access: view={model.CanViewRates}, prepare={model.CanManageRates}, approve={model.CanApproveRateUpload}.", model.Id, model.UserId);
+                    AuditTrail auditTrail = await CreateAuditAsync(username, $"Created User Access for {model.DisplayName}. Rate access: view={model.CanViewRates}, prepare={model.CanManageRates}, approve={model.CanApproveRateUpload}. Other Tug Charges: prepare={model.CanManageOtherTugCharges}, confirm={model.CanConfirmOtherTugCharges}.", model.Id, model.UserId);
                     await unitOfWork.AuditTrail.AddAsync(auditTrail, cancellationToken);
 
                     await unitOfWork.SaveAsync(cancellationToken);
@@ -149,6 +151,14 @@ namespace IBS.Services.MSAP
                 }
 
                 var changes = new List<string>();
+                if (existing.CanManageOtherTugCharges != model.CanManageOtherTugCharges)
+                {
+                    changes.Add($"Prepare Other Tug Charges: {existing.CanManageOtherTugCharges} → {model.CanManageOtherTugCharges}");
+                }
+                if (existing.CanConfirmOtherTugCharges != model.CanConfirmOtherTugCharges)
+                {
+                    changes.Add($"Confirm Other Tug Charges: {existing.CanConfirmOtherTugCharges} → {model.CanConfirmOtherTugCharges}");
+                }
                 if (existing.CanViewRates != model.CanViewRates)
                 {
                     changes.Add($"View Rates: {existing.CanViewRates} → {model.CanViewRates}");
@@ -215,6 +225,8 @@ namespace IBS.Services.MSAP
                     existing.CanApproveSchedule = model.CanApproveSchedule;
                     existing.CanViewRates = model.CanViewRates;
                     existing.CanManageRates = model.CanManageRates;
+                    existing.CanManageOtherTugCharges = model.CanManageOtherTugCharges;
+                    existing.CanConfirmOtherTugCharges = model.CanConfirmOtherTugCharges;
                     existing.CanApproveRateUpload = model.CanApproveRateUpload;
                     existing.CanApproveFinalBilling = model.CanApproveFinalBilling;
                     existing.CanAccessTreasury = model.CanAccessTreasury;

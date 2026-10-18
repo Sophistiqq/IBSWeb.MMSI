@@ -36,7 +36,7 @@
             ProcedureEnum.CreateCustomerOrderSlip,
             ProcedureEnum.EditCustomerOrderSlip,
             ProcedureEnum.DeleteCustomerOrderSlip,
-            ProcedureEnum.CloseCustomerOrderSlip);
+            ProcedureEnum.CloseCustomerOrderSlip, ProcedureEnum.ManageOtherTugCharges, ProcedureEnum.ConfirmOtherTugCharges);
     }
 
     async Task<bool> ModernHasMsapImportAccess()
@@ -114,6 +114,9 @@
                                                     <div class="mnav-link-sub">Calendar &amp; daily planning</div>
                                                 </div>
                                             </a>
+                                        }
+                                        @if (await ModernHasAnyAccess(ProcedureEnum.CreateCustomerOrderSlip, ProcedureEnum.EditCustomerOrderSlip, ProcedureEnum.DeleteCustomerOrderSlip, ProcedureEnum.CloseCustomerOrderSlip, ProcedureEnum.ManageOtherTugCharges, ProcedureEnum.ConfirmOtherTugCharges))
+                                        {
                                             <a class="mnav-mega-link"
                                                asp-area="MSAP" asp-controller="CustomerOrderSlip" asp-action="Index"
                                                role="menuitem">

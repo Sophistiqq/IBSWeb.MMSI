@@ -21,6 +21,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         IUnitOfWork unitOfWork,
         CustomerOrderSlipService customerOrderSlipService,
         DispatchTicketService dispatchTicketService,
+        OtherTugChargeService otherTugCharges,
         ITerminalService terminalService,
         ICloudStorageService cloudStorageService,
         IAccessControlService accessControl,
@@ -46,7 +47,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ProcedureEnum.CreateCustomerOrderSlip,
             ProcedureEnum.EditCustomerOrderSlip,
             ProcedureEnum.DeleteCustomerOrderSlip,
-            ProcedureEnum.CloseCustomerOrderSlip)]
+            ProcedureEnum.CloseCustomerOrderSlip,
+            ProcedureEnum.ManageOtherTugCharges,
+            ProcedureEnum.ConfirmOtherTugCharges)]
         public async Task<IActionResult> Index()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -65,7 +68,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ProcedureEnum.CreateCustomerOrderSlip,
             ProcedureEnum.EditCustomerOrderSlip,
             ProcedureEnum.DeleteCustomerOrderSlip,
-            ProcedureEnum.CloseCustomerOrderSlip)]
+            ProcedureEnum.CloseCustomerOrderSlip,
+            ProcedureEnum.ManageOtherTugCharges,
+            ProcedureEnum.ConfirmOtherTugCharges)]
         public async Task<IActionResult> GetCustomerOrderSlipList([FromForm] DataTablesParameters parameters, CancellationToken cancellationToken)
         {
             try
@@ -155,7 +160,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ProcedureEnum.CreateCustomerOrderSlip,
             ProcedureEnum.EditCustomerOrderSlip,
             ProcedureEnum.DeleteCustomerOrderSlip,
-            ProcedureEnum.CloseCustomerOrderSlip)]
+            ProcedureEnum.CloseCustomerOrderSlip,
+            ProcedureEnum.ManageOtherTugCharges,
+            ProcedureEnum.ConfirmOtherTugCharges)]
         public async Task<IActionResult> Details(int id, CancellationToken cancellationToken, int? expectedServiceEntryId = null, int? dispatchTicketId = null, bool editTicket = false)
         {
             var customerOrderSlip = await customerOrderSlipService.GetCustomerOrderSlipByIdAsync(id, cancellationToken);
@@ -176,7 +183,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ViewBag.CanDeleteTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteDispatchTicket);
             ViewBag.CanEditCustomerOrderSlip = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditCustomerOrderSlip);
             ViewBag.CanCreateDispatchTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateDispatchTicket);
-            ViewData["CanViewActualTicket"] = ViewBag.CanSetTariff == true || ViewBag.CanApproveTariff == true
+            ViewData["CanManageOtherTugCharges"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ManageOtherTugCharges);
+            ViewData["CanViewOtherTugCharges"] = ViewData["CanManageOtherTugCharges"] is true || userId != null
+                && await accessControl.HasAccessAsync(userId, ProcedureEnum.ConfirmOtherTugCharges);
+            ViewData["OtherTugCharges"] = await otherTugCharges.GetForCosAsync(id, cancellationToken);
+            ViewData["CanViewActualTicket"] = ViewData["CanViewOtherTugCharges"] is true || ViewBag.CanSetTariff == true || ViewBag.CanApproveTariff == true
                 || ViewBag.CanCreateDispatchTicket == true || ViewBag.CanEditTicket == true || ViewBag.CanDeleteTicket == true
                 || (userId != null && (await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateBilling)
                     || await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveFinalBilling)
@@ -271,7 +282,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ProcedureEnum.CreateCustomerOrderSlip,
             ProcedureEnum.EditCustomerOrderSlip,
             ProcedureEnum.DeleteCustomerOrderSlip,
-            ProcedureEnum.CloseCustomerOrderSlip)]
+            ProcedureEnum.CloseCustomerOrderSlip,
+            ProcedureEnum.ManageOtherTugCharges,
+            ProcedureEnum.ConfirmOtherTugCharges)]
         public async Task<IActionResult> Progress(int? customerOrderSlipId, List<int>? billingIds, List<int>? dispatchTicketIds, int? actionStage, CancellationToken cancellationToken)
         {
             ViewData["JobProgressActionStage"] = actionStage;

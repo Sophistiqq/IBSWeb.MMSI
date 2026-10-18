@@ -221,7 +221,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     ws.Cells[row, 26].Value = NullIfZero(t.DispatchBillingAmount);
                     ws.Cells[row, 27].Value = NullIfZero(t.BAFRate);
                     ws.Cells[row, 28].Value = NullIfZero(t.BAFBillingAmount);
-                    ws.Cells[row, 29].Value = NullIfZero(t.ApOtherTugs);
+                    ws.Cells[row, 29].Value = t.OtherTugCostPending ? "Pending" : t.OtherTugChargeLine?.Charge.ConfirmedAt != null ? t.ApOtherTugs : NullIfZero(t.ApOtherTugs);
                     ws.Cells[row, 30].Value = t.Billing?.Collection?.MsapCollectionNumber;
                     ws.Cells[row, 31].Value = t.Billing?.Collection?.CheckNumber?.Trim();
                     ws.Cells[row, 32].Value = t.Billing?.Collection?.CheckDate?.ToString("MM/dd/yyyy");
@@ -562,10 +562,14 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     ws.Cells[row, 31].Value = 0m;
                     var balance = netOfVat - (decimal)ws.Cells[row, 28].Value - (decimal)ws.Cells[row, 29].Value - (decimal)ws.Cells[row, 30].Value - (decimal)ws.Cells[row, 31].Value;
                     ws.Cells[row, 32].Value = balance;
-                    ws.Cells[row, 33].Value = t.ApOtherTugs;
+                    ws.Cells[row, 33].Value = t.OtherTugCostPending ? "Pending" : t.ApOtherTugs;
                     var apNetOfVat = t.ApOtherTugsIncludesVat ? Math.Round(t.ApOtherTugs / 1.12m, 2) : t.ApOtherTugs;
-                    ws.Cells[row, 34].Value = apNetOfVat;
-                    ws.Cells[row, 35].Value = balance - apNetOfVat;
+                    ws.Cells[row, 34].Value = t.OtherTugCostPending ? null : apNetOfVat;
+                    ws.Cells[row, 35].Value = t.OtherTugCostPending ? null : balance - apNetOfVat;
+                    if (t.OtherTugCostPending)
+                    {
+                        ws.Cells[row, 33].AddComment("Provider charge pending confirmation. This service is excluded from known net-sales totals until its cost is confirmed.", "MMSI");
+                    }
 
                     // Number formats for detail section
                     ws.Cells[row, 15].Style.Numberformat.Format = "#0.00_);";
@@ -608,7 +612,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     var ownerName = t.Tugboat.TugboatOwner?.TugboatOwnerName;
                     if (ownerName != null && ownerNameToCol.TryGetValue(ownerName, out var apCol))
                     {
-                        ws.Cells[row, apCol].Value = ws.Cells[row, 33].Value;
+                        ws.Cells[row, apCol].Value = t.OtherTugCostPending ? null : t.ApOtherTugs;
                         ws.Cells[row, apCol].Style.Numberformat.Format = "#,##0.00_);[Red](#,##0.00);";
                     }
 

@@ -28,6 +28,13 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
+if (args.Contains("--other-tugs-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.OtherTugChargeCheck.RunAsync();
+    await Checks.MSAP.RateAccessCheck.RunAsync();
+    return;
+}
+
 if (args.Contains("--workflow-gaps-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.WorkflowGapCheck.RunAsync();
@@ -116,7 +123,7 @@ Check(services.GetRequiredService<IBS.DataAccess.MSAP.Repository.IRepository.IUn
 
 var actions = services.GetRequiredService<IActionDescriptorCollectionProvider>().ActionDescriptors.Items.OfType<ControllerActionDescriptor>().ToList();
 var moduleActions = actions.Where(a => a.ControllerTypeInfo.Namespace?.StartsWith("IBSWeb.Areas.MSAP", StringComparison.Ordinal) == true).ToList();
-Check(moduleActions.Select(a => a.ControllerTypeInfo).Distinct().Count() == 30, "An imported controller is missing.");
+Check(moduleActions.Select(a => a.ControllerTypeInfo).Distinct().Count() == 31, "An imported controller is missing.");
 Check(moduleActions.All(a => a.RouteValues["area"] is "MSAP" or "MSAPAdmin" or "MSAPSuperAdmin"), "An MSAP controller collides with a base area.");
 Check(moduleActions.All(action => action.FilterDescriptors.Any(filter =>
     filter.Filter is AuthorizeFilter authorize && authorize.AuthorizeData?.Any(data => data.Policy == MsapRoles.AccessPolicy) == true)),

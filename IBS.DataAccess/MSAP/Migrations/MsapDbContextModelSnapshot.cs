@@ -2280,6 +2280,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("can_close_customer_order_slip");
 
+                    b.Property<bool>("CanConfirmOtherTugCharges")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_confirm_other_tug_charges");
+
                     b.Property<bool>("CanCreateBilling")
                         .HasColumnType("boolean")
                         .HasColumnName("can_create_billing");
@@ -2331,6 +2335,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Property<bool>("CanManageMsapImport")
                         .HasColumnType("boolean")
                         .HasColumnName("can_manage_msap_import");
+
+                    b.Property<bool>("CanManageOtherTugCharges")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_manage_other_tug_charges");
 
                     b.Property<bool>("CanManageRates")
                         .HasColumnType("boolean")
@@ -2407,6 +2415,134 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasName("pk_mmsi_vessels");
 
                     b.ToTable("mmsi_vessels", "msap");
+                });
+
+            modelBuilder.Entity("IBS.Models.MSAP.OtherTugCharge", b =>
+                {
+                    b.Property<int>("OtherTugChargeId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("other_tug_charge_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("OtherTugChargeId"));
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<string>("ConfirmedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("confirmed_by_name");
+
+                    b.Property<string>("ConfirmedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("confirmed_by_user_id");
+
+                    b.Property<DateOnly>("DocumentDate")
+                        .HasColumnType("date")
+                        .HasColumnName("document_date");
+
+                    b.Property<string>("DocumentName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("document_name");
+
+                    b.Property<bool>("IncludesVat")
+                        .HasColumnType("boolean")
+                        .HasColumnName("includes_vat");
+
+                    b.Property<string>("PreparedByName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("prepared_by_name");
+
+                    b.Property<string>("PreparedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("prepared_by_user_id");
+
+                    b.Property<string>("ProviderName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("provider_name");
+
+                    b.Property<string>("ProviderReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("provider_reference");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("remarks");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<int>("TugboatOwnerId")
+                        .HasColumnType("integer")
+                        .HasColumnName("tugboat_owner_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("OtherTugChargeId")
+                        .HasName("pk_mmsi_other_tug_charges");
+
+                    b.HasIndex("TugboatOwnerId", "ProviderReference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_mmsi_other_tug_charges_tugboat_owner_id_provider_reference");
+
+                    b.ToTable("mmsi_other_tug_charges", "msap", t =>
+                        {
+                            t.HasCheckConstraint("ck_other_tug_charge_confirmation", "revision >= 1 AND length(trim(provider_reference)) > 0 AND ((confirmed_at IS NULL AND confirmed_by_user_id IS NULL AND confirmed_by_name IS NULL) OR (confirmed_at IS NOT NULL AND confirmed_by_user_id IS NOT NULL AND confirmed_by_name IS NOT NULL))");
+                        });
+                });
+
+            modelBuilder.Entity("IBS.Models.MSAP.OtherTugChargeLine", b =>
+                {
+                    b.Property<int>("OtherTugChargeLineId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("other_tug_charge_line_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("OtherTugChargeLineId"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<int>("DispatchTicketId")
+                        .HasColumnType("integer")
+                        .HasColumnName("dispatch_ticket_id");
+
+                    b.Property<int>("OtherTugChargeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("other_tug_charge_id");
+
+                    b.HasKey("OtherTugChargeLineId")
+                        .HasName("pk_mmsi_other_tug_charge_lines");
+
+                    b.HasIndex("DispatchTicketId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_mmsi_other_tug_charge_lines_dispatch_ticket_id");
+
+                    b.HasIndex("OtherTugChargeId")
+                        .HasDatabaseName("ix_mmsi_other_tug_charge_lines_other_tug_charge_id");
+
+                    b.ToTable("mmsi_other_tug_charge_lines", "msap", t =>
+                        {
+                            t.HasCheckConstraint("ck_other_tug_charge_line_amount", "amount >= 0 AND amount <= 99999999999999.99");
+                        });
                 });
 
             modelBuilder.Entity("IBS.Models.MSAP.RateUpload", b =>
@@ -3252,6 +3388,39 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Navigation("TugboatOwner");
                 });
 
+            modelBuilder.Entity("IBS.Models.MSAP.OtherTugCharge", b =>
+                {
+                    b.HasOne("IBS.Models.MSAP.MasterFile.TugboatOwner", "TugboatOwner")
+                        .WithMany()
+                        .HasForeignKey("TugboatOwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_mmsi_other_tug_charges_msap_tugboat_owners_tugboat_owner_id");
+
+                    b.Navigation("TugboatOwner");
+                });
+
+            modelBuilder.Entity("IBS.Models.MSAP.OtherTugChargeLine", b =>
+                {
+                    b.HasOne("IBS.Models.MSAP.DispatchTicket", "Ticket")
+                        .WithOne("OtherTugChargeLine")
+                        .HasForeignKey("IBS.Models.MSAP.OtherTugChargeLine", "DispatchTicketId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_mmsi_other_tug_charge_lines_mmsi_dispatch_tickets_dispatch_");
+
+                    b.HasOne("IBS.Models.MSAP.OtherTugCharge", "Charge")
+                        .WithMany("Lines")
+                        .HasForeignKey("OtherTugChargeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_mmsi_other_tug_charge_lines_mmsi_other_tug_charges_other_tu");
+
+                    b.Navigation("Charge");
+
+                    b.Navigation("Ticket");
+                });
+
             modelBuilder.Entity("IBS.Models.MSAP.TariffRate", b =>
                 {
                     b.HasOne("IBS.Models.MSAP.MasterFile.Customer", "Customer")
@@ -3409,6 +3578,16 @@ namespace IBS.DataAccess.MSAP.Migrations
             modelBuilder.Entity("IBS.Models.MSAP.CustomerOrderSlip", b =>
                 {
                     b.Navigation("DispatchTickets");
+                });
+
+            modelBuilder.Entity("IBS.Models.MSAP.DispatchTicket", b =>
+                {
+                    b.Navigation("OtherTugChargeLine");
+                });
+
+            modelBuilder.Entity("IBS.Models.MSAP.OtherTugCharge", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("IBS.Models.MSAP.VesselSchedule", b =>

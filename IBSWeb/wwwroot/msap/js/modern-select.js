@@ -60,8 +60,17 @@ const ModernSelect = {
         $container.append($trigger);
         $select.after($container);
 
+        const $validation = $('<span class="text-danger" role="alert" hidden></span>');
+        $container.after($validation);
+        $select.on('invalid', function(e) {
+            e.preventDefault();
+            $trigger.addClass('is-invalid').attr('aria-invalid', 'true');
+            $validation.text(this.validationMessage).prop('hidden', false);
+            $trigger[0].focus();
+        });
+
         const syncDisabled = () => {
-            const disabled = $select.prop('disabled');
+            const disabled = $select.is(':disabled');
             $trigger.toggleClass('disabled', disabled).attr('aria-disabled', String(disabled)).attr('tabindex', disabled ? '-1' : '0');
             if (disabled) {
                 $dropdown.removeClass('show');
@@ -95,7 +104,7 @@ const ModernSelect = {
         let focusOpened = false;
 
         $trigger.on('focus', function() {
-            if ($select.prop('disabled')) return;
+            if ($select.is(':disabled')) return;
             if (!$dropdown.hasClass('show')) {
                 $('.modern-select-dropdown').not($dropdown).removeClass('show');
                 $('.modern-select-trigger').not($trigger).removeClass('active');
@@ -117,7 +126,7 @@ const ModernSelect = {
         $trigger.on('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            if ($select.prop('disabled')) return;
+            if ($select.is(':disabled')) return;
 
             if (focusOpened) {
                 focusOpened = false;
@@ -148,8 +157,8 @@ const ModernSelect = {
         });
 
         const selectOption = ($opt) => {
-            if ($select.prop('disabled')) return;
-            const val = $opt.data('value');
+            if ($select.is(':disabled')) return;
+            const val = $opt.attr('data-value');
             const text = $opt.text();
 
             // Find next visible focusable element in DOM order after the trigger
@@ -165,7 +174,8 @@ const ModernSelect = {
             };
             const nextEl = findNextFocusable();
 
-            $select.val(val).trigger('change');
+            $select.val(val);
+            $select[0].dispatchEvent(new Event('change', { bubbles: true }));
             $trigger.find('.selected-text').text(text);
             $dropdown.removeClass('show');
             $trigger.removeClass('active');
@@ -291,7 +301,9 @@ const ModernSelect = {
                 $optionsContainer.find('.modern-select-option').removeClass('selected');
             }
             // sync validation state to trigger element
-            $trigger.toggleClass('is-invalid', $select.prop('required') && !val);
+            const invalid = !$select[0].validity.valid;
+            $trigger.toggleClass('is-invalid', invalid).attr('aria-invalid', String(invalid));
+            $validation.text(invalid ? $select[0].validationMessage : '').prop('hidden', !invalid);
         });
 
         // Close on scroll to avoid disconnected dropdown

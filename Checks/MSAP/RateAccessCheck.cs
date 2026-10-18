@@ -32,6 +32,23 @@ namespace Checks.MSAP
                 }
             }
             await CheckAsync(false, false, false);
+            if (await service.CheckAccess(access.UserId, ProcedureEnum.ManageOtherTugCharges)
+                || await service.CheckAccess(access.UserId, ProcedureEnum.ConfirmOtherTugCharges))
+            {
+                throw new InvalidOperationException("Unassigned provider-charge access was granted.");
+            }
+            access.CanManageOtherTugCharges = true;
+            if (!await service.CheckAccess(access.UserId, ProcedureEnum.ManageOtherTugCharges)
+                || await service.CheckAccess(access.UserId, ProcedureEnum.ConfirmOtherTugCharges))
+            {
+                throw new InvalidOperationException("Preparing provider charges granted confirmation.");
+            }
+            access.CanConfirmOtherTugCharges = true;
+            if (!await service.CheckAccess(access.UserId, ProcedureEnum.ConfirmOtherTugCharges))
+            {
+                throw new InvalidOperationException("Explicit provider-charge confirmation was denied.");
+            }
+            access.CanManageOtherTugCharges = access.CanConfirmOtherTugCharges = false;
             access.CanViewRates = true;
             await CheckAsync(true, false, false);
             access.CanViewRates = false;
@@ -46,6 +63,11 @@ namespace Checks.MSAP
             {
                 role = adminRole;
                 await CheckAsync(true, true, true);
+                if (!await service.CheckAccess(access.UserId, ProcedureEnum.ManageOtherTugCharges)
+                    || !await service.CheckAccess(access.UserId, ProcedureEnum.ConfirmOtherTugCharges))
+                {
+                    throw new InvalidOperationException("Administrator provider-charge access was denied.");
+                }
             }
             role = null;
             access.CanViewRates = access.CanManageRates = access.CanApproveRateUpload = true;

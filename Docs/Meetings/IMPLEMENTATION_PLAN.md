@@ -1,5 +1,16 @@
 # MSAP schedule/COS implementation plan
 
+## Important discussion item — proposed AP Other Tugs capture and review
+
+**Development proposal, 18 October 2026 — not a requirement established in the meeting.** The user authorized implementation for review, but the placement, responsibilities and controls below were decided in this development discussion and must be presented to MMSI Operations/Finance for their thoughts before treating them as an accepted business policy.
+
+- Place **Other Tug Charges** in COS Details against recorded subcontractor tickets, separately from Operations' actual-ticket form. Actual service recording does not require the provider charge, and customer billing is not blocked just because the provider's invoice/cost has not arrived.
+- Proposed responsibility: Finance records the provider's reference/date, supporting PDF/image, final allocated amounts, VAT-inclusion flag and remarks; an authorized reviewer confirms the saved bill. Exact personnel and whether a separate confirmation is appropriate require client feedback. New explicit preparation and confirmation permissions default off for MSAP Users; Admin/SuperAdmin can perform both; no different-person confirmation rule is imposed. Supporting documents are optional when a provider reference is supplied. These controls also need their feedback.
+- A provider bill may allocate amounts across multiple tickets/tugboats/COS for the same external tugboat owner. Derive the provider from the recorded tugboat's owner, retain that identity and reference, prevent duplicate owner/reference bills and duplicate ticket allocations. Current scope is one provider-charge allocation per ticket; installments, multiple provider bills per ticket and charge reversals require a later agreed workflow.
+- Save drafts for review without changing AP reporting. Confirmation checks the reviewed revision and linked approved COS, locks the provider charge, and copies confirmed allocations to existing AP Other Tugs report fields. Capture full actor names plus stable IDs and audit before/after allocations. Missing is pending; explicitly confirmed zero is valid. Pending provider costs must not be presented as confirmed zero or included in known net-sales totals.
+- The VAT flag retains the current report convention only; it does not establish supplier VAT/withholding treatment or invent GL accounts. Those remain subject to Accounting confirmation. Provider references are normalized to uppercase for duplicate prevention.
+- **Payment stays in IBS.** This MSAP work creates no payment voucher, supplier payable journal or GL posting, and does not claim an IBS payment status. Explicit owner-to-IBS-supplier linkage and the planned Tugboat Trade Type/payment integration remain deferred. No navbar workspace/company restructuring is included. Migration `20261018013929_AddOtherTugChargeReview` supplies the charge tables, allocation uniqueness and explicit User permissions; it is supplied for the user to apply, not applied by the agent.
+
 ## Important deferred direction — tugboat workspaces and IBS integration
 
 User decision, 18 October 2026: keep the current implementation focused on MSAP. Record the following as important future work; do not introduce the navbar selector or restructure company scope in this phase.

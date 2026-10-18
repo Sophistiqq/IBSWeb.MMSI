@@ -131,6 +131,13 @@ namespace IBS.Models.MSAP
         [Column(TypeName = "numeric(18,2)")]
         public decimal TotalNetRevenue { get; set; }
 
+        public OtherTugChargeLine? OtherTugChargeLine { get; set; }
+
+        [NotMapped]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool OtherTugCostPending => !Tugboat.IsCompanyOwned && ApOtherTugs == 0
+            && OtherTugChargeLine?.Charge.ConfirmedAt == null;
+
         public decimal ApOtherTugs { get; set; }
         public bool ApOtherTugsIncludesVat { get; set; } = true;
 

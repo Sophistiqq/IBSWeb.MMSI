@@ -24,7 +24,7 @@
     bool canViewCos = userId != null && await AccessControl.HasAnyAccessAsync(userId, ProcedureEnum.ApproveSchedule,
         ProcedureEnum.CreateDispatchTicket, ProcedureEnum.EditDispatchTicket, ProcedureEnum.SetTariff, ProcedureEnum.ApproveTariff,
         ProcedureEnum.CreateBilling, ProcedureEnum.ApproveFinalBilling, ProcedureEnum.CreateCollection,
-        ProcedureEnum.CreateCustomerOrderSlip, ProcedureEnum.EditCustomerOrderSlip, ProcedureEnum.DeleteCustomerOrderSlip, ProcedureEnum.CloseCustomerOrderSlip);
+        ProcedureEnum.CreateCustomerOrderSlip, ProcedureEnum.EditCustomerOrderSlip, ProcedureEnum.DeleteCustomerOrderSlip, ProcedureEnum.CloseCustomerOrderSlip, ProcedureEnum.ManageOtherTugCharges, ProcedureEnum.ConfirmOtherTugCharges);
     var reviewBill = Model.LinkedBillings.FirstOrDefault(b => b.Status == MsapConstants.BillingStatus.ForPosting) ?? Model.LinkedBillings.FirstOrDefault();
     var actionUrl = !canAct ? null : Url.Action(Model.ActionName, Model.ActionController, new
     {

@@ -48,6 +48,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                     .ThenInclude(t => t.Port)
                 .Include(j => j.DispatchTickets.Where(dt => dt.Status != MsapConstants.DispatchTicketStatus.Deleted))
                     .ThenInclude(dt => dt.Tugboat)
+                    .ThenInclude(t => t.TugboatOwner)
                 .Include(j => j.DispatchTickets.Where(dt => dt.Status != MsapConstants.DispatchTicketStatus.Deleted))
                     .ThenInclude(dt => dt.TugMaster)
                 .FirstOrDefaultAsync(j => j.CustomerOrderSlipId == id, cancellationToken);
