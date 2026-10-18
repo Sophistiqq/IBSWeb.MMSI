@@ -7,6 +7,7 @@ using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.MasterFile;
 using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP;
+using IBS.Utility.MSAP.Constants;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -106,7 +107,7 @@ namespace Checks.MSAP
 
         private static void CheckCharges()
         {
-            var schedule = new VesselSchedule { Revision = 1, ApprovedRevision = 1, CosDiscountPercent = 10m };
+            var schedule = new VesselSchedule { Revision = 1, ApprovedRevision = 1, Status = MsapConstants.VesselScheduleStatus.Confirmed, CosDiscountPercent = 10m };
             var entry = new VesselScheduleServiceEntry { VesselScheduleServiceEntryId = 1, TugboatId = 1, ServiceId = 1, TariffBasis = TariffChargeBasis.PerHour };
             var ticket = new DispatchTicket
             {

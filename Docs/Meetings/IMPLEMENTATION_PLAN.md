@@ -1,5 +1,8 @@
 # MSAP schedule/COS implementation plan
 
+## Urgent service entry — 18 October 2026
+
+Pending schedules can open the existing COS ticket form through **Record urgent service**, using the existing Create Dispatch Ticket permission. This creates/reuses the linked COS without approving the schedule. Factual tickets retain their stable service-row links, actual dates/times and supporting files; charges remain pending and billing stays blocked. Schedule approval retains the COS/tickets and applies the normal service-date rates and approved terms. Missing rates still leave calculation pending. Existing closed-period, completeness, approval and audit controls remain in force. Bookings with tickets cannot be revised. No automatic approval or separate urgent-entry permission/deadline was introduced.
 
 ## Rate maintenance clarification — 18 October 2026
 

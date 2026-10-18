@@ -28,6 +28,13 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
+if (args.Contains("--urgent-entry-only", StringComparer.Ordinal))
+{
+    Checks.MSAP.JobProgressCheck.Run();
+    Checks.MSAP.UrgentEntryCheck.Run();
+    return;
+}
+
 if (args.Contains("--rate-access-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.RateAccessCheck.RunAsync();

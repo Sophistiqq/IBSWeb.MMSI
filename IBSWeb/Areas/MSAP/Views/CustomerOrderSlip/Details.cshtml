@@ -7,14 +7,14 @@
     var progress = (JobProgressViewModel)ViewBag.JobProgress;
     var entries = booking?.ServiceEntries ?? new List<VesselScheduleServiceEntry>();
     var pendingServices = entries.Where(entry => !Model.DispatchTickets.Any(ticket => ticket.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId)).ToList();
+    var approvalPending = booking != null && (booking.ApprovedRevision != booking.Revision || booking.Status == MsapConstants.VesselScheduleStatus.Tentative);
     var bookingClosed = booking?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
     var canRecord = ViewBag.CanCreateDispatchTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open
-        && !bookingClosed && ViewBag.HasBilling != true && (booking == null || (booking.ApprovedRevision == booking.Revision
-            && booking.Status is MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress));
+        && !bookingClosed && ViewBag.HasBilling != true;
     ViewData["CanRecordExpectedService"] = canRecord;
     var tugIds = entries.Select(entry => entry.TugboatId).Concat(Model.DispatchTickets.Select(ticket => ticket.TugBoatId)).Distinct().ToList();
     var statusLabel = bookingClosed && booking != null ? MsapConstants.VesselScheduleStatus.GetDisplayName(booking.Status)
-        : booking != null && booking.ApprovedRevision != booking.Revision ? "Pending reapproval"
+        : approvalPending ? booking!.ApprovedRevision.HasValue ? "Pending reapproval" : "Approval pending"
         : booking != null && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open ? "COS approved"
         : MsapConstants.CustomerOrderSlipStatus.GetDisplayName(Model.Status);
     var ticketEntry = ViewBag.ActualTicketEntry as DispatchTicketViewModel;
@@ -30,7 +30,7 @@
         @Html.AntiForgeryToken()
         <header class="wf-page-header">
             <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb"><li><a asp-action="Index">COS records</a></li><li aria-current="page">@Model.CustomerOrderSlipNumber</li></ol></nav>
-            <h1 class="wf-page-title" data-page-header>COS details &amp; tickets</h1>
+            <h1 class="wf-page-title" data-page-header>@(approvalPending ? "Urgent service entry" : "COS details & tickets")</h1>
             <a asp-action="Index" class="modern-btn-secondary wf-page-action">Back to list</a>
             <div class="wf-page-description cos-details-status">
                 <span class="schedule-status-pill">@statusLabel</span>
@@ -41,6 +41,10 @@
                 }
             </div>
         </header>
+        @if (approvalPending)
+        {
+            <p class="wf-panel wf-body">Approval pending · Actual ticket entry is allowed. Charges and billing remain pending until schedule approval.</p>
+        }
         <section class="wf-panel wf-panel--compact wf-stack" id="cosBookingDetails" aria-label="COS booking details">
             <dl class="schedule-review-fields cos-details-fields">
                 <div><dt class="wf-caption wf-muted">Customer</dt><dd class="wf-value">@Model.Customer.CustomerName</dd></div>

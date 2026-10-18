@@ -39,7 +39,7 @@ namespace IBS.Services.MSAP
                         .Where(s => s.Status == MsapConstants.VesselScheduleStatus.Tentative
                             && (s.CustomerId == null || s.Customer!.Company == MsapConstants.Company_MMSI));
                     model.ScheduleReviews = await reviews.CountAsync(ct);
-                    model.ScheduleReapprovals = await reviews.CountAsync(s => s.CustomerOrderSlipId != null, ct);
+                    model.ScheduleReapprovals = await reviews.CountAsync(s => s.ApprovedRevision != null, ct);
                     model.ScheduleReviewItems = await reviews.Include(s => s.Customer).Include(s => s.Vessel)
                         .OrderBy(s => s.CreatedDate).ThenBy(s => s.VesselScheduleId).Take(6).ToListAsync(ct);
                 }

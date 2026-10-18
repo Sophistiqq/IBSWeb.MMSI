@@ -3,7 +3,7 @@
     var closed = Model.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
     var pending = !closed && (!Model.CustomerOrderSlipId.HasValue || Model.ApprovedRevision != Model.Revision || Model.Status == MsapConstants.VesselScheduleStatus.Tentative);
     var canApprove = pending && ViewBag.CanConfirm == true;
-    var reapproval = Model.CustomerOrderSlipId.HasValue;
+    var reapproval = Model.ApprovedRevision.HasValue;
     ViewData["Title"] = pending ? "Review schedule" : "Schedule details";
     ViewData["IsFullWidth"] = true;
     ViewData["BookingProgressReview"] = pending;
@@ -29,6 +29,12 @@
                 @if (Model.CustomerOrderSlipId.HasValue)
                 {
                     <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" class="modern-btn-secondary wf-page-action">Open COS</a>
+                }
+                @if (pending && !Model.CustomerOrderSlipId.HasValue && Model.ServiceEntries.Count > 0 && ViewBag.CanRecordTicket == true)
+                {
+                    <form asp-action="UrgentEntry" asp-route-id="@Model.VesselScheduleId" method="post">
+                        <button type="submit" class="modern-btn-secondary wf-page-action">Record urgent service</button>
+                    </form>
                 }
                 <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary wf-page-action">@(pending ? "Back to review list" : "Back to calendar")</a>
             </div>
@@ -166,7 +172,7 @@
             {
                 <section class="wf-panel wf-stack">
                     <h2 class="wf-section-title">After approval</h2>
-                    <p class="wf-body wf-muted">@(reapproval ? "The existing COS is retained and this schedule revision is approved." : "The linked COS is created for this booking. Actual service tickets are recorded after service.")</p>
+                    <p class="wf-body wf-muted">@(reapproval ? "The existing COS is retained and this schedule revision is approved." : "The linked COS is created or retained for this booking. Any urgent tickets are retained and their charges calculated from approved terms.")</p>
                     @if (!canApprove)
                     {
                         <p class="wf-caption wf-muted">Waiting for an authorized reviewer to approve this schedule.</p>

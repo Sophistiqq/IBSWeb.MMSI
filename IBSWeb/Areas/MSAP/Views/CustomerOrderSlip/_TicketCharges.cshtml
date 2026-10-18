@@ -5,6 +5,7 @@
     var progress = (JobProgressViewModel)ViewBag.JobProgress;
     var entry = booking?.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == Model.VesselScheduleServiceEntryId);
     var blocker = progress.CalculationBlockers.GetValueOrDefault(Model.DispatchTicketId);
+    var approvalPending = booking != null && (booking.ApprovedRevision != booking.Revision || booking.Status == MsapConstants.VesselScheduleStatus.Tentative);
     var calculated = Model.Status is MsapConstants.DispatchTicketStatus.ForBilling or MsapConstants.DispatchTicketStatus.Billed;
     var editing = ViewData["EditActualTicket"] is true;
     var cosDiscount = booking == null ? Model.DispatchDiscount : booking.SkipCosDiscount ? 0m : booking.CosDiscountPercent.GetValueOrDefault();
@@ -38,7 +39,7 @@
                     data-cos-id="@Model.CustomerOrderSlipId" data-url="@Url.Action("RecalculateCharges", "DispatchTicket")">Recalculate charges</button>
         }
     </div>
-    <p class="wf-caption wf-muted">Service date: @(Model.DateLeft?.ToString("dd MMM yyyy") ?? "Not entered") · Approved COS discount: @(booking?.SkipCosDiscount == true ? "0% · Skipped" : $"{cosDiscount:0.##}%")</p>
+    <p class="wf-caption wf-muted">Service date: @(Model.DateLeft?.ToString("dd MMM yyyy") ?? "Not entered") · @(approvalPending ? "Proposed COS discount" : "Approved COS discount"): @(booking?.SkipCosDiscount == true ? "0% · Skipped" : $"{cosDiscount:0.##}%")</p>
     @if (blocker != null)
     {
         <p class="wf-body" role="status">@blocker</p>
@@ -50,7 +51,7 @@
                 <tr>
                     <th scope="row">Basic tariff</th><td>@tariffMethod</td>
                     <td>@(calculated ? Model.DispatchRate.ToString("N2") : entry?.ManualTariffRate?.ToString("N2") ?? "Pending")</td>
-                    <td>@(Model.IsManualTariffRate || entry?.ManualTariffRate.HasValue == true ? "Approved manual" : "Rate table")</td>
+                    <td>@(Model.IsManualTariffRate || entry?.ManualTariffRate.HasValue == true ? approvalPending ? "Proposed manual" : "Approved manual" : "Rate table")</td>
                     <td>@(calculated ? Model.DispatchBillingAmount.ToString("N2") : "Pending")</td>
                     <td>@(calculated ? $"{Model.DispatchDiscount:0.##}%" : "—")</td>
                     <td>@(calculated ? Model.DispatchNetRevenue.ToString("N2") : "Pending")</td>
@@ -58,7 +59,7 @@
                 <tr>
                     <th scope="row">BAF</th><td>@bafMethod</td>
                     <td>@(calculated ? Model.BAFRate.ToString("N2") : entry?.ManualBafRate?.ToString("N2") ?? "Pending")</td>
-                    <td>@(Model.IsManualBafRate || entry?.ManualBafRate.HasValue == true ? "Approved manual" : "Rate table")</td>
+                    <td>@(Model.IsManualBafRate || entry?.ManualBafRate.HasValue == true ? approvalPending ? "Proposed manual" : "Approved manual" : "Rate table")</td>
                     <td>@(calculated ? Model.BAFBillingAmount.ToString("N2") : "Pending")</td>
                     <td>@(calculated ? $"{Model.BAFDiscount:0.##}%" : "—")</td>
                     <td>@(calculated ? Model.BAFNetRevenue.ToString("N2") : "Pending")</td>

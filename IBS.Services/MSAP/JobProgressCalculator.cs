@@ -172,12 +172,12 @@ namespace IBS.Services.MSAP
                     ready ? ProcedureEnum.ApproveSchedule : ProcedureEnum.EditCustomerOrderSlip, ready ? "schedule confirmation" : "booking preparation");
                 return result;
             }
-            if (schedule != null && (schedule.ApprovedRevision != schedule.Revision || schedule.Status == MsapConstants.VesselScheduleStatus.Tentative) && active.Count == 0 && bills.Count == 0)
+            if (schedule != null && (schedule.ApprovedRevision != schedule.Revision || schedule.Status == MsapConstants.VesselScheduleStatus.Tentative))
             {
                 result.Stage = 1;
-                result.Guidance = "The schedule was revised and requires reapproval before ticket entry.";
-                SetAction(result, "Review and Reapprove", "VesselSchedule", "Details", schedule.VesselScheduleId,
-                    ProcedureEnum.ApproveSchedule, "schedule reapproval");
+                result.Guidance = "Actual service tickets may be recorded while approval is pending. Billing remains blocked until the current schedule is approved.";
+                SetAction(result, schedule.ApprovedRevision.HasValue ? "Review and Reapprove" : "Review and Approve", "VesselSchedule", "Details", schedule.VesselScheduleId,
+                    ProcedureEnum.ApproveSchedule, "schedule approval");
                 return result;
             }
             List<DispatchTicket> unknown = active.Where(t => !MsapConstants.DispatchTicketStatus.All.Contains(t.Status)).ToList();

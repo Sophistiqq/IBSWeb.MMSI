@@ -208,6 +208,19 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewBag.CanConfirm = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveSchedule);
             ViewBag.CanEdit = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditCustomerOrderSlip);
+            ViewBag.CanRecordTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateDispatchTicket);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.CreateDispatchTicket)]
+        public async Task<IActionResult> UrgentEntry(int id, CancellationToken ct)
+        {
+            var result = await scheduleService.StartUrgentEntryAsync(id, User.Identity?.Name ?? "system", ct);
+            TempData[result.IsSuccess ? "success" : "error"] = result.Message;
+            return result.IsSuccess
+                ? RedirectToAction("Details", "CustomerOrderSlip", new { id = result.Data })
+                : RedirectToAction(nameof(Details), new { id });
         }
 
         [HttpGet]

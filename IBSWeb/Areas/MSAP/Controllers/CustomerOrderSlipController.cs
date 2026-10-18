@@ -188,8 +188,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     return NotFound();
                 }
                 if (schedule != null && billing == null && customerOrderSlip.Status == MsapConstants.CustomerOrderSlipStatus.Open
-                    && schedule.ApprovedRevision == schedule.Revision
-                    && schedule.Status is MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress)
+                    && schedule.Status is MsapConstants.VesselScheduleStatus.Tentative or MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress)
                 {
                     ViewBag.ActualTicketEntry = await dispatchTicketService.PopulateDispatchTicketViewModelAsync(
                         new DispatchTicketViewModel { VesselScheduleServiceEntryId = expectedServiceEntryId.Value }, id, cancellationToken);
@@ -231,8 +230,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     }
                     if (billing != null || customerOrderSlip.Status != MsapConstants.CustomerOrderSlipStatus.Open
                         || customerOrderSlip.DispatchTickets.Any(t => t.Status == MsapConstants.DispatchTicketStatus.Billed || t.BillingId.HasValue)
-                        || schedule?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled
-                        || schedule != null && schedule.ApprovedRevision != schedule.Revision)
+                        || schedule?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
                     {
                         TempData["error"] = "This ticket cannot be edited in the current booking or billing state.";
                         return RedirectToAction(nameof(Details), new { id, dispatchTicketId });

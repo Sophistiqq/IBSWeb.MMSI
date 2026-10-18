@@ -181,7 +181,7 @@ else
                                     <tbody>
                                     @foreach (var schedule in Model.ScheduleReviewItems)
                                     {
-                                        <tr><td>Booking #@schedule.VesselScheduleId</td><td>@(schedule.Customer?.CustomerName ?? "Customer pending")<small>@schedule.Vessel.VesselName</small></td><td>@(schedule.CustomerOrderSlipId.HasValue ? "COS reapproval" : "New booking")</td><td>@((schedule.EditedDate ?? schedule.CreatedDate).ToString("dd MMM, HH:mm"))</td><td><a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId">Review</a></td></tr>
+                                        <tr><td>Booking #@schedule.VesselScheduleId</td><td>@(schedule.Customer?.CustomerName ?? "Customer pending")<small>@schedule.Vessel.VesselName</small></td><td>@(schedule.ApprovedRevision.HasValue ? "COS reapproval" : schedule.CustomerOrderSlipId.HasValue ? "Urgent · Awaiting approval" : "New booking")</td><td>@((schedule.EditedDate ?? schedule.CreatedDate).ToString("dd MMM, HH:mm"))</td><td><a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId">Review</a></td></tr>
                                     }
                                     @if (Model.ScheduleReviewItems.Count == 0) { <tr><td colspan="5" class="dashboard-empty">No schedules awaiting your review.</td></tr> }
                                     </tbody>

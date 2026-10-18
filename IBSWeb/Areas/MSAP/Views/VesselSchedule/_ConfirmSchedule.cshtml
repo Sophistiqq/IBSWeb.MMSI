@@ -2,7 +2,7 @@
 @model VesselSchedule
 @{
     var tugs = (List<string>)ViewBag.AssignedTugboats;
-    var isReapproval = Model.CustomerOrderSlipId.HasValue;
+    var isReapproval = Model.ApprovedRevision.HasValue;
 }
 <div class="schedule-confirm-review">
     <dl id="bookingReview">
@@ -62,7 +62,7 @@
             <p class="schedule-muted">No specific services defined.</p>
         }
     </div>
-    <p class="schedule-confirm-guidance">@(isReapproval ? $"Reapproval approves Revision {Model.Revision} and confirms the schedule, preserving COS {Model.CustomerOrderSlip?.CustomerOrderSlipNumber}." : $"Confirmation creates a COS using these booking details and approves Revision {Model.Revision}.") All times are Philippine time.</p>
+    <p class="schedule-confirm-guidance">@(isReapproval ? $"Reapproval approves Revision {Model.Revision} and confirms the schedule, preserving COS {Model.CustomerOrderSlip?.CustomerOrderSlipNumber}." : $"Confirmation creates or retains the linked COS and urgent tickets, and approves Revision {Model.Revision}.") All times are Philippine time.</p>
     <form asp-action="Confirm" asp-controller="VesselSchedule" asp-area="MSAP" method="post" id="confirmSchedule" data-reapproval="@(isReapproval ? "true" : "false")" data-customer-order-slip="@(Model.CustomerOrderSlip?.CustomerOrderSlipNumber ?? "")">
         <input type="hidden" name="id" value="@Model.VesselScheduleId" />
         <input type="hidden" name="reviewedAt" value="@((Model.EditedDate ?? Model.CreatedDate).ToString("O"))" />

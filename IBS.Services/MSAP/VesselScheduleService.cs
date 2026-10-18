@@ -316,6 +316,57 @@ namespace IBS.Services.MSAP
             }
         }
 
+        public async Task<ServiceResult<int>> StartUrgentEntryAsync(int id, string username, CancellationToken ct = default)
+        {
+            var result = ServiceResult<int>.Failure("Unable to open urgent ticket entry.");
+            try
+            {
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    var schedule = await unitOfWork.VesselSchedule.GetForUpdateAsync(id, ct);
+                    if (schedule == null || schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+                    {
+                        return;
+                    }
+                    if (schedule.CustomerOrderSlipId.HasValue)
+                    {
+                        result = ServiceResult<int>.Success(schedule.CustomerOrderSlipId.Value);
+                        return;
+                    }
+                    schedule = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(id, ct);
+                    if (schedule == null || schedule.ServiceEntries.Count == 0
+                        || string.IsNullOrEmpty(schedule.AssignedTugboatIds) || schedule.AssignedTugboatIds == "[]")
+                    {
+                        result = ServiceResult<int>.Failure("Complete the booking and assign tugboat services before recording an urgent ticket.");
+                        return;
+                    }
+                    // Factual entry does not authorize dispatch or acknowledge planned overlaps.
+                    var error = await ValidateAsync(schedule, true, ct);
+                    if (error != null)
+                    {
+                        result = ServiceResult<int>.Failure(error);
+                        return;
+                    }
+                    var created = await customerOrderSlipService.CreateCustomerOrderSlipAsync(BuildCustomerOrderSlip(schedule), username, ct);
+                    if (!created.IsSuccess)
+                    {
+                        throw new InvalidOperationException(created.Message);
+                    }
+                    schedule.CustomerOrderSlipId = created.Data;
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
+                        $"Opened urgent ticket entry for booking #{id}; approval remains pending and billing is blocked.", "Vessel Schedule", id), ct);
+                    await unitOfWork.SaveAsync(ct);
+                    result = ServiceResult<int>.Success(created.Data, "Record the actual service. Schedule approval is still required before billing.");
+                }, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to open urgent ticket entry for schedule {Id}", id);
+                return ServiceResult<int>.Failure("Unable to open urgent ticket entry. Refresh the schedule and try again.");
+            }
+            return result;
+        }
+
         public async Task<ServiceResult<int>> ConfirmAsync(int id, DateTime reviewedAt, string username, CancellationToken ct = default, bool allowConflicts = false, string? userId = null)
         {
             var result = ServiceResult<int>.Failure("Failed to confirm schedule. Please try again.");
@@ -371,11 +422,15 @@ namespace IBS.Services.MSAP
                     {
                         // Preserve existing CustomerOrderSlip identity and sync details
                         var job = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(schedule.CustomerOrderSlipId.Value, ct);
+                        var existingTickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct)).ToList();
                         if (job?.Status != MsapConstants.CustomerOrderSlipStatus.Open
-                            || await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct) != null
+                            || existingTickets.Any(t => t.BillingId.HasValue
+                                || t.Status != MsapConstants.DispatchTicketStatus.CalculationPending
+                                || !schedule.ServiceEntries.Any(e => e.VesselScheduleServiceEntryId == t.VesselScheduleServiceEntryId
+                                    && e.TugboatId == t.TugBoatId && e.ServiceId == t.ServiceId))
                             || await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct) != null)
                         {
-                            result = ServiceResult<int>.Failure("Cannot reapprove a booking once tickets or billing exist, or its COS is closed.", ServiceResultStatus.ValidationError);
+                            result = ServiceResult<int>.Failure("Only unbilled urgent tickets awaiting calculation can be retained during approval. Review the COS and ticket states.", ServiceResultStatus.ValidationError);
                             return;
                         }
                         if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(job.Date.Year, job.Date.Month, ct))
@@ -408,13 +463,25 @@ namespace IBS.Services.MSAP
                     {
                         schedule.Status = MsapConstants.VesselScheduleStatus.Confirmed;
                     }
+                    foreach (var ticket in await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct))
+                    {
+                        if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(ticket.Date.Year, ticket.Date.Month, ct)
+                            || ticket.DateLeft.HasValue && await unitOfWork.PostedPeriod.IsMonthClosedAsync(ticket.DateLeft.Value.Year, ticket.DateLeft.Value.Month, ct))
+                        {
+                            throw new InvalidOperationException("An urgent ticket belongs to a closed period. Approval cannot calculate its charges.");
+                        }
+                        var blocker = await ScheduledTicketCharges.ApplyAsync(unitOfWork, ticket, schedule, username, ct);
+                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
+                            $"Applied approved COS terms to urgent ticket #{ticket.DispatchNumber}: {blocker ?? "Charges calculated"}",
+                            "Dispatch Ticket", ticket.DispatchTicketId, ticket.DispatchNumber), ct);
+                    }
                     schedule.EditedBy = username;
                     schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
                         $"Confirmed vessel schedule #{id} revision #{schedule.Revision}; linked COS #{schedule.CustomerOrderSlipId}. Overlap override: {allowConflicts}", "Vessel Schedule", id), ct);
                     await unitOfWork.SaveAsync(ct);
-                    result = ServiceResult<int>.Success(schedule.CustomerOrderSlipId.Value, "Schedule confirmed and COS created successfully.");
+                    result = ServiceResult<int>.Success(schedule.CustomerOrderSlipId.Value, "Schedule approved. The linked COS and any recorded tickets were retained.");
                 }, ct);
                 return result;
             }

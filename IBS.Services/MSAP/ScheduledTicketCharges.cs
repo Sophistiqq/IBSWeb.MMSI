@@ -1,3 +1,4 @@
+using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.Enums;
 using IBS.Utility.MSAP.Constants;
@@ -7,6 +8,21 @@ namespace IBS.Services.MSAP
 {
     public static class ScheduledTicketCharges
     {
+        public static async Task<string?> ApplyAsync(IUnitOfWork unitOfWork, DispatchTicket ticket, VesselSchedule schedule, string username, CancellationToken ct)
+        {
+            var entry = schedule.ServiceEntries.Single(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
+            var rate = ticket.DateLeft.HasValue
+                ? await unitOfWork.TariffTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
+                : null;
+            var bafRate = ticket.DateLeft.HasValue
+                ? await unitOfWork.BafTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
+                : null;
+            var blocker = Apply(ticket, schedule, entry, rate, bafRate);
+            ticket.TariffBy = username;
+            ticket.TariffDate = DateTimeHelper.GetCurrentPhilippineTime();
+            return blocker;
+        }
+
         public static string? Apply(DispatchTicket ticket, VesselSchedule schedule, VesselScheduleServiceEntry entry, TariffRate? rate, BafRate? bafRate)
         {
             ticket.Status = MsapConstants.DispatchTicketStatus.CalculationPending;
@@ -72,7 +88,7 @@ namespace IBS.Services.MSAP
             {
                 return "The ticket does not match its approved service requirement.";
             }
-            if (schedule.ApprovedRevision != schedule.Revision)
+            if (schedule.ApprovedRevision != schedule.Revision || schedule.Status == MsapConstants.VesselScheduleStatus.Tentative)
             {
                 return "The current COS revision requires approval.";
             }

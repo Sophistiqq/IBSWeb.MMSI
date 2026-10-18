@@ -17,7 +17,7 @@
         try {
             const confirmation = await ModernAlert.confirm({
                 title: reapproval ? 'Approve this revision?' : 'Approve this schedule?',
-                text: reapproval ? 'Approve the reviewed revision and retain the existing COS.' : 'Approve the reviewed booking and create its linked COS.',
+                text: reapproval ? 'Approve the reviewed revision and retain the existing COS.' : 'Approve the reviewed booking and create or retain its linked COS and any urgent tickets.',
                 confirmText: reapproval ? 'Reapprove schedule' : 'Approve schedule', cancelText: 'Keep reviewing'
             });
             if (!confirmation.isConfirmed) return;

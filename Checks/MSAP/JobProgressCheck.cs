@@ -56,6 +56,7 @@ namespace Checks.MSAP
             split.Status = "For Collection";
             job.Status = MsapConstants.CustomerOrderSlipStatus.Closed;
             schedule.Status = MsapConstants.VesselScheduleStatus.Completed;
+            schedule.ApprovedRevision = schedule.Revision;
             var collection = JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split]);
             Check(collection.Stage == 7 && collection.Billings.Count == 2 && collection.Guidance.Contains("125.00", StringComparison.Ordinal), "Collection must aggregate every outstanding billing.");
             bill.Status = "Collected";
