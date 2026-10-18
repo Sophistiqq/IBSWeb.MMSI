@@ -84,7 +84,7 @@
     <div class="billing-preview-layout @(progressItems.Count == 0 ? "billing-preview-layout--standalone" : "")">
         @if (progressItems.Count > 0)
         {
-            <div class="billing-preview-progress msap-workflow wf-stack no-print">
+            <div class="billing-preview-progress app-ui ui-stack no-print">
                 @foreach (var progress in progressItems)
                 {
                     <partial name="_WorkflowProgress" model="progress" />
@@ -95,20 +95,20 @@
             <!-- Header Section (No Print) -->
             <div class="flex-stack no-print">
                 <div>
-                    <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb"><li>MSAP</li><li><a asp-action="Index">Billing</a></li><li>@Model.MsapBillingNumber</li><li aria-current="page">Preview</li></ol></nav>
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li><a asp-action="Index">Billing</a></li><li>@Model.MsapBillingNumber</li><li aria-current="page">Preview</li></ol></nav>
                     <h1 class="modern-headline-lg" data-page-header>@(isDraft ? "Draft statement preview · Not saved" : "Billing Statement Preview")</h1>
                 </div>
-                <div class="billing-preview-navigation msap-workflow">
+                <div class="billing-preview-navigation app-ui">
                     <button type="button" id="closePreview" class="modern-btn-secondary">Close</button>
                 </div>
             </div>
 
             @if (canPrint)
             {
-                <section class="billing-preview-toolbar msap-workflow no-print" aria-label="Statement print controls">
+                <section class="billing-preview-toolbar app-ui no-print" aria-label="Statement print controls">
                     <label class="billing-preview-option" for="combineMatchingBafRates">
                         <input type="checkbox" id="combineMatchingBafRates" checked="@(ViewData["CombineMatchingBafRates"] is true)" aria-describedby="bafGroupingHint" />
-                        <span><span class="wf-label">Combine matching BAF rates</span><span id="bafGroupingHint" class="wf-caption wf-muted">Different rates remain separate.</span></span>
+                        <span><span class="ui-label">Combine matching BAF rates</span><span id="bafGroupingHint" class="ui-caption ui-muted">Different rates remain separate.</span></span>
                     </label>
                     <div class="billing-preview-print-actions">
                         <button type="button" data-print-with-tickets="false" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">print</span> Print statement</button>

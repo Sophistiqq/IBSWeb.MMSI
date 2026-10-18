@@ -573,7 +573,7 @@ table.dataTable tbody tr:hover {
     padding: 0.5rem 0.75rem;
     background-color: var(--surface-container-lowest);
     border: 1px solid var(--outline-variant);
-    border-radius: var(--radius-xl);
+    border-radius: var(--ui-radius, .25rem);
     cursor: pointer;
     font-size: 14px;
     transition: border-color 0.2s, box-shadow 0.2s;
@@ -607,7 +607,7 @@ table.dataTable tbody tr:hover {
     display: none;
     background-color: var(--surface-container-lowest);
     border: 1px solid var(--outline-variant);
-    border-radius: var(--radius-xl);
+    border-radius: var(--ui-radius, .25rem);
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     z-index: 1050;
     overflow: hidden;
@@ -634,6 +634,7 @@ table.dataTable tbody tr:hover {
     font-size: 13px;
     padding: 0.25rem 0;
     background-color: transparent;
+    border-radius: var(--ui-radius, .25rem);
 }
 
 .modern-select-options {

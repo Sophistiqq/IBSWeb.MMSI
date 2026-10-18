@@ -1,5 +1,6 @@
 @{
-ViewData["Title"] = "MSAP Import";
+    ViewData["IsFullWidth"] = true;
+    ViewData["Title"] = "MSAP Import";
 }
 
 <style>
@@ -70,25 +71,21 @@ ViewData["Title"] = "MSAP Import";
     }
 </style>
 
-<div class="modern-layout">
-    <main class="modern-container" style="max-width: 1000px;">
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
         <div class="flex-stack mb-4">
             <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="modern-label">MSAP</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface)">Import</span>
-                </div>
-                <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Import</li></ol></nav>
+                <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
             </div>
         </div>
 
-        <div class="modern-card">
-            <div class="modern-card-header-info">
+        <div class="modern-card ui-card">
+            <div class="modern-card-header-info ui-card-header">
                 <span class="material-symbols-outlined">file_upload</span>
-                <h2 class="modern-headline-md">MSAP Data Import</h2>
+                <h2 class="modern-headline-md ui-section-title">MSAP Data Import</h2>
             </div>
-            <div class="modern-card-body p-4">
+            <div class="modern-card-body p-4 ui-card-body">
             <div class="alert alert-info py-2 px-3 small mb-4">
                 <i class="bi bi-info-circle-fill me-2"></i>
                 <strong>Guidance:</strong> This is a one-time import. Upload files according to the steps below to ensure data relationships are maintained.
@@ -136,44 +133,44 @@ ViewData["Title"] = "MSAP Import";
                                     <div class="import-file-row">
                                         <span class="import-file-label">Customer</span>
                                         <span class="file-badge badge-step1">Base</span>
-                                        <input type="file" name="customerFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                        <input type="file" name="customerFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                                     </div>
                                     <div class="import-file-row">
                                         <span class="import-file-label">Port</span>
                                         <span class="file-badge badge-step1">Base</span>
-                                        <input type="file" name="portFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                        <input type="file" name="portFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                                     </div>
                                     <div class="import-file-row">
                                         <span class="import-file-label">Bank Account</span>
                                         <span class="file-badge badge-step1">Base</span>
-                                        <input type="file" name="bankAccountFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                        <input type="file" name="bankAccountFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                                     </div>
                                     <div class="import-file-row d-none">
                                         <span class="import-file-label">Service</span>
                                         <span class="file-badge badge-step1">Base</span>
-                                        <input type="file" name="serviceFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                        <input type="file" name="serviceFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                                     </div>
                                 </div>
                                 <div class="col-12 col-md-6 ps-md-4">
                                     <div class="import-file-row">
                                         <span class="import-file-label">Service</span>
                                         <span class="file-badge badge-step1">Base</span>
-                                        <input type="file" name="serviceFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                        <input type="file" name="serviceFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                                     </div>
                                     <div class="import-file-row">
                                         <span class="import-file-label">Tugboat Owner</span>
                                         <span class="file-badge badge-step1">Base</span>
-                                        <input type="file" name="tugboatOwnerFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                        <input type="file" name="tugboatOwnerFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                                     </div>
                                     <div class="import-file-row">
                                         <span class="import-file-label">Tug Master</span>
                                         <span class="file-badge badge-step1">Base</span>
-                                        <input type="file" name="tugMasterFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                        <input type="file" name="tugMasterFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                                     </div>
                                     <div class="import-file-row">
                                         <span class="import-file-label">Vessel</span>
                                         <span class="file-badge badge-step1">Base</span>
-                                        <input type="file" name="vesselFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                        <input type="file" name="vesselFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                                     </div>
                                 </div>
                             </div>
@@ -190,17 +187,17 @@ ViewData["Title"] = "MSAP Import";
                             <div class="import-file-row">
                                 <span class="import-file-label">Terminal</span>
                                 <span class="file-badge badge-dependency">Needs Port</span>
-                                <input type="file" name="terminalFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                <input type="file" name="terminalFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                             </div>
                             <div class="import-file-row">
                                 <span class="import-file-label">Tugboat</span>
                                 <span class="file-badge badge-dependency">Needs Owner</span>
-                                <input type="file" name="tugboatFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                <input type="file" name="tugboatFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                             </div>
                             <div class="import-file-row">
                                 <span class="import-file-label">Principal</span>
                                 <span class="file-badge badge-dependency">Needs Customer</span>
-                                <input type="file" name="principalFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                <input type="file" name="principalFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                             </div>
                         </div>
                     </div>
@@ -215,27 +212,27 @@ ViewData["Title"] = "MSAP Import";
                             <div class="import-file-row">
                                 <span class="import-file-label">Tariff Rate</span>
                                 <span class="file-badge badge-dependency">Needs Customer/Terminal</span>
-                                <input type="file" name="tariffFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                <input type="file" name="tariffFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                             </div>
                             <div class="import-file-row">
                                 <span class="import-file-label">Collection</span>
                                 <span class="file-badge badge-dependency">Needs Customer</span>
-                                <input type="file" name="collectionFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                <input type="file" name="collectionFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                             </div>
                             <div class="import-file-row">
                                 <span class="import-file-label">Collect-Bill Link</span>
                                 <span class="file-badge badge-dependency">Linking File</span>
-                                <input type="file" name="collectBillFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                <input type="file" name="collectBillFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                             </div>
                             <div class="import-file-row">
                                 <span class="import-file-label">Billing</span>
                                 <span class="file-badge badge-dependency">Needs Everything</span>
-                                <input type="file" name="billingFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                <input type="file" name="billingFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                             </div>
                             <div class="import-file-row">
                                 <span class="import-file-label">Dispatch Ticket</span>
                                 <span class="file-badge badge-dependency">Needs Everything</span>
-                                <input type="file" name="dispatchTicketFile" accept=".csv" class="form-control form-control-sm import-file-input" />
+                                <input type="file" name="dispatchTicketFile" accept=".csv" class="form-control form-control-sm import-file-input ui-input" />
                             </div>
                         </div>
                     </div>

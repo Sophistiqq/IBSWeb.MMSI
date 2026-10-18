@@ -9,7 +9,7 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--wf-space-3);
+    gap: var(--ui-space-3);
 }
 
 .cos-section-heading,
@@ -32,7 +32,7 @@
 .cos-details-links a,
 .cos-ticket-link {
     color: var(--on-surface);
-    font-weight: var(--wf-weight-semibold);
+    font-weight: var(--ui-weight-semibold);
     text-decoration: none;
 }
 
@@ -46,8 +46,8 @@
 }
 
 .cos-services-table :is(th, td) {
-    font-size: var(--wf-text-body);
-    padding: var(--wf-space-3);
+    font-size: var(--ui-text-body);
+    padding: var(--ui-space-3);
     vertical-align: middle;
     text-align: left;
 }
@@ -56,12 +56,12 @@
     background: color-mix(in srgb, var(--on-surface) 9%, var(--surface-container-lowest));
     color: var(--on-surface);
     border: 0;
-    font-weight: var(--wf-weight-semibold);
+    font-weight: var(--ui-weight-semibold);
 }
 
-.cos-tug-group .wf-caption {
-    margin-left: var(--wf-space-4);
-    font-weight: var(--wf-weight-regular);
+.cos-tug-group .ui-caption {
+    margin-left: var(--ui-space-4);
+    font-weight: var(--ui-weight-regular);
 }
 
 .cos-services-table .schedule-status-pill {
@@ -70,8 +70,8 @@
 }
 
 .cos-details-workspace .modern-btn-dropdown {
-    font-size: var(--wf-text-caption);
-    border-radius: var(--wf-radius);
+    font-size: var(--ui-text-caption);
+    border-radius: var(--ui-radius);
     box-shadow: none;
 }
 
@@ -82,7 +82,7 @@
     border: 0;
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: var(--wf-grid-gap);
+    gap: var(--ui-grid-gap);
 }
 
 .cos-entry-fields > div {
@@ -105,15 +105,15 @@
 .cos-date-time {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(5rem, .65fr);
-    gap: var(--wf-space-2);
+    gap: var(--ui-space-2);
 }
 
 .cos-duration-preview {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--wf-grid-gap);
+    gap: var(--ui-grid-gap);
     border-top: 1px solid var(--outline-variant);
-    padding-top: var(--wf-space-4);
+    padding-top: var(--ui-space-4);
 }
 
 .cos-duration-preview p {
@@ -124,7 +124,7 @@
     display: flex;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: var(--wf-space-3);
+    gap: var(--ui-space-3);
 }
 
 .cos-entry-footer a,
@@ -155,7 +155,7 @@
 
 .cos-details-footer {
     border-top: 1px solid var(--outline-variant);
-    padding-top: var(--wf-space-4);
+    padding-top: var(--ui-space-4);
 }
 
 @media (max-width: 1200px) {
@@ -185,13 +185,13 @@
 .cos-ticket-blocker {
     display: block;
     max-width: 24rem;
-    margin-top: var(--wf-space-2);
+    margin-top: var(--ui-space-2);
     white-space: normal;
 }
 
 .cos-ticket-charges {
     border-top: 1px solid var(--outline-variant);
-    padding-top: var(--wf-space-4);
+    padding-top: var(--ui-space-4);
 }
 
 button.cos-ticket-link {
@@ -204,4 +204,33 @@ button.cos-ticket-link {
 
 button.cos-ticket-link:hover {
     text-decoration: none;
+}
+
+.cos-service-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--ui-space-2);
+}
+
+.cos-service-actions > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: var(--ui-space-1) var(--ui-space-2);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    background: var(--ui-surface);
+    white-space: nowrap;
+}
+
+.cos-service-actions > a:hover {
+    background: var(--ui-surface-muted);
+    text-decoration: none;
+}
+
+.cos-service-actions .cos-service-cancel {
+    color: var(--ui-state-ink);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-medium);
 }

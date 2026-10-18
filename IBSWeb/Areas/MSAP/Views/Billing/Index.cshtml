@@ -7,18 +7,18 @@
     var jobProgress = ViewBag.JobProgressItems as IEnumerable<JobProgressViewModel>;
 }
 
-<div class="modern-layout">
-    <main class="modern-container">
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
         <!-- Header Section -->
-        <div class="flex-stack">
+        <div class="flex-stack ui-page-toolbar">
             <div>
-                <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb">
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb">
                     <li>MSAP</li>
                     <li aria-current="page">Billing</li>
                 </ol></nav>
-                <h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
+                <h1 class="modern-headline-lg ui-page-title" data-page-header>@ViewData["Title"]</h1>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 ui-actions">
                 @if (ViewBag.CustomerOrderSlipId != null)
                 {
                     <a asp-action="Index" asp-route-customerOrderSlipId="" asp-route-id="" class="modern-btn-secondary">All Billings</a>
@@ -47,19 +47,19 @@
         </div>
 
         <!-- Table Card -->
-        <div class="modern-card">
-            <div class="modern-card-header-action flex justify-between items-center w-full">
+        <div class="modern-card ui-card">
+            <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-primary">receipt_long</span>
-                    <h2 class="modern-headline-md">Billing List</h2>
+                    <h2 class="modern-headline-md ui-section-title">Billing List</h2>
                 </div>
                 <div class="flex items-center gap-2">
-                    <label class="modern-label mb-0" style="color: var(--on-surface-variant)">Filter by Date:</label>
-                    <input type="date" id="dateFilter" class="modern-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
+                    <label class="modern-label mb-0 ui-label" style="color: var(--on-surface-variant)">Filter by Date:</label>
+                    <input type="date" id="dateFilter" class="modern-input ui-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
                 </div>
             </div>
-            <div class="modern-card-body">
-                <table class="modern-table" id="paginatedTable">
+            <div class="modern-card-body ui-card-body">
+                <table class="modern-table ui-table" id="paginatedTable">
                     <thead>
                         <tr>
                             <th>DATE</th>
@@ -153,10 +153,10 @@
                         data: "status",
                         className: "text-center",
                         render: (data) => {
-                            let statusClass = "status-open";
-                            if (data === "@MsapConstants.BillingStatus.ForPosting") return ModernTable.render.badge("Awaiting final approval", "status-tariff");
-                            else if (data === "@MsapConstants.BillingStatus.ForCollection") statusClass = "status-approval";
-                            else if (data === "@MsapConstants.BillingStatus.Collected") statusClass = "status-closed";
+                            let statusClass = "ui-status";
+                            if (data === "@MsapConstants.BillingStatus.ForPosting") return ModernTable.render.badge("Awaiting final approval", "ui-status ui-attention");
+                            else if (data === "@MsapConstants.BillingStatus.ForCollection") statusClass = "ui-status ui-attention";
+                            else if (data === "@MsapConstants.BillingStatus.Collected") statusClass = "ui-status ui-complete";
                             return ModernTable.render.badge(data, statusClass);
                         }
                     },

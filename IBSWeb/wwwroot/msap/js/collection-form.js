@@ -76,9 +76,9 @@ if (typeof document !== 'undefined') $(function () {
             const row = $('<tr>').toggleClass('is-selected', b.selected).toggleClass('is-unavailable', !b.eligible);
             const checkbox = $('<input type="checkbox">').prop({ checked: b.selected, disabled: !b.eligible }).attr('aria-label', `Select ${b.msapBillingNumber}`);
             row.append($('<td>').append(checkbox));
-            row.append($('<td>').append($('<strong>').text(`${b.msapBillingNumber} / ${b.component}`), $('<p class="wf-caption wf-muted">').text(`${b.cosNumber || 'No COS reference'} / ${b.reason || 'Approved'}`)));
+            row.append($('<td>').append($('<strong>').text(`${b.msapBillingNumber} / ${b.component}`), $('<p class="ui-caption ui-muted">').text(`${b.cosNumber || 'No COS reference'} / ${b.reason || 'Approved'}`)));
             row.append($('<td>').text(money(b.amount)));
-            row.append($('<td>').append($('<div class="wf-caption">').text(`EWT ${money(b.ewt)}`), $('<div class="wf-caption">').text(`WVAT ${money(b.wvat)}`)));
+            row.append($('<td>').append($('<div class="ui-caption">').text(`EWT ${money(b.ewt)}`), $('<div class="ui-caption">').text(`WVAT ${money(b.wvat)}`)));
             row.append($('<td>').text(money(b.net)));
             row.append($('<td>').text(b.eligible ? money(b.net) : 'Not eligible'));
             row.append($('<td>').text(money(b.selected ? 0 : b.amount))); body.append(row);

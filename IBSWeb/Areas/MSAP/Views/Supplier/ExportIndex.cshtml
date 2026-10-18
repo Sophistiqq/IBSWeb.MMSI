@@ -3,18 +3,14 @@
     ViewData["IsFullWidth"] = true;
 }
 
-<div class="modern-layout">
-    <main class="modern-container">
-        <div class="flex-stack">
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
+        <div class="flex-stack ui-page-toolbar">
             <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="modern-label" style="color: var(--on-surface-variant)">MSAP</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface)">Export Suppliers</span>
-                </div>
-                <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Export Suppliers</li></ol></nav>
+                <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 ui-actions">
                 <button type="button" class="modern-btn-primary" id="exportToExcelBtn">
                     <span class="material-symbols-outlined">file_download</span>
                     EXPORT TO EXCEL
@@ -25,21 +21,21 @@
             </div>
         </div>
 
-        <div class="modern-card">
-            <div class="modern-card-header-action flex justify-between items-center w-full">
+        <div class="modern-card ui-card">
+            <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-primary">file_download</span>
-                    <h2 class="modern-headline-md">Filter & Export</h2>
+                    <h2 class="modern-headline-md ui-section-title">Filter & Export</h2>
                 </div>
                 <div class="flex items-center gap-2">
-                    <label class="modern-label mb-0" style="color: var(--on-surface-variant)">Date From:</label>
-                    <input type="date" id="dateFrom" class="modern-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
-                    <label class="modern-label mb-0" style="color: var(--on-surface-variant)">Date To:</label>
-                    <input type="date" id="dateTo" class="modern-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
+                    <label class="modern-label mb-0 ui-label" style="color: var(--on-surface-variant)">Date From:</label>
+                    <input type="date" id="dateFrom" class="modern-input ui-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
+                    <label class="modern-label mb-0 ui-label" style="color: var(--on-surface-variant)">Date To:</label>
+                    <input type="date" id="dateTo" class="modern-input ui-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
                 </div>
             </div>
-            <div class="modern-card-body">
-                <table class="modern-table" id="supplierTable">
+            <div class="modern-card-body ui-card-body">
+                <table class="modern-table ui-table" id="supplierTable">
                     <thead>
                         <tr>
                             <th></th>

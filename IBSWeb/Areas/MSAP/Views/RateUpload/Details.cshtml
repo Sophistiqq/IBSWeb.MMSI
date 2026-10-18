@@ -11,30 +11,30 @@
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/rate-maintenance.css" asp-append-version="true" />
-<div class="modern-layout msap-workflow rate-upload-layout">
+<div class="modern-layout app-ui rate-upload-layout">
     <partial name="_RateProgress" model="@(approved ? 4 : submitted ? 3 : 2)" />
-    <main class="wf-stack rate-upload-content">
-        <header class="wf-page-header">
-            <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb"><li><a asp-controller="Home" asp-action="Index">MSAP</a></li><li><a asp-action="Index">Rate updates</a></li><li aria-current="page">Review</li></ol></nav>
-            <h1 class="wf-page-title" data-page-header>@update.RateKind rate update</h1>
-            <a asp-action="Index" class="modern-btn-secondary wf-page-action">Back to rate updates</a>
-            <p class="wf-page-description wf-caption wf-muted">@update.Status · @(approved ? "Selected rates are active." : "Live rates remain unchanged.")</p>
+    <main class="ui-stack rate-upload-content">
+        <header class="ui-page-header">
+            <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-controller="Home" asp-action="Index">MSAP</a></li><li><a asp-action="Index">Rate updates</a></li><li aria-current="page">Review</li></ol></nav>
+            <h1 class="ui-page-title" data-page-header>@update.RateKind rate update</h1>
+            <a asp-action="Index" class="modern-btn-secondary ui-page-action">Back to rate updates</a>
+            <p class="ui-page-description ui-caption ui-muted">@update.Status · @(approved ? "Selected rates are active." : "Live rates remain unchanged.")</p>
         </header>
-        <section class="wf-panel rate-upload-meta">
-            <div class="wf-field"><span class="wf-caption wf-muted">Company / table</span><strong>MMSI / @update.RateKind</strong></div>
-            <div class="wf-field"><span class="wf-caption wf-muted">Prepared by</span><strong>@update.UploadedBy</strong><span class="wf-caption wf-muted">@update.UploadedAt.ToString("dd MMM yyyy, HH:mm") Philippine time</span></div>
-            <div class="wf-field"><span class="wf-caption wf-muted">@(approved ? "Approved by" : "Status")</span><strong>@(approved ? update.ApprovedBy : update.Status)</strong>@if (approved) { <span class="wf-caption wf-muted">@(update.ApprovedAt!.Value.ToString("dd MMM yyyy, HH:mm"))</span> }</div>
+        <section class="ui-panel rate-upload-meta">
+            <div class="ui-field"><span class="ui-caption ui-muted">Company / table</span><strong>MMSI / @update.RateKind</strong></div>
+            <div class="ui-field"><span class="ui-caption ui-muted">Prepared by</span><strong>@update.UploadedBy</strong><span class="ui-caption ui-muted">@update.UploadedAt.ToString("dd MMM yyyy, HH:mm") Philippine time</span></div>
+            <div class="ui-field"><span class="ui-caption ui-muted">@(approved ? "Approved by" : "Status")</span><strong>@(approved ? update.ApprovedBy : update.Status)</strong>@if (approved) { <span class="ui-caption ui-muted">@(update.ApprovedAt!.Value.ToString("dd MMM yyyy, HH:mm"))</span> }</div>
         </section>
         @if (Model.BaselineChanged)
         {
-            <section class="wf-panel rate-change-notice" role="alert"><h2 class="wf-section-title">Stored rates changed after this comparison was prepared</h2><p class="wf-body">The preparer must refresh the comparison, review the latest values and submit again before approval.</p></section>
+            <section class="ui-panel rate-change-notice ui-critical" role="alert"><h2 class="ui-section-title">Stored rates changed after this comparison was prepared</h2><p class="ui-body">The preparer must refresh the comparison, review the latest values and submit again before approval.</p></section>
         }
         <form id="rateSubmit" asp-action="Submit" method="post" hidden><input type="hidden" name="id" value="@update.RateUploadId" /></form>
-        <section class="wf-panel wf-stack">
-            <div class="rate-upload-heading"><h2 class="wf-section-title">Compare current and proposed amounts</h2><span class="wf-caption wf-muted">@changes.Count new / changed · @(Model.Rows.Count - changes.Count) unchanged hidden</span></div>
+        <section class="ui-panel ui-stack">
+            <div class="rate-upload-heading"><h2 class="ui-section-title">Compare current and proposed amounts</h2><span class="ui-caption ui-muted">@changes.Count new / changed · @(Model.Rows.Count - changes.Count) unchanged hidden</span></div>
             <div class="rate-comparison-legend"><span class="rate-legend-changed">Yellow: changed amount</span><span class="rate-legend-new">Blue: new amount or date</span></div>
             <div class="rate-table-scroll">
-                <table class="modern-table rate-comparison-table">
+                <table class="modern-table rate-comparison-table ui-table">
                     <thead><tr><th scope="col">Include / change</th><th scope="col">Customer / service</th><th scope="col">Effective date</th><th scope="col">Previous @update.RateKind amount</th><th scope="col">Proposed @update.RateKind amount</th></tr></thead>
                     <tbody>
                     @foreach (var row in changes)
@@ -54,31 +54,31 @@
                     </tbody>
                 </table>
             </div>
-            <p class="wf-caption wf-muted">New dates retain earlier rates. Corrections update only the selected dated entry. Unselected or omitted rows are retained. Approved updates keep this comparison as audit evidence.</p>
+            <p class="ui-caption ui-muted">New dates retain earlier rates. Corrections update only the selected dated entry. Unselected or omitted rows are retained. Approved updates keep this comparison as audit evidence.</p>
         </section>
         @if (approved && update.RateKind == RateTableKind.BAF)
         {
-            <section class="wf-panel wf-stack">
-                <h2 class="wf-section-title">Unbilled tickets to review</h2>
-                <p class="wf-caption wf-muted">Saved amounts remain unchanged. Open each ticket to compare and explicitly apply the current service-date charges. Manual BAF and COS with billing are excluded.</p>
-                @if (Model.ImpactLimitReached) { <p class="wf-body">This list checks the latest 200 candidate tickets. Older jobs still check current rates when opened or billed.</p> }
-                <div class="rate-table-scroll"><table class="modern-table">
+            <section class="ui-panel ui-stack">
+                <h2 class="ui-section-title">Unbilled tickets to review</h2>
+                <p class="ui-caption ui-muted">Saved amounts remain unchanged. Open each ticket to compare and explicitly apply the current service-date charges. Manual BAF and COS with billing are excluded.</p>
+                @if (Model.ImpactLimitReached) { <p class="ui-body">This list checks the latest 200 candidate tickets. Older jobs still check current rates when opened or billed.</p> }
+                <div class="rate-table-scroll"><table class="modern-table ui-table">
                     <thead><tr><th>COS / ticket</th><th>Saved BAF rate</th><th>Applicable BAF rate</th><th>Action</th></tr></thead>
                     <tbody>
                     @foreach (var ticket in Model.AffectedTickets)
                     {
-                        <tr><td>@ticket.CosNumber / @ticket.TicketNumber</td><td>@(ticket.HasSavedCharges ? ticket.SavedBafRate.ToString("N2") : "Pending")</td><td>@ticket.ProposedBafRate.ToString("N2")</td><td>@if (ViewData["CanReviewTickets"] is true) { <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@ticket.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId">Review ticket</a> } else { <span>Operations review required</span> }</td></tr>
+                        <tr class="ui-attention"><td>@ticket.CosNumber / @ticket.TicketNumber</td><td>@(ticket.HasSavedCharges ? ticket.SavedBafRate.ToString("N2") : "Pending")</td><td>@ticket.ProposedBafRate.ToString("N2")</td><td>@if (ViewData["CanReviewTickets"] is true) { <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@ticket.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId">Review ticket</a> } else { <span>Operations review required</span> }</td></tr>
                     }
                     @if (Model.AffectedTickets.Count == 0) { <tr><td colspan="4">No affected tickets found in the checked unbilled jobs.</td></tr> }
                     </tbody>
                 </table></div>
             </section>
         }
-        <section class="wf-panel wf-stack rate-review-notes">
-            <h2 class="wf-section-title">Ticket charges and billing</h2>
-            <p class="wf-body">Approval activates rates for the applicable service dates. It does not rewrite saved ticket charges, approved manual COS amounts, existing bills or posted records.</p>
-            <p class="wf-caption wf-muted">For recorded tickets awaiting rates, open the COS and use Recalculate charges after approval. Missing actual tickets still keep the job pending. Corrections affecting already calculated charges require separate review.</p>
-            @if (update.RateKind == RateTableKind.BAF) { <p class="wf-caption wf-muted">Per hour uses billable hours. Per Move, Lumpsum and Industry apply the final BAF amount once per service entry. Existing COS discounts and tax rules still apply.</p> }
+        <section class="ui-panel ui-stack rate-review-notes">
+            <h2 class="ui-section-title">Ticket charges and billing</h2>
+            <p class="ui-body">Approval activates rates for the applicable service dates. It does not rewrite saved ticket charges, approved manual COS amounts, existing bills or posted records.</p>
+            <p class="ui-caption ui-muted">For recorded tickets awaiting rates, open the COS and use Recalculate charges after approval. Missing actual tickets still keep the job pending. Corrections affecting already calculated charges require separate review.</p>
+            @if (update.RateKind == RateTableKind.BAF) { <p class="ui-caption ui-muted">Per hour uses billable hours. Per Move, Lumpsum and Industry apply the final BAF amount once per service entry. Existing COS discounts and tax rules still apply.</p> }
         </section>
         <div class="rate-upload-actions">
             @if (canEdit && Model.BaselineChanged)

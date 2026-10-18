@@ -13,88 +13,89 @@
     <div class="container text-center my-5">
         <h1 class="modern-headline-lg">Welcome to MSAP</h1>
         <p class="text-muted">MMSI Sales and Accounting Program</p>
-        <a class="modern-btn-primary" asp-area="Identity" asp-page="/Account/Login">Login</a>
+        <a class="modern-btn-primary ui-button ui-button--primary" asp-area="Identity" asp-page="/Account/Login">Login</a>
     </div>
 }
 else
 {
     <div class="modern-layout">
-        <main class="msap-workflow dashboard-workspace wf-stack">
-            <header class="wf-page-header dashboard-header">
-                <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb"><li>MSAP</li><li aria-current="page">Dashboard</li></ol></nav>
-                <h1 class="wf-page-title" data-page-header>Maritime dashboard</h1>
-                <div class="wf-page-action dashboard-actions">
-                    <a asp-controller="VesselSchedule" asp-action="Index" asp-route-date="@dateValue" class="modern-btn-secondary">Open calendar</a>
-                    <a asp-controller="VesselSchedule" asp-action="Create" asp-route-date="@dateValue" class="modern-btn-primary">+ Create schedule</a>
+        <main class="app-ui dashboard-workspace ui-stack">
+            <header class="ui-page-header dashboard-header">
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Dashboard</li></ol></nav>
+                <h1 class="ui-page-title" data-page-header>Maritime dashboard</h1>
+                <div class="ui-page-action dashboard-actions ui-actions">
+                    <a asp-controller="VesselSchedule" asp-action="Index" asp-route-date="@dateValue" class="modern-btn-secondary ui-button">Open calendar</a>
+                    <a asp-controller="VesselSchedule" asp-action="Create" asp-route-date="@dateValue" class="modern-btn-primary ui-button ui-button--primary">+ Create schedule</a>
                 </div>
-                <p class="wf-page-description wf-caption wf-muted"><span class="dashboard-status">MMSI</span> @day.ToString("dddd, dd MMM yyyy") · Philippine time · Updated @Model.UpdatedAt.ToString("HH:mm") <a asp-action="Index">Refresh</a></p>
+                <p class="ui-page-description ui-caption ui-muted"><span class="dashboard-status">MMSI</span> @day.ToString("dddd, dd MMM yyyy") · Philippine time · Updated @Model.UpdatedAt.ToString("HH:mm") <a asp-action="Index">Refresh</a></p>
             </header>
 
+            <p class="dashboard-state-key ui-caption" aria-label="Workflow color guide"><span class="ui-status ui-attention">Follow-up / review</span><span class="ui-status ui-critical">Blocked / conflict</span><span class="ui-muted">Open a record to see its next action.</span></p>
             @if (Model.CanViewRates)
             {
-                <section class="wf-panel dashboard-rate" aria-label="Rate updates">
-                    <div><h2 class="wf-section-title">Tariff / BAF rate maintenance</h2><p class="wf-caption wf-muted">Rates apply by service date. Edit tariff and BAF separately, then submit selected changes for approval.</p></div>
-                    <a asp-controller="RateUpload" asp-action="Index" class="modern-btn-secondary">View rate updates</a>
+                <section class="ui-panel dashboard-rate ui-row" aria-label="Rate updates">
+                    <div><h2 class="ui-section-title">Tariff / BAF rate maintenance</h2><p class="ui-caption ui-muted">Rates apply by service date. Edit tariff and BAF separately, then submit selected changes for approval.</p></div>
+                    <a asp-controller="RateUpload" asp-action="Index" class="modern-btn-secondary ui-button">View rate updates</a>
                 </section>
             }
             @if (Model.DataError != null)
             {
-                <p class="wf-panel dashboard-notice" role="alert">@Model.DataError</p>
+                <p class="ui-panel dashboard-notice ui-critical" role="alert">@Model.DataError</p>
             }
             else if (hasReviews)
             {
                 <section class="dashboard-approvals" aria-label="Approvals across all dates">
                     @if (Model.CanApproveSchedule)
                     {
-                        <article class="wf-panel dashboard-metric">
-                            <h2 class="wf-section-title">Schedule / COS approvals</h2><strong>@Model.ScheduleReviews.ToString("N0")</strong>
-                            <p class="wf-caption wf-muted">Includes @Model.ScheduleReapprovals reapprovals · All open reviews</p>
-                            <a href="#schedule-reviews" class="modern-btn-secondary">Review schedules</a>
+                        <article class="ui-panel dashboard-metric @(Model.ScheduleReviews > 0 ? "ui-attention" : "")">
+                            <h2 class="ui-section-title">Schedule / COS approvals</h2><strong>@Model.ScheduleReviews.ToString("N0")</strong>
+                            <p class="ui-caption ui-muted">Includes @Model.ScheduleReapprovals reapprovals · All open reviews</p>
+                            <a href="#schedule-reviews" class="modern-btn-secondary ui-button">Review schedules</a>
                         </article>
                     }
                     @if (Model.CanApproveRates)
                     {
-                        <article class="wf-panel dashboard-metric">
-                            <h2 class="wf-section-title">Rate updates for review</h2><strong>@Model.RateUploadReviews.ToString("N0")</strong>
-                            <p class="wf-caption wf-muted">Submitted comparisons · All dates</p>
-                            <a asp-controller="RateUpload" asp-action="Index" asp-route-awaitingReview="true" class="modern-btn-secondary">Review rate updates</a>
+                        <article class="ui-panel dashboard-metric @(Model.RateUploadReviews > 0 ? "ui-attention" : "")">
+                            <h2 class="ui-section-title">Rate updates for review</h2><strong>@Model.RateUploadReviews.ToString("N0")</strong>
+                            <p class="ui-caption ui-muted">Submitted comparisons · All dates</p>
+                            <a asp-controller="RateUpload" asp-action="Index" asp-route-awaitingReview="true" class="modern-btn-secondary ui-button">Review rate updates</a>
                         </article>
                     }
                     @if (Model.CanApproveBilling)
                     {
-                        <article class="wf-panel dashboard-metric">
-                            <h2 class="wf-section-title">Final bill approvals</h2><strong>@Model.ForPosting.ToString("N0")</strong>
-                            <p class="wf-caption wf-muted">Numbered bills awaiting review · All dates</p>
-                            <a href="#billing-reviews" class="modern-btn-secondary">Review bills</a>
+                        <article class="ui-panel dashboard-metric @(Model.ForPosting > 0 ? "ui-attention" : "")">
+                            <h2 class="ui-section-title">Final bill approvals</h2><strong>@Model.ForPosting.ToString("N0")</strong>
+                            <p class="ui-caption ui-muted">Numbered bills awaiting review · All dates</p>
+                            <a href="#billing-reviews" class="modern-btn-secondary ui-button">Review bills</a>
                         </article>
                     }
                 </section>
             }
 
-            <section class="wf-stack" aria-labelledby="operations-heading">
-                <div class="dashboard-heading"><h2 id="operations-heading" class="wf-section-title">Operations · Today</h2><span class="wf-caption wf-muted">@day.ToString("dd MMM yyyy")</span></div>
+            <section class="ui-stack" aria-labelledby="operations-heading">
+                <div class="dashboard-heading ui-row"><h2 id="operations-heading" class="ui-section-title">Operations · Today</h2><span class="ui-caption ui-muted">@day.ToString("dd MMM yyyy")</span></div>
                 @if (Model.ScheduleError != null)
                 {
-                    <p class="wf-panel dashboard-notice" role="alert">@Model.ScheduleError</p>
+                    <p class="ui-panel dashboard-notice ui-critical" role="alert">@Model.ScheduleError</p>
                 }
                 else
                 {
                     <div class="dashboard-stats">
-                        <article class="wf-panel dashboard-stat"><h3>Scheduled today</h3><strong>@Model.ScheduleCount</strong><p>@Model.ConfirmedToday confirmed / in service / completed · @(Model.ScheduleCount - Model.ConfirmedToday) awaiting review</p></article>
-                        <article class="wf-panel dashboard-stat"><h3>Bookings needing tugs</h3><strong>@Model.NeedingTugs</strong><p>Within today's active plans</p></article>
+                        <article class="ui-panel dashboard-stat"><h3>Scheduled today</h3><strong>@Model.ScheduleCount</strong><p>@Model.ConfirmedToday confirmed / in service / completed · @(Model.ScheduleCount - Model.ConfirmedToday) awaiting review</p></article>
+                        <article class="ui-panel dashboard-stat @(Model.NeedingTugs > 0 ? "ui-attention" : "")"><h3>Bookings needing tugs</h3><strong>@Model.NeedingTugs</strong><p>Within today's active plans</p></article>
                         @if (Model.CanViewDispatch && Model.DataError == null)
                         {
-                            <article class="wf-panel dashboard-stat"><h3>COS with missing tickets</h3><strong>@Model.MissingTicketCount</strong><p>Open services started by now</p></article>
+                            <article class="ui-panel dashboard-stat @(Model.MissingTicketCount > 0 ? "ui-attention" : "")"><h3>COS with missing tickets</h3><strong>@Model.MissingTicketCount</strong><p>Open services started by now</p></article>
                         }
-                        <article class="wf-panel dashboard-stat"><h3>Bookings due awaiting review</h3><strong>@Model.DueBookings</strong><p>Within today's plans</p></article>
+                        <article class="ui-panel dashboard-stat @(Model.DueBookings > 0 ? "ui-attention" : "")"><h3>Bookings due awaiting review</h3><strong>@Model.DueBookings</strong><p>Within today's plans</p></article>
                     </div>
                 }
                 <div class="dashboard-main">
-                    <section class="wf-panel wf-stack" aria-labelledby="vessel-heading">
-                        <h2 id="vessel-heading" class="wf-section-title">Today's vessel schedules</h2>
+                    <section class="ui-panel ui-stack" aria-labelledby="vessel-heading">
+                        <h2 id="vessel-heading" class="ui-section-title">Today's vessel schedules</h2>
                         @if (Model.ScheduleError != null)
                         {
-                            <p class="wf-caption wf-muted">Schedule information is unavailable.</p>
+                            <p class="ui-caption ui-muted">Schedule information is unavailable.</p>
                         }
                         else if (Model.Schedules.Count == 0)
                         {
@@ -109,10 +110,10 @@ else
                                     <tbody>
                                     @foreach (var schedule in Model.Schedules)
                                     {
-                                        <tr>
+                                        <tr class="@(Model.ConflictingScheduleIds.Contains(schedule.VesselScheduleId) ? "ui-critical" : schedule.Status != MsapConstants.VesselScheduleStatus.Completed && (schedule.Status == MsapConstants.VesselScheduleStatus.Tentative || Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) < schedule.RequiredTugCount) ? "ui-attention" : "")">
                                             <td class="dashboard-window">@schedule.PlannedStart.ToString(schedule.PlannedStart.Date == day ? "HH:mm" : "dd MMM HH:mm") – @schedule.PlannedEnd.ToString(schedule.PlannedEnd.Date == day ? "HH:mm" : "dd MMM HH:mm")</td>
                                             <td>@schedule.Vessel.VesselName<small>@schedule.Port.PortName · @schedule.Terminal.TerminalName</small></td>
-                                            <td><span class="dashboard-status">@(schedule.Status == MsapConstants.VesselScheduleStatus.Tentative ? "Awaiting review" : MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status))</span>@if (Model.ConflictingScheduleIds.Contains(schedule.VesselScheduleId)) { <small>Overlap · needs review</small> }</td>
+                                            <td><span class="dashboard-status">@(schedule.Status == MsapConstants.VesselScheduleStatus.Tentative ? "Awaiting review" : MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status))</span>@if (Model.ConflictingScheduleIds.Contains(schedule.VesselScheduleId)) { <small><span class="ui-status ui-critical">Overlap · needs review</span></small> }</td>
                                             <td>@Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.RequiredTugCount</td>
                                             <td><a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId" aria-label="Open @schedule.Vessel.VesselName schedule">Open</a></td>
                                         </tr>
@@ -120,14 +121,14 @@ else
                                     </tbody>
                                 </table>
                             </div>
-                            <div class="dashboard-heading wf-caption"><span class="wf-muted">Showing @Model.Schedules.Count of @Model.ScheduleCount plans · @Model.ConflictingScheduleIds.Count with overlaps</span><a asp-controller="VesselSchedule" asp-action="Index" asp-route-date="@dateValue">View day in calendar</a></div>
+                            <div class="dashboard-heading ui-row ui-caption"><span class="ui-muted">Showing @Model.Schedules.Count of @Model.ScheduleCount plans · @Model.ConflictingScheduleIds.Count with overlaps</span><a asp-controller="VesselSchedule" asp-action="Index" asp-route-date="@dateValue">View day in calendar</a></div>
                         }
                     </section>
-                    <section class="wf-panel wf-stack" aria-labelledby="upcoming-heading">
-                        <h2 id="upcoming-heading" class="wf-section-title">Upcoming vessels · Next 7 days</h2>
+                    <section class="ui-panel ui-stack" aria-labelledby="upcoming-heading">
+                        <h2 id="upcoming-heading" class="ui-section-title">Upcoming vessels · Next 7 days</h2>
                         @if (Model.ScheduleError != null)
                         {
-                            <p class="wf-caption wf-muted">Schedule information is unavailable.</p>
+                            <p class="ui-caption ui-muted">Schedule information is unavailable.</p>
                         }
                         else if (Model.UpcomingSchedules.Count == 0)
                         {
@@ -138,7 +139,7 @@ else
                             <ul class="dashboard-upcoming">
                                 @foreach (var schedule in Model.UpcomingSchedules)
                                 {
-                                    <li><span class="wf-caption wf-muted">@schedule.PlannedStart.ToString("ddd dd MMM · HH:mm")</span><div class="dashboard-heading"><a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId">@schedule.Vessel.VesselName · @schedule.Terminal.TerminalName</a><span class="wf-caption wf-muted">@Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.RequiredTugCount tugs</span></div></li>
+                                    <li><span class="ui-caption ui-muted">@schedule.PlannedStart.ToString("ddd dd MMM · HH:mm")</span><div class="dashboard-heading ui-row"><a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId">@schedule.Vessel.VesselName · @schedule.Terminal.TerminalName</a><span class="ui-caption ui-muted">@Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.RequiredTugCount tugs</span></div></li>
                                 }
                             </ul>
                         }
@@ -149,68 +150,68 @@ else
 
             @if (Model.CanViewFinance && Model.DataError == null)
             {
-                <section class="wf-stack" aria-labelledby="finance-heading">
-                    <div class="dashboard-heading"><h2 id="finance-heading" class="wf-section-title">Finance overview</h2><span class="wf-caption wf-muted">@day.ToString("MMMM yyyy") · Month to date / All open</span></div>
+                <section class="ui-stack" aria-labelledby="finance-heading">
+                    <div class="dashboard-heading ui-row"><h2 id="finance-heading" class="ui-section-title">Finance overview</h2><span class="ui-caption ui-muted">@day.ToString("MMMM yyyy") · Month to date / All open</span></div>
                     <div class="dashboard-stats">
-                        <article class="wf-panel dashboard-stat"><h3>Billed this month</h3><strong>@Model.BilledMonth.ToString("N2")</strong><p>PHP · Posted bills · 1–@day.Day @day.ToString("MMM")</p></article>
-                        <article class="wf-panel dashboard-stat"><h3>Known unbilled service charges</h3><strong>@Model.KnownUnbilledCharges.ToString("N2")</strong><p>PHP · All open calculated tickets · Calculated ticket amounts after discounts</p></article>
-                        <article class="wf-panel dashboard-stat"><h3>Received this month</h3><strong>@Model.ReceivedMonth.ToString("N2")</strong><p>PHP · Cash / check receipts · Excludes withholding</p></article>
-                        <article class="wf-panel dashboard-stat"><h3>Outstanding gross balance</h3><strong>@Model.OutstandingBalance.ToString("N2")</strong><p>PHP · All posted bills · Current stored balances</p></article>
+                        <article class="ui-panel dashboard-stat"><h3>Billed this month</h3><strong>@Model.BilledMonth.ToString("N2")</strong><p>PHP · Posted bills · 1–@day.Day @day.ToString("MMM")</p></article>
+                        <article class="ui-panel dashboard-stat"><h3>Known unbilled service charges</h3><strong>@Model.KnownUnbilledCharges.ToString("N2")</strong><p>PHP · All open calculated tickets · Calculated ticket amounts after discounts</p></article>
+                        <article class="ui-panel dashboard-stat"><h3>Received this month</h3><strong>@Model.ReceivedMonth.ToString("N2")</strong><p>PHP · Cash / check receipts · Excludes withholding</p></article>
+                        <article class="ui-panel dashboard-stat"><h3>Outstanding gross balance</h3><strong>@Model.OutstandingBalance.ToString("N2")</strong><p>PHP · All posted bills · Current stored balances</p></article>
                     </div>
-                    <div class="wf-panel dashboard-banking">
+                    <div class="ui-panel dashboard-banking">
                         @foreach (var item in new[] { (Key: "Deposit", Label: "For deposit"), (Key: "Clearing", Label: "Awaiting clearing"), (Key: "Returned", Label: "Returned checks") })
                         {
-                            <div><span class="wf-caption wf-muted">@item.Label</span><strong>@Model.BankingCounts.GetValueOrDefault(item.Key) receipts · PHP @Model.BankingAmounts.GetValueOrDefault(item.Key).ToString("N2")</strong></div>
+                            <div class="@(Model.BankingCounts.GetValueOrDefault(item.Key) > 0 ? item.Key == "Returned" ? "ui-critical" : "ui-attention" : "")"><span class="ui-caption ui-muted">@item.Label</span><strong>@Model.BankingCounts.GetValueOrDefault(item.Key) receipts · PHP @Model.BankingAmounts.GetValueOrDefault(item.Key).ToString("N2")</strong></div>
                         }
                     </div>
-                    <p class="wf-caption wf-muted">Received amounts include uncleared checks. Banking status is tracked separately from collection. Pending calculations are excluded from known unbilled charges.</p>
+                    <p class="ui-caption ui-muted">Received amounts include uncleared checks. Banking status is tracked separately from collection. Pending calculations are excluded from known unbilled charges.</p>
                 </section>
             }
 
             @if (hasReviews && Model.DataError == null)
             {
-                <section class="wf-panel wf-stack" aria-labelledby="review-heading">
-                    <h2 id="review-heading" class="wf-section-title">Awaiting your review</h2>
+                <section class="ui-panel ui-stack" aria-labelledby="review-heading">
+                    <h2 id="review-heading" class="ui-section-title">Awaiting your review</h2>
                     @if (Model.CanApproveSchedule)
                     {
-                        <div id="schedule-reviews" class="wf-stack dashboard-review">
-                            <div class="dashboard-heading"><h3 class="wf-label">Schedules / COS (@Model.ScheduleReviews)</h3><a asp-controller="VesselSchedule" asp-action="Index" asp-route-status="@MsapConstants.VesselScheduleStatus.Tentative" class="wf-caption">All schedule reviews</a></div>
+                        <div id="schedule-reviews" class="ui-stack dashboard-review">
+                            <div class="dashboard-heading ui-row"><h3 class="ui-label">Schedules / COS (@Model.ScheduleReviews)</h3><a asp-controller="VesselSchedule" asp-action="Index" asp-route-status="@MsapConstants.VesselScheduleStatus.Tentative" class="ui-caption">All schedule reviews</a></div>
                             <div class="dashboard-table-wrap">
                                 <table class="dashboard-table">
                                     <thead><tr><th scope="col">Reference</th><th scope="col">Customer / vessel</th><th scope="col">Requested review</th><th scope="col">Submitted / updated</th><th scope="col">Action</th></tr></thead>
                                     <tbody>
                                     @foreach (var schedule in Model.ScheduleReviewItems)
                                     {
-                                        <tr><td>Booking #@schedule.VesselScheduleId</td><td>@(schedule.Customer?.CustomerName ?? "Customer pending")<small>@schedule.Vessel.VesselName</small></td><td>@(schedule.ApprovedRevision.HasValue ? "COS reapproval" : schedule.CustomerOrderSlipId.HasValue ? "Urgent · Awaiting approval" : "New booking")</td><td>@((schedule.EditedDate ?? schedule.CreatedDate).ToString("dd MMM, HH:mm"))</td><td><a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId">Review</a></td></tr>
+                                        <tr class="ui-attention"><td>Booking #@schedule.VesselScheduleId</td><td>@(schedule.Customer?.CustomerName ?? "Customer pending")<small>@schedule.Vessel.VesselName</small></td><td>@(schedule.ApprovedRevision.HasValue ? "COS reapproval" : schedule.CustomerOrderSlipId.HasValue ? "Urgent · Awaiting approval" : "New booking")</td><td>@((schedule.EditedDate ?? schedule.CreatedDate).ToString("dd MMM, HH:mm"))</td><td><a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId">Review</a></td></tr>
                                     }
                                     @if (Model.ScheduleReviewItems.Count == 0) { <tr><td colspan="5" class="dashboard-empty">No schedules awaiting your review.</td></tr> }
                                     </tbody>
                                 </table>
                             </div>
-                            <p class="wf-caption wf-muted">Showing @Model.ScheduleReviewItems.Count of @Model.ScheduleReviews open reviews.</p>
+                            <p class="ui-caption ui-muted">Showing @Model.ScheduleReviewItems.Count of @Model.ScheduleReviews open reviews.</p>
                         </div>
                     }
                     @if (Model.CanApproveRates)
                     {
-                        <div class="dashboard-review"><h3 class="wf-label">Rate updates (@Model.RateUploadReviews)</h3><a asp-controller="RateUpload" asp-action="Index" asp-route-awaitingReview="true" class="wf-caption">Open submitted comparisons</a></div>
+                        <div class="dashboard-review"><h3 class="ui-label">Rate updates (@Model.RateUploadReviews)</h3><a asp-controller="RateUpload" asp-action="Index" asp-route-awaitingReview="true" class="ui-caption">Open submitted comparisons</a></div>
                     }
                     @if (Model.CanApproveBilling)
                     {
-                        <div id="billing-reviews" class="wf-stack dashboard-review">
-                            <div class="dashboard-heading"><h3 class="wf-label">Final billing (@Model.ForPosting)</h3><a asp-controller="Billing" asp-action="Index" asp-route-status="@MsapConstants.BillingStatus.ForPosting" class="wf-caption">All final bill reviews</a></div>
+                        <div id="billing-reviews" class="ui-stack dashboard-review">
+                            <div class="dashboard-heading ui-row"><h3 class="ui-label">Final billing (@Model.ForPosting)</h3><a asp-controller="Billing" asp-action="Index" asp-route-status="@MsapConstants.BillingStatus.ForPosting" class="ui-caption">All final bill reviews</a></div>
                             <div class="dashboard-table-wrap">
                                 <table class="dashboard-table">
                                     <thead><tr><th scope="col">Billing number</th><th scope="col">Customer / vessel</th><th scope="col">Component</th><th scope="col">Billing date</th><th scope="col">Action</th></tr></thead>
                                     <tbody>
                                     @foreach (var bill in Model.BillingReviewItems)
                                     {
-                                        <tr><td>@bill.MsapBillingNumber</td><td>@bill.Customer.CustomerName<small>@bill.Vessel.VesselName</small></td><td>@(bill.BasicBillingId.HasValue ? "BAF" : bill.BafBilling != null ? "Basic" : "Combined")</td><td>@bill.Date.ToString("dd MMM yyyy")</td><td><a asp-controller="Billing" asp-action="Review" asp-route-id="@bill.MsapBillingId">Review</a></td></tr>
+                                        <tr class="ui-attention"><td>@bill.MsapBillingNumber</td><td>@bill.Customer.CustomerName<small>@bill.Vessel.VesselName</small></td><td>@(bill.BasicBillingId.HasValue ? "BAF" : bill.BafBilling != null ? "Basic" : "Combined")</td><td>@bill.Date.ToString("dd MMM yyyy")</td><td><a asp-controller="Billing" asp-action="Review" asp-route-id="@bill.MsapBillingId">Review</a></td></tr>
                                     }
                                     @if (Model.BillingReviewItems.Count == 0) { <tr><td colspan="5" class="dashboard-empty">No final bills awaiting your review.</td></tr> }
                                     </tbody>
                                 </table>
                             </div>
-                            <p class="wf-caption wf-muted">Showing @Model.BillingReviewItems.Count of @Model.ForPosting numbered bills. Split components have separate approvals.</p>
+                            <p class="ui-caption ui-muted">Showing @Model.BillingReviewItems.Count of @Model.ForPosting numbered bills. Split components have separate approvals.</p>
                         </div>
                     }
                 </section>
@@ -220,27 +221,27 @@ else
                 <div class="dashboard-main">
                     @if (Model.CanViewDispatch)
                     {
-                        <section class="wf-panel wf-stack" aria-labelledby="missing-heading">
-                            <h2 id="missing-heading" class="wf-section-title">Missing-ticket follow-up · @Model.MissingTicketCount COS</h2>
+                        <section class="ui-panel ui-stack @(Model.MissingTicketCount > 0 ? "ui-attention" : "")" aria-labelledby="missing-heading">
+                            <h2 id="missing-heading" class="ui-section-title">Missing-ticket follow-up · @Model.MissingTicketCount COS</h2>
                             <div class="dashboard-table-wrap">
                                 <table class="dashboard-table">
                                     <thead><tr><th scope="col">COS</th><th scope="col">Customer / vessel</th><th scope="col">Tickets</th><th scope="col">Action</th></tr></thead>
                                     <tbody>
                                     @foreach (var schedule in Model.MissingTicketSchedules)
                                     {
-                                        <tr><td>@(schedule.CustomerOrderSlip!.CustomerOrderSlipNumber)</td><td>@(schedule.Customer!.CustomerName)<small>@schedule.Vessel.VesselName</small></td><td>@Model.CompleteTicketsBySchedule.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.ServiceEntries.Count(e => !e.CancelledAt.HasValue) complete</td><td><a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@schedule.CustomerOrderSlipId">Open COS</a></td></tr>
+                                        <tr class="ui-attention"><td>@(schedule.CustomerOrderSlip!.CustomerOrderSlipNumber)</td><td>@(schedule.Customer!.CustomerName)<small>@schedule.Vessel.VesselName</small></td><td>@Model.CompleteTicketsBySchedule.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.ServiceEntries.Count(e => !e.CancelledAt.HasValue) complete</td><td><a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@schedule.CustomerOrderSlipId">Open COS</a></td></tr>
                                     }
                                     @if (Model.MissingTicketSchedules.Count == 0) { <tr><td colspan="4" class="dashboard-empty">No missing tickets for services started by now.</td></tr> }
                                     </tbody>
                                 </table>
                             </div>
-                            <p class="wf-caption wf-muted">Showing @Model.MissingTicketSchedules.Count of @Model.MissingTicketCount COS · Oldest planned services first.</p>
+                            <p class="ui-caption ui-muted">Showing @Model.MissingTicketSchedules.Count of @Model.MissingTicketCount COS · Oldest planned services first.</p>
                         </section>
                     }
                     @if (Model.CanViewFinance)
                     {
-                        <section class="wf-panel wf-stack" aria-labelledby="pending-heading">
-                            <h2 id="pending-heading" class="wf-section-title">Pending amounts · @Model.PendingCalculationCount COS</h2>
+                        <section class="ui-panel ui-stack @(Model.PendingCalculationCount > 0 ? "ui-critical" : "")" aria-labelledby="pending-heading">
+                            <h2 id="pending-heading" class="ui-section-title">Pending amounts · @Model.PendingCalculationCount COS</h2>
                             @if (Model.PendingCalculationTickets.Count == 0)
                             {
                                 <p class="dashboard-empty">No recorded tickets awaiting calculation.</p>
@@ -250,25 +251,25 @@ else
                                 <ul class="dashboard-upcoming">
                                     @foreach (var ticket in Model.PendingCalculationTickets)
                                     {
-                                        <li><div class="dashboard-heading"><span>@(ticket.CustomerOrderSlip?.CustomerOrderSlipNumber ?? ticket.DispatchNumber)</span><span class="wf-caption wf-muted">Rate / terms calculation pending</span></div>
-                                            @if (ticket.CustomerOrderSlipId.HasValue && (Model.CanViewDispatch || Model.CanCreateBilling || Model.CanApproveBilling || Model.CanCreateCollection || Model.CanApproveSchedule)) { <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@ticket.CustomerOrderSlipId" class="wf-caption">Open COS · Ticket @ticket.DispatchNumber</a> }
+                                        <li><div class="dashboard-heading ui-row"><span>@(ticket.CustomerOrderSlip?.CustomerOrderSlipNumber ?? ticket.DispatchNumber)</span><span class="ui-caption ui-muted">Rate / terms calculation pending</span></div>
+                                            @if (ticket.CustomerOrderSlipId.HasValue && (Model.CanViewDispatch || Model.CanCreateBilling || Model.CanApproveBilling || Model.CanCreateCollection || Model.CanApproveSchedule)) { <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@ticket.CustomerOrderSlipId" class="ui-caption">Open COS · Ticket @ticket.DispatchNumber</a> }
                                         </li>
                                     }
                                 </ul>
                             }
-                            <p class="wf-caption wf-muted">Up to 6 affected tickets. Excluded from known unbilled charges; pending amounts are never presented as zero.</p>
+                            <p class="ui-caption ui-muted">Up to 6 affected tickets. Excluded from known unbilled charges; pending amounts are never presented as zero.</p>
                         </section>
                     }
                 </div>
             }
             @if (Model.CanViewFinance && Model.DataError == null)
             {
-                <footer class="wf-panel dashboard-footer">
-                    <div><span class="wf-caption wf-muted">Dispatches this month</span><strong>@Model.DispatchesMonth.ToString("N0") valid actual tickets</strong><span class="wf-caption wf-muted">By actual service start date</span></div>
-                    <div><span class="wf-caption wf-muted">Vessels served this month</span><strong>@Model.VesselsMonth.ToString("N0") distinct vessels</strong></div>
-                    <div class="dashboard-actions">
-                        @if (Model.CanViewReports) { <a asp-controller="MaritimeReport" asp-action="Index" class="modern-btn-secondary">View maritime reports</a> }
-                        @if (Model.CanCreateCollection) { <a asp-controller="Collection" asp-action="Index" class="modern-btn-secondary">Open collections</a> }
+                <footer class="ui-panel dashboard-footer">
+                    <div><span class="ui-caption ui-muted">Dispatches this month</span><strong>@Model.DispatchesMonth.ToString("N0") valid actual tickets</strong><span class="ui-caption ui-muted">By actual service start date</span></div>
+                    <div><span class="ui-caption ui-muted">Vessels served this month</span><strong>@Model.VesselsMonth.ToString("N0") distinct vessels</strong></div>
+                    <div class="dashboard-actions ui-actions">
+                        @if (Model.CanViewReports) { <a asp-controller="MaritimeReport" asp-action="Index" class="modern-btn-secondary ui-button">View maritime reports</a> }
+                        @if (Model.CanCreateCollection) { <a asp-controller="Collection" asp-action="Index" class="modern-btn-secondary ui-button">Open collections</a> }
                     </div>
                 </footer>
             }

@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/billing-preparation.css" asp-append-version="true" />
 
-<div class="modern-layout msap-workflow billing-preparation">
+<div class="modern-layout app-ui billing-preparation">
     <form id="billingPreparationForm" method="post" asp-action="Create" novalidate data-download
           data-customer-url="@Url.Action("GetCustomerDetail")"
           data-cos-list-url="@Url.Action("GetBillableCustomerOrderSlips")"
@@ -19,76 +19,76 @@
           data-initial-cos="@Model.CustomerOrderSlipId">
         @Html.AntiForgeryToken()
         <main class="billing-workspace">
-            <aside class="wf-panel schedule-details-progress billing-progress" aria-label="Job Progress">
+            <aside class="ui-panel schedule-details-progress billing-progress" aria-label="Job Progress">
                 <div id="financialJobProgress" data-progress-url="@Url.Action("Progress", "CustomerOrderSlip")" data-action-stage="5">
-                    <h2 class="wf-section-title">Job Progress</h2>
-                    <p class="wf-caption wf-muted">Select a COS to see its progress.</p>
+                    <h2 class="ui-section-title">Job Progress</h2>
+                    <p class="ui-caption ui-muted">Select a COS to see its progress.</p>
                 </div>
             </aside>
-            <div class="wf-stack billing-content">
-                <header class="wf-page-header">
-                    <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb"><li><a asp-action="Index">Billing</a></li><li aria-current="page">Prepare billing</li></ol></nav>
-                    <h1 class="wf-page-title" data-page-header>Prepare billing</h1>
-                    <a id="cosDetailsLink" class="modern-btn-secondary wf-page-action" asp-action="Index">Back to billing</a>
-                    <p class="wf-page-description wf-caption wf-muted" id="billingReadiness" role="status">Select a customer and COS to load completed services.</p>
+            <div class="ui-stack billing-content">
+                <header class="ui-page-header">
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">Billing</a></li><li aria-current="page">Prepare billing</li></ol></nav>
+                    <h1 class="ui-page-title" data-page-header>Prepare billing</h1>
+                    <a id="cosDetailsLink" class="modern-btn-secondary ui-page-action" asp-action="Index">Back to billing</a>
+                    <p class="ui-page-description ui-caption ui-muted" id="billingReadiness" role="status">Select a customer and COS to load completed services.</p>
                 </header>
 
-                <section class="wf-panel wf-stack" aria-label="Booking details">
+                <section class="ui-panel ui-stack" aria-label="Booking details">
                     <div class="billing-fields">
-                        <div class="wf-field">
-                            <label asp-for="CustomerId" class="wf-label">Service customer *</label>
+                        <div class="ui-field">
+                            <label asp-for="CustomerId" class="ui-label">Service customer *</label>
                             <select asp-for="CustomerId" asp-items="Model.Customers" class="js-modern-select" data-placeholder="Select customer" required>
                                 <option value="">Select customer</option>
                             </select>
                         </div>
-                        <div class="wf-field">
-                            <label for="CustomerOrderSlipSelect" class="wf-label">COS *</label>
+                        <div class="ui-field">
+                            <label for="CustomerOrderSlipSelect" class="ui-label">COS *</label>
                             <select asp-for="CustomerOrderSlipId" class="js-modern-select" id="CustomerOrderSlipSelect" data-placeholder="Select COS" disabled required>
                                 <option value="">Select COS</option>
                             </select>
                         </div>
-                        <div class="wf-field"><span class="wf-caption wf-muted">Vessel</span><p id="bookingVessel" class="wf-body">—</p></div>
-                        <div class="wf-field"><span class="wf-caption wf-muted">Port / terminal</span><p id="bookingLocation" class="wf-body">—</p></div>
+                        <div class="ui-field"><span class="ui-caption ui-muted">Vessel</span><p id="bookingVessel" class="ui-body">—</p></div>
+                        <div class="ui-field"><span class="ui-caption ui-muted">Port / terminal</span><p id="bookingLocation" class="ui-body">—</p></div>
                     </div>
                     <div class="billing-booking-facts">
-                        <div><span class="wf-caption wf-muted">Voyage</span><p id="bookingVoyage" class="wf-body">—</p></div>
-                        <div><span class="wf-caption wf-muted">Service dates</span><p id="bookingDates" class="wf-body">—</p></div>
-                        <div><span class="wf-caption wf-muted">COS discount</span><p id="bookingDiscount" class="wf-body">—</p></div>
-                        <div><span class="wf-caption wf-muted">Terms</span><p id="bookingTerms" class="wf-body">—</p></div>
+                        <div><span class="ui-caption ui-muted">Voyage</span><p id="bookingVoyage" class="ui-body">—</p></div>
+                        <div><span class="ui-caption ui-muted">Service dates</span><p id="bookingDates" class="ui-body">—</p></div>
+                        <div><span class="ui-caption ui-muted">COS discount</span><p id="bookingDiscount" class="ui-body">—</p></div>
+                        <div><span class="ui-caption ui-muted">Terms</span><p id="bookingTerms" class="ui-body">—</p></div>
                     </div>
                 </section>
 
-                <section class="wf-panel wf-stack" aria-labelledby="billingHeading">
+                <section class="ui-panel ui-stack" aria-labelledby="billingHeading">
                     <div class="billing-section-heading">
-                        <h2 id="billingHeading" class="wf-section-title">Billing details</h2>
+                        <h2 id="billingHeading" class="ui-section-title">Billing details</h2>
                         <div class="billing-tax-options">
                             <label class="billing-check"><input asp-for="IsUndocumented" /> Undocumented</label>
                             <label class="billing-check"><input asp-for="SeparateBaf" /> Separate Basic and BAF</label>
                         </div>
                     </div>
                     <div class="billing-number-fields">
-                        <div class="wf-field">
-                            <label for="MsapBillingNumber" id="basicNumberLabel" class="wf-label">Billing number *</label>
+                        <div class="ui-field">
+                            <label for="MsapBillingNumber" id="basicNumberLabel" class="ui-label">Billing number *</label>
                             <input asp-for="MsapBillingNumber" class="modern-input" placeholder="B000000" maxlength="10" required />
                         </div>
-                        <div class="wf-field" id="bafNumberField" hidden>
-                            <label asp-for="BafBillingNumber" class="wf-label">BAF billing number *</label>
+                        <div class="ui-field" id="bafNumberField" hidden>
+                            <label asp-for="BafBillingNumber" class="ui-label">BAF billing number *</label>
                             <input asp-for="BafBillingNumber" class="modern-input" maxlength="10" disabled />
                         </div>
-                        <div class="wf-field">
-                            <label asp-for="Date" class="wf-label">Billing date *</label>
+                        <div class="ui-field">
+                            <label asp-for="Date" class="ui-label">Billing date *</label>
                             <input asp-for="Date" type="date" class="modern-input" required value="@(Model.Date != default ? Model.Date.ToString("yyyy-MM-dd") : DateTimeHelper.GetCurrentPhilippineTime().ToString("yyyy-MM-dd"))" />
                         </div>
                     </div>
                     <div class="billing-recipient-fields">
-                        <div class="wf-field">
-                            <label asp-for="BilledTo" class="wf-label">Bill to *</label>
+                        <div class="ui-field">
+                            <label asp-for="BilledTo" class="ui-label">Bill to *</label>
                             <select asp-for="BilledTo" class="js-modern-select">
                                 <option value="LOCAL">Customer</option>
                             </select>
                         </div>
-                        <div id="principalField" class="wf-field" hidden>
-                            <label for="PrincipalSelect" class="wf-label">Principal *</label>
+                        <div id="principalField" class="ui-field" hidden>
+                            <label for="PrincipalSelect" class="ui-label">Principal *</label>
                             <select asp-for="PrincipalId" class="js-modern-select" id="PrincipalSelect" disabled>
                                 <option value="">Select principal</option>
                             </select>
@@ -97,21 +97,21 @@
                             <label class="billing-check"><input type="checkbox" id="customerVat" disabled /> VAT</label>
                             <label class="billing-check"><input type="checkbox" id="customerVatInclusive" checked disabled /> VAT inclusive</label>
                             <label class="billing-check"><input type="checkbox" id="customerWithholding" disabled /> Print withholding</label>
-                            <span class="wf-caption wf-muted">From service customer settings</span>
+                            <span class="ui-caption ui-muted">From service customer settings</span>
                         </div>
                     </div>
                     <div class="billing-recipient">
-                        <div><span class="wf-caption wf-muted">Statement address</span><p id="recipientAddress" class="wf-body">—</p></div>
-                        <div><span class="wf-caption wf-muted">Statement TIN</span><p id="recipientTin" class="wf-body">—</p></div>
-                        <div><span class="wf-caption wf-muted">Payment terms</span><p id="recipientTerms" class="wf-body">—</p></div>
+                        <div><span class="ui-caption ui-muted">Statement address</span><p id="recipientAddress" class="ui-body">—</p></div>
+                        <div><span class="ui-caption ui-muted">Statement TIN</span><p id="recipientTin" class="ui-body">—</p></div>
+                        <div><span class="ui-caption ui-muted">Payment terms</span><p id="recipientTerms" class="ui-body">—</p></div>
                     </div>
-                    <p id="recipientNote" class="wf-caption wf-muted">The statement is addressed to the service customer.</p>
+                    <p id="recipientNote" class="ui-caption ui-muted">The statement is addressed to the service customer.</p>
                 </section>
 
-                <section class="wf-panel wf-stack" aria-labelledby="servicesHeading">
+                <section class="ui-panel ui-stack" aria-labelledby="servicesHeading">
                     <div class="billing-section-heading">
-                        <h2 id="servicesHeading" class="wf-section-title">Completed services</h2>
-                        <span class="wf-caption wf-muted">Approved rates · COS discount applied</span>
+                        <h2 id="servicesHeading" class="ui-section-title">Completed services</h2>
+                        <span class="ui-caption ui-muted">Approved rates · COS discount applied</span>
                     </div>
                     <div class="billing-table-scroll">
                         <table class="billing-service-table">
@@ -122,27 +122,27 @@
                 </section>
 
                 <div class="billing-summary-grid">
-                    <section class="wf-panel wf-stack">
-                        <div class="billing-section-heading"><h2 id="basicSummaryHeading" class="wf-section-title">Basic</h2><span class="billing-badge split-only" hidden>Separate balance</span></div>
+                    <section class="ui-panel ui-stack">
+                        <div class="billing-section-heading"><h2 id="basicSummaryHeading" class="ui-section-title">Basic</h2><span class="billing-badge split-only" hidden>Separate balance</span></div>
                         <div class="billing-amount"><span>Services after COS discount</span><strong id="basicCharges">0.00</strong></div>
-                        <p class="wf-caption wf-muted">SBMA share · Provisional placement</p>
+                        <p class="ui-caption ui-muted">SBMA share · Provisional placement</p>
                         <div class="billing-amount billing-summary-total"><strong id="basicDueLabel">Final amount due</strong><strong>To be calculated</strong></div>
-                        <p class="wf-caption wf-muted">Reminder: confirm SBMA placement and financial treatment.</p>
+                        <p class="ui-caption ui-muted">Reminder: confirm SBMA placement and financial treatment.</p>
                     </section>
-                    <section class="wf-panel wf-stack">
-                        <div class="billing-section-heading"><h2 id="bafSummaryHeading" class="wf-section-title">BAF</h2><span class="billing-badge split-only" hidden>Separate balance</span></div>
+                    <section class="ui-panel ui-stack">
+                        <div class="billing-section-heading"><h2 id="bafSummaryHeading" class="ui-section-title">BAF</h2><span class="billing-badge split-only" hidden>Separate balance</span></div>
                         <div class="billing-amount"><span>BAF after COS discount</span><strong id="bafCharges">0.00</strong></div>
-                        <p class="wf-caption wf-muted">VAT / withholding · From customer settings</p>
+                        <p class="ui-caption ui-muted">VAT / withholding · From customer settings</p>
                         <div class="billing-amount billing-summary-total"><strong>Final amount due</strong><strong>Calculated in statement preview</strong></div>
-                        <p id="balanceNote" class="wf-caption wf-muted">The charges are included in one billing balance.</p>
+                        <p id="balanceNote" class="ui-caption ui-muted">The charges are included in one billing balance.</p>
                     </section>
                 </div>
 
                 <footer class="billing-footer">
-                    <p id="preparationNote" class="wf-caption wf-muted">One preparation · One billing number</p>
+                    <p id="preparationNote" class="ui-caption ui-muted">One preparation · One billing number</p>
                     <div class="billing-footer-actions">
-                        <button type="submit" id="previewBilling" class="modern-btn-secondary wf-page-action" formaction="@Url.Action("PreviewPreparation")" formtarget="_blank" disabled>Preview statements</button>
-                        <button type="submit" id="saveBilling" class="modern-btn-primary wf-page-action" disabled>Save for reviewing</button>
+                        <button type="submit" id="previewBilling" class="modern-btn-secondary ui-page-action" formaction="@Url.Action("PreviewPreparation")" formtarget="_blank" disabled>Preview statements</button>
+                        <button type="submit" id="saveBilling" class="modern-btn-primary ui-page-action" disabled>Save for reviewing</button>
                     </div>
                 </footer>
             </div>

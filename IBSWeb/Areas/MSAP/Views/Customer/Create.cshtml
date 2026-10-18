@@ -6,21 +6,15 @@
     ViewData["IsFullWidth"] = true;
 }
 
-<div class="modern-layout">
+<div class="modern-layout app-ui">
     <form asp-action="Create" method="post" id="mainForm">
-        <main class="modern-container">
-            <div class="flex-stack">
+        <main class="modern-container ui-page">
+            <div class="flex-stack ui-page-toolbar">
                 <div>
-                    <div class="flex items-center gap-2 mb-1">
-                        <span class="modern-label">MSAP</span>
-                        <span class="material-symbols-outlined text-xs">chevron_right</span>
-                        <a class="modern-label" style="text-decoration:none;" asp-action="Index">Customers</a>
-                        <span class="material-symbols-outlined text-xs">chevron_right</span>
-                        <span class="modern-label" style="color: var(--on-surface)">New Customer</span>
-                    </div>
-                    <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li><a asp-action="Index">Customers</a></li><li aria-current="page">New Customer</li></ol></nav>
+                    <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex gap-2 ui-actions">
                     <button type="submit" class="modern-btn-primary">
                         <span class="material-symbols-outlined">save</span> Save Changes
                     </button>
@@ -32,72 +26,72 @@
 
             <div class="modern-grid justify-center">
                 <section class="modern-col-8">
-                    <div class="modern-card">
-                        <div class="modern-card-header-info">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
                             <span class="material-symbols-outlined">person_add</span>
-                            <h2 class="modern-headline-md">Customer Details</h2>
+                            <h2 class="modern-headline-md ui-section-title">Customer Details</h2>
                         </div>
-                        <div class="modern-card-body">
+                        <div class="modern-card-body ui-card-body">
                             <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
 
                             <div class="modern-grid">
                                 <div class="modern-col-6">
-                                    <label asp-for="CustomerName" class="modern-label">Customer Name <span class="text-error">*</span></label>
-                                    <input asp-for="CustomerName" class="form-control" style="border: 1px solid var(--outline-variant); border-radius: var(--radius-xl);" placeholder="Enter customer name" />
+                                    <label asp-for="CustomerName" class="modern-label ui-label">Customer Name <span class="text-error">*</span></label>
+                                    <input asp-for="CustomerName" class="form-control ui-input" placeholder="Enter customer name" />
                                     <span asp-validation-for="CustomerName" class="text-error text-xs"></span>
                                 </div>
                                 <div class="modern-col-6">
-                                    <label asp-for="CustomerAddress" class="modern-label">Customer Address <span class="text-error">*</span></label>
-                                    <input asp-for="CustomerAddress" class="form-control" style="border: 1px solid var(--outline-variant); border-radius: var(--radius-xl);" placeholder="Enter customer address" />
+                                    <label asp-for="CustomerAddress" class="modern-label ui-label">Customer Address <span class="text-error">*</span></label>
+                                    <input asp-for="CustomerAddress" class="form-control ui-input" placeholder="Enter customer address" />
                                     <span asp-validation-for="CustomerAddress" class="text-error text-xs"></span>
                                 </div>
                             </div>
 
                             <div class="modern-grid mt-3">
                                 <div class="modern-col-4">
-                                    <label asp-for="ZipCode" class="modern-label">Zip Code <span class="text-error">*</span></label>
-                                    <input asp-for="ZipCode" class="form-control" style="border: 1px solid var(--outline-variant); border-radius: var(--radius-xl);" placeholder="Enter zip code" maxlength="4" />
+                                    <label asp-for="ZipCode" class="modern-label ui-label">Zip Code <span class="text-error">*</span></label>
+                                    <input asp-for="ZipCode" class="form-control ui-input" placeholder="Enter zip code" maxlength="4" />
                                     <span asp-validation-for="ZipCode" class="text-error text-xs"></span>
                                 </div>
                                 <div class="modern-col-4">
-                                    <label asp-for="CustomerTin" class="modern-label">Customer Tin <span class="text-error">*</span></label>
-                                    <input asp-for="CustomerTin" class="form-control formattedTinNumberInput" style="border: 1px solid var(--outline-variant); border-radius: var(--radius-xl);" placeholder="Enter TIN" maxlength="17" />
+                                    <label asp-for="CustomerTin" class="modern-label ui-label">Customer Tin <span class="text-error">*</span></label>
+                                    <input asp-for="CustomerTin" class="form-control formattedTinNumberInput ui-input" placeholder="Enter TIN" maxlength="17" />
                                     <span asp-validation-for="CustomerTin" class="text-error text-xs"></span>
                                 </div>
                                 <div class="modern-col-4">
-                                    <label asp-for="BusinessStyle" class="modern-label">Business Style</label>
-                                    <input asp-for="BusinessStyle" class="form-control" style="border: 1px solid var(--outline-variant); border-radius: var(--radius-xl);" placeholder="Enter business style" />
+                                    <label asp-for="BusinessStyle" class="modern-label ui-label">Business Style</label>
+                                    <input asp-for="BusinessStyle" class="form-control ui-input" placeholder="Enter business style" />
                                     <span asp-validation-for="BusinessStyle" class="text-error text-xs"></span>
                                 </div>
                             </div>
 
                             <div class="modern-grid mt-3">
                                 <div class="modern-col-4">
-                                    <label asp-for="CreditLimit" class="modern-label">Credit Limit <span class="text-error">*</span></label>
-                                    <input asp-for="CreditLimit" class="form-control" style="border: 1px solid var(--outline-variant); border-radius: var(--radius-xl);" placeholder="Enter credit limit" />
+                                    <label asp-for="CreditLimit" class="modern-label ui-label">Credit Limit <span class="text-error">*</span></label>
+                                    <input asp-for="CreditLimit" class="form-control ui-input" placeholder="Enter credit limit" />
                                     <span asp-validation-for="CreditLimit" class="text-error text-xs"></span>
                                 </div>
                                 <div class="modern-col-4">
-                                    <label asp-for="CreditLimitAsOfToday" class="modern-label">Available Credit Limit As of Today <span class="text-error">*</span></label>
-                                    <input asp-for="CreditLimitAsOfToday" class="form-control" style="border: 1px solid var(--outline-variant); border-radius: var(--radius-xl);" placeholder="Enter available credit" />
+                                    <label asp-for="CreditLimitAsOfToday" class="modern-label ui-label">Available Credit Limit As of Today <span class="text-error">*</span></label>
+                                    <input asp-for="CreditLimitAsOfToday" class="form-control ui-input" placeholder="Enter available credit" />
                                     <span asp-validation-for="CreditLimitAsOfToday" class="text-error text-xs"></span>
                                 </div>
                                 <div class="modern-col-4">
-                                    <label asp-for="CommissionRate" class="modern-label">Commission Rate</label>
-                                    <input asp-for="CommissionRate" class="form-control" style="border: 1px solid var(--outline-variant); border-radius: var(--radius-xl);" placeholder="Enter commission rate" />
+                                    <label asp-for="CommissionRate" class="modern-label ui-label">Commission Rate</label>
+                                    <input asp-for="CommissionRate" class="form-control ui-input" placeholder="Enter commission rate" />
                                     <span asp-validation-for="CommissionRate" class="text-error text-xs"></span>
                                 </div>
                             </div>
 
                             <div class="modern-grid mt-3">
                                 <div class="modern-col-6">
-                                    <label asp-for="CommissioneeId" class="modern-label">Commissionee</label>
+                                    <label asp-for="CommissioneeId" class="modern-label ui-label">Commissionee</label>
                                     <select asp-for="CommissioneeId" asp-items="@Model.Commissionees" class="js-modern-select" data-placeholder="-- Select Commissionee --">
                                     </select>
                                     <span asp-validation-for="CommissioneeId" class="text-error text-xs"></span>
                                 </div>
                                 <div class="modern-col-6">
-                                    <label asp-for="CustomerType" class="modern-label">Customer Type <span class="text-error">*</span></label>
+                                    <label asp-for="CustomerType" class="modern-label ui-label">Customer Type <span class="text-error">*</span></label>
                                     <select asp-for="CustomerType" class="js-modern-select" data-placeholder="Select customer type" id="customerTypeSelect">
                                         <option value="" selected disabled></option>
                                         @foreach (CustomerType customerType in Enum.GetValues<CustomerType>())
@@ -111,8 +105,8 @@
 
                             <div class="modern-grid mt-3">
                                 <div class="modern-col-4">
-                                    <label asp-for="DefaultCosDiscountPercent" class="modern-label"></label>
-                                    <input asp-for="DefaultCosDiscountPercent" type="number" min="0" max="100" step="0.0001" class="modern-input" aria-describedby="cosDiscountHelp" />
+                                    <label asp-for="DefaultCosDiscountPercent" class="modern-label ui-label"></label>
+                                    <input asp-for="DefaultCosDiscountPercent" type="number" min="0" max="100" step="0.0001" class="modern-input ui-input" aria-describedby="cosDiscountHelp" />
                                     <span asp-validation-for="DefaultCosDiscountPercent" class="text-error text-xs"></span>
                                     <small id="cosDiscountHelp">Customer default for the COS discount. Enter 10 for 10%.</small>
                                 </div>
@@ -120,21 +114,21 @@
 
                             <div class="modern-grid mt-3" id="station-div" style="display:none;">
                                 <div class="modern-col-6">
-                                    <label asp-for="StationCode" class="modern-label">Station Code <span class="text-error">*</span></label>
-                                    <input asp-for="StationCode" class="form-control" style="border: 1px solid var(--outline-variant); border-radius: var(--radius-xl);" placeholder="Enter station code" />
+                                    <label asp-for="StationCode" class="modern-label ui-label">Station Code <span class="text-error">*</span></label>
+                                    <input asp-for="StationCode" class="form-control ui-input" placeholder="Enter station code" />
                                     <span asp-validation-for="StationCode" class="text-error text-xs"></span>
                                 </div>
                             </div>
 
                             <div class="modern-grid mt-3">
                                 <div class="modern-col-6">
-                                    <label asp-for="CustomerTerms" class="modern-label">Customer Terms <span class="text-error">*</span></label>
+                                    <label asp-for="CustomerTerms" class="modern-label ui-label">Customer Terms <span class="text-error">*</span></label>
                                     <select asp-for="CustomerTerms" asp-items="@Model.PaymentTerms" class="js-modern-select" data-placeholder="-- Select Terms --">
                                     </select>
                                     <span asp-validation-for="CustomerTerms" class="text-error text-xs"></span>
                                 </div>
                                 <div class="modern-col-6">
-                                    <label asp-for="RetentionRate" class="modern-label">Retention Rate</label>
+                                    <label asp-for="RetentionRate" class="modern-label ui-label">Retention Rate</label>
                                     <select asp-for="RetentionRate" class="js-modern-select" data-placeholder="%">
                                         <option value="" selected disabled></option>
                                         <option value="0.0000">0%</option>
@@ -149,7 +143,7 @@
 
                             <div class="modern-grid mt-3">
                                 <div class="modern-col-6">
-                                    <label asp-for="VatType" class="modern-label">Vat Type <span class="text-error">*</span></label>
+                                    <label asp-for="VatType" class="modern-label ui-label">Vat Type <span class="text-error">*</span></label>
                                     <select asp-for="VatType" class="js-modern-select" data-placeholder="Select vat type">
                                         <option value="" selected disabled></option>
                                         <option value="@MsapConstants.VatType_Vatable">@MsapConstants.VatType_Vatable</option>
@@ -160,7 +154,7 @@
                                 </div>
                                 <div class="modern-col-6 d-flex align-items-end pb-2">
                                     <div class="flex flex-column gap-1 w-100">
-                                        <label class="modern-label">Options</label>
+                                        <label class="modern-label ui-label">Options</label>
                                         <div class="flex gap-3">
                                             <label class="flex items-center gap-1">
                                                 <input class="form-check-input" asp-for="WithHoldingVat" /> <span class="text-sm">Withholding VAT</span>

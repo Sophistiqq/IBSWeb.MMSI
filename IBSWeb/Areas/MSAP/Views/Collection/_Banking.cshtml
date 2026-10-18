@@ -12,21 +12,21 @@
     if (Model.ReturnedDate > minimumDate) { minimumDate = Model.ReturnedDate.Value; }
     if (Model.DepositDate > minimumDate) { minimumDate = Model.DepositDate.Value; }
 }
-<form asp-action="Banking" asp-controller="Collection" asp-area="MSAP" method="post" id="collectionBankingForm" class="msap-workflow wf-stack text-left">
+<form asp-action="Banking" asp-controller="Collection" asp-area="MSAP" method="post" id="collectionBankingForm" class="app-ui ui-stack text-left">
     <input type="hidden" name="id" value="@Model.MsapCollectionId" />
     <input type="hidden" name="bankingAction" value="@action" />
-    <div class="wf-field">
-        <p class="wf-label">Receipt @Model.MsapCollectionNumber</p>
-        <p class="wf-caption wf-muted">@Model.Customer?.CustomerName / Net received @Model.Amount.ToString("N2")</p>
+    <div class="ui-field">
+        <p class="ui-label">Receipt @Model.MsapCollectionNumber</p>
+        <p class="ui-caption ui-muted">@Model.Customer?.CustomerName / Net received @Model.Amount.ToString("N2")</p>
         @if (Model.CheckAmount > 0)
         {
-            <p class="wf-caption wf-muted">Check @Model.CheckNumber / @Model.CheckBank / @Model.CheckBranch</p>
+            <p class="ui-caption ui-muted">Check @Model.CheckNumber / @Model.CheckBank / @Model.CheckBranch</p>
         }
     </div>
     @if (depositing)
     {
-        <div class="wf-field">
-            <label class="wf-label" for="depositBank">Deposit to MMSI account *</label>
+        <div class="ui-field">
+            <label class="ui-label" for="depositBank">Deposit to MMSI account *</label>
             <select name="bankId" id="depositBank" class="js-modern-select" data-placeholder="Select receiving bank account" required>
                 <option value="">-- Select receiving bank account --</option>
                 @foreach (var bank in banks)
@@ -34,20 +34,20 @@
                     <option value="@bank.Value" selected="@(bank.Value == selectedBank)">@bank.Text</option>
                 }
             </select>
-            <p class="wf-caption wf-muted">MMSI's receiving account, separate from the check's issuing bank.</p>
+            <p class="ui-caption ui-muted">MMSI's receiving account, separate from the check's issuing bank.</p>
             @if (banks.Count == 0)
             {
-                <p class="text-error wf-caption">No MMSI receiving account is available. Add an account before recording the deposit.</p>
+                <p class="text-error ui-caption">No MMSI receiving account is available. Add an account before recording the deposit.</p>
             }
         </div>
     }
     else
     {
-        <div class="wf-field"><span class="wf-caption wf-muted">Receiving bank account</span><p class="wf-body">@Model.BankAccount?.Bank / @(Model.BankAccountNumber ?? Model.BankAccount?.AccountNo)</p></div>
+        <div class="ui-field"><span class="ui-caption ui-muted">Receiving bank account</span><p class="ui-body">@Model.BankAccount?.Bank / @(Model.BankAccountNumber ?? Model.BankAccount?.AccountNo)</p></div>
     }
-    <div class="wf-field">
-        <label class="wf-label" for="bankingDate">@label *</label>
+    <div class="ui-field">
+        <label class="ui-label" for="bankingDate">@label *</label>
         <input name="date" id="bankingDate" type="date" class="modern-input" min="@minimumDate.ToString("yyyy-MM-dd")" max="@today" value="@today" required />
     </div>
-    <p class="wf-caption wf-muted">@(depositing ? "Use the actual deposit date. Deposit does not mark the receipt as cleared." : action == CollectionBankingAction.ReturnCheck ? "The returned check must be redeposited before clearing." : "Clearing applies to this receipt and all billing payments it covers.")</p>
+    <p class="ui-caption ui-muted">@(depositing ? "Use the actual deposit date. Deposit does not mark the receipt as cleared." : action == CollectionBankingAction.ReturnCheck ? "The returned check must be redeposited before clearing." : "Clearing applies to this receipt and all billing payments it covers.")</p>
 </form>

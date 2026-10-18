@@ -30,19 +30,19 @@
         && booking != null && booking.ApprovedRevision == booking.Revision
         && booking.Status is MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress or MsapConstants.VesselScheduleStatus.Completed;
 }
-<section class="cos-ticket-charges wf-stack" aria-labelledby="ticketChargesTitle">
+<section class="cos-ticket-charges ui-stack" aria-labelledby="ticketChargesTitle">
     <div class="cos-section-heading">
-        <h3 class="wf-section-title" id="ticketChargesTitle">Ticket charges</h3>
+        <h3 class="ui-section-title" id="ticketChargesTitle">Ticket charges</h3>
         @if (canRecalculate)
         {
             <button type="button" class="modern-btn-secondary" data-recalculate-ticket="@Model.DispatchTicketId"
                     data-cos-id="@Model.CustomerOrderSlipId" data-preview-url="@Url.Action("PreviewCharges", "DispatchTicket")" data-url="@Url.Action("RecalculateCharges", "DispatchTicket")">Recalculate charges</button>
         }
     </div>
-    <p class="wf-caption wf-muted">Service date: @(Model.DateLeft?.ToString("dd MMM yyyy") ?? "Not entered") · @(approvalPending ? "Proposed COS discount" : "Approved COS discount"): @(booking?.SkipCosDiscount == true ? "0% · Skipped" : $"{cosDiscount:0.##}%")</p>
+    <p class="ui-caption ui-muted">Service date: @(Model.DateLeft?.ToString("dd MMM yyyy") ?? "Not entered") · @(approvalPending ? "Proposed COS discount" : "Approved COS discount"): @(booking?.SkipCosDiscount == true ? "0% · Skipped" : $"{cosDiscount:0.##}%")</p>
     @if (blocker != null)
     {
-        <p class="wf-body" role="status">@blocker</p>
+        <p class="ui-notice ui-critical" role="status">@blocker</p>
     }
     <div class="schedule-services-table" role="region" aria-label="Saved ticket charge breakdown" tabindex="0">
         <table class="schedule-review-table">
@@ -68,5 +68,5 @@
             <tfoot><tr><th scope="row" colspan="4">Total</th><td>@(calculated ? Model.TotalBilling.ToString("N2") : "Pending")</td><td></td><td>@(calculated ? Model.TotalNetRevenue.ToString("N2") : "Pending")</td></tr></tfoot>
         </table>
     </div>
-    <p class="wf-caption wf-muted">Amounts are in PHP. @(editing ? "These are the saved charges. Saving changes recalculates charges when actual service times change." : "Recalculation uses recorded service times, approved manual terms and applicable service-date table rates.")</p>
+    <p class="ui-caption ui-muted">Amounts are in PHP. @(editing ? "These are the saved charges. Saving changes recalculates charges when actual service times change." : "Recalculation uses recorded service times, approved manual terms and applicable service-date table rates.")</p>
 </section>

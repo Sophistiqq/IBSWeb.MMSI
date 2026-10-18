@@ -3,39 +3,35 @@
     ViewData["IsFullWidth"] = true;
 }
 
-<div class="modern-layout">
-    <main class="modern-container">
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
         <!-- Header Section -->
-        <div class="flex-stack">
+        <div class="flex-stack ui-page-toolbar">
             <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="modern-label" style="color: var(--on-surface-variant)">MSAP</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface)">Audit Trail</span>
-                </div>
-                <h1 class="modern-headline-lg">System Audit Trails</h1>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Audit Trail</li></ol></nav>
+                <h1 class="modern-headline-lg ui-page-title">System Audit Trails</h1>
             </div>
         </div>
 
         <!-- Workflow Trace Accordion -->
-        <div class="modern-card mb-4">
-            <div class="modern-card-header-action" style="cursor: pointer;" id="traceAccordionToggle">
+        <div class="modern-card mb-4 ui-card">
+            <div class="modern-card-header-action ui-card-header" style="cursor: pointer;" id="traceAccordionToggle">
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-primary">account_tree</span>
-                    <h2 class="modern-headline-md">Workflow Trace</h2>
+                    <h2 class="modern-headline-md ui-section-title">Workflow Trace</h2>
                 </div>
                 <div class="flex items-center gap-3">
-                    <span class="modern-label" id="traceStatusLabel" style="font-size: 10px;">Select a COS to begin</span>
+                    <span class="modern-label ui-label" id="traceStatusLabel" style="font-size: 10px;">Select a COS to begin</span>
                     <span class="material-symbols-outlined transition-all" id="traceChevron" style="font-variation-settings: 'FILL' 0, 'wght' 700;">expand_more</span>
                 </div>
             </div>
             <div id="traceAccordionBody" style="display: none; border-top: 1px solid var(--outline-variant);">
-                <div class="modern-card-body">
+                <div class="modern-card-body ui-card-body">
                     <div class="modern-grid" style="gap: 1rem;">
                         <!-- Selection Column -->
                         <div class="modern-col-4">
                             <div class="p-3 bg-surface-container-low rounded-md border">
-                                <p class="modern-label mb-3">Target COS</p>
+                                <p class="modern-label mb-3 ui-label">Target COS</p>
                                 <select id="joSelect" class="js-modern-select w-100" data-placeholder="Search COS #...">
                                     <option value="">Search COS #...</option>
                                     @if (ViewBag.CustomerOrderSlips != null)
@@ -46,13 +42,13 @@
                                         }
                                     }
                                 </select>
-                                <p class="modern-label mt-4" style="font-size: 10px; opacity: 0.7;">
+                                <p class="modern-label mt-4 ui-label" style="font-size: 10px; opacity: 0.7;">
                                     Tracing will show all related dispatch tickets, billings, and collections.
                                 </p>
 
                                 <div id="traceLoading" class="text-center py-4 hidden">
                                     <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                                    <span class="modern-label ms-2">Fetching history...</span>
+                                    <span class="modern-label ms-2 ui-label">Fetching history...</span>
                                 </div>
                             </div>
                         </div>
@@ -73,7 +69,7 @@
                             <div id="tracePlaceholder" class="flex items-center justify-center h-100 min-h-[200px] border-dashed rounded-md" style="border: 2px dashed var(--outline-variant); background: var(--surface-container-lowest);">
                                 <div class="text-center opacity-30 p-5">
                                     <span class="material-symbols-outlined" style="font-size: 48px;">analytics</span>
-                                    <p class="modern-label mt-2">Selection Required</p>
+                                    <p class="modern-label mt-2 ui-label">Selection Required</p>
                                 </div>
                             </div>
                         </div>
@@ -93,20 +89,20 @@
         </div>
 
         <!-- Table Card -->
-        <div class="modern-card">
-            <div class="modern-card-header-action flex justify-between items-center w-full">
+        <div class="modern-card ui-card">
+            <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-primary">history</span>
-                    <h2 class="modern-headline-md">Activity Log</h2>
+                    <h2 class="modern-headline-md ui-section-title">Activity Log</h2>
                 </div>
                 <div class="flex items-center gap-2">
-                    <label class="modern-label mb-0" style="color: var(--on-surface-variant)">Filter by Date:</label>
-                    <input type="date" id="dateFilter" class="modern-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
+                    <label class="modern-label mb-0 ui-label" style="color: var(--on-surface-variant)">Filter by Date:</label>
+                    <input type="date" id="dateFilter" class="modern-input ui-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
                 </div>
             </div>
-            <div class="modern-card-body">
+            <div class="modern-card-body ui-card-body">
                 <div class="modern-table-container">
-                    <table id="auditTable" class="modern-table w-100">
+                    <table id="auditTable" class="modern-table w-100 ui-table">
                         <thead>
                             <tr>
                                 <th>DATE</th>
@@ -260,7 +256,7 @@
                 })
                 .fail(function(xhr) {
                     const errorMsg = xhr.responseText || 'Failed to load timeline.';
-                    $('#traceTimeline').html(`<div class="text-center py-5 text-danger"><span class="material-symbols-outlined" style="font-size:32px">error</span><p class="modern-label mt-2">${errorMsg}</p></div>`);
+                    $('#traceTimeline').html(`<div class="text-center py-5 text-danger"><span class="material-symbols-outlined" style="font-size:32px">error</span><p class="modern-label mt-2 ui-label">${errorMsg}</p></div>`);
                 })
                 .always(function() {
                     $('#traceLoading').addClass('hidden');

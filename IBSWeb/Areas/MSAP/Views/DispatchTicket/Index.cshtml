@@ -9,19 +9,15 @@
     var periodSearch = hasPeriod ? $"{periodFrom:yyyy-MM-dd}..{periodTo:yyyy-MM-dd}" : "";
 }
 
-<div class="modern-layout">
-    <main class="modern-container">
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
         <!-- Header Section -->
-        <div class="flex-stack">
+        <div class="flex-stack ui-page-toolbar">
             <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="modern-label" style="color: var(--on-surface-variant)">MSAP</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface)">Dispatch Tickets</span>
-                </div>
-                <h1 class="modern-headline-lg" data-page-header>@ViewData["Title"]</h1>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Dispatch Tickets</li></ol></nav>
+                <h1 class="modern-headline-lg ui-page-title" data-page-header>@ViewData["Title"]</h1>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 ui-actions">
                 <!-- Add New Button if needed in future -->
             </div>
         </div>
@@ -41,24 +37,24 @@
 
         @if (hasPeriod)
         {
-            <p id="dispatchPeriod" class="modern-label">Dispatch dates: @periodFrom.ToString("MMM d, yyyy")–@periodTo.ToString("MMM d, yyyy") · <a asp-action="Index">Clear date range</a></p>
+            <p id="dispatchPeriod" class="modern-label ui-label">Dispatch dates: @periodFrom.ToString("MMM d, yyyy")–@periodTo.ToString("MMM d, yyyy") · <a asp-action="Index">Clear date range</a></p>
         }
 
         <!-- Table Card -->
-        <div class="modern-card">
-            <div class="modern-card-header-action flex justify-between items-center w-full">
+        <div class="modern-card ui-card">
+            <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-primary">confirmation_number</span>
-                    <h2 class="modern-headline-md">Ticket Registry</h2>
+                    <h2 class="modern-headline-md ui-section-title">Ticket Registry</h2>
                 </div>
                 <div class="flex items-center gap-2">
-                    <label class="modern-label mb-0" style="color: var(--on-surface-variant)">Filter by Date:</label>
-                    <input type="date" id="dateFilter" class="modern-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
+                    <label class="modern-label mb-0 ui-label" style="color: var(--on-surface-variant)">Filter by Date:</label>
+                    <input type="date" id="dateFilter" class="modern-input ui-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
                 </div>
             </div>
-            <div class="modern-card-body">
+            <div class="modern-card-body ui-card-body">
                 <div class="modern-table-container">
-                    <table class="modern-table" id="paginatedTable">
+                    <table class="modern-table ui-table" id="paginatedTable">
                         <thead>
                             <tr>
                                 <th>Date</th>
@@ -171,11 +167,12 @@
                         className: "text-center",
                         render: (data) => {
                             let statusClass = "";
-                            if (data === "@MsapConstants.DispatchTicketStatus.ForTariff") statusClass = "status-tariff";
-                            else if (data === "@MsapConstants.DispatchTicketStatus.ForApproval") statusClass = "status-approval";
-                            else if (data === "@MsapConstants.DispatchTicketStatus.Disapproved") statusClass = "status-error";
-                            else if (data === "@MsapConstants.DispatchTicketStatus.ForBilling") statusClass = "status-billing";
-                            else if (data === "@MsapConstants.DispatchTicketStatus.Billed") statusClass = "status-confirmed";
+                            if (data === "@MsapConstants.DispatchTicketStatus.CalculationPending") return ModernTable.render.badge("Calculation pending", "ui-status ui-critical");
+                            if (data === "@MsapConstants.DispatchTicketStatus.ForTariff") statusClass = "ui-status ui-attention";
+                            else if (data === "@MsapConstants.DispatchTicketStatus.ForApproval") statusClass = "ui-status ui-attention";
+                            else if (data === "@MsapConstants.DispatchTicketStatus.Disapproved") statusClass = "ui-status ui-critical";
+                            else if (data === "@MsapConstants.DispatchTicketStatus.ForBilling") statusClass = "ui-status ui-attention";
+                            else if (data === "@MsapConstants.DispatchTicketStatus.Billed") statusClass = "ui-status ui-complete";
                             return ModernTable.render.badge(data, statusClass);
                         }
                     },

@@ -4,7 +4,7 @@
 {
     @foreach (var dt in Model.PaidDispatchTickets.Where(dt => !string.IsNullOrEmpty(dt.ImageSignedUrl)))
     {
-        <div class="wf-panel modern-card ticket-image-page">
+        <div class="ui-panel modern-card ticket-image-page">
             <div class="billing-statement text-center">
                 <h4 class="font-bold text-sm mb-3">
                     Dispatch Ticket #@(dt.DispatchNumber) &mdash; Billing @Model.MsapBillingNumber

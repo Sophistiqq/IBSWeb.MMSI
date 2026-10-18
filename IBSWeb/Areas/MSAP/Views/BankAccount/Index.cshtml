@@ -3,18 +3,14 @@
     ViewData["IsFullWidth"] = true;
 }
 
-<div class="modern-layout">
-    <main class="modern-container">
-        <div class="flex-stack">
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
+        <div class="flex-stack ui-page-toolbar">
             <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="modern-label" style="color: var(--on-surface-variant)">MSAP</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface)">Bank Accounts</span>
-                </div>
-                <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Bank Accounts</li></ol></nav>
+                <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 ui-actions">
                 <a asp-action="Create" class="modern-btn-primary">
                     <span class="material-symbols-outlined">add_circle</span>
                     CREATE NEW
@@ -22,15 +18,15 @@
             </div>
         </div>
 
-        <div class="modern-card">
-            <div class="modern-card-header-action flex justify-between items-center w-full">
+        <div class="modern-card ui-card">
+            <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-primary">account_balance</span>
-                    <h2 class="modern-headline-md">Bank Account List</h2>
+                    <h2 class="modern-headline-md ui-section-title">Bank Account List</h2>
                 </div>
             </div>
-            <div class="modern-card-body">
-                <table class="modern-table" id="bankAccountTable">
+            <div class="modern-card-body ui-card-body">
+                <table class="modern-table ui-table" id="bankAccountTable">
                     <thead>
                         <tr>
                             <th>Code</th>

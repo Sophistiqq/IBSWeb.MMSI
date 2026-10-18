@@ -9,30 +9,30 @@
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/collection-form.css" asp-append-version="true" />
-<div class="modern-layout msap-workflow collection-form">
+<div class="modern-layout app-ui collection-form">
     <main class="collection-workspace">
-        <aside class="wf-panel schedule-details-progress" aria-label="Job Progress">
+        <aside class="ui-panel schedule-details-progress" aria-label="Job Progress">
             @if (progressItems.Count > 0)
             {
                 <partial name="_JobProgressList" model="progressItems" />
             }
             else
             {
-                <h2 class="wf-section-title">Job Progress</h2>
-                <p class="wf-caption wf-muted">No COS is linked to this receipt.</p>
+                <h2 class="ui-section-title">Job Progress</h2>
+                <p class="ui-caption ui-muted">No COS is linked to this receipt.</p>
             }
         </aside>
-        <div class="wf-stack collection-content">
-            <header class="wf-page-header">
-                <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb"><li><a asp-action="Index">Collections</a></li><li aria-current="page">@Model.MsapCollectionNumber</li></ol></nav>
-                <h1 class="wf-page-title" data-page-header>Receipt @Model.MsapCollectionNumber</h1>
-                <a asp-action="Index" class="modern-btn-secondary wf-page-action">Collections</a>
-                <p class="wf-page-description wf-caption wf-muted">@Model.PaymentStatus / @(Model.IsUndocumented ? "Undocumented" : "Documented") / @Model.Date.ToString(MsapConstants.Date_Format)</p>
+        <div class="ui-stack collection-content">
+            <header class="ui-page-header">
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">Collections</a></li><li aria-current="page">@Model.MsapCollectionNumber</li></ol></nav>
+                <h1 class="ui-page-title" data-page-header>Receipt @Model.MsapCollectionNumber</h1>
+                <a asp-action="Index" class="modern-btn-secondary ui-page-action">Collections</a>
+                <p class="ui-page-description ui-caption ui-muted">@Model.PaymentStatus / @(Model.IsUndocumented ? "Undocumented" : "Documented") / @Model.Date.ToString(MsapConstants.Date_Format)</p>
             </header>
-            <section class="wf-panel collection-heading" aria-label="Receipt actions">
+            <section class="ui-panel collection-heading @(Model.ClearedDate.HasValue ? "" : Model.ReturnedDate.HasValue && !Model.DepositDate.HasValue ? "ui-critical" : "ui-attention")" aria-label="Receipt actions">
                 <div>
-                    <h2 class="wf-section-title">Receipt banking</h2>
-                    <p class="wf-caption wf-muted">Banking updates this receipt once for all covered billings.</p>
+                    <h2 class="ui-section-title">Receipt banking</h2>
+                    <p class="ui-caption ui-muted">Banking updates this receipt once for all covered billings.</p>
                 </div>
                 <div class="collection-actions">
                     @if (canEdit)
@@ -57,25 +57,25 @@
                 </div>
                 @if (Model.IsMonthClosed)
                 {
-                    <p class="wf-caption wf-muted">This receipt belongs to a closed period.</p>
+                    <p class="ui-caption ui-muted">This receipt belongs to a closed period.</p>
                 }
                 else if (Model.ClearedDate.HasValue)
                 {
-                    <p class="wf-caption wf-muted">This receipt has cleared. Other receipts or unpaid bills may still remain on the COS.</p>
+                    <p class="ui-caption ui-muted">This receipt has cleared. Other receipts or unpaid bills may still remain on the COS.</p>
                 }
             </section>
-            <section class="wf-panel wf-stack" aria-labelledby="receiptDetailsHeading">
-                <h2 id="receiptDetailsHeading" class="wf-section-title">Receipt details</h2>
+            <section class="ui-panel ui-stack" aria-labelledby="receiptDetailsHeading">
+                <h2 id="receiptDetailsHeading" class="ui-section-title">Receipt details</h2>
                 <div class="collection-fields">
-                    <div class="wf-field"><span class="wf-caption wf-muted">Service customer</span><p class="wf-body">@Model.Customer?.CustomerName</p></div>
-                    <div class="wf-field"><span class="wf-caption wf-muted">TIN</span><p class="wf-body">@(Model.Customer?.CustomerTin ?? "Not recorded")</p></div>
-                    <div class="wf-field"><span class="wf-caption wf-muted">Reference number</span><p class="wf-body">@(Model.ReferenceNo ?? "Not recorded")</p></div>
-                    <div class="wf-field"><span class="wf-caption wf-muted">Address</span><p class="wf-body">@Model.Customer?.CustomerAddress</p></div>
-                    <div class="wf-field"><span class="wf-caption wf-muted">Business style</span><p class="wf-body">@(Model.Customer?.BusinessStyle ?? "Not recorded")</p></div>
+                    <div class="ui-field"><span class="ui-caption ui-muted">Service customer</span><p class="ui-body">@Model.Customer?.CustomerName</p></div>
+                    <div class="ui-field"><span class="ui-caption ui-muted">TIN</span><p class="ui-body">@(Model.Customer?.CustomerTin ?? "Not recorded")</p></div>
+                    <div class="ui-field"><span class="ui-caption ui-muted">Reference number</span><p class="ui-body">@(Model.ReferenceNo ?? "Not recorded")</p></div>
+                    <div class="ui-field"><span class="ui-caption ui-muted">Address</span><p class="ui-body">@Model.Customer?.CustomerAddress</p></div>
+                    <div class="ui-field"><span class="ui-caption ui-muted">Business style</span><p class="ui-body">@(Model.Customer?.BusinessStyle ?? "Not recorded")</p></div>
                 </div>
             </section>
-            <section class="wf-panel wf-stack" aria-labelledby="coveredBillingsHeading">
-                <h2 id="coveredBillingsHeading" class="wf-section-title">Billings covered by this receipt</h2>
+            <section class="ui-panel ui-stack" aria-labelledby="coveredBillingsHeading">
+                <h2 id="coveredBillingsHeading" class="ui-section-title">Billings covered by this receipt</h2>
                 <div class="collection-table-scroll">
                     <table class="collection-table">
                         <thead><tr><th>Billing</th><th>Component</th><th>Billing date</th><th>Bill amount</th><th>Gross paid by receipt</th><th>Remaining bill balance</th></tr></thead>
@@ -99,38 +99,38 @@
                         </tbody>
                     </table>
                 </div>
-                <p class="wf-caption wf-muted">Each billing keeps its own payment allocation and remaining balance. A paid balance does not mean the receipt has cleared.</p>
+                <p class="ui-caption ui-muted">Each billing keeps its own payment allocation and remaining balance. A paid balance does not mean the receipt has cleared.</p>
             </section>
             <div class="collection-settlement-layout">
-                <div class="wf-stack">
-                    <section class="wf-panel wf-stack" aria-labelledby="checkDetailsHeading">
-                        <h2 id="checkDetailsHeading" class="wf-section-title">Check details</h2>
+                <div class="ui-stack">
+                    <section class="ui-panel ui-stack" aria-labelledby="checkDetailsHeading">
+                        <h2 id="checkDetailsHeading" class="ui-section-title">Check details</h2>
                         @if (Model.CheckAmount > 0)
                         {
                             <div class="collection-fields collection-fields--two">
-                                <div class="wf-field"><span class="wf-caption wf-muted">Check's issuing bank</span><p class="wf-body">@(Model.CheckBank ?? "Not recorded")</p></div>
-                                <div class="wf-field"><span class="wf-caption wf-muted">Issuing branch</span><p class="wf-body">@(Model.CheckBranch ?? "Not recorded")</p></div>
-                                <div class="wf-field"><span class="wf-caption wf-muted">Check number</span><p class="wf-body">@Model.CheckNumber</p></div>
-                                <div class="wf-field"><span class="wf-caption wf-muted">Check date</span><p class="wf-body">@(Model.CheckDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
+                                <div class="ui-field"><span class="ui-caption ui-muted">Check's issuing bank</span><p class="ui-body">@(Model.CheckBank ?? "Not recorded")</p></div>
+                                <div class="ui-field"><span class="ui-caption ui-muted">Issuing branch</span><p class="ui-body">@(Model.CheckBranch ?? "Not recorded")</p></div>
+                                <div class="ui-field"><span class="ui-caption ui-muted">Check number</span><p class="ui-body">@Model.CheckNumber</p></div>
+                                <div class="ui-field"><span class="ui-caption ui-muted">Check date</span><p class="ui-body">@(Model.CheckDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
                             </div>
                         }
                         else
                         {
-                            <p class="wf-body wf-muted">No check payment recorded.</p>
+                            <p class="ui-body ui-muted">No check payment recorded.</p>
                         }
                     </section>
-                    <section class="wf-panel wf-stack" aria-labelledby="depositDetailsHeading">
-                        <h2 id="depositDetailsHeading" class="wf-section-title">Deposit and clearing</h2>
-                        <div class="wf-field"><span class="wf-caption wf-muted">MMSI receiving bank account</span><p class="wf-body">@(Model.BankAccount?.Bank ?? "Not recorded")</p><p class="wf-caption wf-muted">@(Model.BankAccountNumber ?? Model.BankAccount?.AccountNo) / @(Model.BankAccountName ?? Model.BankAccount?.AccountName)</p></div>
+                    <section class="ui-panel ui-stack" aria-labelledby="depositDetailsHeading">
+                        <h2 id="depositDetailsHeading" class="ui-section-title">Deposit and clearing</h2>
+                        <div class="ui-field"><span class="ui-caption ui-muted">MMSI receiving bank account</span><p class="ui-body">@(Model.BankAccount?.Bank ?? "Not recorded")</p><p class="ui-caption ui-muted">@(Model.BankAccountNumber ?? Model.BankAccount?.AccountNo) / @(Model.BankAccountName ?? Model.BankAccount?.AccountName)</p></div>
                         <div class="collection-fields">
-                            <div class="wf-field"><span class="wf-caption wf-muted">@(Model.ReturnedDate.HasValue ? "Latest deposit" : "Deposit date")</span><p class="wf-body">@(Model.DepositDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
-                            <div class="wf-field"><span class="wf-caption wf-muted">Last check return</span><p class="wf-body">@(Model.ReturnedDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
-                            <div class="wf-field"><span class="wf-caption wf-muted">Clearing date</span><p class="wf-body">@(Model.ClearedDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
+                            <div class="ui-field"><span class="ui-caption ui-muted">@(Model.ReturnedDate.HasValue ? "Latest deposit" : "Deposit date")</span><p class="ui-body">@(Model.DepositDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
+                            <div class="ui-field"><span class="ui-caption ui-muted">Last check return</span><p class="ui-body">@(Model.ReturnedDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
+                            <div class="ui-field"><span class="ui-caption ui-muted">Clearing date</span><p class="ui-body">@(Model.ClearedDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
                         </div>
                     </section>
                 </div>
-                <section class="wf-panel wf-stack collection-summary" aria-labelledby="receiptTotalsHeading">
-                    <h2 id="receiptTotalsHeading" class="wf-section-title">Receipt totals</h2>
+                <section class="ui-panel ui-stack collection-summary" aria-labelledby="receiptTotalsHeading">
+                    <h2 id="receiptTotalsHeading" class="ui-section-title">Receipt totals</h2>
                     <dl>
                         <div><dt>Cash received</dt><dd>@Model.CashAmount.ToString("N2")</dd></div>
                         <div><dt>Check received</dt><dd>@Model.CheckAmount.ToString("N2")</dd></div>
@@ -141,7 +141,7 @@
                     </dl>
                 </section>
             </div>
-            <section class="wf-panel wf-field"><h2 class="wf-section-title">Remarks</h2><p class="wf-body collection-remarks">@(string.IsNullOrWhiteSpace(Model.Remarks) ? "No remarks." : Model.Remarks)</p></section>
+            <section class="ui-panel ui-field"><h2 class="ui-section-title">Remarks</h2><p class="ui-body collection-remarks">@(string.IsNullOrWhiteSpace(Model.Remarks) ? "No remarks." : Model.Remarks)</p></section>
         </div>
     </main>
 </div>

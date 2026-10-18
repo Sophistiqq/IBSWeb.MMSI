@@ -37,7 +37,7 @@
 <section class="modern-card job-progress" aria-label="Job Progress">
     <div class="job-progress-heading">
         <h2 class="modern-headline-md">Job Progress</h2>
-        <span class="modern-badge-sm">@(Model.IsCancelled ? "Cancelled" : Model.IsInvalidated ? "Invalidated" : Model.Stopped ? "Needs attention" : stages.First(s => s.Stage == currentStage).Label)</span>
+        <span class="modern-badge-sm @(Model.CalculationBlockers.Count > 0 ? "ui-status ui-critical" : Model.Stopped && !Model.IsCancelled && !Model.IsInvalidated ? "ui-status ui-attention" : "")">@(Model.IsCancelled ? "Cancelled" : Model.IsInvalidated ? "Invalidated" : Model.Stopped ? "Needs attention" : stages.First(s => s.Stage == currentStage).Label)</span>
     </div>
     <ol class="job-progress-timeline" aria-label="Job stages">
         @for (int index = 0; index < stages.Length; index++)
@@ -132,7 +132,7 @@
             </li>
         }
     </ol>
-    <div class="job-progress-next">
+    <div class="job-progress-next @(Model.CalculationBlockers.Count > 0 ? "ui-critical" : Model.Stopped && !Model.IsCancelled && !Model.IsInvalidated ? "ui-attention" : "")">
         <div>
             <span class="modern-label">@(Model.Stage == JobProgressCalculator.CompletedStage && !Model.Stopped ? "Completed" : "Next Action")</span>
             <p>@Model.Guidance</p>

@@ -1,24 +1,19 @@
 @model IBS.Models.MSAP.MasterFile.EmployeeViewModel
 
 @{
+    ViewData["IsFullWidth"] = true;
     ViewData["Title"] = "Edit Employee";
 }
 
-<div class="modern-layout">
-    <main class="modern-container">
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
         <!-- Header Section -->
-        <div class="flex-stack">
+        <div class="flex-stack ui-page-toolbar">
             <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="modern-label" style="color: var(--on-surface-variant)">GENERAL</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface-variant)">Employee</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface)">Edit</span>
-                </div>
-                <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>GENERAL</li><li>Employee</li><li aria-current="page">Edit</li></ol></nav>
+                <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 ui-actions">
                 <a asp-action="Index" class="modern-btn-secondary">
                     <span class="material-symbols-outlined">arrow_back</span>
                     BACK TO LIST
@@ -26,12 +21,12 @@
             </div>
         </div>
 
-        <div class="modern-card">
-            <div class="modern-card-header-info">
+        <div class="modern-card ui-card">
+            <div class="modern-card-header-info ui-card-header">
                 <span class="material-symbols-outlined">edit</span>
-                <h2 class="modern-headline-md">Employee Information - @Model.EmployeeNumber</h2>
+                <h2 class="modern-headline-md ui-section-title">Employee Information - @Model.EmployeeNumber</h2>
             </div>
-            <div class="modern-card-body">
+            <div class="modern-card-body ui-card-body">
                 <form asp-action="Edit" class="flex flex-col gap-4">
                     @Html.AntiForgeryToken()
                     <input type="hidden" asp-for="EmployeeId" />
@@ -39,7 +34,7 @@
 
                     <div class="modern-grid">
                         <div class="modern-col-6">
-                            <label asp-for="Status" class="modern-label">Employment Status <span class="text-error">*</span></label>
+                            <label asp-for="Status" class="modern-label ui-label">Employment Status <span class="text-error">*</span></label>
                             <div class="radio-group mt-1">
                                 <input class="radio-tab-input" type="radio" asp-for="Status" id="statusP" value="P" required>
                                 <label class="radio-tab-label" for="statusP">Provisionary</label>
@@ -53,52 +48,52 @@
 
                     <div class="modern-grid">
                         <div class="modern-col-4">
-                            <label asp-for="EmployeeNumber" class="modern-label">Employee Number <span class="text-error">*</span></label>
-                            <input asp-for="EmployeeNumber" class="modern-input" maxlength="4" required />
+                            <label asp-for="EmployeeNumber" class="modern-label ui-label">Employee Number <span class="text-error">*</span></label>
+                            <input asp-for="EmployeeNumber" class="modern-input ui-input" maxlength="4" required />
                             <span asp-validation-for="EmployeeNumber" class="text-error text-xs"></span>
                         </div>
                         <div class="modern-col-4">
-                            <label asp-for="Initial" class="modern-label">Initial</label>
-                            <input asp-for="Initial" class="modern-input" maxlength="3" />
+                            <label asp-for="Initial" class="modern-label ui-label">Initial</label>
+                            <input asp-for="Initial" class="modern-input ui-input" maxlength="3" />
                             <span asp-validation-for="Initial" class="text-error text-xs"></span>
                         </div>
                     </div>
 
                     <div class="modern-grid">
                         <div class="modern-col-4">
-                            <label asp-for="FirstName" class="modern-label">First Name <span class="text-error">*</span></label>
-                            <input asp-for="FirstName" class="modern-input" required />
+                            <label asp-for="FirstName" class="modern-label ui-label">First Name <span class="text-error">*</span></label>
+                            <input asp-for="FirstName" class="modern-input ui-input" required />
                             <span asp-validation-for="FirstName" class="text-error text-xs"></span>
                         </div>
                         <div class="modern-col-4">
-                            <label asp-for="MiddleName" class="modern-label">Middle Name</label>
-                            <input asp-for="MiddleName" class="modern-input" />
+                            <label asp-for="MiddleName" class="modern-label ui-label">Middle Name</label>
+                            <input asp-for="MiddleName" class="modern-input ui-input" />
                             <span asp-validation-for="MiddleName" class="text-error text-xs"></span>
                         </div>
                         <div class="modern-col-4">
-                            <label asp-for="LastName" class="modern-label">Last Name <span class="text-error">*</span></label>
-                            <input asp-for="LastName" class="modern-input" required />
+                            <label asp-for="LastName" class="modern-label ui-label">Last Name <span class="text-error">*</span></label>
+                            <input asp-for="LastName" class="modern-input ui-input" required />
                             <span asp-validation-for="LastName" class="text-error text-xs"></span>
                         </div>
                     </div>
 
                     <div class="modern-grid">
                         <div class="modern-col-8">
-                            <label asp-for="Address" class="modern-label">Address <span class="text-error">*</span></label>
-                            <textarea asp-for="Address" class="modern-input" required></textarea>
+                            <label asp-for="Address" class="modern-label ui-label">Address <span class="text-error">*</span></label>
+                            <textarea asp-for="Address" class="modern-input ui-input" required></textarea>
                             <span asp-validation-for="Address" class="text-error text-xs"></span>
                         </div>
                         <div class="modern-col-4">
-                            <label asp-for="BirthDate" class="modern-label">Birth Date</label>
-                            <input asp-for="BirthDate" type="date" class="modern-input" />
+                            <label asp-for="BirthDate" class="modern-label ui-label">Birth Date</label>
+                            <input asp-for="BirthDate" type="date" class="modern-input ui-input" />
                             <span asp-validation-for="BirthDate" class="text-error text-xs"></span>
                         </div>
                     </div>
 
                     <div class="modern-grid">
                         <div class="modern-col-4">
-                            <label asp-for="Department" class="modern-label">Department <span class="text-error">*</span></label>
-                            <select asp-for="Department" class="modern-input js-modern-select" data-placeholder="Select Department" required>
+                            <label asp-for="Department" class="modern-label ui-label">Department <span class="text-error">*</span></label>
+                            <select asp-for="Department" class="modern-input js-modern-select ui-input" data-placeholder="Select Department" required>
                                 <option value="" disabled>Select Department</option>
                                 <option value="Accounting">Accounting</option>
                                 <option value="Credit and Collection">Credit and Collection</option>
@@ -121,56 +116,56 @@
                             <span asp-validation-for="Department" class="text-error text-xs"></span>
                         </div>
                         <div class="modern-col-4">
-                            <label asp-for="Position" class="modern-label">Position <span class="text-error">*</span></label>
-                            <input asp-for="Position" class="modern-input" required />
+                            <label asp-for="Position" class="modern-label ui-label">Position <span class="text-error">*</span></label>
+                            <input asp-for="Position" class="modern-input ui-input" required />
                             <span asp-validation-for="Position" class="text-error text-xs"></span>
                         </div>
                         <div class="modern-col-4">
-                            <label asp-for="Supervisor" class="modern-label">Supervisor <span class="text-error">*</span></label>
-                            <input asp-for="Supervisor" class="modern-input" required />
+                            <label asp-for="Supervisor" class="modern-label ui-label">Supervisor <span class="text-error">*</span></label>
+                            <input asp-for="Supervisor" class="modern-input ui-input" required />
                             <span asp-validation-for="Supervisor" class="text-error text-xs"></span>
                         </div>
                     </div>
 
                     <div class="modern-grid">
                         <div class="modern-col-4">
-                            <label asp-for="DateHired" class="modern-label">Date Hired</label>
-                            <input asp-for="DateHired" type="date" class="modern-input" />
+                            <label asp-for="DateHired" class="modern-label ui-label">Date Hired</label>
+                            <input asp-for="DateHired" type="date" class="modern-input ui-input" />
                             <span asp-validation-for="DateHired" class="text-error text-xs"></span>
                         </div>
                         <div class="modern-col-4">
-                            <label asp-for="Salary" class="modern-label">Salary <span class="text-error">*</span></label>
-                            <input asp-for="Salary" class="modern-input" required />
+                            <label asp-for="Salary" class="modern-label ui-label">Salary <span class="text-error">*</span></label>
+                            <input asp-for="Salary" class="modern-input ui-input" required />
                             <span asp-validation-for="Salary" class="text-error text-xs"></span>
                         </div>
                         <div class="modern-col-4 flex items-center gap-4 pt-4">
                             <div class="flex items-center gap-2">
                                 <input asp-for="IsManagerial" class="form-check-input" />
-                                <label asp-for="IsManagerial" class="modern-label mb-0">Managerial</label>
+                                <label asp-for="IsManagerial" class="modern-label mb-0 ui-label">Managerial</label>
                             </div>
                             <div class="flex items-center gap-2">
                                 <input asp-for="IsActive" class="form-check-input" />
-                                <label asp-for="IsActive" class="modern-label mb-0">Active</label>
+                                <label asp-for="IsActive" class="modern-label mb-0 ui-label">Active</label>
                             </div>
                         </div>
                     </div>
 
                     <div class="modern-grid-compact border-t border-outline-variant pt-4">
                         <div class="modern-col-6">
-                            <label asp-for="SssNo" class="modern-label">SSS No.</label>
-                            <input asp-for="SssNo" class="modern-input" />
+                            <label asp-for="SssNo" class="modern-label ui-label">SSS No.</label>
+                            <input asp-for="SssNo" class="modern-input ui-input" />
                         </div>
                         <div class="modern-col-6">
-                            <label asp-for="TinNo" class="modern-label">TIN No.</label>
-                            <input asp-for="TinNo" class="modern-input" />
+                            <label asp-for="TinNo" class="modern-label ui-label">TIN No.</label>
+                            <input asp-for="TinNo" class="modern-input ui-input" />
                         </div>
                         <div class="modern-col-6">
-                            <label asp-for="PhilhealthNo" class="modern-label">Philhealth No.</label>
-                            <input asp-for="PhilhealthNo" class="modern-input" />
+                            <label asp-for="PhilhealthNo" class="modern-label ui-label">Philhealth No.</label>
+                            <input asp-for="PhilhealthNo" class="modern-input ui-input" />
                         </div>
                         <div class="modern-col-6">
-                            <label asp-for="PagibigNo" class="modern-label">Pag-IBIG No.</label>
-                            <input asp-for="PagibigNo" class="modern-input" />
+                            <label asp-for="PagibigNo" class="modern-label ui-label">Pag-IBIG No.</label>
+                            <input asp-for="PagibigNo" class="modern-input ui-input" />
                         </div>
                     </div>
 

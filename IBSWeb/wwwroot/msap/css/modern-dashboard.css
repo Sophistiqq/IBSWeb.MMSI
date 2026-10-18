@@ -1,10 +1,10 @@
 /* Dashboard uses the same spacing, typography and flat panels as the workflow pages. */
-.msap-workflow.dashboard-workspace {
+.app-ui.dashboard-workspace {
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: var(--wf-space-4) var(--wf-space-4) var(--wf-space-5);
-    --wf-section-gap: var(--wf-space-4);
+    padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-5);
+    --ui-section-gap: var(--ui-space-4);
 }
 
 .dashboard-workspace a {
@@ -23,29 +23,7 @@
 }
 
 .dashboard-workspace .dashboard-actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--wf-space-3);
     padding: 0;
-}
-
-.dashboard-workspace :is(.modern-btn-primary, .modern-btn-secondary) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: var(--wf-control-height);
-    padding: var(--wf-space-2) var(--wf-space-5);
-    border: 1px solid var(--outline-variant);
-    border-radius: var(--wf-radius);
-    box-shadow: none;
-    white-space: nowrap;
-}
-
-.dashboard-workspace :is(.modern-btn-primary, .modern-btn-primary:hover) {
-    color: var(--surface-container-lowest);
-    background: var(--on-surface);
-    border-color: var(--on-surface);
 }
 
 .dashboard-header .dashboard-actions > a {
@@ -53,50 +31,33 @@
     min-width: 10rem;
 }
 
-.dashboard-workspace .modern-btn-secondary {
-    color: var(--on-surface);
-    background: var(--surface-container-lowest);
-}
-
-.dashboard-workspace .modern-btn-secondary:hover {
-    background: var(--surface-container-low);
-}
-
-.dashboard-heading, .dashboard-rate {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--wf-space-3);
-    flex-wrap: wrap;
-}
-
 .dashboard-rate {
     background: var(--surface-container);
 }
 
 .dashboard-rate p {
-    margin-top: var(--wf-space-2);
+    margin-top: var(--ui-space-2);
 }
 
 .dashboard-approvals, .dashboard-stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
-    gap: var(--wf-space-4);
+    gap: var(--ui-space-4);
 }
 
 .dashboard-metric, .dashboard-stat {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--wf-space-2);
+    gap: var(--ui-space-2);
     min-width: 0;
-    padding: var(--wf-space-4);
+    padding: var(--ui-space-4);
 }
 
 .dashboard-workspace :is(.dashboard-metric, .dashboard-stat) > strong {
-    font-size: var(--wf-text-page);
-    font-weight: var(--wf-weight-bold);
-    line-height: var(--wf-leading-heading);
+    font-size: var(--ui-text-page);
+    font-weight: var(--ui-weight-bold);
+    line-height: var(--ui-leading-heading);
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
     max-width: 100%;
@@ -110,21 +71,21 @@
 .dashboard-stat h3 {
     margin: 0;
     color: var(--on-surface-variant);
-    font-size: var(--wf-text-caption);
-    font-weight: var(--wf-weight-regular);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-regular);
 }
 
 .dashboard-stat p {
     margin: 0;
     color: var(--on-surface-variant);
-    font-size: var(--wf-text-caption);
+    font-size: var(--ui-text-caption);
 }
 
 .dashboard-main {
     display: grid;
     grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
     align-items: start;
-    gap: var(--wf-space-4);
+    gap: var(--ui-space-4);
 }
 
 .dashboard-main > :only-child {
@@ -136,11 +97,11 @@
 }
 
 .dashboard-review {
-    scroll-margin-top: var(--wf-space-5);
+    scroll-margin-top: var(--ui-space-5);
 }
 
 .dashboard-review + .dashboard-review {
-    padding-top: var(--wf-space-4);
+    padding-top: var(--ui-space-4);
     border-top: 1px solid var(--outline-variant);
 }
 
@@ -151,19 +112,19 @@
 .dashboard-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: var(--wf-text-body);
+    font-size: var(--ui-text-body);
 }
 
 .dashboard-table :is(th, td) {
-    padding: var(--wf-space-3) var(--wf-space-2);
+    padding: var(--ui-space-3) var(--ui-space-2);
     text-align: left;
     vertical-align: middle;
 }
 
 .dashboard-table th {
     color: var(--on-surface-variant);
-    font-size: var(--wf-text-caption);
-    font-weight: var(--wf-weight-medium);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-medium);
     white-space: nowrap;
 }
 
@@ -173,9 +134,9 @@
 
 .dashboard-table small {
     display: block;
-    margin-top: var(--wf-space-1);
+    margin-top: var(--ui-space-1);
     color: var(--on-surface-variant);
-    font-size: var(--wf-text-caption);
+    font-size: var(--ui-text-caption);
 }
 
 .dashboard-window {
@@ -185,26 +146,26 @@
 
 .dashboard-status {
     display: inline-block;
-    padding: var(--wf-space-1) var(--wf-space-2);
-    border-radius: var(--wf-radius);
+    padding: var(--ui-space-1) var(--ui-space-2);
+    border-radius: var(--ui-radius);
     background: var(--surface-container);
     color: var(--on-surface);
-    font-size: var(--wf-text-caption);
+    font-size: var(--ui-text-caption);
     white-space: nowrap;
 }
 
 .dashboard-header .dashboard-status {
-    margin-right: var(--wf-space-2);
+    margin-right: var(--ui-space-2);
 }
 
-.dashboard-header .wf-page-description > a {
-    margin-left: var(--wf-space-2);
+.dashboard-header .ui-page-description > a {
+    margin-left: var(--ui-space-2);
 }
 
 .dashboard-upcoming {
     display: flex;
     flex-direction: column;
-    gap: var(--wf-space-4);
+    gap: var(--ui-space-4);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -213,43 +174,43 @@
 .dashboard-upcoming li {
     display: flex;
     flex-direction: column;
-    gap: var(--wf-space-1);
+    gap: var(--ui-space-1);
 }
 
 .dashboard-upcoming a, .dashboard-end-link, .dashboard-table a {
-    font-weight: var(--wf-weight-medium);
+    font-weight: var(--ui-weight-medium);
 }
 
 .dashboard-end-link {
     align-self: flex-end;
-    font-size: var(--wf-text-caption);
+    font-size: var(--ui-text-caption);
 }
 
 .dashboard-banking, .dashboard-footer {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
-    gap: var(--wf-space-4);
-    padding: var(--wf-space-4);
+    gap: var(--ui-space-4);
+    padding: var(--ui-space-4);
 }
 
 :is(.dashboard-banking, .dashboard-footer) > div:not(.dashboard-actions) {
     display: flex;
     flex-direction: column;
-    gap: var(--wf-space-2);
+    gap: var(--ui-space-2);
 }
 
 .dashboard-banking strong, .dashboard-footer strong {
-    font-size: var(--wf-text-body);
-    font-weight: var(--wf-weight-semibold);
+    font-size: var(--ui-text-body);
+    font-weight: var(--ui-weight-semibold);
     font-variant-numeric: tabular-nums;
 }
 
 .dashboard-empty {
     margin: 0;
-    padding: var(--wf-space-4);
+    padding: var(--ui-space-4);
     color: var(--on-surface-variant);
-    font-size: var(--wf-text-body);
+    font-size: var(--ui-text-body);
 }
 
 .dashboard-notice {
@@ -264,9 +225,39 @@
 }
 
 @media (max-width: 767px) {
-    .msap-workflow.dashboard-workspace { padding: var(--wf-space-2); }
+    .app-ui.dashboard-workspace { padding: var(--ui-space-2); }
     .dashboard-workspace .dashboard-actions { justify-self: stretch; }
     .dashboard-header .dashboard-actions > a { flex: 1; }
     .dashboard-banking, .dashboard-footer { grid-template-columns: minmax(0, 1fr); }
     .dashboard-table { min-width: 36rem; }
+}
+
+.dashboard-state-key {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-3);
+}
+
+.dashboard-workspace :is(.dashboard-metric, .dashboard-stat):is(.ui-attention, .ui-critical) > strong {
+    color: var(--ui-state-ink);
+}
+
+.dashboard-banking > :is(.ui-attention, .ui-critical) {
+    border-inline-start: 3px solid var(--ui-state-accent);
+    padding-inline-start: var(--ui-space-3);
+}
+
+.dashboard-workspace .dashboard-table td:last-child > a {
+    display: inline-block;
+    padding: var(--ui-space-1) var(--ui-space-3);
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--ui-radius);
+    background: var(--surface-container-lowest);
+    white-space: nowrap;
+}
+
+.dashboard-workspace .dashboard-table td:last-child > a:hover {
+    background: var(--surface-container);
+    border-color: var(--on-surface-variant);
 }

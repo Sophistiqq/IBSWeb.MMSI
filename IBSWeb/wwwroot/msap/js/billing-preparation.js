@@ -79,7 +79,7 @@ $(function () {
         });
         groups.forEach((services, tugboat) => {
             $body.append($('<tr class="billing-tugboat-row">').append($('<th colspan="6" scope="rowgroup">').append(
-                $('<span>').text(tugboat), $('<span class="billing-tugboat-owner wf-caption wf-muted">').text(services[0].isCompanyOwned ? 'Company-owned' : 'Subcontractor'))));
+                $('<span>').text(tugboat), $('<span class="billing-tugboat-owner ui-caption ui-muted">').text(services[0].isCompanyOwned ? 'Company-owned' : 'Subcontractor'))));
             services.forEach(ticket => {
                 const $row = $('<tr>');
                 $row.append($('<td>').append($('<strong>').text(ticket.service), $('<span class="billing-ticket-number">').text(ticket.dispatchNo)));

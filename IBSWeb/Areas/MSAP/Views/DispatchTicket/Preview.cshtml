@@ -6,25 +6,19 @@
     var filterType = ViewBag.FilterType as string;
 }
 
-<div class="modern-layout">
-    <main class="modern-container">
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
             @Html.AntiForgeryToken()
         <!-- Header -->
-        <div class="flex-stack">
+        <div class="flex-stack ui-page-toolbar">
             <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="modern-label">MSAP</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <a class="modern-label" style="text-decoration:none;" asp-action="Index">Dispatch Tickets</a>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="modern-label" style="color: var(--on-surface)">@Model.DispatchNumber</span>
-                </div>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li><a asp-action="Index">Dispatch Tickets</a></li><li aria-current="page">@Model.DispatchNumber</li></ol></nav>
                 <div class="flex items-center gap-3">
-                    <h1 class="modern-headline-lg" data-page-header>@Model.DispatchNumber</h1>
-                    <span class="modern-badge @(Model.Status == MsapConstants.DispatchTicketStatus.ForBilling ? "status-billing" : (Model.Status == MsapConstants.DispatchTicketStatus.Disapproved ? "status-error" : "status-tariff"))">@Model.Status</span>
+                    <h1 class="modern-headline-lg ui-page-title" data-page-header>@Model.DispatchNumber</h1>
+                    <span class="modern-badge @(Model.Status == MsapConstants.DispatchTicketStatus.ForBilling ?"status-billing" : (Model.Status == MsapConstants.DispatchTicketStatus.Disapproved ? "status-error" : "status-tariff"))">@Model.Status</span>
                 </div>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 ui-actions">
                 @if (Model.CustomerOrderSlipId.HasValue)
                 {
                     <a class="modern-btn-secondary" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value">
@@ -43,19 +37,19 @@
         <div class="modern-grid">
             <!-- Left Column: Dispatch Details -->
             <div class="modern-col-4">
-                <div class="modern-card sticky top-24">
-                    <div class="modern-card-header-info">
+                <div class="modern-card sticky top-24 ui-card">
+                    <div class="modern-card-header-info ui-card-header">
                         <span class="material-symbols-outlined">info</span>
-                        <h2 class="modern-headline-md">Dispatch Details</h2>
+                        <h2 class="modern-headline-md ui-section-title">Dispatch Details</h2>
                     </div>
-                    <div class="modern-card-body" style="gap: 0.6rem;">
+                    <div class="modern-card-body ui-card-body" style="gap: 0.6rem;">
                         <!-- Customer & Vessel -->
                         <div>
-                            <p class="modern-label">Customer</p>
+                            <p class="modern-label ui-label">Customer</p>
                             <p class="modern-value-lg text-primary" style="font-size: 18px;">@Model.Customer?.CustomerName</p>
 
                             <div class="mt-2">
-                                <p class="modern-label">Vessel</p>
+                                <p class="modern-label ui-label">Vessel</p>
                                 <p class="modern-value-md font-bold uppercase">@Model.Vessel?.VesselName <span class="modern-badge-sm" style="background-color: var(--surface-container-high); text-transform: none; font-weight: 500; margin-left: 4px;">@Model.Vessel?.VesselType</span></p>
                             </div>
                         </div>
@@ -63,18 +57,18 @@
                         <!-- Logistics Row -->
                         <div class="modern-grid-compact border-t border-outline-variant pt-2">
                             <div class="modern-col-6">
-                                <p class="modern-label">COS #</p>
+                                <p class="modern-label ui-label">COS #</p>
                                 <p class="modern-value-md font-bold">@(Model.COSNumber ?? "-")</p>
                             </div>
                             <div class="modern-col-6">
-                                <p class="modern-label">Voyage #</p>
+                                <p class="modern-label ui-label">Voyage #</p>
                                 <p class="modern-value-md font-bold">@(Model.VoyageNumber ?? "-")</p>
                             </div>
                         </div>
 
                         <!-- Location -->
                         <div class="border-t border-outline-variant pt-2">
-                            <p class="modern-label">Location</p>
+                            <p class="modern-label ui-label">Location</p>
                             <div class="flex items-start gap-2">
                                 <span class="material-symbols-outlined text-primary" style="font-size: 18px; margin-top: 2px;">location_on</span>
                                 <p class="modern-value-md">
@@ -93,7 +87,7 @@
 
                         <!-- Type of Service -->
                         <div class="border-t border-outline-variant pt-2">
-                            <p class="modern-label">Type of Service</p>
+                            <p class="modern-label ui-label">Type of Service</p>
                             <div class="flex items-center gap-2">
                                 <span class="material-symbols-outlined text-primary" style="font-size: 18px;">build</span>
                                 <div>
@@ -104,7 +98,7 @@
 
                         <!-- Timeline -->
                         <div class="border-t border-outline-variant pt-2">
-                            <p class="modern-label mb-2">Service Timeline</p>
+                            <p class="modern-label mb-2 ui-label">Service Timeline</p>
                             <div class="dispatch-timeline">
                                 <div class="timeline-item">
                                     <div class="timeline-marker start"></div>
@@ -127,8 +121,8 @@
                                 <div class="duration-box">
                                     <span class="material-symbols-outlined">schedule</span>
                                     <div>
-                                        <p class="modern-label" style="margin-bottom: 0;">Net Duration</p>
-                                        <p class="modern-headline-md text-primary" style="font-size: 20px;">@Model.TotalHours.ToString("N2")&nbsp;<span class="text-xs opacity-60">HRS</span></p>
+                                        <p class="modern-label ui-label" style="margin-bottom: 0;">Net Duration</p>
+                                        <p class="modern-headline-md text-primary ui-section-title" style="font-size: 20px;">@Model.TotalHours.ToString("N2")&nbsp;<span class="text-xs opacity-60">HRS</span></p>
                                     </div>
                                 </div>
                             </div>
@@ -136,7 +130,7 @@
 
                         <!-- Provider -->
                         <div class="border-t border-outline-variant pt-2">
-                            <p class="modern-label">Provider Details</p>
+                            <p class="modern-label ui-label">Provider Details</p>
                             <div class="flex items-start gap-2">
                                 <span class="material-symbols-outlined text-primary" style="font-size: 18px; margin-top: 2px;">directions_boat</span>
                                 <div>
@@ -149,20 +143,20 @@
                         @if (!string.IsNullOrEmpty(Model.Remarks))
                         {
                             <div class="border-t border-outline-variant pt-2">
-                                <p class="modern-label">Remarks</p>
+                                <p class="modern-label ui-label">Remarks</p>
                                 <p class="modern-value-md italic opacity-70" style="font-size: 13px;">@Model.Remarks</p>
                             </div>
                         }
 
                         <!-- Attachments -->
                         <div class="border-t border-outline-variant pt-2">
-                            <p class="modern-label mb-2">Media Attachments</p>
+                            <p class="modern-label mb-2 ui-label">Media Attachments</p>
                             <div class="modern-grid-compact">
                                 @if (!string.IsNullOrEmpty(Model.ImageSignedUrl))
                                 {
                                     <div class="modern-col-12 mb-2">
-                                        <div class="modern-card" style="background-color: var(--surface-container-low); cursor: pointer;" id="viewUpload">
-                                            <div class="modern-card-body items-center p-2" style="gap: 4px;">
+                                        <div class="modern-card ui-card" style="background-color: var(--surface-container-low); cursor: pointer;" id="viewUpload">
+                                            <div class="modern-card-body items-center p-2 ui-card-body" style="gap: 4px;">
                                                 <img src="@Model.ImageSignedUrl" class="rounded" alt="Ticket" style="height: 120px; width: 100%; object-fit: cover;" />
                                                 <span class="text-xs text-primary font-bold">View Image</span>
                                             </div>
@@ -172,8 +166,8 @@
                                 @if (!string.IsNullOrEmpty(Model.VideoSignedUrl))
                                 {
                                     <div class="modern-col-12">
-                                        <div class="modern-card view-video" style="background-color: var(--surface-container-low); cursor: pointer;" data-videolink="@Model.VideoSignedUrl">
-                                            <div class="modern-card-body items-center p-2" style="gap: 4px;">
+                                        <div class="modern-card view-video ui-card" style="background-color: var(--surface-container-low); cursor: pointer;" data-videolink="@Model.VideoSignedUrl">
+                                            <div class="modern-card-body items-center p-2 ui-card-body" style="gap: 4px;">
                                                 <span class="material-symbols-outlined text-primary" style="font-size: 48px">play_circle</span>
                                                 <span class="text-xs text-primary font-bold">Play Video</span>
                                             </div>
@@ -192,14 +186,14 @@
 
             <!-- Right Column: Tariff Details -->
             <div class="modern-col-8">
-                <div class="modern-card">
-                    <div class="modern-card-header-info">
+                <div class="modern-card ui-card">
+                    <div class="modern-card-header-info ui-card-header">
                         <span class="material-symbols-outlined">receipt_long</span>
-                        <h2 class="modern-headline-md">Tariff Summary</h2>
+                        <h2 class="modern-headline-md ui-section-title">Tariff Summary</h2>
                     </div>
-                    <div class="modern-card-body">
+                    <div class="modern-card-body ui-card-body">
                         <div class="modern-table-container" style="border: 1px solid var(--outline-variant);">
-                            <table class="modern-table">
+                            <table class="modern-table ui-table">
                                 <thead>
                                     <tr>
                                         <th>Service Description</th>
@@ -230,7 +224,7 @@
                                             <td colspan="3" class="italic">
                                                 Outsourced Provider: <span class="font-bold">@Model.Tugboat.TugboatOwner?.TugboatOwnerName</span>
                                             </td>
-                                            <td class="text-right modern-label" style="vertical-align: middle">AP Other Tugs:</td>
+                                            <td class="text-right modern-label ui-label" style="vertical-align: middle">AP Other Tugs:</td>
                                             <td class="text-right font-bold text-error">(@Model.ApOtherTugs.ToString("N2"))</td>
                                         </tr>
                                     }

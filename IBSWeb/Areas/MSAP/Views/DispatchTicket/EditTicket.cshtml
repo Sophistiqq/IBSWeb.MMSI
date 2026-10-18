@@ -6,26 +6,20 @@
     var filterType = ViewBag.FilterType as string;
 }
 
-<div class="modern-layout">
+<div class="modern-layout app-ui">
     <form id="myForm" method="post" enctype="multipart/form-data">
         <input type="hidden" name="filterType" value="@filterType" />
         <input asp-for="DispatchTicketId" type="hidden">
         <input asp-for="CustomerOrderSlipId" type="hidden">
 
-        <main class="modern-container">
+        <main class="modern-container ui-page">
             <!-- Header -->
-            <div class="flex-stack">
+            <div class="flex-stack ui-page-toolbar">
                 <div>
-                    <div class="flex items-center gap-2 mb-1">
-                        <span class="modern-label">MSAP</span>
-                        <span class="material-symbols-outlined text-xs">chevron_right</span>
-                        <a class="modern-label" style="text-decoration:none;" asp-action="Index">Dispatch Tickets</a>
-                        <span class="material-symbols-outlined text-xs">chevron_right</span>
-                        <span class="modern-label" style="color: var(--on-surface)">@Model.DispatchNumber</span>
-                    </div>
-                    <h1 class="modern-headline-lg" data-page-header>Edit Dispatch Ticket</h1>
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li><a asp-action="Index">Dispatch Tickets</a></li><li aria-current="page">@Model.DispatchNumber</li></ol></nav>
+                    <h1 class="modern-headline-lg ui-page-title" data-page-header>Edit Dispatch Ticket</h1>
                 </div>
-                <div class="flex gap-2" data-tour-step="16">
+                <div class="flex gap-2 ui-actions" data-tour-step="16">
                     <button type="submit" class="modern-btn-primary" id="submitButton">
                         <span class="material-symbols-outlined">save</span> SAVE CHANGES
                     </button>
@@ -48,46 +42,46 @@
                 <!-- Left Column -->
                 <div class="modern-col-8 flex flex-column" style="gap: 1.5rem;">
                     <!-- I. Reference Information -->
-                    <div class="modern-card">
-                        <div class="modern-card-header-info">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
                             <span class="material-symbols-outlined">info</span>
-                            <h2 class="modern-headline-md">Reference Information</h2>
+                            <h2 class="modern-headline-md ui-section-title">Reference Information</h2>
                         </div>
-                        <div class="modern-card-body">
+                        <div class="modern-card-body ui-card-body">
                             <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
                             <div class="modern-grid-compact">
                                 <div class="modern-col-6">
-                                    <label class="modern-label">Date Today <span class="text-error">*</span></label>
-                                    <input asp-for="Date" type="date" value="@(Model.Date.ToString("yyyy-MM-dd"))" class="modern-input" data-tour-step="1">
+                                    <label class="modern-label ui-label">Date Today <span class="text-error">*</span></label>
+                                    <input asp-for="Date" type="date" value="@(Model.Date.ToString("yyyy-MM-dd"))" class="modern-input ui-input" data-tour-step="1">
                                     <span asp-validation-for="Date" class="text-error text-xs"></span>
                                 </div>
                                 <div class="modern-col-6">
-                                    <label class="modern-label">Dispatch/Mooring # <span class="text-error">*</span></label>
-                                    <input asp-for="DispatchNumber" class="modern-input" placeholder="Enter Dispatch #" maxlength="20" required data-tour-step="2">
+                                    <label class="modern-label ui-label">Dispatch/Mooring # <span class="text-error">*</span></label>
+                                    <input asp-for="DispatchNumber" class="modern-input ui-input" placeholder="Enter Dispatch #" maxlength="20" required data-tour-step="2">
                                     <span asp-validation-for="DispatchNumber" class="text-error text-xs"></span>
                                 </div>
                                 <div class="modern-col-6">
-                                    <label class="modern-label">COS #</label>
+                                    <label class="modern-label ui-label">COS #</label>
                                     @if (Model.CustomerOrderSlipId.HasValue)
                                     {
-                                        <input type="text" class="modern-input" style="background-color: var(--surface-container-low)" value="@(Model.COSNumber ?? "-")" readonly data-tour-step="3">
+                                        <input type="text" class="modern-input ui-input" style="background-color: var(--surface-container-low)" value="@(Model.COSNumber ?? "-")" readonly data-tour-step="3">
                                         <input type="hidden" asp-for="COSNumber" />
                                     }
                                     else
                                     {
-                                        <input asp-for="COSNumber" class="modern-input" placeholder="Optional" maxlength="10" data-tour-step="3">
+                                        <input asp-for="COSNumber" class="modern-input ui-input" placeholder="Optional" maxlength="10" data-tour-step="3">
                                     }
                                 </div>
                                 <div class="modern-col-6">
-                                    <label class="modern-label">Voyage #</label>
+                                    <label class="modern-label ui-label">Voyage #</label>
                                     @if (Model.CustomerOrderSlipId.HasValue)
                                     {
-                                        <input type="text" class="modern-input" style="background-color: var(--surface-container-low)" value="@(Model.VoyageNumber ?? "-")" readonly data-tour-step="4">
+                                        <input type="text" class="modern-input ui-input" style="background-color: var(--surface-container-low)" value="@(Model.VoyageNumber ?? "-")" readonly data-tour-step="4">
                                         <input type="hidden" asp-for="VoyageNumber" />
                                     }
                                     else
                                     {
-                                        <input asp-for="VoyageNumber" class="modern-input" placeholder="Optional" maxlength="20" data-tour-step="4">
+                                        <input asp-for="VoyageNumber" class="modern-input ui-input" placeholder="Optional" maxlength="20" data-tour-step="4">
                                     }
                                 </div>
                             </div>
@@ -95,17 +89,17 @@
                     </div>
 
                     <!-- II. Service Details -->
-                    <div class="modern-card">
-                        <div class="modern-card-header-info">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
                             <span class="material-symbols-outlined">anchor</span>
-                            <h2 class="modern-headline-md">Service Details</h2>
+                            <h2 class="modern-headline-md ui-section-title">Service Details</h2>
                         </div>
-                        <div class="modern-card-body">
+                        <div class="modern-card-body ui-card-body">
                             <div class="mb-2">
-                                <label class="modern-label">Customer <span class="text-error">*</span></label>
+                                <label class="modern-label ui-label">Customer <span class="text-error">*</span></label>
                                 @if (Model.CustomerOrderSlipId.HasValue)
                                 {
-                                    <input type="text" class="modern-input" style="background-color: var(--surface-container-low)" value="@(Model.Customers?.FirstOrDefault(c => c.Value == Model.CustomerId.ToString())?.Text ?? "Selected Customer")" readonly data-tour-step="5">
+                                    <input type="text" class="modern-input ui-input" style="background-color: var(--surface-container-low)" value="@(Model.Customers?.FirstOrDefault(c => c.Value == Model.CustomerId.ToString())?.Text ?? "Selected Customer")" readonly data-tour-step="5">
                                     <input type="hidden" asp-for="CustomerId" />
                                 }
                                 else
@@ -119,10 +113,10 @@
                             </div>
                             <div class="modern-grid-compact mt-2">
                                 <div class="modern-col-6">
-                                    <label class="modern-label">Port <span class="text-error">*</span></label>
+                                    <label class="modern-label ui-label">Port <span class="text-error">*</span></label>
                                     @if (Model.CustomerOrderSlipId.HasValue)
                                     {
-                                        <input type="text" class="modern-input" style="background-color: var(--surface-container-low)" value="@(Model.Ports?.FirstOrDefault(p => p.Value == Model.PortId.ToString())?.Text ?? "Selected Port")" readonly data-tour-step="6">
+                                        <input type="text" class="modern-input ui-input" style="background-color: var(--surface-container-low)" value="@(Model.Ports?.FirstOrDefault(p => p.Value == Model.PortId.ToString())?.Text ?? "Selected Port")" readonly data-tour-step="6">
                                         <input type="hidden" asp-for="PortId" />
                                     }
                                     else
@@ -135,10 +129,10 @@
                                     }
                                 </div>
                                 <div class="modern-col-6">
-                                    <label class="modern-label">Terminal <span class="text-error">*</span> <span id="terminalLoading" class="spinner-border spinner-border-sm text-secondary ms-1" style="display:none;" role="status"></span></label>
+                                    <label class="modern-label ui-label">Terminal <span class="text-error">*</span> <span id="terminalLoading" class="spinner-border spinner-border-sm text-secondary ms-1" style="display:none;" role="status"></span></label>
                                     @if (Model.CustomerOrderSlipId.HasValue)
                                     {
-                                        <input type="text" class="modern-input" style="background-color: var(--surface-container-low)" value="@(Model.Terminals?.FirstOrDefault(t => t.Value == Model.TerminalId.ToString())?.Text ?? "Selected Terminal")" readonly data-tour-step="7">
+                                        <input type="text" class="modern-input ui-input" style="background-color: var(--surface-container-low)" value="@(Model.Terminals?.FirstOrDefault(t => t.Value == Model.TerminalId.ToString())?.Text ?? "Selected Terminal")" readonly data-tour-step="7">
                                         <input type="hidden" asp-for="TerminalId" />
                                     }
                                     else
@@ -151,10 +145,10 @@
                                     }
                                 </div>
                                 <div class="modern-col-6">
-                                    <label class="modern-label">Vessel <span class="text-error">*</span></label>
+                                    <label class="modern-label ui-label">Vessel <span class="text-error">*</span></label>
                                     @if (Model.CustomerOrderSlipId.HasValue)
                                     {
-                                        <input type="text" class="modern-input" style="background-color: var(--surface-container-low)" value="@(Model.Vessels?.FirstOrDefault(v => v.Value == Model.VesselId.ToString())?.Text ?? "Selected Vessel")" readonly data-tour-step="8">
+                                        <input type="text" class="modern-input ui-input" style="background-color: var(--surface-container-low)" value="@(Model.Vessels?.FirstOrDefault(v => v.Value == Model.VesselId.ToString())?.Text ?? "Selected Vessel")" readonly data-tour-step="8">
                                         <input type="hidden" asp-for="VesselId" />
                                     }
                                     else
@@ -169,12 +163,12 @@
                                     <span id="voyageTypeBadge" class="modern-badge-sm mt-1" style="display:none"></span>
                                 </div>
                                 <div class="modern-col-6">
-                                    <label class="modern-label">Activity/Service Type <span class="text-error">*</span></label>
+                                    <label class="modern-label ui-label">Activity/Service Type <span class="text-error">*</span></label>
                                     <div id="ServiceContainer" data-tour-step="9">
                                         @if (Model.VesselScheduleServiceEntryId.HasValue)
                                         {
                                             <input type="hidden" name="ServiceId" value="@Model.ServiceId" />
-                                            <input class="modern-input" value="@(Model.Services?.FirstOrDefault(item => item.Value == Model.ServiceId.ToString())?.Text)" readonly aria-label="Approved service" />
+                                            <input class="modern-input ui-input" value="@(Model.Services?.FirstOrDefault(item => item.Value == Model.ServiceId.ToString())?.Text)" readonly aria-label="Approved service" />
                                         }
                                         else
                                         {
@@ -186,12 +180,12 @@
                                 </div>
 
                                 <div class="modern-col-6">
-                                    <label class="modern-label">Tugboat/Service provider <span class="text-error">*</span></label>
+                                    <label class="modern-label ui-label">Tugboat/Service provider <span class="text-error">*</span></label>
                                     <div data-tour-step="10">
                                         @if (Model.VesselScheduleServiceEntryId.HasValue)
                                         {
                                             <input type="hidden" name="TugBoatId" value="@Model.TugBoatId" />
-                                            <input class="modern-input" value="@(Model.Tugboats?.FirstOrDefault(item => item.Value == Model.TugBoatId.ToString())?.Text)" readonly aria-label="Approved tugboat" />
+                                            <input class="modern-input ui-input" value="@(Model.Tugboats?.FirstOrDefault(item => item.Value == Model.TugBoatId.ToString())?.Text)" readonly aria-label="Approved tugboat" />
                                         }
                                         else
                                         {
@@ -202,7 +196,7 @@
                                     </div>
                                 </div>
                                 <div class="modern-col-6">
-                                    <label class="modern-label">Master on Duty <span class="text-error">*</span></label>
+                                    <label class="modern-label ui-label">Master on Duty <span class="text-error">*</span></label>
                                     <div data-tour-step="11">
                                         <select asp-for="TugMasterId" asp-items="@Model.TugMasters" class="js-modern-select" data-placeholder="-- Select Tug Master --" required>
                                             <option value="">-- Select Tug Master --</option>
@@ -215,13 +209,13 @@
 
 
                     <!-- III. Remarks -->
-                    <div class="modern-card" style="flex: 1;">
-                        <div class="modern-card-header-info" style="background-color: var(--surface-container-low); color: var(--on-surface);">
+                    <div class="modern-card ui-card" style="flex: 1;">
+                        <div class="modern-card-header-info ui-card-header" style="background-color: var(--surface-container-low); color: var(--on-surface);">
                             <span class="material-symbols-outlined">chat</span>
-                            <h2 class="modern-headline-md">Remarks</h2>
+                            <h2 class="modern-headline-md ui-section-title">Remarks</h2>
                         </div>
-                        <div class="modern-card-body" style="height: 100%;" data-tour-step="15">
-                            <textarea asp-for="Remarks" class="modern-input" placeholder="Enter remarks (Optional)" style="height: 100%; min-height: 120px;"></textarea>
+                        <div class="modern-card-body ui-card-body" style="height: 100%;" data-tour-step="15">
+                            <textarea asp-for="Remarks" class="modern-input ui-input" placeholder="Enter remarks (Optional)" style="height: 100%; min-height: 120px;"></textarea>
                         </div>
                     </div>
                 </div>
@@ -229,47 +223,47 @@
                 <!-- Right Column -->
                 <div class="modern-col-4 flex flex-column" style="gap: 1.5rem;">
                     <!-- Timeline & Duration -->
-                    <div class="modern-card sticky top-24">
-                        <div class="modern-card-header-info" style="background-color: var(--primary); color: white;">
+                    <div class="modern-card sticky top-24 ui-card">
+                        <div class="modern-card-header-info ui-card-header" style="background-color: var(--primary); color: white;">
                             <span class="material-symbols-outlined">schedule</span>
                             <div class="flex justify-between items-center w-full">
-                                <h2 class="modern-headline-md" style="color: white">Timeline</h2>
+                                <h2 class="modern-headline-md ui-section-title" style="color: white">Timeline</h2>
                                 <span id="durationBadge" class="modern-badge" style="background: white; color: var(--primary);">0.00 hrs</span>
                             </div>
                         </div>
-                        <div class="modern-card-body">
+                        <div class="modern-card-body ui-card-body">
                             <div class="mb-2" data-tour-step="12">
-                                <label class="modern-label font-bold">Start Date & Time <span class="text-error">*</span></label>
+                                <label class="modern-label font-bold ui-label">Start Date & Time <span class="text-error">*</span></label>
                                 <div class="flex gap-2 mt-1">
-                                    <input type="date" asp-for="DateLeft" id="DateLeft" value="@(Model.DateLeft?.ToString("yyyy-MM-dd"))" class="modern-input timeline-input" required>
-                                    <input type="time" asp-for="TimeLeft" id="TimeLeft" value="@(Model.TimeLeft?.ToString("HH:mm"))" class="modern-input timeline-input" required>
+                                    <input type="date" asp-for="DateLeft" id="DateLeft" value="@(Model.DateLeft?.ToString("yyyy-MM-dd"))" class="modern-input timeline-input ui-input" required>
+                                    <input type="time" asp-for="TimeLeft" id="TimeLeft" value="@(Model.TimeLeft?.ToString("HH:mm"))" class="modern-input timeline-input ui-input" required>
                                 </div>
                             </div>
                             <div data-tour-step="13">
-                                <label class="modern-label font-bold">End Date & Time <span class="text-error">*</span></label>
+                                <label class="modern-label font-bold ui-label">End Date & Time <span class="text-error">*</span></label>
                                 <div class="flex gap-2 mt-1">
-                                    <input type="date" asp-for="DateArrived" id="DateArrived" value="@(Model.DateArrived?.ToString("yyyy-MM-dd"))" class="modern-input timeline-input" required>
-                                    <input type="time" asp-for="TimeArrived" id="TimeArrived" value="@(Model.TimeArrived?.ToString("HH:mm"))" class="modern-input timeline-input" required>
+                                    <input type="date" asp-for="DateArrived" id="DateArrived" value="@(Model.DateArrived?.ToString("yyyy-MM-dd"))" class="modern-input timeline-input ui-input" required>
+                                    <input type="time" asp-for="TimeArrived" id="TimeArrived" value="@(Model.TimeArrived?.ToString("HH:mm"))" class="modern-input timeline-input ui-input" required>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Media Uploads -->
-                    <div class="modern-card">
-                        <div class="modern-card-header-info" style="background-color: var(--surface-container-low); color: var(--on-surface);">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header" style="background-color: var(--surface-container-low); color: var(--on-surface);">
                             <span class="material-symbols-outlined">camera</span>
-                            <h2 class="modern-headline-md">Media Attachments</h2>
+                            <h2 class="modern-headline-md ui-section-title">Media Attachments</h2>
                         </div>
-                        <div class="modern-card-body" data-tour-step="14">
+                        <div class="modern-card-body ui-card-body" data-tour-step="14">
                             <div class="mb-4">
                                 <div class="flex justify-between items-center mb-1">
-                                    <label class="modern-label">Dispatch Ticket Image</label>
+                                    <label class="modern-label ui-label">Dispatch Ticket Image</label>
                                     <button type="button" id="btnPreviewImage" class="modern-btn-text text-xs" style="display:none;">
                                         <span class="material-symbols-outlined text-sm">visibility</span> PREVIEW
                                     </button>
                                 </div>
-                                <input class="modern-input" id="imageUpload" name="imageFile" type="file" accept="image/*" style="padding: 0.35rem;">
+                                <input class="modern-input ui-input" id="imageUpload" name="imageFile" type="file" accept="image/*" style="padding: 0.35rem;">
                                 @if (!string.IsNullOrEmpty(Model.ImageName))
                                 {
                                     <div class="flex gap-2 mt-2">
@@ -284,12 +278,12 @@
                             </div>
                             <div>
                                 <div class="flex justify-between items-center mb-1">
-                                    <label class="modern-label">Operation Video</label>
+                                    <label class="modern-label ui-label">Operation Video</label>
                                     <button type="button" id="btnPreviewVideo" class="modern-btn-text text-xs" style="display:none;">
                                         <span class="material-symbols-outlined text-sm">visibility</span> PREVIEW
                                     </button>
                                 </div>
-                                <input class="modern-input" id="videoUpload" name="videoFile" type="file" accept="video/*" style="padding: 0.35rem;">
+                                <input class="modern-input ui-input" id="videoUpload" name="videoFile" type="file" accept="video/*" style="padding: 0.35rem;">
                                 @if (!string.IsNullOrEmpty(Model.VideoName))
                                 {
                                     <div class="flex gap-2 mt-2">

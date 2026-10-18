@@ -22,19 +22,20 @@
         MsapConstants.VesselScheduleStatus.InProgress, MsapConstants.VesselScheduleStatus.Completed, MsapConstants.VesselScheduleStatus.Cancelled };
 }
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/vessel-calendar.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <div class="modern-layout schedule-calendar-layout">
-    <main class="modern-container schedule-workspace schedule-calendar-workspace msap-workflow">
-        <header class="schedule-calendar-header wf-page-header">
+    <main class="modern-container schedule-workspace schedule-calendar-workspace app-ui">
+        <header class="schedule-calendar-header ui-page-header">
             <nav aria-label="Breadcrumb">
-                <ol class="wf-breadcrumb">
+                <ol class="ui-breadcrumb">
                     <li><a asp-controller="Home" asp-action="Index">MSAP</a></li>
                     <li aria-current="page">Vessel schedules</li>
                 </ol>
             </nav>
-            <h1 class="wf-page-title" data-page-header>Vessel calendar</h1>
-            <a asp-action="Create" asp-route-date="@((Model.SelectedDate ?? today).ToString("yyyy-MM-dd"))" class="modern-btn-primary wf-page-action" data-hotkey="c">+ New schedule</a>
-            <p class="schedule-muted wf-body wf-muted wf-page-description">Find a booking, preview a vessel or select a day. All times are Philippine time.</p>
+            <h1 class="ui-page-title" data-page-header>Vessel calendar</h1>
+            <a asp-action="Create" asp-route-date="@((Model.SelectedDate ?? today).ToString("yyyy-MM-dd"))" class="modern-btn-primary ui-page-action" data-hotkey="c">+ New schedule</a>
+            <p class="schedule-muted ui-body ui-muted ui-page-description">Find a booking, preview a vessel or select a day. All times are Philippine time.</p>
         </header>
 
         <form method="get" class="schedule-calendar-filters" id="calendarFilters">

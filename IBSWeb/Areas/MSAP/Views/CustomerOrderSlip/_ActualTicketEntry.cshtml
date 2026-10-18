@@ -14,7 +14,7 @@
     var role = readOnly || userId == null ? null : await MsapRoleService.GetUserRoleAsync(userId);
     bool imageRequired = role is not (MsapRoles.Admin or MsapRoles.SuperAdmin) && string.IsNullOrEmpty(Model.ImageName);
 }
-<form asp-controller="DispatchTicket" asp-action="@(editing ? "EditTicket" : "Create")" method="post" enctype="multipart/form-data" class="wf-stack" id="@(readOnly ? "cosActualTicketDetails" : "cosActualTicketForm")" onsubmit="@(readOnly ? "return false;" : null)">
+<form asp-controller="DispatchTicket" asp-action="@(editing ? "EditTicket" : "Create")" method="post" enctype="multipart/form-data" class="ui-stack" id="@(readOnly ? "cosActualTicketDetails" : "cosActualTicketForm")" onsubmit="@(readOnly ? "return false;" : null)">
     <input name="inlineEntry" type="hidden" value="true" />
     <input asp-for="DispatchTicketId" type="hidden" />
     <input asp-for="CustomerOrderSlipId" type="hidden" />
@@ -24,74 +24,74 @@
     <input asp-for="TugBoatId" type="hidden" /><input asp-for="ServiceId" type="hidden" />
     <input asp-for="VoyageNumber" type="hidden" /><input asp-for="COSNumber" type="hidden" />
     <fieldset class="cos-entry-fields" disabled="@readOnly">
-        <div class="wf-field"><label asp-for="DispatchNumber" class="wf-label">Actual ticket number *</label><input asp-for="DispatchNumber" class="modern-input" maxlength="20" required /></div>
-        <div class="wf-field"><label asp-for="Date" class="wf-label">Ticket date *</label><input asp-for="Date" type="date" class="modern-input" required /></div>
-        <div class="wf-field">
+        <div class="ui-field"><label asp-for="DispatchNumber" class="ui-label">Actual ticket number *</label><input asp-for="DispatchNumber" class="modern-input ui-input" maxlength="20" required /></div>
+        <div class="ui-field"><label asp-for="Date" class="ui-label">Ticket date *</label><input asp-for="Date" type="date" class="modern-input ui-input" required /></div>
+        <div class="ui-field">
             @if (readOnly)
             {
-                <label for="cosTicketCaptain" class="wf-label">Captain / tug master</label>
-                <input id="cosTicketCaptain" class="modern-input" value="@(Model.TugMasters?.FirstOrDefault(c => c.Value == Model.TugMasterId?.ToString())?.Text ?? "Not recorded")" type="text" disabled />
+                <label for="cosTicketCaptain" class="ui-label">Captain / tug master</label>
+                <input id="cosTicketCaptain" class="modern-input ui-input" value="@(Model.TugMasters?.FirstOrDefault(c => c.Value == Model.TugMasterId?.ToString())?.Text ?? "Not recorded")" type="text" disabled />
             }
             else
             {
-                <label asp-for="TugMasterId" class="wf-label">Captain / tug master *</label>
+                <label asp-for="TugMasterId" class="ui-label">Captain / tug master *</label>
                 <select asp-for="TugMasterId" asp-items="Model.TugMasters" class="js-modern-select" data-placeholder="Select captain" required><option value="">Select captain</option></select>
             }
         </div>
-        <div class="wf-field cos-entry-half"><label for="DateLeft" class="wf-label">Actual start * · Philippine time</label><div class="cos-date-time"><input asp-for="DateLeft" type="date" class="modern-input" aria-label="Actual start date" required /><input asp-for="TimeLeft" type="time" class="modern-input" aria-label="Actual start time" required /></div></div>
-        <div class="wf-field cos-entry-half">
+        <div class="ui-field cos-entry-half"><label for="DateLeft" class="ui-label">Actual start * · Philippine time</label><div class="cos-date-time"><input asp-for="DateLeft" type="date" class="modern-input ui-input" aria-label="Actual start date" required /><input asp-for="TimeLeft" type="time" class="modern-input ui-input" aria-label="Actual start time" required /></div></div>
+        <div class="ui-field cos-entry-half">
             @if (readOnly)
             {
-                <span class="wf-label">Supporting image</span>
+                <span class="ui-label">Supporting image</span>
                 @if (!string.IsNullOrEmpty(Model.ImageSignedUrl))
                 {
                     <a href="@Model.ImageSignedUrl" target="_blank" rel="noopener" class="cos-ticket-link">View image</a>
                 }
                 else
                 {
-                    <span class="wf-body wf-muted">No image attached</span>
+                    <span class="ui-body ui-muted">No image attached</span>
                 }
             }
             else
             {
-                <label for="cosTicketImage" class="wf-label">Supporting image @(imageRequired ? "*" : "")</label><input id="cosTicketImage" name="imageFile" type="file" accept="image/*" class="modern-input" required="@imageRequired" />
+                <label for="cosTicketImage" class="ui-label">Supporting image @(imageRequired ? "*" : "")</label><input id="cosTicketImage" name="imageFile" type="file" accept="image/*" class="modern-input ui-input" required="@imageRequired" />
                 @if (editing && !string.IsNullOrEmpty(Model.ImageSignedUrl))
                 {
                     <a href="@Model.ImageSignedUrl" target="_blank" rel="noopener" class="cos-ticket-link">View current image</a>
-                    <span class="wf-caption wf-muted">Choose a file only to replace the current image.</span>
+                    <span class="ui-caption ui-muted">Choose a file only to replace the current image.</span>
                 }
             }
         </div>
-        <div class="wf-field cos-entry-half"><label for="DateArrived" class="wf-label">Actual end * · Philippine time</label><div class="cos-date-time"><input asp-for="DateArrived" type="date" class="modern-input" aria-label="Actual end date" required /><input asp-for="TimeArrived" type="time" class="modern-input" aria-label="Actual end time" required /></div></div>
-        <div class="wf-field cos-entry-half">
+        <div class="ui-field cos-entry-half"><label for="DateArrived" class="ui-label">Actual end * · Philippine time</label><div class="cos-date-time"><input asp-for="DateArrived" type="date" class="modern-input ui-input" aria-label="Actual end date" required /><input asp-for="TimeArrived" type="time" class="modern-input ui-input" aria-label="Actual end time" required /></div></div>
+        <div class="ui-field cos-entry-half">
             @if (readOnly)
             {
-                <span class="wf-label">Supporting video</span>
+                <span class="ui-label">Supporting video</span>
                 @if (!string.IsNullOrEmpty(Model.VideoSignedUrl))
                 {
                     <a href="@Model.VideoSignedUrl" target="_blank" rel="noopener" class="cos-ticket-link">View video</a>
                 }
                 else
                 {
-                    <span class="wf-body wf-muted">No video attached</span>
+                    <span class="ui-body ui-muted">No video attached</span>
                 }
             }
             else
             {
-                <label for="cosTicketVideo" class="wf-label">Supporting video</label><input id="cosTicketVideo" name="videoFile" type="file" accept="video/*" class="modern-input" />
+                <label for="cosTicketVideo" class="ui-label">Supporting video</label><input id="cosTicketVideo" name="videoFile" type="file" accept="video/*" class="modern-input ui-input" />
                 @if (editing && !string.IsNullOrEmpty(Model.VideoSignedUrl))
                 {
                     <a href="@Model.VideoSignedUrl" target="_blank" rel="noopener" class="cos-ticket-link">View current video</a>
-                    <span class="wf-caption wf-muted">Choose a file only to replace the current video.</span>
+                    <span class="ui-caption ui-muted">Choose a file only to replace the current video.</span>
                 }
             }
         </div>
-        <div class="wf-field cos-entry-remarks"><label asp-for="Remarks" class="wf-label">Remarks</label><textarea asp-for="Remarks" class="modern-input" rows="2" maxlength="100"></textarea></div>
+        <div class="ui-field cos-entry-remarks"><label asp-for="Remarks" class="ui-label">Remarks</label><textarea asp-for="Remarks" class="modern-input ui-input" rows="2" maxlength="100"></textarea></div>
     </fieldset>
     <div class="cos-duration-preview" aria-live="polite">
-        <div class="wf-field"><span class="wf-caption wf-muted">Actual duration</span><output class="wf-value" id="cosActualDuration">@(readOnly ? $"{savedTicket?.RawDurationMinutes} min · {savedTicket?.RawDurationHours:0.00} hours" : "Enter actual times")</output></div>
-        <div class="wf-field"><span class="wf-caption wf-muted">Billable duration</span><output class="wf-value" id="cosBillableDuration">@(readOnly ? $"{savedTicket?.TotalHours:0.00} hours" : "Enter actual times")</output></div>
-        <p class="wf-caption wf-muted">Hourly charges use a one-hour minimum. SBMA uses actual service time.</p>
+        <div class="ui-field"><span class="ui-caption ui-muted">Actual duration</span><output class="ui-value" id="cosActualDuration">@(readOnly ? $"{savedTicket?.RawDurationMinutes} min · {savedTicket?.RawDurationHours:0.00} hours" : "Enter actual times")</output></div>
+        <div class="ui-field"><span class="ui-caption ui-muted">Billable duration</span><output class="ui-value" id="cosBillableDuration">@(readOnly ? $"{savedTicket?.TotalHours:0.00} hours" : "Enter actual times")</output></div>
+        <p class="ui-caption ui-muted">Hourly charges use a one-hour minimum. SBMA uses actual service time.</p>
     </div>
     @if (savedTicket != null)
     {
@@ -101,11 +101,11 @@
         <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@(editing ? Model.DispatchTicketId : null)" asp-fragment="@(editing ? "actualTicketEntry" : null)" class="modern-btn-secondary">@(readOnly ? "Close ticket" : editing ? "Cancel changes" : "Cancel entry")</a>
         @if (canEdit)
         {
-            <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@Model.DispatchTicketId" asp-route-editTicket="true" class="schedule-btn-dark wf-button">Edit ticket</a>
+            <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@Model.DispatchTicketId" asp-route-editTicket="true" class="ui-button ui-button--primary">Edit ticket</a>
         }
         @if (!readOnly)
         {
-            <button type="submit" class="schedule-btn-dark wf-button">@(editing ? "Save changes" : "Save actual ticket")</button>
+            <button type="submit" class="ui-button ui-button--primary">@(editing ? "Save changes" : "Save actual ticket")</button>
         }
     </div>
 </form>

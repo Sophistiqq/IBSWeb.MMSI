@@ -7,20 +7,20 @@
 
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 
-<div class="modern-layout">
+<div class="modern-layout app-ui">
     <form asp-action="Create" method="post" id="customerOrderSlipForm">
-        <main class="modern-container">
+        <main class="modern-container ui-page">
             <!-- Header Section -->
-            <div class="flex-stack">
+            <div class="flex-stack ui-page-toolbar">
                 <div>
-                    <nav aria-label="Breadcrumb"><ol class="wf-breadcrumb">
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb">
                         <li>MSAP</li>
                         <li><a asp-action="Index">COS records</a></li>
                         <li aria-current="page">New COS</li>
                     </ol></nav>
-                    <h1 class="modern-headline-lg" data-page-header>Create COS</h1>
+                    <h1 class="modern-headline-lg ui-page-title" data-page-header>Create COS</h1>
                 </div>
-                <div class="flex gap-2" data-tour-step="11">
+                <div class="flex gap-2 ui-actions" data-tour-step="11">
                     <button type="button" class="modern-btn-primary" id="confirmCreateBtn">
                         <span class="material-symbols-outlined">save</span> Create COS
                     </button>
@@ -33,17 +33,17 @@
             <div class="modern-grid">
                 <!-- Left Column: Primary Logistics & Remarks (col-8) -->
                 <section class="modern-col-8 flex flex-column" style="gap: 1.5rem;">
-                    <div class="modern-card">
-                        <div class="modern-card-header-info">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
                             <span class="material-symbols-outlined">anchor</span>
-                            <h2 class="modern-headline-md">Logistics & Vessel Details</h2>
+                            <h2 class="modern-headline-md ui-section-title">Logistics & Vessel Details</h2>
                         </div>
-                        <div class="modern-card-body">
+                        <div class="modern-card-body ui-card-body">
                             <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
 
                             <div class="modern-grid">
                                 <div class="modern-col-8">
-                                    <label asp-for="CustomerId" class="modern-label">Customer <span class="text-error">*</span></label>
+                                    <label asp-for="CustomerId" class="modern-label ui-label">Customer <span class="text-error">*</span></label>
                                     <div id="CustomerContainer" data-tour-step="1">
                                         <select asp-for="CustomerId" asp-items="@Model.Customers" class="js-modern-select" id="CustomerId" data-testid="select-CustomerId" data-placeholder="-- Select Customer --">
                                             <option value="">-- Select Customer --</option>
@@ -52,15 +52,15 @@
                                     <span asp-validation-for="CustomerId" class="text-error text-xs"></span>
                                 </div>
                                 <div class="modern-col-4" data-tour-step="2">
-                                    <label asp-for="Date" class="modern-label">Order Date</label>
-                                    <input asp-for="Date" type="date" class="modern-input" />
+                                    <label asp-for="Date" class="modern-label ui-label">Order Date</label>
+                                    <input asp-for="Date" type="date" class="modern-input ui-input" />
                                     <span asp-validation-for="Date" class="text-error text-xs"></span>
                                 </div>
                             </div>
 
                             <div class="modern-grid mt-2">
                                 <div class="modern-col-4">
-                                    <label asp-for="VesselId" class="modern-label">Vessel</label>
+                                    <label asp-for="VesselId" class="modern-label ui-label">Vessel</label>
                                     <div id="VesselContainer" data-tour-step="3">
                                         <select asp-for="VesselId" asp-items="@Model.Vessels" class="js-modern-select" id="VesselSelect" data-testid="select-VesselId" data-placeholder="-- Select Vessel --">
                                             <option value="">-- Select Vessel --</option>
@@ -69,7 +69,7 @@
                                     <span asp-validation-for="VesselId" class="text-error text-xs"></span>
                                 </div>
                                 <div class="modern-col-4">
-                                    <label asp-for="PortId" class="modern-label">Port</label>
+                                    <label asp-for="PortId" class="modern-label ui-label">Port</label>
                                     <div id="PortContainer" data-tour-step="4">
                                         <select asp-for="PortId" asp-items="@Model.Ports" class="js-modern-select" id="PortId" data-testid="select-PortId" data-placeholder="-- Select Port --">
                                             <option value="">-- Select Port --</option>
@@ -78,7 +78,7 @@
                                     <span asp-validation-for="PortId" class="text-error text-xs"></span>
                                 </div>
                                 <div class="modern-col-4">
-                                    <label asp-for="TerminalId" class="modern-label">Terminal</label>
+                                    <label asp-for="TerminalId" class="modern-label ui-label">Terminal</label>
                                     <div id="TerminalContainer" data-tour-step="5">
                                         <select asp-for="TerminalId" asp-items="@Model.Terminals" class="js-modern-select" id="TerminalId" data-testid="select-TerminalId" data-placeholder="-- Select Terminal --">
                                             <option value="">-- Select Terminal --</option>
@@ -90,13 +90,13 @@
                         </div>
                     </div>
 
-                    <div class="modern-card" style="flex: 1;">
-                        <div class="modern-card-header-info" style="background-color: var(--surface-container-low); color: var(--on-surface);">
+                    <div class="modern-card ui-card" style="flex: 1;">
+                        <div class="modern-card-header-info ui-card-header" style="background-color: var(--surface-container-low); color: var(--on-surface);">
                             <span class="material-symbols-outlined">notes</span>
-                            <h2 class="modern-headline-md">Remarks</h2>
+                            <h2 class="modern-headline-md ui-section-title">Remarks</h2>
                         </div>
-                        <div class="modern-card-body" style="height: 100%;" data-tour-step="10">
-                            <textarea asp-for="Remarks" class="modern-input" style="height: 100%; min-height: 150px;" placeholder="Additional notes or special instructions..."></textarea>
+                        <div class="modern-card-body ui-card-body" style="height: 100%;" data-tour-step="10">
+                            <textarea asp-for="Remarks" class="modern-input ui-input" style="height: 100%; min-height: 150px;" placeholder="Additional notes or special instructions..."></textarea>
                             <span asp-validation-for="Remarks" class="text-error text-xs"></span>
                         </div>
                     </div>
@@ -104,40 +104,40 @@
 
                 <!-- Right Column: Metadata & Timing (col-4) -->
                 <section class="modern-col-4 flex flex-column" style="gap: 1.5rem;">
-                    <div class="modern-card">
-                        <div class="modern-card-header-info" style="background-color: var(--surface-container-low); color: var(--on-surface);">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header" style="background-color: var(--surface-container-low); color: var(--on-surface);">
                             <span class="material-symbols-outlined">description</span>
-                            <h2 class="modern-headline-md">References</h2>
+                            <h2 class="modern-headline-md ui-section-title">References</h2>
                         </div>
-                        <div class="modern-card-body">
+                        <div class="modern-card-body ui-card-body">
                             <div data-tour-step="6">
-                                <label asp-for="COSNumber" class="modern-label">COS Number</label>
-                                <input asp-for="COSNumber" class="modern-input" placeholder="Optional" maxlength="20" />
+                                <label asp-for="COSNumber" class="modern-label ui-label">COS Number</label>
+                                <input asp-for="COSNumber" class="modern-input ui-input" placeholder="Optional" maxlength="20" />
                                 <span asp-validation-for="COSNumber" class="text-error text-xs"></span>
                             </div>
                             <div class="mt-3" data-tour-step="7">
-                                <label asp-for="VoyageNumber" class="modern-label">Voyage Number</label>
-                                <input asp-for="VoyageNumber" class="modern-input" placeholder="Optional" maxlength="100" />
+                                <label asp-for="VoyageNumber" class="modern-label ui-label">Voyage Number</label>
+                                <input asp-for="VoyageNumber" class="modern-input ui-input" placeholder="Optional" maxlength="100" />
                                 <span asp-validation-for="VoyageNumber" class="text-error text-xs"></span>
                             </div>
                         </div>
                     </div>
 
-                    <div class="modern-card">
-                        <div class="modern-card-header-info" style="background-color: var(--surface-container-high); color: var(--on-surface);">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header" style="background-color: var(--surface-container-high); color: var(--on-surface);">
                             <span class="material-symbols-outlined">schedule</span>
-                            <h2 class="modern-headline-md">Planned Schedule</h2>
+                            <h2 class="modern-headline-md ui-section-title">Planned Schedule</h2>
                         </div>
-                        <div class="modern-card-body">
+                        <div class="modern-card-body ui-card-body">
                             <div class="flex flex-column" style="gap: 1.25rem;">
                                 <div data-tour-step="8">
-                                    <label asp-for="PlannedStartTime" class="modern-label">Planned Arrival/Start</label>
-                                    <input asp-for="PlannedStartTime" type="datetime-local" class="modern-input timeline-input" id="PlannedStartTime" />
+                                    <label asp-for="PlannedStartTime" class="modern-label ui-label">Planned Arrival/Start</label>
+                                    <input asp-for="PlannedStartTime" type="datetime-local" class="modern-input timeline-input ui-input" id="PlannedStartTime" />
                                     <span asp-validation-for="PlannedStartTime" class="text-error text-xs"></span>
                                 </div>
                                 <div data-tour-step="9">
-                                    <label asp-for="PlannedEndTime" class="modern-label">Planned Departure/End</label>
-                                    <input asp-for="PlannedEndTime" type="datetime-local" class="modern-input timeline-input" id="PlannedEndTime" />
+                                    <label asp-for="PlannedEndTime" class="modern-label ui-label">Planned Departure/End</label>
+                                    <input asp-for="PlannedEndTime" type="datetime-local" class="modern-input timeline-input ui-input" id="PlannedEndTime" />
                                     <span asp-validation-for="PlannedEndTime" class="text-error text-xs"></span>
                                     <div id="durationWarning" class="text-error text-xs mt-1" style="display: none;">
                                         <span class="material-symbols-outlined text-xs" style="vertical-align: middle;">warning</span> End time must be after start time.

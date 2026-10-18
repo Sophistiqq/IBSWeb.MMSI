@@ -79,7 +79,7 @@
 
 .job-progress .job-progress-next :is(.modern-btn-primary, .modern-btn-secondary) {
     flex-shrink: 0;
-    font-size: var(--wf-text-caption, .75rem);
+    font-size: var(--ui-text-caption, .75rem);
 }
 
 .job-progress-handoff {
@@ -112,7 +112,7 @@
 .job-progress-blockers {
     margin: .5rem 0 0;
     padding-left: 1rem;
-    font-size: var(--wf-text-caption, .75rem);
+    font-size: var(--ui-text-caption, .75rem);
 }
 
 .job-progress-blockers li + li {
