@@ -1532,15 +1532,6 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("business_style");
 
-                    b.Property<decimal>("CommissionRate")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)")
-                        .HasColumnName("commission_rate");
-
-                    b.Property<int?>("CommissioneeId")
-                        .HasColumnType("integer")
-                        .HasColumnName("commissionee_id");
-
                     b.Property<string>("Company")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -1555,16 +1546,6 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_date");
-
-                    b.Property<decimal>("CreditLimit")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)")
-                        .HasColumnName("credit_limit");
-
-                    b.Property<decimal>("CreditLimitAsOfToday")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)")
-                        .HasColumnName("credit_limit_as_of_today");
 
                     b.Property<string>("CustomerAddress")
                         .IsRequired()
@@ -1618,10 +1599,6 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("edited_date");
 
-                    b.Property<bool>("HasMultipleTerms")
-                        .HasColumnType("boolean")
-                        .HasColumnName("has_multiple_terms");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
@@ -1630,20 +1607,6 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("varchar(10)")
                         .HasColumnName("msap_recid");
-
-                    b.Property<bool>("RequiresPriceAdjustment")
-                        .HasColumnType("boolean")
-                        .HasColumnName("requires_price_adjustment");
-
-                    b.Property<decimal?>("RetentionRate")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)")
-                        .HasColumnName("retention_rate");
-
-                    b.Property<string>("StationCode")
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)")
-                        .HasColumnName("station_code");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -1673,9 +1636,6 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     b.HasKey("CustomerId")
                         .HasName("pk_customers");
-
-                    b.HasIndex("CommissioneeId")
-                        .HasDatabaseName("ix_customers_commissionee_id");
 
                     b.HasIndex("CustomerCode")
                         .HasDatabaseName("ix_customers_customer_code");
@@ -1883,10 +1843,6 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnName("port_id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("PortId"));
-
-                    b.Property<bool>("HasSBMA")
-                        .HasColumnType("boolean")
-                        .HasColumnName("has_sbma");
 
                     b.Property<string>("MsapRecId")
                         .HasMaxLength(10)
@@ -3496,16 +3452,6 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Navigation("Tugboat");
 
                     b.Navigation("Vessel");
-                });
-
-            modelBuilder.Entity("IBS.Models.MSAP.MasterFile.Customer", b =>
-                {
-                    b.HasOne("IBS.Models.MSAP.MasterFile.Supplier", "Commissionee")
-                        .WithMany()
-                        .HasForeignKey("CommissioneeId")
-                        .HasConstraintName("fk_customers_suppliers_commissionee_id");
-
-                    b.Navigation("Commissionee");
                 });
 
             modelBuilder.Entity("IBS.Models.MSAP.MasterFile.Principal", b =>

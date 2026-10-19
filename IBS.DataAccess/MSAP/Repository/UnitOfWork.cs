@@ -215,20 +215,6 @@ namespace IBS.DataAccess.MSAP.Repository
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<List<SelectListItem>> GetCommissioneeListAsyncById(string company, CancellationToken cancellationToken = default)
-        {
-            return await _db.Suppliers
-                .OrderBy(s => s.SupplierCode)
-                .Where(s => s.IsActive && s.Category == "Commissionee")
-                .Where(GetCompanyFilter<Supplier>(company))
-                .Select(s => new SelectListItem
-                {
-                    Value = s.SupplierId.ToString(),
-                    Text = s.SupplierCode + " " + s.SupplierName
-                })
-                .ToListAsync(cancellationToken);
-        }
-
         public async Task<List<SelectListItem>> GetHaulerListAsyncById(string company, CancellationToken cancellationToken = default)
         {
             return await _db.Suppliers

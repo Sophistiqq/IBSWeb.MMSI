@@ -224,7 +224,9 @@ namespace Checks.MSAP
             {
                 Check(typeof(DispatchTicketController).GetMethods().All(m => m.Name != name), $"Retired action still exposed: {name}.");
             }
-            Check(typeof(MsapImportController).GetCustomAttribute<NonControllerAttribute>() != null, "Legacy workflow import/reset is still exposed.");
+            Check(typeof(MsapImportController).GetCustomAttribute<AuthorizeAttribute>()?.Policy == MsapRoles.AdminPolicy,
+                "Master-file import must remain Admin-only.");
+            Check(typeof(MsapImportController).GetMethods().All(method => method.Name != "Reset"), "Legacy import reset is still exposed.");
             Check(typeof(IBSWeb.Areas.MSAPSuperAdmin.Controllers.DataController).GetCustomAttribute<NonControllerAttribute>() != null, "Raw financial editing is still exposed.");
             MethodInfo discard = typeof(BillingController).GetMethod("Delete")!;
             Check(discard.GetCustomAttribute<HttpPostAttribute>() != null && discard.GetCustomAttribute<ValidateAntiForgeryTokenAttribute>() != null,

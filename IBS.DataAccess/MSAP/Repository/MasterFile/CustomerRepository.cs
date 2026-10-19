@@ -68,17 +68,10 @@ namespace IBS.DataAccess.MSAP.Repository.MasterFile
             existingCustomer.CustomerType = model.CustomerType;
             existingCustomer.WithHoldingVat = model.WithHoldingVat;
             existingCustomer.WithHoldingTax = model.WithHoldingTax;
-            existingCustomer.CreditLimit = model.CreditLimit;
-            existingCustomer.CreditLimitAsOfToday = model.CreditLimitAsOfToday;
             existingCustomer.ZipCode = model.ZipCode;
-            existingCustomer.RetentionRate = model.RetentionRate;
             existingCustomer.VatType = model.VatType;
             existingCustomer.Type = model.Type;
-            existingCustomer.RequiresPriceAdjustment = model.RequiresPriceAdjustment;
-            existingCustomer.StationCode = model.StationCode;
-            existingCustomer.CommissionRate = model.CommissionRate;
             existingCustomer.DefaultCosDiscountPercent = model.DefaultCosDiscountPercent;
-            existingCustomer.CommissioneeId = model.CommissioneeId;
 
             if (_db.ChangeTracker.HasChanges())
             {
@@ -95,14 +88,12 @@ namespace IBS.DataAccess.MSAP.Repository.MasterFile
         public override async Task<Customer?> GetAsync(Expression<Func<Customer, bool>> filter, CancellationToken cancellationToken = default)
         {
             return await dbSet.Where(filter)
-                    .Include(c => c.Commissionee)
                     .FirstOrDefaultAsync(cancellationToken);
         }
 
         public override async Task<IEnumerable<Customer>> GetAllAsync(Expression<Func<Customer, bool>>? filter, CancellationToken cancellationToken = default)
         {
-            IQueryable<Customer> query = dbSet
-                .Include(dr => dr.Commissionee);
+            IQueryable<Customer> query = dbSet;
 
             if (filter != null)
             {

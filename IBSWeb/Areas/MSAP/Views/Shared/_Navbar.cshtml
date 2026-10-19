@@ -262,6 +262,13 @@
                                 <div>
                                     <div class="mnav-section-label">Maritime &amp; MSAP</div>
                                     <div class="mnav-link-list">
+                                        @if (msapRole is IBS.Utility.MSAP.Constants.MsapRoles.Admin or IBS.Utility.MSAP.Constants.MsapRoles.SuperAdmin)
+                                        {
+                                            <a class="mnav-mega-link" asp-area="MSAP" asp-controller="MsapImport" asp-action="Index" role="menuitem">
+                                                <span class="material-symbols-outlined">upload_file</span>
+                                                <div><div class="mnav-link-title">Master File Import</div><div class="mnav-link-sub">Validate and import reference CSVs</div></div>
+                                            </a>
+                                        }
                                         @if (canManageReferences)
                                         {
                                             <a class="mnav-mega-link"

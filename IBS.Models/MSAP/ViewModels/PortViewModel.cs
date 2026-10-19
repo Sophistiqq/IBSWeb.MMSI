@@ -11,7 +11,6 @@ namespace IBS.Models.MSAP.ViewModels
             PortId = entity.PortId;
             PortNumber = entity.PortNumber;
             PortName = entity.PortName;
-            HasSBMA = entity.HasSBMA;
             MsapRecId = entity.MsapRecId;
         }
     }

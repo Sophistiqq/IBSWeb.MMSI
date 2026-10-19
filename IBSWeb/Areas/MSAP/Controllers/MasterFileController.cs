@@ -119,26 +119,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 new() { Header = "BUSINESS STYLE", ValueSelector = c => ((Customer)c).BusinessStyle ?? "" },
                 new() { Header = "ZIP CODE", ValueSelector = c => ((Customer)c).ZipCode },
                 new() { Header = "CREDIT TERM", ValueSelector = c => ((Customer)c).CustomerTerms },
-                new()
-            {
-                Header = "CREDIT LIMIT",
-                ValueSelector = c => ((Customer)c).CreditLimit,
-                NumberFormat = "#,##0.00",
-                Alignment = ExcelHorizontalAlignment.Right
-            },
-            new()
-            {
-                Header = "CREDIT LIMIT AS OF TODAY",
-                ValueSelector = c => ((Customer)c).CreditLimitAsOfToday,
-                NumberFormat = "#,##0.00",
-                Alignment = ExcelHorizontalAlignment.Right
-            },
-            new() { Header = "STATION CODE", ValueSelector = c => ((Customer)c).StationCode ?? "" },
-            new() { Header = "TYPE", ValueSelector = c => ((Customer)c).Type },
-            new() { Header = "DEFAULT COMMISION RATE", ValueSelector = c => ((Customer)c).CommissionRate },
-            new() { Header = "DEFAULT COS DISCOUNT (%)", ValueSelector = c => ((Customer)c).DefaultCosDiscountPercent },
-            new() { Header = "DEFAULT COMMISIONEE", ValueSelector = c => ((Customer)c).Commissionee?.SupplierName ?? ""},
-            new() { Header = "STATUS", ValueSelector = c => ((Customer)c).IsActive ? "Active" : "Inactive" },
+                new() { Header = "TYPE", ValueSelector = c => ((Customer)c).Type },
+                new() { Header = "VAT TYPE", ValueSelector = c => ((Customer)c).VatType },
+                new() { Header = "WITHHOLDING TAX (2307)", ValueSelector = c => ((Customer)c).WithHoldingTax },
+                new() { Header = "WITHHOLDING VAT (2306)", ValueSelector = c => ((Customer)c).WithHoldingVat },
+                new() { Header = "DEFAULT COS DISCOUNT (%)", ValueSelector = c => ((Customer)c).DefaultCosDiscountPercent },
+                new() { Header = "STATUS", ValueSelector = c => ((Customer)c).IsActive ? "Active" : "Inactive" },
             };
 
             var customerWidths = new Dictionary<string, double>

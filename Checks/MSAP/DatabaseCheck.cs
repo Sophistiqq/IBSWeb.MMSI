@@ -289,28 +289,26 @@ namespace Checks.MSAP
 
                 module.ChangeTracker.Clear();
                 var importHttp = new DefaultHttpContext { User = new ClaimsPrincipal(identity) };
-                var importer = new IBSWeb.Areas.MSAP.Controllers.MsapImportController(module,
+                var importer = new IBSWeb.Areas.MSAP.Controllers.MsapImportController(new MasterFileImportService(module, work, new RateUploadService(module, work)),
                     NullLogger<IBSWeb.Areas.MSAP.Controllers.MsapImportController>.Instance)
                 {
                     ControllerContext = new ControllerContext { HttpContext = importHttp },
                     TempData = tempData.GetTempData(importHttp)
                 };
                 using var csv = new MemoryStream("recid,number\n"u8.ToArray());
-                var importFiles = new List<IFormFile>
+                var importModel = new MasterFileImportViewModel
                 {
-                    new FormFile(csv, 0, csv.Length, "bulkFiles", "billing.csv"),
-                    new FormFile(csv, 0, csv.Length, "bulkFiles", "dispatch.csv")
+                    Files = [new FormFile(csv, 0, csv.Length, "Files", "billing.csv"), new FormFile(csv, 0, csv.Length, "Files", "dispatch.csv")]
                 };
-                await importer.Index(null, null, null, null, null, null, null, null,
-                    null, null, null, null, null, null, null, importFiles);
-                Check(!importer.TempData.ContainsKey("error") && importer.TempData.ContainsKey("success"),
-                    $"MSAP import/sequence SQL failed: {importer.TempData["error"]}");
-                await importer.Reset();
-                Check(!importer.TempData.ContainsKey("error") && !await module.MsapCustomerOrderSlips.AnyAsync() && !await module.Customers.AnyAsync(),
-                    $"MSAP reset SQL failed: {importer.TempData["error"]}");
+                int billsBefore = await module.MsapBillings.CountAsync();
+                int ticketsBefore = await module.MsapDispatchTickets.CountAsync();
+                await importer.Index(importModel, false, default);
+                Check(importModel.Errors.Count > 0 && !importModel.Imported
+                    && await module.MsapBillings.CountAsync() == billsBefore && await module.MsapDispatchTickets.CountAsync() == ticketsBefore,
+                    "Master-file importer accepted legacy financial files.");
                 Check(await SchemaAsync(settings.ConnectionString) == before && await original.Users.CountAsync() == 1
-                    && await original.FilprideAuditTrails.CountAsync() == 1, "MSAP import/reset changed the host schema, users or audits.");
-                Console.WriteLine("PASS: import clearing/sequence updates and reset use only the msap schema.");
+                    && await original.FilprideAuditTrails.CountAsync() == 1, "Master import changed the host schema, users or audits.");
+                Console.WriteLine("PASS: master-only import rejects legacy financial files without resetting any records.");
             }
             finally
             {

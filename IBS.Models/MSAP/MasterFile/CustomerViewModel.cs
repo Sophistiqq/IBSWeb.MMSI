@@ -26,16 +26,8 @@ namespace IBS.Models.MSAP.MasterFile
             EditedBy = entity.EditedBy;
             EditedDate = entity.EditedDate;
             Company = entity.Company;
-            StationCode = entity.StationCode;
-            CreditLimit = entity.CreditLimit;
-            CreditLimitAsOfToday = entity.CreditLimitAsOfToday;
             ZipCode = entity.ZipCode;
-            RetentionRate = entity.RetentionRate;
-            HasMultipleTerms = entity.HasMultipleTerms;
             Type = entity.Type;
-            RequiresPriceAdjustment = entity.RequiresPriceAdjustment;
-            CommissioneeId = entity.CommissioneeId;
-            CommissionRate = entity.CommissionRate;
             DefaultCosDiscountPercent = entity.DefaultCosDiscountPercent;
             MsapRecId = entity.MsapRecId;
         }

@@ -49,7 +49,6 @@ namespace IBS.Services.MSAP
 
                 existingPort.PortNumber = model.PortNumber;
                 existingPort.PortName = model.PortName;
-                existingPort.HasSBMA = model.HasSBMA;
 
                 var auditTrail = new AuditTrail(username, $"Updated Port #{model.PortNumber}", "Port");
                 await unitOfWork.AuditTrail.AddAsync(auditTrail, cancellationToken);

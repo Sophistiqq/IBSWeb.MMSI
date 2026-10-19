@@ -29,8 +29,6 @@ namespace IBS.DataAccess.MSAP.Repository.IRepository
 
         Task<List<SelectListItem>> GetNonTradeSupplierListAsyncById(string company, CancellationToken cancellationToken = default);
 
-        Task<List<SelectListItem>> GetCommissioneeListAsyncById(string company, CancellationToken cancellationToken = default);
-
         Task<List<SelectListItem>> GetHaulerListAsyncById(string company, CancellationToken cancellationToken = default);
 
         Task<List<SelectListItem>> GetBankAccountListById(CancellationToken cancellationToken = default);

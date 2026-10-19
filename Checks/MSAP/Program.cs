@@ -28,6 +28,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
+if (args.Contains("--master-import-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.MasterFileImportCheck.RunAsync();
+    return;
+}
+
 if (args.Contains("--workflow-access-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.WorkflowAccessCheck.RunAsync();

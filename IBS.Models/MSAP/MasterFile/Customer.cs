@@ -89,54 +89,21 @@ namespace IBS.Models.MSAP.MasterFile
         [StringLength(20)]
         public string Company { get; set; } = string.Empty;
 
-        #region For Retail
-
-        [StringLength(3)]
-        public string? StationCode { get; set; }
-
-        #endregion
-
-        [Column(TypeName = "numeric(18,4)")]
-        [DisplayFormat(DataFormatString = "{0:#,##0.0000;(#,##0.0000)}", ApplyFormatInEditMode = false)]
-        public decimal CreditLimit { get; set; }
-
-        [Column(TypeName = "numeric(18,4)")]
-        [DisplayFormat(DataFormatString = "{0:#,##0.0000;(#,##0.0000)}", ApplyFormatInEditMode = false)]
-        public decimal CreditLimitAsOfToday { get; set; }
-
-
         [Required]
         [Display(Name = "Zip Code")]
         [StringLength(10)]
         public string ZipCode { get; set; } = null!;
 
-        [Column(TypeName = "numeric(18,4)")]
-        public decimal? RetentionRate { get; set; }
-
-        public bool HasMultipleTerms { get; set; }
-
         [StringLength(13)]
         public string Type { get; set; } = string.Empty;
 
-        [Display(Name = "Requires Price Adjustment")]
-        public bool RequiresPriceAdjustment { get; set; }
-
         [NotMapped]
         public List<SelectListItem>? PaymentTerms { get; set; }
-
-        public int? CommissioneeId { get; set; }
-
-        public decimal CommissionRate { get; set; }
 
         [Display(Name = "Default COS discount (%)")]
         [Range(typeof(decimal), "0", "100", ErrorMessage = "Default COS discount must be between 0 and 100 percent.")]
         [Column(TypeName = "numeric(18,4)")]
         public decimal DefaultCosDiscountPercent { get; set; }
-
-        [NotMapped]
-        public List<SelectListItem>? Commissionees { get; set; }
-
-        public Supplier? Commissionee { get; set; }
 
         [StringLength(10)]
         [Column("msap_recid", TypeName = "varchar(10)")]

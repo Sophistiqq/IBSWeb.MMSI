@@ -73,7 +73,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
                 PaymentTerms = await unitOfWork.Terms
                     .GetFilprideTermsListAsyncByCode(cancellationToken),
-                Commissionees = await unitOfWork.GetCommissioneeListAsyncById(companyClaims, cancellationToken),
             };
             return View(model);
         }
@@ -91,7 +90,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             model.PaymentTerms = await unitOfWork.Terms
                 .GetFilprideTermsListAsyncByCode(cancellationToken);
-            model.Commissionees = await unitOfWork.GetCommissioneeListAsyncById(companyClaims, cancellationToken);
 
             // Customer codes are generated after validation, never supplied by the create form.
             ModelState.Remove(nameof(CustomerViewModel.CustomerCode));
@@ -159,7 +157,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 var model = new CustomerViewModel(customer);
                 model.PaymentTerms = await unitOfWork.Terms
                     .GetFilprideTermsListAsyncByCode(cancellationToken);
-                model.Commissionees = await unitOfWork.GetCommissioneeListAsyncById(companyClaims, cancellationToken);
                 return View(model);
             }
 
@@ -178,7 +175,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             model.PaymentTerms = await unitOfWork.Terms
                 .GetFilprideTermsListAsyncByCode(cancellationToken);
-            model.Commissionees = await unitOfWork.GetCommissioneeListAsyncById(company, cancellationToken);
 
             if (!ModelState.IsValid)
             {

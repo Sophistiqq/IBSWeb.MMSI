@@ -187,7 +187,7 @@ namespace IBS.Services.MSAP
             {
                 return ServiceResult<Guid>.Failure(references.Message!);
             }
-            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+            await using var transaction = _db.Database.CurrentTransaction == null ? await _db.Database.BeginTransactionAsync(ct) : null;
             RateUpload? update = model.Id.HasValue ? await LockAsync(model.Id.Value, ct) : new RateUpload
             {
                 UploadedByUserId = userId, UploadedBy = actor.Name.Trim(), UploadedAt = DateTimeHelper.GetCurrentPhilippineTime(),
@@ -209,7 +209,10 @@ namespace IBS.Services.MSAP
             }
             _db.AuditTrails.Add(CreateAudit(actor, update, "Saved draft", before));
             await _db.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
+            if (transaction != null)
+            {
+                await transaction.CommitAsync(ct);
+            }
             return ServiceResult<Guid>.Success(update.RateUploadId, "Draft saved. Review the comparison before submitting.");
         }
 

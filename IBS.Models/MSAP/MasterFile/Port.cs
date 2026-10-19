@@ -18,8 +18,6 @@ namespace IBS.Models.MSAP.MasterFile
         [Column(TypeName = "varchar(50)")]
         public string PortName { get; set; } = null!;
 
-        public bool HasSBMA { get; set; }
-
         [StringLength(10)]
         [Column("msap_recid", TypeName = "varchar(10)")]
         public string? MsapRecId { get; set; }

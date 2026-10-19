@@ -60,7 +60,7 @@ namespace Checks.MSAP
 
             edited.DefaultCosDiscountPercent = -1m;
             controller.ModelState.AddModelError(nameof(Customer.DefaultCosDiscountPercent), "Invalid discount.");
-            Check(await controller.Edit(edited, default) is ViewResult && edited.PaymentTerms?.Count > 0 && edited.Commissionees != null,
+            Check(await controller.Edit(edited, default) is ViewResult && edited.PaymentTerms?.Count > 0,
                 "Invalid customer edit did not return a populated form.");
             await db.Entry(saved).ReloadAsync();
             Check(saved.DefaultCosDiscountPercent == 12.5m, "Invalid edit changed the saved discount.");

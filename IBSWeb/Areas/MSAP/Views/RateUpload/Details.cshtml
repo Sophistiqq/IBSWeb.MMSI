@@ -45,7 +45,12 @@
                                 else { <span>@(row.Selected ? "Included" : "Not included")</span> }
                                 <small>@(!row.ExistingRateId.HasValue ? "New dated rate" : "Correction")</small>
                             </td>
-                            <td><strong>@row.CustomerName</strong><small>@row.PortName / @row.TerminalName</small><small>@row.ServiceName</small></td>
+                            <td><strong>@row.CustomerName</strong><small>@row.PortName / @row.TerminalName</small><small>@row.ServiceName</small>
+                                @if (!string.IsNullOrEmpty(row.LegacySourceId))
+                                {
+                                    <small>Imported source #@row.LegacySourceId · legacy vessel type @(row.LegacyVesselType ?? "not supplied"). Current rate key uses customer, terminal, service and date; confirm this scope before approval.</small>
+                                }
+                            </td>
                             <td><strong>@row.EffectiveDate.ToString("dd MMM yyyy")</strong><small>Previous: @(row.BaselineDate?.ToString("dd MMM yyyy") ?? "None")</small></td>
                             <partial name="_RateAmountComparison" model="@((row.StoredAmount, row.Amount.GetValueOrDefault()))" />
                         </tr>
