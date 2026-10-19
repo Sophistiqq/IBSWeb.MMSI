@@ -78,9 +78,11 @@ namespace Checks.MSAP
                     ManualTariffRate = 0m, ManualBafRate = 29000m
                 }]
             };
-            foreach (bool reapproval in new[] { false, true })
+            foreach ((bool hasCos, bool reapproval) in new[] { (false, false), (true, false), (true, true) })
             {
-                schedule.CustomerOrderSlipId = reapproval ? 7 : null;
+                schedule.CustomerOrderSlipId = hasCos ? 7 : null;
+                schedule.Revision = reapproval ? 2 : 1;
+                schedule.ApprovedRevision = reapproval ? 1 : null;
                 var reviewData = new ViewDataDictionary<VesselSchedule>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = schedule };
                 reviewData["AssignedTugboatModels"] = new List<Tugboat> { tug };
                 reviewData["CanConfirm"] = true;
@@ -96,6 +98,8 @@ namespace Checks.MSAP
                 Check(reviewHtml.Contains(">0.00</span>", StringComparison.Ordinal) && reviewHtml.Contains("29,000.00", StringComparison.Ordinal), "Review lost zero/manual rates.");
                 Check(reviewHtml.Contains("__RequestVerificationToken", StringComparison.Ordinal) && reviewHtml.Contains("name=\"reviewedAt\"", StringComparison.Ordinal), "Review is missing approval protections.");
                 Check(reviewHtml.Contains(reapproval ? "Reapprove schedule" : "Approve schedule", StringComparison.Ordinal), "Review action does not match revision state.");
+                Check(reviewHtml.Contains($"data-reapproval=\"{reapproval.ToString().ToLowerInvariant()}\"", StringComparison.Ordinal)
+                    && reviewHtml.Contains(reapproval ? "Pending reapproval" : "Pending review", StringComparison.Ordinal), "Review confirmation and status do not match approval history.");
                 Check(Regex.Matches(reviewHtml, "aria-current=\"step\"").Count == 1 && reviewHtml.Contains("COS approval", StringComparison.Ordinal), "Review must show COS approval as its single current progress step.");
             }
             schedule.CustomerOrderSlipId = null;
@@ -141,13 +145,22 @@ namespace Checks.MSAP
             cosData["CanSetTariff"] = false;
             cosData["CanApproveTariff"] = false;
             cosData["JobProgress"] = JobProgressCalculator.Calculate(cos, schedule, [], []);
+            var cosRoute = new RouteData();
+            cosRoute.Values["area"] = "MSAP";
+            cosRoute.Values["controller"] = "CustomerOrderSlip";
+            cosRoute.Values["action"] = "Details";
+            http.Request.RouteValues = cosRoute.Values;
+            var cosDescriptor = services.GetRequiredService<IActionDescriptorCollectionProvider>().ActionDescriptors.Items
+                .OfType<ControllerActionDescriptor>().First(a => a.RouteValues["area"] == "MSAP"
+                    && a.ControllerName == "CustomerOrderSlip" && a.ActionName == "Details");
+            var cosContext = new ActionContext(http, cosRoute, cosDescriptor);
             var cosView = engine.GetView(null, "/Areas/MSAP/Views/CustomerOrderSlip/Details.cshtml", false);
             using var cosOutput = new StringWriter();
-            await cosView.View!.RenderAsync(new ViewContext(context, cosView.View, cosData,
+            await cosView.View!.RenderAsync(new ViewContext(cosContext, cosView.View, cosData,
                 services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), cosOutput, new HtmlHelperOptions()));
-            Check(cosOutput.ToString().Contains("Expected services", StringComparison.Ordinal)
+            Check(cosOutput.ToString().Contains("id=\"cosServices\"", StringComparison.Ordinal)
                 && cosOutput.ToString().Contains("expectedServiceEntryId=12", StringComparison.Ordinal)
-                && cosOutput.ToString().Contains("Pending ticket", StringComparison.Ordinal), "COS omitted pending service requirements or their actual-entry links.");
+                && cosOutput.ToString().Contains("Awaiting ticket", StringComparison.Ordinal), "COS omitted pending service requirements or their actual-entry links.");
             Console.WriteLine("PASS: full schedule/revision review renders tug services, manual/zero rates, encoded details, current approval stage and protected approval actions.");
         }
 

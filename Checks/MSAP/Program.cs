@@ -111,7 +111,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql
 builder.Services.AddDefaultIdentity<ApplicationUser>().AddRoles<IdentityRole>().AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddScoped<IBS.DataAccess.Repository.IRepository.IUnitOfWork, IBS.DataAccess.Repository.UnitOfWork>();
 builder.Services.AddMsapModule(builder.Configuration);
-if (args.Contains("--calendar-render-only", StringComparer.Ordinal))
+if (args.Contains("--calendar-render-only", StringComparer.Ordinal)
+    || args.Contains("--schedule-render-only", StringComparer.Ordinal))
 {
     builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
 }
@@ -123,6 +124,12 @@ app.UseEndpoints(endpoints => endpoints.MapControllerRoute("default", "{area=Use
 #pragma warning restore ASP0014
 using var scope = app.Services.CreateScope();
 var services = scope.ServiceProvider;
+if (args.Contains("--schedule-render-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.ScheduleFormRenderingCheck.RunAsync(services);
+    return;
+}
+
 var module = services.GetRequiredService<MsapDbContext>();
 var original = services.GetRequiredService<ApplicationDbContext>();
 void Check(bool passed, string message)
