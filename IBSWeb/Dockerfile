@@ -23,7 +23,6 @@ ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "./IBSWeb.csproj" \
     -c $BUILD_CONFIGURATION \
     -o /app/publish \
-    --no-restore \
     /p:UseAppHost=false
 
 FROM base AS final
