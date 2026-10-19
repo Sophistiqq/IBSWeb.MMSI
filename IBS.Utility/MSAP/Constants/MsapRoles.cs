@@ -15,6 +15,10 @@ namespace IBS.Utility.MSAP.Constants
         public static string? GetRole(IEnumerable<Claim> claims, bool isSharedAdmin = false)
         {
             string[] roles = claims.Where(claim => claim.Type == ClaimType).Select(claim => claim.Value).ToArray();
+            if (isSharedAdmin && (roles.Length == 0 || roles.Length == 1 && IsValid(roles[0])))
+            {
+                return roles.FirstOrDefault() == SuperAdmin ? SuperAdmin : Admin;
+            }
             return roles.Length switch
             {
                 0 => isSharedAdmin ? Admin : User,

@@ -43,12 +43,12 @@ namespace Checks.MSAP
                 && (int)ProcedureEnum.ApproveFinalBilling == 24, "Procedure values shifted.");
             await CheckApprovalsAsync(users, work, user.Id, false, scheduleAdmin: true);
 
-            Check(await HasRoleAsync(users, principal, MsapRoles.Admin), "Filpride Admin did not default to MSAP Admin.");
-            Check(!await HasRoleAsync(users, principal, MsapRoles.SuperAdmin), "Filpride Admin inherited MSAP SuperAdmin.");
+            Check(await HasRoleAsync(users, work, principal, MsapRoles.Admin), "Filpride Admin did not default to MSAP Admin.");
+            Check(!await HasRoleAsync(users, work, principal, MsapRoles.SuperAdmin), "Filpride Admin inherited MSAP SuperAdmin.");
             Check(await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateBilling), "Inherited MSAP Admin lacks procedure access.");
             Check((await users.RemoveFromRoleAsync(user, "Admin")).Succeeded, "Cannot prepare ordinary shared user check.");
-            Check(await HasRoleAsync(users, principal, MsapRoles.User)
-                && !await HasRoleAsync(users, principal, MsapRoles.Admin), "Stored role changes were ignored in favor of cookie roles.");
+            Check(await HasRoleAsync(users, work, principal, MsapRoles.User)
+                && !await HasRoleAsync(users, work, principal, MsapRoles.Admin), "Stored role changes were ignored in favor of cookie roles.");
             Check(await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateCustomerOrderSlip)
                 && !await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateBilling),
                 "The default MSAP User does not retain its procedure permissions.");
@@ -81,11 +81,11 @@ namespace Checks.MSAP
             Check((await users.AddToRoleAsync(user, "Admin")).Succeeded, "Cannot restore Filpride Admin for override check.");
             Check((await users.AddClaimAsync(user, new Claim(MsapRoles.ClaimType, MsapRoles.User))).Succeeded,
                 "Cannot assign MSAP User.");
-            Check(await HasRoleAsync(users, principal, MsapRoles.User), "Shared login cannot use its MSAP role.");
-            Check(!await HasRoleAsync(users, principal, MsapRoles.Admin), "MSAP User inherited Filpride Admin.");
+            Check(await HasRoleAsync(users, work, principal, MsapRoles.Admin), "Shared Admin lost MSAP administrator access.");
+            Check(!await HasRoleAsync(users, work, principal, MsapRoles.User), "Shared Admin was downgraded by its MSAP User claim.");
             Check(await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateCustomerOrderSlip)
-                && !await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateBilling),
-                "MSAP User procedure permissions were not enforced.");
+                && await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateBilling),
+                "Shared Admin does not retain supported MSAP actions.");
 
             Check((await users.ReplaceClaimAsync(user, new Claim(MsapRoles.ClaimType, MsapRoles.User),
                 new Claim(MsapRoles.ClaimType, MsapRoles.Admin))).Succeeded, "Cannot assign MSAP Admin for authorization check.");
@@ -94,14 +94,14 @@ namespace Checks.MSAP
                 "MSAP role editing removed an unrelated shared claim.");
             Check((await users.GetClaimsAsync(user)).Count(claim => claim.Type == MsapRoles.ClaimType) == 1,
                 "MSAP role editing left multiple role claims.");
-            Check(await HasRoleAsync(users, principal, MsapRoles.Admin)
-                && !await HasRoleAsync(users, principal, MsapRoles.SuperAdmin), "MSAP Admin boundary failed.");
+            Check(await HasRoleAsync(users, work, principal, MsapRoles.Admin)
+                && !await HasRoleAsync(users, work, principal, MsapRoles.SuperAdmin), "MSAP Admin boundary failed.");
             Check(await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateBilling), "MSAP Admin lacks procedure access.");
             await CheckApprovalsAsync(users, work, user.Id, false, scheduleAdmin: true);
             Check((await users.ReplaceClaimAsync(user, new Claim(MsapRoles.ClaimType, MsapRoles.Admin),
                 new Claim(MsapRoles.ClaimType, MsapRoles.SuperAdmin))).Succeeded, "Cannot bootstrap MSAP SuperAdmin.");
-            Check(await HasRoleAsync(users, principal, MsapRoles.SuperAdmin)
-                && await HasRoleAsync(users, principal, MsapRoles.Admin, MsapRoles.SuperAdmin),
+            Check(await HasRoleAsync(users, work, principal, MsapRoles.SuperAdmin)
+                && await HasRoleAsync(users, work, principal, MsapRoles.Admin, MsapRoles.SuperAdmin),
                 "MSAP SuperAdmin cannot access both administration areas.");
             await CheckApprovalsAsync(users, work, user.Id, false, scheduleAdmin: true);
             Check((await work.UserAccess.GetUserIdsWithAccessAsync(ProcedureEnum.ApproveSchedule)).Contains(user.Id), "MSAP SuperAdmin is missing from schedule recipients.");
@@ -109,7 +109,7 @@ namespace Checks.MSAP
             user.IsActive = false;
             Check((await users.UpdateAsync(user)).Succeeded, "Cannot deactivate the test account.");
             principal.Identities.First().AddClaim(new Claim(MsapRoles.ClaimType, MsapRoles.SuperAdmin));
-            Check(!await HasRoleAsync(users, principal, MsapRoles.SuperAdmin)
+            Check(!await HasRoleAsync(users, work, principal, MsapRoles.SuperAdmin)
                 && !await HasProcedureAsync(users, work, user.Id, ProcedureEnum.CreateBilling),
                 "An inactive account retained MSAP access through its cookie or permissions.");
             await CheckApprovalsAsync(users, work, user.Id, false);
@@ -118,11 +118,11 @@ namespace Checks.MSAP
             Check((await users.UpdateAsync(user)).Succeeded, "Cannot reactivate the test account.");
             Check((await users.ReplaceClaimAsync(user, new Claim(MsapRoles.ClaimType, MsapRoles.SuperAdmin),
                 new Claim(MsapRoles.ClaimType, MsapRoles.User))).Succeeded, "Cannot demote MSAP SuperAdmin for stale cookie check.");
-            Check(!await HasRoleAsync(users, principal, MsapRoles.SuperAdmin), "A stale cookie retained SuperAdmin after demotion.");
+            Check(!await HasRoleAsync(users, work, principal, MsapRoles.SuperAdmin), "A stale cookie retained SuperAdmin after demotion.");
 
             Check((await users.AddClaimAsync(user, new Claim(MsapRoles.ClaimType, MsapRoles.Admin))).Succeeded,
                 "Cannot prepare duplicate role check.");
-            Check(!await HasRoleAsync(users, principal, MsapRoles.User, MsapRoles.Admin), "Ambiguous MSAP roles granted access.");
+            Check(!await HasRoleAsync(users, work, principal, MsapRoles.User, MsapRoles.Admin), "Ambiguous MSAP roles granted access.");
             Check((await users.RemoveClaimAsync(user, new Claim(MsapRoles.ClaimType, MsapRoles.Admin))).Succeeded,
                 "Cannot clean up duplicate role check.");
             string?[] allowed = (await new RoleService(users).GetAllRolesAsync(default)).Select(role => role.Name).ToArray();
@@ -147,13 +147,14 @@ namespace Checks.MSAP
             }
         }
 
-        private static async Task<bool> HasRoleAsync(UserManager<ApplicationUser> users, ClaimsPrincipal principal, params string[] roles)
+        private static async Task<bool> HasRoleAsync(UserManager<ApplicationUser> users, IUnitOfWork work, ClaimsPrincipal principal, params string[] roles)
         {
             var requirement = new ClaimsAuthorizationRequirement(MsapRoles.ClaimType, roles);
             var context = new AuthorizationHandlerContext([requirement], principal, null);
             // Run the default claim handler too: persisted cookie claims must not bypass the live role check.
             await requirement.HandleAsync(context);
-            await new MsapRoleHandler(new RoleService(users)).HandleAsync(context);
+            await new MsapRoleHandler(new RoleService(users), new AccessControlService(users,
+                new UserAccessService(work, users, new RoleService(users), NullLogger<UserAccessService>.Instance))).HandleAsync(context);
             return context.HasSucceeded;
         }
 

@@ -21,14 +21,14 @@
             <div class="flex gap-2 ui-actions">
                 @if (Model.CustomerOrderSlipId.HasValue)
                 {
-                    <a class="modern-btn-secondary" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value">
-                        <span class="material-symbols-outlined">arrow_back</span> BACK
+                    <a class="modern-btn-secondary" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value" data-ui-back>
+                        <span class="material-symbols-outlined">arrow_back</span> Back
                     </a>
                 }
                 else
                 {
-                    <a class="modern-btn-secondary" asp-controller="DispatchTicket" asp-action="Index" asp-area="MSAP" asp-route-filterType="@filterType">
-                        <span class="material-symbols-outlined">arrow_back</span> BACK
+                    <a class="modern-btn-secondary" asp-controller="DispatchTicket" asp-action="Index" asp-area="MSAP" asp-route-filterType="@filterType" data-ui-back>
+                        <span class="material-symbols-outlined">arrow_back</span> Back
                     </a>
                 }
             </div>
@@ -245,24 +245,7 @@
                             </div>
                         </div>
 
-                        <!-- Action Buttons -->
-                        <div class="flex justify-end gap-2 mt-4 pt-4 border-t border-outline-variant">
-                            @if (ViewBag.CanApproveTariff == true && Model.Status == MsapConstants.DispatchTicketStatus.ForApproval)
-                            {
-                                <button type="button" id="approveTariff" data-id="@Model.DispatchTicketId" class="modern-btn-primary" style="background-color: #406915; color: white;">
-                                    <span class="material-symbols-outlined">check_circle</span> APPROVE TARIFF
-                                </button>
-                                <button type="button" id="disapproveTariff" data-id="@Model.DispatchTicketId" class="modern-btn-error">
-                                    <span class="material-symbols-outlined">block</span> DISAPPROVE
-                                </button>
-                            }
-                            else if (ViewBag.CanEditTicket == true && Model.Status == MsapConstants.DispatchTicketStatus.ForBilling)
-                            {
-                                <button type="button" id="revokeApproval" data-id="@Model.DispatchTicketId" class="modern-btn-secondary" style="color: #ef6c00">
-                                    <span class="material-symbols-outlined">history</span> REVOKE APPROVAL
-                                </button>
-                            }
-                        </div>
+
                     </div>
                 </div>
             </div>
@@ -276,7 +259,7 @@
             { selector: '.modern-grid > .modern-col-4 > .modern-card', title: 'Service details', text: 'Review the customer, vessel, location, service, tugboat, and any supporting media attached to this ticket.', interactive: false },
             { selector: '.dispatch-timeline', title: 'Actual service times', text: 'Departure and arrival are the recorded service times. Check the net duration before reviewing tariff amounts.', interactive: false },
             { selector: '.modern-grid > .modern-col-8 .modern-table-container', title: 'Tariff summary', text: 'Review dispatch and bunker adjustment rates, discounts, billing amounts, and net revenue. Outsourced tug costs appear when applicable.', interactive: false },
-            { selector: '.financial-summary-card', title: 'Financial totals', text: 'See the ticket’s grand total billing and net revenue. Approval or revision actions appear below when the current status and your access allow them.', interactive: false }
+            { selector: '.financial-summary-card', title: 'Financial totals', text: 'See the ticket’s grand total billing and net revenue. Ticket changes are performed from the linked COS.', interactive: false }
         ];
     </script>
     <script>
@@ -293,82 +276,6 @@
                 if (videoLink) ModernAlert.video(videoLink, "Dispatch Ticket Video");
             });
 
-            // Approve Action
-            $('#approveTariff').on('click', function () {
-                let id = $(this).data('id');
-                ModernAlert.confirm({
-                    title: 'Approve Tariff?',
-                    text: "This ticket will be marked for billing.",
-                    icon: 'question',
-                    confirmText: 'Yes, Approve'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        ModernAlert.showLoading("Approving...");
-                        $.post('@Url.Action("ApproveTariff", "DispatchTicket", new { area = "MSAP" })', { id: id, __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() }, function(data) {
-                            if (data.success) {
-                                ModernAlert.success(data.message).then(() => location.reload());
-                            } else {
-                                ModernAlert.error(data.message);
-                            }
-                        });
-                    }
-                });
-            });
-
-            // Revoke Approval
-            $('#revokeApproval').on('click', function () {
-                let id = $(this).data('id');
-                ModernAlert.confirm({
-                    title: 'Revoke Approval?',
-                    text: "The tariff status will be reverted to For Approval.",
-                    icon: 'warning',
-                    confirmText: 'Yes, Revoke'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        ModernAlert.showLoading("Revoking...");
-                        $.post('@Url.Action("ChangeStatus", "DispatchTicket", new { area = "MSAP" })', {
-                            id: id,
-                            __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
-                        }, function(data) {
-                            if (data.success) {
-                                ModernAlert.success(data.message).then(() => location.reload());
-                            } else {
-                                ModernAlert.error(data.message);
-                            }
-                        });
-                    }
-                });
-            });
-
-            // Disapprove
-            $('#disapproveTariff').on('click', function () {
-                let id = $(this).data('id');
-                ModernAlert.prompt({
-                    title: 'Disapprove Tariff',
-                    text: 'Please provide a reason (min 10 characters):',
-                    placeholder: 'Reason for disapproval...',
-                    icon: 'error',
-                    confirmText: 'Submit',
-                    validator: (value) => {
-                        if (!value || value.length < 10) return 'Reason must be at least 10 characters';
-                    }
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        ModernAlert.showLoading("Submitting...");
-                        $.post('@Url.Action("DisapproveTariff", "DispatchTicket", new { area = "MSAP" })', {
-                            id: id,
-                            reason: result.value,
-                            __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
-                        }, function(data) {
-                            if (data.success) {
-                                ModernAlert.success(data.message).then(() => location.reload());
-                            } else {
-                                ModernAlert.error(data.message);
-                            }
-                        });
-                    }
-                });
-            });
         });
     </script>
 }

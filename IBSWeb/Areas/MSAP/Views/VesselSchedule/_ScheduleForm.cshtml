@@ -22,8 +22,8 @@
                 </ol>
             </nav>
             <h1 class="schedule-page-title ui-page-title" data-page-header>@(isNew ? "Create schedule" : "Edit schedule")</h1>
-            <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary schedule-calendar-btn ui-page-action">
-                <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span> Back to calendar
+            <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary schedule-calendar-btn ui-page-action" data-ui-back>
+                <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span> Back
             </a>
             <p class="schedule-page-subtitle ui-body ui-muted ui-page-description">Plan the booking and add each tugboat's services.</p>
             <div class="schedule-status-banner ui-page-description">

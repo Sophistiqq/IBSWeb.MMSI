@@ -14,6 +14,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace IBSWeb.Areas.MSAP.Controllers
 {
+    // Retired: direct data changes bypass the approved workflow and book snapshots.
+    [NonController]
     [Area("MSAP")]
     public class MsapImportController(MsapDbContext dbContext, ILogger<MsapImportController> logger) : Controller
     {

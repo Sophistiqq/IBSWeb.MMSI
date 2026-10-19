@@ -1,5 +1,121 @@
 # MSAP schedule/COS implementation plan
 
+## Current status and next goal — 19 October 2026
+
+This section is the current implementation checkpoint. Earlier phase tables, source inspections and wireframe proposals below are retained as history; they are not a current backlog. Later direct user decisions take precedence, including general reviewer wording, Admin access, final-value BAF entry, and suspended MSAP month closing. No staff member is assigned approval authority merely because an older meeting example names them.
+
+### Implemented scope
+
+- Schedule/calendar, revision-aware COS approval, urgent operational ticket recording before approval, and cancellation of unperformed services.
+- Actual ticket recording/editing, automatic tariff/BAF calculation, expected-service completeness, explicit recalculation, and reusable clickable Job Progress.
+- Independent tariff/BAF spreadsheet-style maintenance, exports, staged old/new comparisons and selected approvals. Tuesday–Monday freshness applies to table-derived BAF only; saving factual tickets remains possible while calculation is pending.
+- Customer/principal billing, general split Basic/BAF preparation with distinct numbers and balances, final approval, approval-gated printing, optional ticket images and persisted per-number/per-approved-revision Sales Book snapshots.
+- Multi-billing collection receipts, receiving-bank selection, deposit/clearing and returned-check/redeposit workflow. Partial settlement is outside the agreed current scope.
+- Other Tug Charges capture, allocation, review/confirmation and named audit evidence in MSAP. IBS payment/check processing remains separate future work.
+- Dashboard and compact portable UI system, committed as `cd11c80cd`. Shared primitives live in `ui-system.css` (`.app-ui`, `ui-*`, `--ui-*`); Job Progress uses `workflow-ui.css`. Schedule CSS is separated into shared `vessel-schedule.css`, form `vessel-schedule-form.css`, and calendar `vessel-calendar.css`. Use dark primary actions, neutral secondary actions and restrained semantic attention colors; preserve billing print layouts.
+
+### Remaining gaps and decisions
+
+| Item | Current boundary / remaining work |
+|---|---|
+| User access | Access cleanup implemented below. Confirm actual named staff assignments and complete live multi-user acceptance; initial inspection remains recorded below. |
+| GL / IBS recognition | `AccountingSourceId` supplies stable source identity only. GL recognition, journals, reclassification, account mapping and IBS synchronization are not implemented by that identity or by Sales Book persistence. |
+| IBS AP Trade – Tugboats | Dedicated tugboat payables/payment integration remains future IBS work. Do not require an IBS Supplier link. Define source matching, unpaid eligibility and idempotent synchronization before implementing. |
+| Other Tug corrections | Confirmed charges are immutable. Agree amendment/reversal and multiple provider bills per ticket before extending the current one-allocation-per-ticket workflow. Capture/review responsibilities remain a development proposal needing MMSI feedback. |
+| Split corrections | No paired split-billing editor yet: delete/reprepare an eligible unposted preparation. Bills with book history cannot be deleted. |
+| Finance reconciliation | Validate reporting examples, principal withholding across statements/collections, rate-match fallback rules, provider VAT/withholding and the fixed VAT-inclusive billing assumption (`IsVatInclusive = true`). Do not infer new policy from sample amounts. |
+| Workflow acceptance | Complete a live scheduling-to-clearing scenario matrix, including denied actions, stale reviews, pending BAF/recalculation, urgent services, cancellations, split/principal billing, multi-bill checks and returned checks. Chrome Recorder/importable browser artifacts have not been produced. |
+| Migration / checks | Migrations are supplied; application is user-managed. The last broader `Checks/MSAP` run encountered `ScheduleFormRenderingCheck.cs:98` ("Review action does not match revision state"); investigate before claiming the complete check suite passes. |
+
+Deferred for discussion: MSAP month closing and late-arriving tickets; fuel inputs, consumption/inventory, formulas and responsible personnel; per-tugboat workspaces/performance/opex reporting; and partial payments unless explicitly requested. Supplied final BAF amounts remain usable without fuel inputs. An April service finally approved for billing in May retains its service date and appears in the May Sales Book; separate management-accounting recognition still needs the GL work above.
+
+### Back navigation clarification — 19 October 2026
+
+Back controls return through browser history, preserving the previous screen and its filter/context instead of always opening an index. Reuse portable `ui-navigation.js` and `a[data-ui-back]`; retain a real, relevant `href` as the fallback for direct/new-tab entry without back history and for no-script navigation. Keep modified clicks and explicit destinations/native link behavior intact. Back labels say `Back`; breadcrumbs and deliberate navigation links retain their named destinations. Billing preparation keeps Back separate from its selected-COS details link. Collection return controls and billing Review use the same behavior. Escape activates the page's Back control when present, retaining existing modal/alert guards. This does not change save/approval redirects or print-preview Close behavior.
+
+### Dashboard responsibilities and MSAP entry — 19 October 2026
+
+Later user direction: shared Admin retains both-app access; IBS authorization is outside this slice. MSAP must deny ordinary users with no MSAP work and tailor dashboard information to their responsibilities.
+
+- `AccessMsap` is a derived permission, not a new user type or database flag. Active Admin/SuperAdmin retain supported MSAP access; an ordinary User needs an existing User Access assignment with at least one supported grant. A retired-only, empty or missing assignment cannot enter. The shared-user role fallback remains available for provisioning; it is no longer sufficient for module entry. A role claim alone is not a procedure assignment.
+- Enforce entry through the module authorization handler for all three MSAP areas, rechecking effective access even when a cookie contains an MSAP role. Hide the MSAP link in its IBS-hosted navigation partial for denied users. The dashboard also denies entry before loading data. No IBS roles/routes are restricted, and no live account grants are changed.
+- A valid MSAP User claim does not downgrade shared Admin authority. Preserve explicit MSAP SuperAdmin identity; invalid/ambiguous role claims and inactive accounts remain denied.
+- Resolve dashboard section flags in `DashboardService.SetAccessAsync`, using the existing access service. Apply the same flags to query execution and view sections; supporting-record read access does not automatically fill the dashboard with unrelated responsibilities.
+
+| Dashboard information | Relevant grants |
+|---|---|
+| Calendar, today/upcoming schedules and operational activity | Schedule create/edit/approve, ticket record/edit, or maritime reports |
+| Missing actual tickets | Ticket record/edit or maritime reports |
+| Schedule, rate and final-bill approval queues | Their respective approval grants only |
+| Billed and known-unbilled amounts | Billing prepare/edit/discard/final-approve or maritime reports |
+| Receipt totals | Collection preparation, banking or maritime reports |
+| Outstanding approved-bill balance | Billing or collection dashboard access |
+| Deposit/clearing/returned-check queue | Banking or maritime reports; receipt preparation alone does not load it |
+| Pending calculations | Ticket editing/recalculation, billing prepare/edit/final-approve, rate prepare/approve, or maritime reports |
+| Missing provider-cost entries | Other Tug Charges preparation |
+| Draft provider documents | Other Tug Charges preparation or confirmation; actual confirmation remains a separately authorized editor action |
+| Rates/history/exports and master-file entry | Their respective existing grants |
+
+The new provider queues use MMSI scope and exclude cancelled/invalidated COS and deleted tickets. Missing-cost entries require factual service times and no existing provider allocation; draft/confirmed zero entries are not classified as missing. Queues show at most six records with total counts and lead to existing COS/provider editors. Missing provider costs still do not block operational ticket entry or customer billing. Rate-only calculation follow-up does not grant COS access; the COS link requires its existing read permission.
+
+This slice adds no schema changes and leaves billing amounts, Sales Book recognition, collection state transitions and print appearance unchanged. Live dashboard/browser and database-query acceptance remain separate from compilation and permission checks. The web application and check project build passed; the targeted `--workflow-access-only` checks passed entry/revocation, shared Admin handling and dashboard responsibility combinations, plus the existing rate-access and Job Progress checks. Dashboard tour JavaScript syntax and diff/UTF-8/LF/final-newline checks passed. The existing EF1002 warning in `Checks/MSAP/SchedulingCheck.cs:72` remains. New dashboard queries and visual layouts have not been exercised against a live database/browser in this slice.
+
+### Access cleanup implementation — 19 October 2026
+
+The user authorized implementing the access cleanup together with retiring actions from the previous workflow. This supersedes the initial access inventory below; that inventory remains an inspection record, not current grants.
+
+- Keep active Admin/SuperAdmin authority for supported workflow actions. Ordinary Users need explicit action flags; missing access records, inactive/invalid roles and unknown procedure values deny access. No actual user assignments were changed by the agent.
+- Use derived `ViewOperations`, `ViewBillings` and `ViewCollections` checks for lists, details, previews, supporting lookups and navigation. These are read dependencies of existing grants, not new stored flags. Operational grants permit operational reads; billing grants permit billing and operational reads; collection/banking grants also permit supporting billing reads; maritime report access permits reading linked workflow records. Rate-only and reference-only grants do not grant workflow access.
+- Retain separate preparation and approval controls for schedule/COS, rate changes, final billing and provider charges. Ticket editing includes explicit recalculation. Booking editing includes cancellation of unperformed services. No new different-person/self-approval rule is invented.
+- `CanCreateCollection` prepares/edits receipts; existing `CanAccessTreasury` now explicitly controls deposit, clearing and returned-check/redeposit actions, independently of preparation. An ordinary User previously granted only collection preparation needs an administrator to assign banking if that is their responsibility. No automatic grant expansion or migration is supplied.
+- User Access create/edit share one supported-permission form. Its list summarizes grants by workflow and displays names. Writes accept supported fields only, require an active User target, reject a mismatched posted target identity, retain stable user IDs/names in audit evidence and clear retired flags when a permission record is saved. Admin/SuperAdmin permissions do not depend on these individual rows.
+- Remove billing reversal/unpost from the index and controller. Keep eligible draft edit/discard and separate final approval; discard now requires POST plus antiforgery validation. Split preparations cannot be edited through the single-bill editor; retain delete/reprepare and all existing service-side book-history/state restrictions.
+- Remove manual ticket tariff setting/editing/approval/rejection/batch actions, arbitrary status changes, ticket deletion/restoration and standalone attachment deletion from routed actions and controls. Registry filters follow calculation pending / for billing / billed. Linked ticket inspection/editing reuses the COS actual-ticket form. Historical unlinked previews remain read-only; legacy tariff states remain blocked instead of acquiring a manual-approval bypass.
+- Start new bookings through Vessel Schedule; the old direct COS create POST/view are retired and its GET redirects to schedule preparation. Require create-schedule authority on both schedule create routes. Cancel a mistaken/unperformed booking with audit retention instead of permanently deleting the plan.
+- Retire the old bulk workflow import/reset and SuperAdmin raw financial-data editor from MVC discovery (`NonController`) and navigation because they bypass current approvals/snapshots. Their source is retained for reference; no route or supported permission re-enables them. Keep enum numbers, mapped retired columns, historical service implementations, audit records and past migrations intact. Month-closing navigation is removed while that work remains deferred.
+- Calendar, dashboard, Job Progress, COS/billing/collection indexes and receipt controls use the same effective read/action checks. A read grant never permits a save, approval or banking update. Rate access independently exposes its master-file entry. Master-file export requires reference access; employee/bank/supplier exports additionally require Admin policy, matching their administrative boundary.
+
+Acceptance still requires the user's live multi-user walkthrough and confirmation of actual named staff assignments. The implementation does not assign permissions from department titles or introduce a role-template system. Validation: the web project and `Checks/MSAP/Check.csproj` built successfully. `--workflow-access-only` passed the new action-filter/permission checks, existing rate-access checks and updated Job Progress checks without querying or changing the database. The check project retains its pre-existing EF1002 warning in `SchedulingCheck.cs:72`. Changed inline JavaScript parsed after substituting Razor expressions, and `schedule-actions.js` passed `node --check`. Diff/UTF-8/LF/final-newline checks passed. These checks do not replace live browser, multi-user or full database-workflow acceptance; the previously recorded broader rendering-check failure has not been rerun in this slice.
+
+### Next goal: solidify user access
+
+**Outcome:** a reviewed action-by-action access matrix and consistent enforcement. Keep the existing role/individual-permission approach unless a concrete requirement requires changing it. Do not invent Operations/Finance roles or grant actual users permissions from job-title assumptions. Admin and SuperAdmin retain the user's instruction to perform all supported workflow actions; financial state/completeness/revision controls still apply.
+
+Source baseline inspected on 19 October: `MsapRoles`, `RoleService`, `MsapRoleHandler`, `UserAccessService`, the MSAP module policy convention, access attributes, and the schedule/COS/billing/collection/rate/Other Tug/User Access controllers. This is a starting inventory, not a completed endpoint/security audit or a list of live user grants. No database/user-account query was performed.
+
+| User category | Current source behavior |
+|---|---|
+| Active Admin / SuperAdmin | `UserAccessService.CheckAccess` grants procedure access without individual flags. User Access maintenance is protected by `MSAP.Admin`. Separate admin/superadmin policy restrictions must still be inventoried. |
+| Active User | Procedure actions depend on the saved per-user access record; missing records deny procedure checks. Having a role does not itself grant every procedure. |
+| Inactive / invalid role | Live role resolution denies access. The MSAP module convention adds the module access policy; stale cookie role claims are not sufficient. |
+| Shared identity fallback | Without an explicit MSAP role claim, shared Admin maps to MSAP Admin; other active identities resolve to User. Review this module-entry policy explicitly. |
+
+Initial action groups (ordinary User grants; Admin/SuperAdmin procedure bypass as above):
+
+| Action group | Existing permission / observed boundary | Access-review question |
+|---|---|---|
+| Calendar and new schedule | Schedule index/create currently rely on module/authentication entry; create has no dedicated procedure attribute. | Who may read schedules versus create them? Check the service and every lookup/save route before closing this gap. |
+| Schedule edit / approval | `EditCustomerOrderSlip`; separate `ApproveSchedule`. | Who prepares, revises and approves? Confirm urgent entry and reapproval visibility. |
+| COS / service records | COS create/edit/delete/close flags; details accepts several workflow grants while its list accepts a narrower set. | Ensure each user's permitted work is reachable through lists and Job Progress without granting unrelated actions. |
+| Actual tickets | `CreateDispatchTicket`, `EditDispatchTicket`, `DeleteDispatchTicket`. | Separate recording/editing/viewing, service cancellation and recalculation; examine legacy endpoints and post-billing restrictions. |
+| Rates | `ViewRates`, `ManageRates`, `ApproveRateUpload`; prepare/approve also imply view. | Confirm who prepares versus approves, exports/history access and whether self-approval is allowed. Existing enum naming does not imply workbook upload remains the user flow. |
+| Billing | Create/edit/delete/reverse flags; distinct `ApproveFinalBilling`. Review/preview/print currently commonly accept create or final-approve grants. | Confirm read-only/print access for collection and report users, correction/reversal authority and every split component. |
+| Collections / banking | `CreateCollection` currently covers list, create, edit, preview, banking and selection lookups. | Decide whether receipt preparation and deposit/clear/return need separate grants; do not split them without an agreed need. |
+| Other Tug Charges | `ManageOtherTugCharges` prepares; `ConfirmOtherTugCharges` confirms; either opens the module. | Identify actual preparers/reviewers; decide self-confirmation policy. Preserve pending provider costs without blocking factual service entry. |
+| Master files / reports / import | `ManageMaritimeMasterFile`, `ViewMaritimeReport`, `ViewInventoryReport`, `ManageMsapImport`. | Inventory every screen/export, dashboard measure and lookup; confirm data scope and import authority. |
+| Access administration | `UserAccessController` requires Admin policy. | Review user/role administration, allowed target users, grant-change audit and account deactivation separately from workflow approvals. |
+| Legacy flags | `SetTariff`, `ApproveTariff`, treasury/disbursement and posted-period enum entries remain in source. | Identify active callers versus obsolete controls. Do not reintroduce manual tariff approval or month closing merely because a flag exists. |
+
+Work sequence:
+
+1. Inventory all MSAP endpoints and action controls, including read/list/export/print routes, AJAX/lookups, dashboard queues, Job Progress, legacy entry points and service-layer guards. Record current permission, required state, data scope and caller.
+2. Map the agreed responsibilities to named users (display names plus stable IDs), distinguishing view, prepare, edit/correct, approve/confirm, reverse/delete, banking and administration. Department labels are discussion aids, not implemented roles. Confirm self-approval/separation-of-duties rather than assuming it is mandatory or allowed policy.
+3. Review the matrix with the user, preserve Admin/SuperAdmin authority, and identify the minimum additional grants or retired flags needed. Avoid bundling unrelated financial authority merely to make navigation work.
+4. Align UI visibility and direct server enforcement, including list/read dependencies. Hiding a control is not authorization; approval permission never bypasses financial state gates.
+5. Verify representative active Users with no grants, one grant and combined grants, Admin/SuperAdmin, inactive users and changed/revoked grants. Check direct GET/POST/AJAX access as well as visible controls; preserve named audit evidence. No full-workflow verification claim until exercised.
+
+Initial documentation-only checkpoint, before the access implementation above: no application behavior, permissions, database records or migrations changed. Previous UI checks were targeted fixture/static checks, not a full live workflow test. No build is needed for this documentation update.
+
 ## Important correction — tugboat payables, not supplier payables
 
 **User clarification, 18 October 2026:** AP Other Tugs will be paid through a dedicated **IBS AP Trade – Tugboats** module. Select the actual tugboat as the payable identity. Supplier-based AP Trade was a temporary workaround and must not become the required model for this flow.
@@ -70,13 +186,13 @@ This later user clarification supersedes earlier upload-only and unresolved-form
 - Fuel input/calculation personnel, formulas, VAT treatment and inventory remain deferred. Do not add unused fuel fields or derive customer charges from the example workbook.
 - Editor drafts and submitted comparisons do not change active rates. The authorized approver activates only selected changes after checking the current baseline. Retain immutable old/new comparison and approval evidence. Weekly changes add effective dates; explicit corrections update the selected dated rate.
 - Current implementation connects independent rate lookups to schedule estimates, actual ticket calculations and Job Progress. Old direct rate editing and CSV rate activation are retired. Existing ticket/billing amounts are not rewritten by rate approval; unresolved unbilled tickets retain the COS recalculation action.
-- Still pending: Tuesday cycle coverage/enforcement, impact preview for already-calculated unbilled tickets, their correction/recalculation policy, and confirmation of rate-matching fallback rules. No weekly freshness renewal is inferred from this editor milestone.
+- Implemented since this editor milestone: BAF-only Tuesday–Monday coverage enforcement, unbilled-ticket impact review and explicit correction/recalculation. Rate approval does not silently rewrite tickets. The impact preview is bounded to the latest 200 candidates; downstream COS/billing guards still check older work. Rate-matching fallback policy remains for confirmation.
 - A schema migration is supplied but is not applied by the agent. Browser acceptance and database migration execution remain with the user.
 
 
 Prepared: 16 October 2026.
 
-Status: implementation started. Phase 0 source trace is recorded; phase 1a adds the three explicit approval permissions. The calendar milestone is complete. Phase 1b adds structural expected-service rows; phase 1c adds customer-default COS discount maintenance and exports; phase 1d stores schedule commercial settings and per-service charging choices/manual values; phase 1e adds revision-bound approval evidence to schedule and billing; phase 1f adds dispatch ticket linkage to expected service entries, rate provenance flags, and raw duration separation. Schedule preparation UI, commercial/service-row saving and revision-aware schedule review have been continued from the partial implementation; see the baseline for checks and limits. Authoritative rate resolution, expected-ticket completeness and the new financial approval gates remain subsequent slices. The complete new COS/ticket/rate/billing workflow is not enabled; schedule confirmation now uses the explicit schedule-approval permission. Production data has not been changed.
+Historical status at the initial foundation milestone (superseded by the 19 October checkpoint): implementation started. Phase 0 source trace is recorded; phase 1a adds the three explicit approval permissions. The calendar milestone is complete. Phase 1b adds structural expected-service rows; phase 1c adds customer-default COS discount maintenance and exports; phase 1d stores schedule commercial settings and per-service charging choices/manual values; phase 1e adds revision-bound approval evidence to schedule and billing; phase 1f adds dispatch ticket linkage to expected service entries, rate provenance flags, and raw duration separation. Schedule preparation UI, commercial/service-row saving and revision-aware schedule review have been continued from the partial implementation; see the baseline for checks and limits. Authoritative rate resolution, expected-ticket completeness and the new financial approval gates remain subsequent slices. The complete new COS/ticket/rate/billing workflow is not enabled; schedule confirmation now uses the explicit schedule-approval permission. Production data has not been changed.
 
 Implementation tracking: see [IMPLEMENTATION_BASELINE.md](IMPLEMENTATION_BASELINE.md) for the source trace, accounting boundary, sample reconciliation, and outstanding release prerequisites.
 
@@ -92,7 +208,7 @@ Implementation tracking: see [IMPLEMENTATION_BASELINE.md](IMPLEMENTATION_BASELIN
 
 - Schedule review now follows wireframe 02 as a full page at the existing Confirm route, using the shared styling and progress panel. Use COS wording on the review screen. Table rates remain explicitly labeled estimates; saved manual values are reviewed as entered. Retain schedule approval permissions, stale-review/closed-period guards and explicit overlap acknowledgement. Customer account navigation remains unavailable until an actual account screen exists; show recorded customer details for now.
 
-- Reusable styling: new workflow pages opt into `workflow-ui.css` through `msap-workflow`. Follow [MSAP_STYLE_GUIDE.md](MSAP_STYLE_GUIDE.md) for typography roles and spacing tokens. Create/edit schedule is the first consumer, including a 22rem summary, shared panel/field/stack spacing and theme-aware text. Do not duplicate page-specific font scales or apply these styles to billing print layouts.
+- Reusable styling: portable primitives now live in `ui-system.css` through `.app-ui`, `ui-*` and `--ui-*`; `workflow-ui.css` retains Job Progress. Follow [MSAP_STYLE_GUIDE.md](MSAP_STYLE_GUIDE.md) for typography and spacing. Keep shared primitives portable to IBS and isolated from billing print layouts.
 
 - Schedule rate clarification: use `Recurring` / `Non-recurring` rather than `Standard`. Detected table rates are read-only; allow manual entry only after a successful lookup confirms no match. Keep inputs locked during incomplete, pending or failed lookups. A detected rate supersedes a previous manual entry; table estimates remain outside manual override fields.
 
@@ -124,6 +240,8 @@ Deliver a schedule-driven process in which RML individually approves the booking
 The largest visible change is Vessel Schedule/COS; the work also reaches rate maintenance, dispatch, progress gates, authorization, billing, collections, reports, imports, and persistence. Keep the layered MVC/EF Core structure. Reuse the current unit of work, transactions, access model, UI components, and installed Excel package. Do not build a generic workflow engine or a parallel accounting system.
 
 ### Mandatory visual and layout baseline
+
+The later portable-system and muted attention-color decisions in the 19 October checkpoint supersede grayscale-only and MSAP-specific primitive naming below. Retain compact layout and print isolation.
 
 The reviewed `MSAP_WIREFRAMES.drawio` screens and numbered PNGs in `wireframe-previews/`, together with the user's later clarifications, are the visual baseline for implementation. Match their hierarchy, field grouping, information density, and action placement. Older application styling must be adapted to this baseline within the affected MSAP screens. A wireframe does not resolve business rules still marked provisional in this plan.
 
@@ -383,4 +501,4 @@ Before each slice is reported complete: review the full diff, remove unrelated e
 
 This plan reviewed the updated brief and the principal schedule, job-order, dispatch, tariff, progress, billing, access, dashboard, context, and module-registration code. The brief's older backup-approval, auto-approval, BAF-selection, and post-ticket-edit wording was aligned with the latest decisions. No application build, database migration, runtime workflow test, or full workbook reconciliation was performed for this documentation task.
 
-Continue phase 1's expected-service and approval foundation, resolving narrow GL/rate-key questions as their dependent slices approach. Fresh deployment removes legacy conversion from this sequence. This is the minimum stable base for the redesigned schedule form; adding UI inputs alone would leave missing-ticket detection and approval controls incomplete.
+Next: solidify user access using the 19 October action inventory and review sequence above. The original phase 1 foundation is implemented; remaining accounting/integration, Finance reconciliation and workflow-acceptance work stays tracked in the current gap table.

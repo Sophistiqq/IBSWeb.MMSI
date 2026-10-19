@@ -38,6 +38,10 @@
             <partial name="_JobProgressList" model="progress" />
         }
 
+        <form id="discardBilling" asp-action="Delete" method="post" hidden>
+            <input type="hidden" name="id" />
+        </form>
+
         <!-- Filter Group -->
         <div class="flex flex-wrap gap-2">
             <button id="filterAll" class="modern-btn-secondary active">ALL</button>
@@ -105,7 +109,6 @@
         $(document).ready(function () {
             const editUrl = '@Url.Action("Edit", "Billing")';
             const reviewUrl = '@Url.Action("Review", "Billing")';
-            const canReverse = @((ViewBag.CanReverse as bool? ?? false).ToString().ToLower());
             const canEdit = @((ViewBag.CanEdit as bool? ?? false).ToString().ToLower());
             const canDelete = @((ViewBag.CanDelete as bool? ?? false).ToString().ToLower());
 
@@ -168,13 +171,8 @@
                             if (row.status === "@MsapConstants.BillingStatus.ForPosting") {
                                 return ModernTable.render.dropdown([
                                     { label: 'Review billing', icon: 'visibility', url: `${reviewUrl}?id=${row.msapBillingId}` },
-                                    { label: 'Edit', icon: 'edit', url: `${editUrl}?id=${row.msapBillingId}`, condition: !row.isMonthClosed && canEdit },
+                                    { label: 'Edit', icon: 'edit', url: `${editUrl}?id=${row.msapBillingId}`, condition: !row.isMonthClosed && !row.basicBillingId && !row.bafBilling && canEdit },
                                     { label: 'Delete', icon: 'delete', isError: true, onclick: `confirmDelete(${row.msapBillingId})`, condition: !row.isMonthClosed && canDelete }
-                                ]);
-                            } else if (row.status === "@MsapConstants.BillingStatus.ForCollection") {
-                                return ModernTable.render.dropdown([
-                                    { label: 'Review billing', icon: 'visibility', url: `${reviewUrl}?id=${row.msapBillingId}` },
-                                    { label: 'Reverse (Unpost)', icon: 'undo', onclick: `confirmReverse(${row.msapBillingId})`, condition: !row.isMonthClosed && canReverse }
                                 ]);
                             } else {
                                 return ModernTable.render.dropdown([
@@ -241,25 +239,12 @@
             }).then((result) => {
                 if (result.isConfirmed) {
                     ModernAlert.showLoading("Deleting billing...");
-                    window.location.href = '@Url.Action("Delete", "Billing")?id=' + id;
+                    const form = document.getElementById('discardBilling');
+                    form.elements.id.value = id;
+                    form.submit();
                 }
             });
         }
 
-        function confirmReverse(id) {
-            ModernAlert.prompt({
-                title: 'Reverse Billing?',
-                text: "This will unpost the billing and return all dispatch tickets to 'For Billing' status.",
-                icon: 'warning',
-                placeholder: 'Enter reason for reversal...',
-                confirmText: 'Yes, reverse it!',
-                validator: (value) => value ? null : 'Please enter a reason for the reversal.'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    ModernAlert.showLoading("Reversing billing...");
-                    window.location.href = '@Url.Action("Reverse", "Billing")?id=' + id + '&remarks=' + encodeURIComponent(result.value);
-                }
-            });
-        }
     </script>
 }

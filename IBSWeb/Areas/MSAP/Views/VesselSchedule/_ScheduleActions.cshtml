@@ -41,17 +41,6 @@
     }
     @if (closed)
     {
-        <p class="ui-body ui-muted">@(Model.Status == MsapConstants.VesselScheduleStatus.Completed ? "Service is completed. Tariff, approval, billing, posting and collection can continue." : "This booking is cancelled. Schedule changes are no longer available.")</p>
-    }
-    @if (ViewBag.CanEdit == true && Model.Status == MsapConstants.VesselScheduleStatus.Tentative && Model.CustomerOrderSlipId == null)
-    {
-        <details class="schedule-delete-option">
-            <summary>Created by mistake?</summary>
-            <p class="ui-body ui-muted">Delete this tentative plan permanently, or cancel it to keep the record.</p>
-            <form asp-action="Delete" method="post" id="deleteSchedule">
-                <input type="hidden" name="id" value="@Model.VesselScheduleId" />
-                <button type="button" id="deleteScheduleButton" class="modern-btn-error"><span class="material-symbols-outlined" aria-hidden="true">delete</span> Delete tentative schedule</button>
-            </form>
-        </details>
+        <p class="ui-body ui-muted">@(Model.Status == MsapConstants.VesselScheduleStatus.Completed ? "Service is completed. Charge calculation, billing approval and collection can continue." : "This booking is cancelled. Schedule changes are no longer available.")</p>
     }
 </details>

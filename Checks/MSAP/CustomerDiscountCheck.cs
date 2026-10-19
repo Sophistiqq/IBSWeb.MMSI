@@ -77,7 +77,7 @@ namespace Checks.MSAP
                 ControllerContext = new ControllerContext { HttpContext = http },
                 TempData = tempData.GetTempData(http)
             };
-            var masterExport = (FileStreamResult)await masterController.GenerateExcel("customer", default);
+            var masterExport = (FileStreamResult)await masterController.GenerateExcel("customer", default, null!);
             using var masterPackage = new ExcelPackage(masterExport.FileStream);
             Check(masterPackage.Workbook.Worksheets[0].Cells[6, 13].Text == "DEFAULT COS DISCOUNT (%)"
                 && masterPackage.Workbook.Worksheets[0].Cells[7, 13].GetValue<decimal>() == 12.5m,

@@ -18,9 +18,9 @@
             <div class="flex gap-2 ui-actions">
                 @if (ViewBag.CanCreate == true)
                 {
-                    <a asp-action="Create" class="modern-btn-primary" data-hotkey="c">
+                    <a asp-controller="VesselSchedule" asp-action="Create" class="modern-btn-primary" data-hotkey="c">
                         <span class="material-symbols-outlined">add_circle</span>
-                        CREATE COS
+                        CREATE SCHEDULE
                     </a>
                 }
             </div>
@@ -62,7 +62,7 @@
 @section Scripts {
     <script>
         window.IBS_TOUR_STEPS = [
-            { selector: '.flex-stack', title: 'COS records', text: 'Open an existing COS below or create a direct order when you have access. Schedules confirmed from Vessel Scheduling create their own COS records.', interactive: false },
+            { selector: '.flex-stack', title: 'COS records', text: 'Open a COS below. Create a schedule to begin a new booking; approval creates its linked COS.', interactive: false },
             { selector: '#dateFilter', title: 'Filter by date', text: 'Choose an order date to narrow the list. Clear the date to show all orders again.', interactive: false },
             { selector: '#customerOrderSlipsTable', title: 'COS list', text: 'Review the customer, vessel, ticket count, and status. Select an order number or View Details to continue its workflow.', interactive: false }
         ];

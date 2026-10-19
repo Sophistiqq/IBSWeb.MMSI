@@ -31,13 +31,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// <summary>
         /// Displays the list of Billings.
         /// </summary>
-        [RequireAnyAccess(
-            "Access denied. You don't have permission to access Billings.",
-            ProcedureEnum.CreateBilling,
-            ProcedureEnum.EditBilling,
-            ProcedureEnum.DeleteBilling,
-            ProcedureEnum.ReverseBilling,
-            ProcedureEnum.ApproveFinalBilling)]
+        [RequireAccess(ProcedureEnum.ViewBillings)]
         public async Task<IActionResult> Index(string filterType, CancellationToken cancellationToken, int? customerOrderSlipId = null)
         {
             ViewBag.FilterType = filterType;
@@ -53,7 +47,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 ViewBag.JobProgressItems = new[] { await JobProgressCalculator.LoadAsync(unitOfWork, job, schedule, cancellationToken) };
             }
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            ViewBag.CanReverse = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ReverseBilling);
             ViewBag.CanPost = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateBilling);
             ViewBag.CanEdit = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditBilling);
             ViewBag.CanDelete = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteBilling);
@@ -233,6 +226,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// <summary>
         /// Deletes a specific Billing.
         /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.DeleteBilling, "Access denied. You don't have permission to delete Billings.")]
         public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
         {
@@ -256,7 +251,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         #region Billing review
 
         [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.ApproveFinalBilling)]
+        [RequireAccess(ProcedureEnum.ViewBillings)]
         public async Task<IActionResult> Review(int id, CancellationToken cancellationToken)
         {
             var model = await billingService.GetBillingByIdAsync(id, cancellationToken);
@@ -289,39 +284,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         #endregion
 
-        #region Reverse (Unpost)
-
-        /// <summary>
-        /// Reverses a posted billing back to 'For Posting' status.
-        /// </summary>
-        [RequireAccess(ProcedureEnum.ReverseBilling, "Access denied. You don't have permission to reverse Billings.")]
-        public async Task<IActionResult> Reverse(int id, string? remarks, CancellationToken cancellationToken)
-        {
-            var result = await billingService.ReverseBillingAsync(id, User.Identity?.Name ?? "Unknown", remarks, cancellationToken);
-
-            if (result.IsSuccess)
-            {
-                TempData["success"] = result.Message;
-            }
-            else
-            {
-                TempData["error"] = result.Message;
-            }
-
-            List<JobProgressViewModel> progress = await JobProgressCalculator.LoadForBillingsAsync(unitOfWork, [id], cancellationToken);
-            return progress.Count == 1
-                ? RedirectToAction(nameof(Index), new { customerOrderSlipId = progress[0].CustomerOrderSlipId })
-                : RedirectToAction(nameof(Preview), new { id });
-        }
-
-        #endregion
-
         #region Preview & Print
 
         /// <summary>
         /// Displays a preview of the Billing, including associated tickets and tugboats.
         /// </summary>
-        [RequireAnyAccess("Access denied. You don't have permission to view Billings.", ProcedureEnum.CreateBilling, ProcedureEnum.ApproveFinalBilling)]
+        [RequireAccess(ProcedureEnum.ViewBillings)]
         public async Task<IActionResult> Preview(int id, CancellationToken cancellationToken, bool includeTicketImages = false, bool combineMatchingBafRates = false, bool printCopy = false)
         {
             var model = await billingService.GetBillingByIdAsync(id, cancellationToken);
@@ -391,7 +359,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// <summary>
         /// Generates an Excel file for dot-matrix printing of the Billing.
         /// </summary>
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.ApproveFinalBilling)]
+        [RequireAccess(ProcedureEnum.ViewBillings)]
         public async Task<IActionResult> Print(int id, CancellationToken cancellationToken)
         {
             try
@@ -567,7 +535,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.ApproveFinalBilling)]
+        [RequireAccess(ProcedureEnum.ViewBillings)]
         public async Task<IActionResult> GetBillingList([FromForm] DataTablesParameters parameters, CancellationToken cancellationToken, int? customerOrderSlipId = null)
         {
             try

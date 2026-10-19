@@ -54,9 +54,6 @@ namespace IBS.Services.MSAP.AccessControl
     /// </summary>
     public static class AccessControlExtensions
     {
-        #region -- MSAP Workflow --
-
-        #endregion -- MSAP Workflow --
 
         #region -- MSAP Import --
 

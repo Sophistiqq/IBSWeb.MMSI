@@ -28,15 +28,15 @@ namespace Checks.MSAP
             Check(CustomerOrderSlipService.CanCompleteService([first]), "Finished actual service must allow completion before billing.");
             var second = Ticket(2, "For Tariff");
             var deleted = new DispatchTicket { DispatchTicketId = 3, Status = "Deleted" };
-            Check(JobProgressCalculator.Calculate(job, null, [first, second, deleted], []).Stage == 3, "One unfinished tariff must block approved tickets; deleted tickets must be excluded.");
+            Check(JobProgressCalculator.Calculate(job, null, [first, second, deleted], []).Stopped, "Retired tariff states must block billing without exposing manual approval.");
             second.TimeArrived = null;
             Check(!CustomerOrderSlipService.CanCompleteService([first, second, deleted]), "Missing actual times must prevent service completion.");
             Check(JobProgressCalculator.Calculate(job, null, [first, second], []).Stage == 2, "Missing actual times must block tariff progression.");
             second = Ticket(2, "Disapproved");
             var rejected = JobProgressCalculator.Calculate(job, null, [first, second], []);
-            Check(rejected.Stage == 3 && rejected.ActionName == "EditTariff", "Disapproved charges must require correction before billing.");
+            Check(rejected.Stage == 2 && rejected.Stopped && string.IsNullOrEmpty(rejected.ActionName), "Retired disapproved charges must not expose the old editor.");
             second.Status = "For Approval";
-            Check(JobProgressCalculator.Calculate(job, null, [first, second], []).Stage == 4, "Outstanding approval must block billing.");
+            Check(JobProgressCalculator.Calculate(job, null, [first, second], []).Stopped, "Retired manual approval must block billing.");
             second.Status = "For Billing";
             Check(JobProgressCalculator.Calculate(job, null, [first, second], []).Stage == 5, "All approved tickets must advance to Billing.");
             var bill = new Billing { MsapBillingId = 1, Status = "For Posting", Balance = 100 };

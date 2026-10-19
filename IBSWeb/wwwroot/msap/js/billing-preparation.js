@@ -34,7 +34,7 @@ $(function () {
         $('#completedServices').empty().append($('<tr>').append($('<td colspan="6">').text('Select a COS to view completed services.')));
         $('#bookingVessel, #bookingLocation, #bookingVoyage, #bookingDates, #bookingDiscount').text('—');
         $('#billingReadiness').text('Select a COS to load completed services.');
-        $('#cosDetailsLink').attr('href', form.dataset.indexUrl).text('Back to billing');
+        $('#cosDetailsLink').prop('hidden', true);
         JobProgress.load(document.getElementById('financialJobProgress'), {});
         updateSummary();
         enableActions();
@@ -138,7 +138,7 @@ $(function () {
         if (!id) return;
         $('#billingReadiness').text('Checking completed services and charges…');
         JobProgress.load(document.getElementById('financialJobProgress'), { customerOrderSlipId: id });
-        $('#cosDetailsLink').attr('href', form.dataset.detailsUrl + '?' + new URLSearchParams({ id })).text('COS details');
+        $('#cosDetailsLink').attr('href', form.dataset.detailsUrl + '?' + new URLSearchParams({ id })).prop('hidden', false);
         try {
             const response = await getJson(form.dataset.ticketsUrl, { customerOrderSlipId: id });
             if (request !== cosRequest) return;

@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using IBS.DataAccess.MSAP.Data;
 using IBS.Models.MSAP;
-using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP;
 using IBS.Services.MSAP.AccessControl;
@@ -37,20 +36,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return Challenge();
             }
 
-            model.CanViewDispatch = await accessControl.HasAnyAccessAsync(userId,
-                ProcedureEnum.CreateDispatchTicket, ProcedureEnum.EditDispatchTicket, ProcedureEnum.SetTariff, ProcedureEnum.ApproveTariff);
-            model.CanViewBilling = await accessControl.HasAnyAccessAsync(userId,
-                ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling, ProcedureEnum.DeleteBilling, ProcedureEnum.ReverseBilling, ProcedureEnum.ApproveFinalBilling);
-            model.CanCreateBilling = await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateBilling);
-            model.CanCreateCollection = await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateCollection);
-            model.CanApproveSchedule = await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveSchedule);
-            model.CanApproveBilling = await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveFinalBilling);
-            model.CanApproveRates = await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveRateUpload);
-            model.CanManageRates = await accessControl.HasAccessAsync(userId, ProcedureEnum.ManageRates);
-            model.CanViewRates = await accessControl.HasAccessAsync(userId, ProcedureEnum.ViewRates);
-            model.CanViewReports = await accessControl.HasAccessAsync(userId, ProcedureEnum.ViewMaritimeReport);
-            model.CanViewFinance = model.CanViewBilling || model.CanCreateCollection
-                || model.CanViewReports;
+            await dashboardService.SetAccessAsync(model, userId, accessControl);
+            if (!model.ShowDashboard)
+            {
+                return Forbid();
+            }
 
             await dashboardService.LoadAsync(model, ct);
             return View(model);

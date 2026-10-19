@@ -1,10 +1,16 @@
+@using System.Security.Claims
+@using IBS.Services.MSAP.AccessControl
+@inject IAccessControlService AccessControl
 @model Collection
 @{
     ViewData["Title"] = "Collection receipt " + Model.MsapCollectionNumber;
     ViewData["IsFullWidth"] = true;
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    bool canPrepare = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.CreateCollection);
+    bool canBank = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.AccessTreasury);
     ViewData["JobProgressActionStage"] = Model.DepositDate.HasValue ? JobProgressCalculator.ClearingStage : JobProgressCalculator.DepositStage;
     ViewData["JobProgressActionTargetId"] = Model.MsapCollectionId;
-    bool canEdit = !Model.IsMonthClosed && !Model.IsPrinted && !Model.DepositDate.HasValue && !Model.ReturnedDate.HasValue && !Model.ClearedDate.HasValue;
+    bool canEdit = canPrepare && !Model.IsMonthClosed && !Model.IsPrinted && !Model.DepositDate.HasValue && !Model.ReturnedDate.HasValue && !Model.ClearedDate.HasValue;
     var progressItems = (ViewBag.JobProgressItems as IEnumerable<JobProgressViewModel> ?? []).ToList();
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
@@ -26,7 +32,7 @@
             <header class="ui-page-header">
                 <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">Collections</a></li><li aria-current="page">@Model.MsapCollectionNumber</li></ol></nav>
                 <h1 class="ui-page-title" data-page-header>Receipt @Model.MsapCollectionNumber</h1>
-                <a asp-action="Index" class="modern-btn-secondary ui-page-action">Collections</a>
+                <a asp-action="Index" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
                 <p class="ui-page-description ui-caption ui-muted">@Model.PaymentStatus / @(Model.IsUndocumented ? "Undocumented" : "Documented") / @Model.Date.ToString(MsapConstants.Date_Format)</p>
             </header>
             <section class="ui-panel collection-heading @(Model.ClearedDate.HasValue ? "" : Model.ReturnedDate.HasValue && !Model.DepositDate.HasValue ? "ui-critical" : "ui-attention")" aria-label="Receipt actions">
@@ -39,7 +45,7 @@
                     {
                         <a asp-action="Edit" asp-route-id="@Model.MsapCollectionId" class="modern-btn-secondary">Edit receipt</a>
                     }
-                    @if (!Model.IsMonthClosed && !Model.ClearedDate.HasValue)
+                    @if (canBank && !Model.IsMonthClosed && !Model.ClearedDate.HasValue)
                     {
                         @if (!Model.DepositDate.HasValue)
                         {

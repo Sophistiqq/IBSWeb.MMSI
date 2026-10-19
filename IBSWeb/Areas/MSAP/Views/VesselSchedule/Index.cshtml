@@ -1,6 +1,11 @@
+@using System.Security.Claims
+@using IBS.Services.MSAP.AccessControl
+@inject IAccessControlService AccessControl
 @using System.Text.Json
 @model VesselScheduleBoardViewModel
 @{
+    var accessUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    bool canCreateSchedule = accessUserId != null && await AccessControl.HasAccessAsync(accessUserId, ProcedureEnum.CreateCustomerOrderSlip);
     ViewData["Title"] = "Vessel calendar";
     ViewData["IsFullWidth"] = true;
     var month = Model.Date;
@@ -34,7 +39,10 @@
                 </ol>
             </nav>
             <h1 class="ui-page-title" data-page-header>Vessel calendar</h1>
-            <a asp-action="Create" asp-route-date="@((Model.SelectedDate ?? today).ToString("yyyy-MM-dd"))" class="modern-btn-primary ui-page-action" data-hotkey="c">+ New schedule</a>
+            @if (canCreateSchedule)
+            {
+                <a asp-action="Create" asp-route-date="@((Model.SelectedDate ?? today).ToString("yyyy-MM-dd"))" class="modern-btn-primary ui-page-action" data-hotkey="c">+ New schedule</a>
+            }
             <p class="schedule-muted ui-body ui-muted ui-page-description">Find a booking, preview a vessel or select a day. All times are Philippine time.</p>
         </header>
 

@@ -36,7 +36,7 @@
                         <button type="submit" class="modern-btn-secondary ui-page-action">Record urgent service</button>
                     </form>
                 }
-                <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary ui-page-action">@(pending ? "Back to review list" : "Back to calendar")</a>
+                <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
             </div>
             <p class="ui-body ui-muted ui-page-description">@(pending ? "Review the booking, service rates and commercial terms before approval." : "Booking details, service requirements and commercial terms.")</p>
             <div class="schedule-status-banner ui-page-description">
@@ -129,7 +129,7 @@
                     <input type="hidden" name="allowConflicts" value="false" />
                     <span class="ui-caption ui-muted">@(Model.Revision > 1 ? $"Approval applies to Revision {Model.Revision - 1} of this booking." : "Approval applies to this booking.")</span>
                     <div class="schedule-action-buttons">
-                        <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">@(pending ? "Back to review list" : "Back to calendar")</a>
+                        <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary" data-ui-back>Back</a>
                         <button type="submit" class="ui-button ui-button--primary">@(reapproval ? "Reapprove schedule" : "Approve schedule")</button>
                     </div>
                 </form>

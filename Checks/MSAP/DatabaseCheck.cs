@@ -133,21 +133,25 @@ namespace Checks.MSAP
                     NullLogger<DashboardService>.Instance));
                 var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "shared-check"), new Claim("Company", "Filpride")], "check");
                 dashboard.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } };
-                var dashboardModel = (DashboardCountViewModel)((ViewResult)await dashboard.Index(default)).Model!;
-                Check(dashboardModel.ShowDashboard && dashboardModel.DataError == null && dashboardModel.ScheduleError == null,
-                    "Host company claim hides the MSAP dashboard or its empty states fail.");
-                Check(!dashboardModel.CanViewFinance && !dashboardModel.CanCreateBilling, "Dashboard bypassed MSAP permissions.");
+                Check(await dashboard.Index(default) is ForbidResult, "An unassigned shared user entered the MSAP dashboard.");
                 identity.AddClaim(new Claim(ClaimTypes.Role, "PortCoordinator"));
-                Check(((DashboardCountViewModel)((ViewResult)await dashboard.Index(default)).Model!).ShowDashboard,
-                    "Filpride PortCoordinator role hides the MSAP dashboard.");
-                Console.WriteLine("PASS: shared login opens MSAP dashboard; PortCoordinator does not hide it.");
+                Check(await dashboard.Index(default) is ForbidResult, "An unrelated IBS role granted MSAP dashboard access.");
+                Console.WriteLine("PASS: shared users without MSAP assignments cannot open the dashboard, regardless of IBS role.");
                 var fullDashboard = new DashboardCountViewModel
                 {
+                    ShowDashboard = true,
                     UpdatedAt = DateTimeHelper.GetCurrentPhilippineTime(),
                     CanApproveSchedule = true,
                     CanApproveBilling = true,
                     CanViewDispatch = true,
-                    CanViewFinance = true
+                    CanViewFinance = true,
+                    CanFollowUpTickets = true,
+                    CanReviewCalculations = true,
+                    CanViewBilling = true,
+                    CanViewCollections = true,
+                    CanViewBanking = true,
+                    CanManageOtherTugCharges = true,
+                    CanConfirmOtherTugCharges = true
                 };
                 await new DashboardService(module,
                     new VesselScheduleService(dashboardWork, new CustomerOrderSlipService(dashboardWork, NullLogger<CustomerOrderSlipService>.Instance), NullLogger<VesselScheduleService>.Instance),

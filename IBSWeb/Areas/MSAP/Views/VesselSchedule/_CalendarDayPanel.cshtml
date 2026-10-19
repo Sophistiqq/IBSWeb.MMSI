@@ -1,6 +1,11 @@
+@using System.Security.Claims
+@using IBS.Services.MSAP.AccessControl
+@inject IAccessControlService AccessControl
 @using System.Text.Json
 @model VesselScheduleBoardViewModel
 @{
+    var accessUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    bool canCreateSchedule = accessUserId != null && await AccessControl.HasAccessAsync(accessUserId, ProcedureEnum.CreateCustomerOrderSlip);
     var day = Model.SelectedDate!.Value;
     var schedules = Model.Schedules.Where(s => s.PlannedStart < day.AddDays(1) && s.PlannedEnd > day).ToList();
     var bookings = Model.TugBookings.Where(s => s.PlannedStart < day.AddDays(1) && s.PlannedEnd > day).ToList();
@@ -82,6 +87,9 @@
     </section>
     <footer class="schedule-panel-footer">
         <p class="schedule-muted">Filters and selected date stay in the calendar.</p>
-        <a asp-action="Create" asp-route-date="@day.ToString("yyyy-MM-dd")" class="modern-btn-primary schedule-panel-create">+ Create schedule for @day.ToString("d MMMM")</a>
+        @if (canCreateSchedule)
+        {
+            <a asp-action="Create" asp-route-date="@day.ToString("yyyy-MM-dd")" class="modern-btn-primary schedule-panel-create">+ Create schedule for @day.ToString("d MMMM")</a>
+        }
     </footer>
 </aside>

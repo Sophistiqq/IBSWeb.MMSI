@@ -65,5 +65,11 @@ namespace IBS.Models.MSAP.Enums
         ManageRates = 26,
         ManageOtherTugCharges = 27,
         ConfirmOtherTugCharges = 28,
+
+        // Derived read access; these do not introduce stored permission flags.
+        ViewOperations = 29,
+        ViewBillings = 30,
+        ViewCollections = 31,
+        AccessMsap = 32,
     }
 }

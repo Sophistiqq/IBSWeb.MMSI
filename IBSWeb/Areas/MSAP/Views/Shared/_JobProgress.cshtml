@@ -20,11 +20,8 @@
         && await AccessControl.HasAccessAsync(userId, Model.Permission.Value);
     bool actionHere = ViewData["JobProgressActionStage"] is int stage && stage == Model.Stage
         && (ViewData["JobProgressActionTargetId"] is not int targetId || targetId == Model.TargetId);
-    bool canViewBilling = userId != null && await AccessControl.HasAnyAccessAsync(userId, ProcedureEnum.CreateBilling, ProcedureEnum.ApproveFinalBilling);
-    bool canViewCos = userId != null && await AccessControl.HasAnyAccessAsync(userId, ProcedureEnum.ApproveSchedule,
-        ProcedureEnum.CreateDispatchTicket, ProcedureEnum.EditDispatchTicket, ProcedureEnum.SetTariff, ProcedureEnum.ApproveTariff,
-        ProcedureEnum.CreateBilling, ProcedureEnum.ApproveFinalBilling, ProcedureEnum.CreateCollection,
-        ProcedureEnum.CreateCustomerOrderSlip, ProcedureEnum.EditCustomerOrderSlip, ProcedureEnum.DeleteCustomerOrderSlip, ProcedureEnum.CloseCustomerOrderSlip, ProcedureEnum.ManageOtherTugCharges, ProcedureEnum.ConfirmOtherTugCharges);
+    bool canViewBilling = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.ViewBillings);
+    bool canViewCos = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.ViewOperations);
     var reviewBill = Model.LinkedBillings.FirstOrDefault(b => b.Status == MsapConstants.BillingStatus.ForPosting) ?? Model.LinkedBillings.FirstOrDefault();
     var actionUrl = !canAct ? null : Url.Action(Model.ActionName, Model.ActionController, new
     {
@@ -57,7 +54,7 @@
             string? stepUrl = null;
             if (!bypassed && userId != null)
             {
-                if (step.Stage is 0 or 1 && Model.VesselScheduleId.HasValue)
+                if (step.Stage is 0 or 1 && canViewCos && Model.VesselScheduleId.HasValue)
                 {
                     stepUrl = Url.Action("Details", "VesselSchedule", new { area = "MSAP", id = Model.VesselScheduleId });
                 }
@@ -144,10 +141,6 @@
                         <li>@blocker</li>
                     }
                 </ul>
-            }
-            @if (Model.Stage == JobProgressCalculator.TariffStage && !Model.HasSchedule && !Model.Stopped)
-            {
-                <p class="job-progress-handoff">Use the tariff action on each Dispatch Ticket in the COS.</p>
             }
             @if (!canAct && Model.Permission.HasValue && !Model.Stopped)
             {

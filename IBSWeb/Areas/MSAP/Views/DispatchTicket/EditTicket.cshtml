@@ -25,14 +25,14 @@
                     </button>
                     @if (Model.CustomerOrderSlipId.HasValue)
                     {
-                        <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value" class="modern-btn-secondary">
-                            <span class="material-symbols-outlined">arrow_back</span> BACK
+                        <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value" class="modern-btn-secondary" data-ui-back>
+                            <span class="material-symbols-outlined">arrow_back</span> Back
                         </a>
                     }
                     else
                     {
-                        <a asp-action="Index" asp-route-filterType="@filterType" class="modern-btn-secondary">
-                            <span class="material-symbols-outlined">arrow_back</span> BACK
+                        <a asp-action="Index" asp-route-filterType="@filterType" class="modern-btn-secondary" data-ui-back>
+                            <span class="material-symbols-outlined">arrow_back</span> Back
                         </a>
                     }
                 </div>
@@ -270,9 +270,6 @@
                                         <button type="button" class="modern-btn-secondary text-sm flex-1" id="viewImage">
                                             <span class="material-symbols-outlined text-sm">visibility</span> View
                                         </button>
-                                        <button type="button" class="modern-btn-error text-sm" id="deleteImageConfirm">
-                                            <span class="material-symbols-outlined text-sm">delete</span>
-                                        </button>
                                     </div>
                                 }
                             </div>
@@ -289,9 +286,6 @@
                                     <div class="flex gap-2 mt-2">
                                         <button type="button" class="modern-btn-secondary text-sm flex-1 view-video" data-videolink="@Model.VideoSignedUrl">
                                             <span class="material-symbols-outlined text-sm">play_circle</span> Play
-                                        </button>
-                                        <button type="button" class="modern-btn-error text-sm" id="deleteVideoConfirm">
-                                            <span class="material-symbols-outlined text-sm">delete</span>
                                         </button>
                                     </div>
                                 }
@@ -438,18 +432,6 @@
                 if (videoBlobUrl) {
                     ModernAlert.video(videoBlobUrl, "New Video Preview");
                 }
-            });
-
-            // Deletion Actions
-            $('#deleteImageConfirm').on('click', function() {
-                ModernAlert.confirm({ title: 'Delete image?', icon: 'warning' }).then(r => {
-                    if (r.isConfirmed) window.location.href = '@Url.Action("DeleteImage", new { id = Model.DispatchTicketId, filterType = filterType })';
-                });
-            });
-            $('#deleteVideoConfirm').on('click', function() {
-                ModernAlert.confirm({ title: 'Delete video?', icon: 'warning' }).then(r => {
-                    if (r.isConfirmed) window.location.href = '@Url.Action("DeleteVideo", new { id = Model.DispatchTicketId, filterType = filterType })';
-                });
             });
 
             // Form Submit Confirmation

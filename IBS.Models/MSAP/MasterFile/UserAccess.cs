@@ -9,6 +9,7 @@ namespace IBS.Models.MSAP.MasterFile
         [Key]
         public int Id { get; set; }
 
+        [Required]
         public string UserId { get; set; } = null!;
 
         [Column(TypeName = "varchar(100)")]

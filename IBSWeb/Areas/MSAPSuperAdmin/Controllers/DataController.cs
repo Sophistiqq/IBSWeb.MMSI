@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace IBSWeb.Areas.MSAPSuperAdmin.Controllers
 {
+    // Retired: direct data changes bypass the approved workflow and book snapshots.
+    [NonController]
     [Area("MSAPSuperAdmin")]
     [Authorize(Policy = MsapRoles.SuperAdminPolicy)]
     public class DataController(

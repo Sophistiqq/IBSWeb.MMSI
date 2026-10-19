@@ -3,6 +3,9 @@ using System.Security.Claims;
 using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.MasterFile;
+using IBS.Models.MSAP.Enums;
+using IBS.Services.MSAP.Attributes;
+using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -14,7 +17,7 @@ using ApplicationUser = IBS.Models.ApplicationUser;
 namespace IBSWeb.Areas.MSAP.Controllers
 {
     [Area("MSAP")]
-    [Authorize]
+    [RequireAccess(ProcedureEnum.ManageMaritimeMasterFile)]
     public class MasterFileController(
         UserManager<ApplicationUser> userManager,
         IUnitOfWork unitOfWork,
@@ -34,10 +37,15 @@ namespace IBSWeb.Areas.MSAP.Controllers
         #region -- Main Excel Generation Method --
 
         [HttpGet]
-        public async Task<IActionResult> GenerateExcel(string masterFileType, CancellationToken cancellationToken)
+        public async Task<IActionResult> GenerateExcel(string masterFileType, CancellationToken cancellationToken, [FromServices] IAuthorizationService authorization)
         {
             try
             {
+                if (!string.Equals(masterFileType, "customer", StringComparison.OrdinalIgnoreCase)
+                    && !(await authorization.AuthorizeAsync(User, MsapRoles.AdminPolicy)).Succeeded)
+                {
+                    return Forbid();
+                }
                 var extractedBy = GetUserFullName();
                 // Generate Excel based on master file type
                 var result = masterFileType.ToLower() switch

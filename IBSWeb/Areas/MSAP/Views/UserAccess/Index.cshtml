@@ -19,6 +19,8 @@
             </div>
         </div>
 
+        <p class="ui-caption ui-muted">Individual permissions for Users are shown below. Admin and SuperAdmin have all supported actions; inactive accounts cannot act. Preparing does not grant approval or banking authority.</p>
+
         <!-- Table Card -->
         <div class="modern-card ui-card">
             @Html.AntiForgeryToken()
@@ -29,14 +31,23 @@
                 </div>
             </div>
             <div class="modern-card-body ui-card-body">
+                <div class="modern-table-container">
                 <table class="modern-table ui-table" id="userAccessTable">
                     <thead>
                         <tr>
                             <th>Name</th>
+                            <th>Schedule / COS</th>
+                            <th>Tickets</th>
+                            <th>Rates</th>
+                            <th>Billing</th>
+                            <th>Collections</th>
+                            <th>Other tugs</th>
+                            <th>References / reports</th>
                             <th style="text-align: right !important">Actions</th>
                         </tr>
                     </thead>
                 </table>
+                </div>
             </div>
         </div>
     </main>
@@ -50,6 +61,13 @@
                 ajax: ModernTable.ajax('/MSAP/UserAccess/GetUserAccessList'),
                 columns: [
                     { data: 'displayName', render: data => `<span class="font-bold">${escapeHtml(data ?? '')}</span>` },
+                    { data: null, orderable: false, render: (data, type, row) => permissionSummary([[row.canCreateCustomerOrderSlip, 'Prepare'], [row.canEditCustomerOrderSlip, 'Edit / cancel'], [row.canApproveSchedule, 'Approve']]) },
+                    { data: null, orderable: false, render: (data, type, row) => permissionSummary([[row.canCreateDispatchTicket, 'Record'], [row.canEditDispatchTicket, 'Edit / recalculate']]) },
+                    { data: null, orderable: false, render: (data, type, row) => permissionSummary([[row.canViewRates, 'View'], [row.canManageRates, 'Prepare'], [row.canApproveRateUpload, 'Approve']]) },
+                    { data: null, orderable: false, render: (data, type, row) => permissionSummary([[row.canCreateBilling, 'Prepare'], [row.canEditBilling, 'Edit draft'], [row.canDeleteBilling, 'Discard draft'], [row.canApproveFinalBilling, 'Approve']]) },
+                    { data: null, orderable: false, render: (data, type, row) => permissionSummary([[row.canCreateCollection, 'Prepare receipts'], [row.canAccessTreasury, 'Banking']]) },
+                    { data: null, orderable: false, render: (data, type, row) => permissionSummary([[row.canManageOtherTugCharges, 'Prepare'], [row.canConfirmOtherTugCharges, 'Confirm']]) },
+                    { data: null, orderable: false, render: (data, type, row) => permissionSummary([[row.canManageMaritimeMasterFile, 'Maintain'], [row.canViewMaritimeReport, 'Reports']]) },
                     {
                         data: null,
                         orderable: false,
@@ -63,6 +81,10 @@
                 order: [[0, 'asc']]
             }));
         });
+
+        function permissionSummary(flags) {
+            return flags.filter(([allowed]) => allowed).map(([, label]) => label).join(' · ') || '—';
+        }
 
         function escapeHtml(text) {
             const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };

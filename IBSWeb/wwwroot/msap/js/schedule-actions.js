@@ -8,7 +8,7 @@ document.querySelectorAll('[data-schedule-action]').forEach(form => {
         const completing = action === 'Complete';
         const result = await ModernAlert.confirm({
             title: completing ? 'Complete vessel service?' : 'Cancel schedule?',
-            text: completing ? 'Confirm that all services are finished and no more Dispatch Tickets are expected. New tickets will be blocked. Tariff, approval, billing, posting and collection will continue.' : 'This cancels the schedule and any linked COS together. The booking becomes read-only and records are retained.',
+            text: completing ? 'Confirm that all services are finished and no more Dispatch Tickets are expected. New tickets will be blocked. Charge calculation, billing approval and collection will continue.' : 'This cancels the schedule and any linked COS together. The booking becomes read-only and records are retained.',
             icon: 'warning',
             confirmText: completing ? 'Complete Service' : 'Cancel Schedule'
         });
@@ -19,9 +19,4 @@ document.querySelectorAll('[data-schedule-action]').forEach(form => {
             reviewing = false;
         }
     });
-});
-document.getElementById('deleteScheduleButton')?.addEventListener('click', function () {
-    const form = document.getElementById('deleteSchedule');
-    ModernAlert.confirm({ title: 'Delete tentative schedule?', text: 'This removes the plan permanently.', icon: 'warning', confirmText: 'Delete schedule' })
-        .then(result => { if (result.isConfirmed) form.submit(); });
 });

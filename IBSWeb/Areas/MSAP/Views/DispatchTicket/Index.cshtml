@@ -25,14 +25,9 @@
         <!-- Filter Group -->
         <div class="flex flex-wrap gap-2">
             <button id="filterAll" class="modern-btn-secondary active">ALL</button>
-            <button id="filterForTariff" class="modern-btn-secondary">FOR TARIFF</button>
-            <button id="filterForApproval" class="modern-btn-secondary">FOR APPROVAL</button>
-            <button id="filterDisapproved" class="modern-btn-secondary">DISAPPROVED</button>
+            <button id="filterCalculationPending" class="modern-btn-secondary">CALCULATION PENDING</button>
             <button id="filterForBilling" class="modern-btn-secondary">FOR BILLING</button>
             <button id="filterBilled" class="modern-btn-secondary">BILLED</button>
-            <button id="filterDeleted" class="modern-btn-secondary modern-btn-error">
-                <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">delete</span> DELETED
-            </button>
         </div>
 
         @if (hasPeriod)
@@ -95,7 +90,7 @@
 @section Scripts {
     <script>
         window.IBS_TOUR_STEPS = [
-            { selector: '#filterAll', title: 'Ticket status filters', text: 'Choose a status above the registry to focus on tickets waiting for tariff, approval, billing, or other action.', interactive: false },
+            { selector: '#filterAll', title: 'Ticket status filters', text: 'Choose a status above the registry to focus on tickets awaiting calculation, ready for billing, or billed.', interactive: false },
             { selector: '#dateFilter', title: 'Filter by date', text: 'Filter tickets by dispatch date. A date range may also be applied from another screen and can be cleared above the registry.', interactive: false },
             { selector: '#paginatedTable', title: 'Ticket registry', text: 'Review service times, vessel, tugboat, customer, billing link, and status. Open a ticket number to inspect it or use Actions for permitted work.', interactive: false }
         ];
@@ -103,13 +98,6 @@
     <script>
         $(document).ready(function () {
             const previewUrl = '@Url.Action("Preview", "DispatchTicket")';
-            const setTariffUrl = '@Url.Action("SetTariff", "DispatchTicket")';
-            const editTariffUrl = '@Url.Action("EditTariff", "DispatchTicket")';
-            const editTicketUrl = '@Url.Action("EditTicket", "DispatchTicket")';
-            const canSetTariff = @((ViewBag.CanSetTariff as bool? ?? false).ToString().ToLower());
-            const canEditTicket = @((ViewBag.CanEditTicket as bool? ?? false).ToString().ToLower());
-            const canApproveTariff = @((ViewBag.CanApproveTariff as bool? ?? false).ToString().ToLower());
-            const canDeleteTicket = @((ViewBag.CanDeleteTicket as bool? ?? false).ToString().ToLower());
             let filterType = '@ViewBag.FilterType';
 
             const urlParams = new URLSearchParams(window.location.search);
@@ -185,43 +173,6 @@
                                 label: 'View Details',
                                 icon: 'visibility',
                                 url: `${previewUrl}?id=${row.dispatchTicketId}`
-                            },
-                            {
-                                label: 'Set Tariff',
-                                icon: 'payments',
-                                url: `${setTariffUrl}?id=${row.dispatchTicketId}&filterType=${filterType}`,
-                                condition: row.status === "@MsapConstants.DispatchTicketStatus.ForTariff" && row.customerId !== null && !row.isMonthClosed && canSetTariff
-                            },
-                            {
-                                label: 'Edit Tariff',
-                                icon: 'edit_note',
-                                url: `${editTariffUrl}?id=${row.dispatchTicketId}&filterType=${filterType}`,
-                                condition: row.status === "@MsapConstants.DispatchTicketStatus.ForApproval" && row.customerId !== null && !row.isMonthClosed && canSetTariff
-                            },
-                            {
-                                label: 'Edit Ticket',
-                                icon: 'edit',
-                                url: `${editTicketUrl}?id=${row.dispatchTicketId}&filterType=${filterType}`,
-                                condition: ["@MsapConstants.DispatchTicketStatus.ForTariff", "@MsapConstants.DispatchTicketStatus.ForApproval"].includes(row.status) && !row.isMonthClosed && canEditTicket
-                            },
-                            {
-                                label: 'Approve Tariff',
-                                icon: 'check_circle',
-                                onclick: `confirmApprove(${row.dispatchTicketId})`,
-                                condition: row.status === "@MsapConstants.DispatchTicketStatus.ForApproval" && !row.isMonthClosed && canApproveTariff
-                            },
-                            {
-                                label: 'Delete Ticket',
-                                icon: 'delete',
-                                isError: true,
-                                onclick: `confirmDeleteTicket(${row.dispatchTicketId})`,
-                                condition: ["@MsapConstants.DispatchTicketStatus.ForTariff", "@MsapConstants.DispatchTicketStatus.Disapproved"].includes(row.status) && !row.isMonthClosed && canDeleteTicket
-                            },
-                            {
-                                label: 'Restore Ticket',
-                                icon: 'restore',
-                                onclick: `confirmRestoreTicket(${row.dispatchTicketId})`,
-                                condition: row.status === "Deleted" && !row.isMonthClosed && canDeleteTicket
                             }
                         ])
                     }
@@ -249,14 +200,11 @@
             $('.modern-btn-secondary[id^="filter"]').on('click', function() {
                 const id = $(this).attr('id');
                 let status = '';
-                if (id === 'filterForTariff') status = '@MsapConstants.DispatchTicketStatus.ForTariff';
-                else if (id === 'filterForApproval') status = '@MsapConstants.DispatchTicketStatus.ForApproval';
-                else if (id === 'filterDisapproved') status = '@MsapConstants.DispatchTicketStatus.Disapproved';
+                if (id === 'filterCalculationPending') status = '@MsapConstants.DispatchTicketStatus.CalculationPending';
                 else if (id === 'filterForBilling') status = '@MsapConstants.DispatchTicketStatus.ForBilling';
                 else if (id === 'filterBilled') status = '@MsapConstants.DispatchTicketStatus.Billed';
-                else if (id === 'filterDeleted') status = '@MsapConstants.DispatchTicketStatus.Deleted';
 
-                filterType = status === '@MsapConstants.DispatchTicketStatus.Deleted' ? 'deleted' : status ? '' : '';
+                filterType = '';
                 table.column(11).search(status).draw();
                 updateUrl(status);
                 updateFilterButtons(status);
@@ -272,106 +220,11 @@
             function updateFilterButtons(status) {
                 $('.modern-btn-secondary').removeClass('active');
                 if (!status) $('#filterAll').addClass('active');
-                else if (status === "@MsapConstants.DispatchTicketStatus.ForTariff") $('#filterForTariff').addClass('active');
-                else if (status === "@MsapConstants.DispatchTicketStatus.ForApproval") $('#filterForApproval').addClass('active');
-                else if (status === "@MsapConstants.DispatchTicketStatus.Disapproved") $('#filterDisapproved').addClass('active');
+                else if (status === "@MsapConstants.DispatchTicketStatus.CalculationPending") $('#filterCalculationPending').addClass('active');
                 else if (status === "@MsapConstants.DispatchTicketStatus.ForBilling") $('#filterForBilling').addClass('active');
                 else if (status === "@MsapConstants.DispatchTicketStatus.Billed") $('#filterBilled').addClass('active');
-                else if (status === "@MsapConstants.DispatchTicketStatus.Deleted") $('#filterDeleted').addClass('active');
             }
         });
 
-        function confirmApprove(id) {
-            ModernAlert.confirm({
-                title: 'Approve Tariff?',
-                text: "This ticket will be marked for billing.",
-                icon: 'question',
-                confirmText: 'Yes, Approve'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    ModernAlert.showLoading("Approving...");
-                    const formData = new FormData();
-                    formData.append('id', id);
-                    formData.append('__RequestVerificationToken', $('input[name="__RequestVerificationToken"]').val());
-
-                    fetch('@Url.Action("ApproveTariff", "DispatchTicket", new { area = "MSAP" })', {
-                        method: 'POST',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                        body: new URLSearchParams(formData)
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            ModernAlert.success(data.message).then(() => location.reload());
-                        } else {
-                            ModernAlert.error(data.message);
-                        }
-                    })
-                    .catch(error => ModernAlert.error(`Request failed: ${error}`));
-                }
-            });
-        }
-
-        function confirmDeleteTicket(id) {
-            ModernAlert.confirm({
-                title: 'Delete Dispatch Ticket?',
-                text: "This will delete the ticket. You can restore it later.",
-                icon: 'warning',
-                confirmText: 'Yes, delete it!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    ModernAlert.showLoading("Deleting ticket...");
-                    const formData = new FormData();
-                    formData.append('id', id);
-                    formData.append('__RequestVerificationToken', $('input[name="__RequestVerificationToken"]').val());
-
-                    fetch('@Url.Action("Delete", "DispatchTicket", new { area = "MSAP" })', {
-                        method: 'POST',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                        body: new URLSearchParams(formData)
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            ModernAlert.success('Dispatch ticket deleted.').then(() => location.reload());
-                        } else {
-                            ModernAlert.error(data.message);
-                        }
-                    })
-                    .catch(error => ModernAlert.error(`Request failed: ${error}`));
-                }
-            });
-        }
-
-        function confirmRestoreTicket(id) {
-            ModernAlert.confirm({
-                title: 'Restore Dispatch Ticket?',
-                text: "This will restore the ticket to its previous status.",
-                icon: 'question',
-                confirmText: 'Yes, restore it!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    ModernAlert.showLoading("Restoring ticket...");
-                    const formData = new FormData();
-                    formData.append('id', id);
-                    formData.append('__RequestVerificationToken', $('input[name="__RequestVerificationToken"]').val());
-
-                    fetch('@Url.Action("Restore", "DispatchTicket", new { area = "MSAP" })', {
-                        method: 'POST',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                        body: new URLSearchParams(formData)
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            ModernAlert.success('Dispatch ticket restored.').then(() => location.reload());
-                        } else {
-                            ModernAlert.error(data.message);
-                        }
-                    })
-                    .catch(error => ModernAlert.error(`Request failed: ${error}`));
-                }
-            });
-        }
     </script>
 }

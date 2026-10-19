@@ -28,6 +28,14 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
+if (args.Contains("--workflow-access-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.WorkflowAccessCheck.RunAsync();
+    await Checks.MSAP.RateAccessCheck.RunAsync();
+    Checks.MSAP.JobProgressCheck.Run();
+    return;
+}
+
 if (args.Contains("--ar-monitoring-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.ArMonitoringCheck.RunAsync();

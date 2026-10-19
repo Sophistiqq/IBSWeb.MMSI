@@ -23,6 +23,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         IAccessControlService accessControl) : Controller
     {
         [HttpGet]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> Index(DateTime? month, CancellationToken ct, DateTime? date = null,
             int? portId = null, int? terminalId = null, string? search = null, string? status = null)
         {
@@ -57,6 +58,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
         public IActionResult Day(DateTime? date, CancellationToken ct)
         {
             if (!ModelState.IsValid)
@@ -74,6 +76,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
+        [RequireAccess(ProcedureEnum.CreateCustomerOrderSlip)]
         public async Task<IActionResult> Create(DateTime? date, CancellationToken ct)
         {
             if (!ModelState.IsValid || date.HasValue && (date.Value.Year < 1900 || date.Value.Year > 9998))
@@ -90,6 +93,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.CreateCustomerOrderSlip)]
         public async Task<IActionResult> Create(VesselScheduleViewModel vm, CancellationToken ct)
         {
             if (ModelState.IsValid)
@@ -171,6 +175,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> Details(int id, CancellationToken ct)
         {
             var schedule = await LoadDetailsAsync(id, ct);
@@ -309,26 +314,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
             return schedule;
         }
 
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Delete(int id, CancellationToken ct)
-        {
-            var schedule = await scheduleService.GetByIdAsync(id, ct);
-            var result = await scheduleService.DeleteAsync(id, User.Identity?.Name ?? "system", ct);
-
-            if (result.IsSuccess)
-            {
-                TempData["success"] = "Schedule deleted successfully.";
-            }
-            else
-            {
-                TempData["error"] = result.Message;
-            }
-
-            return RedirectToAction(nameof(Day), new { date = (schedule?.PlannedStart ?? DateTimeHelper.GetCurrentPhilippineTime()).ToString("yyyy-MM-dd") });
-        }
-
         [HttpGet]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> GetCustomerDiscount(int customerId, CancellationToken ct)
         {
             var customer = await unitOfWork.Customer.GetAsync(c => c.CustomerId == customerId, ct);
@@ -336,6 +323,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> GetTariffRate(int customerId, int terminalId, int serviceId, DateTime? date, CancellationToken ct)
         {
             if (customerId <= 0 || serviceId <= 0)
@@ -357,6 +345,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> GetTerminalsByPort(int portId, CancellationToken ct)
         {
             var terminals = await unitOfWork.Terminal.GetAllAsync(t => t.PortId == portId, ct);
@@ -364,6 +353,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> GetTugboatBookings(DateTime? start, DateTime? end, int scheduleId, CancellationToken ct)
         {
             if (!ModelState.IsValid || !start.HasValue || !end.HasValue

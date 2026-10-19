@@ -25,9 +25,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// <summary>
         /// Displays the list of Collections.
         /// </summary>
-        [RequireAnyAccess(
-            "Access denied. You don't have permission to access Collections.",
-            ProcedureEnum.CreateCollection)]
+        [RequireAccess(ProcedureEnum.ViewCollections)]
         public IActionResult Index()
         {
             return View();
@@ -137,9 +135,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// <summary>
         /// Displays the details of a specific Collection, including associated paid billings.
         /// </summary>
-        [RequireAnyAccess(
-            "Access denied. You don't have permission to view Collections.",
-            ProcedureEnum.CreateCollection)]
+        [RequireAccess(ProcedureEnum.ViewCollections)]
         public async Task<IActionResult> Preview(int id, CancellationToken cancellationToken = default)
         {
             var collection = await collectionService.GetCollectionByIdAsync(id, cancellationToken);
@@ -161,7 +157,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAnyAccess(ProcedureEnum.CreateCollection)]
+        [RequireAccess(ProcedureEnum.ViewCollections)]
         public async Task<IActionResult> GetCollectionList([FromForm] DataTablesParameters parameters, CancellationToken cancellationToken)
         {
             try
@@ -197,7 +193,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         #endregion
 
         [HttpGet]
-        [RequireAccess(ProcedureEnum.CreateCollection, "Access denied. You don't have permission to update Collections.")]
+        [RequireAccess(ProcedureEnum.AccessTreasury, "Access denied. You don't have permission to record banking updates.")]
         public async Task<IActionResult> Banking(int id, CollectionBankingAction bankingAction, CancellationToken ct)
         {
             var collection = await collectionService.GetCollectionByIdAsync(id, ct);
@@ -212,7 +208,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.CreateCollection, "Access denied. You don't have permission to update Collections.")]
+        [RequireAccess(ProcedureEnum.AccessTreasury, "Access denied. You don't have permission to record banking updates.")]
         public async Task<IActionResult> Banking(int id, CollectionBankingAction bankingAction, DateOnly date, int? bankId, CancellationToken ct)
         {
             var result = ModelState.IsValid
@@ -259,7 +255,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// Retrieves detailed information for a specific bank account.
         /// </summary>
         [HttpGet]
-        [RequireAnyAccess(ProcedureEnum.CreateCollection)]
+        [RequireAnyAccess(ProcedureEnum.CreateCollection, ProcedureEnum.AccessTreasury)]
         public async Task<IActionResult> GetBankAccountDetails(int bankId, CancellationToken cancellationToken = default)
         {
             var result = await collectionService.GetBankAccountDetailsAsync(bankId, cancellationToken);

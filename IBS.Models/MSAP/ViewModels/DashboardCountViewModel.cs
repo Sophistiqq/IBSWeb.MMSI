@@ -4,6 +4,19 @@ namespace IBS.Models.MSAP.ViewModels
     {
         public bool ShowDashboard { get; set; }
         public DateTime UpdatedAt { get; set; }
+        public bool CanFollowUpTickets { get; set; }
+        public bool CanReviewCalculations { get; set; }
+        public bool CanViewBanking { get; set; }
+        public bool CanManageReferences { get; set; }
+        public bool CanManageOtherTugCharges { get; set; }
+        public bool CanConfirmOtherTugCharges { get; set; }
+        public bool CanReadCos { get; set; }
+        public int MissingOtherTugTicketCount { get; set; }
+        public List<DispatchTicket> MissingOtherTugTickets { get; set; } = [];
+        public int OtherTugChargeReviewCount { get; set; }
+        public List<OtherTugCharge> OtherTugChargeReviews { get; set; } = [];
+        public bool CanCreateSchedule { get; set; }
+        public bool CanViewCollections { get; set; }
         public bool CanViewDispatch { get; set; }
         public bool CanViewBilling { get; set; }
         public bool CanViewFinance { get; set; }

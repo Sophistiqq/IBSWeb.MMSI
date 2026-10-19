@@ -292,7 +292,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             IQueryable<Billing> query = dbSet
                 .Include(b => b.Customer)
                 .Include(b => b.Terminal).ThenInclude(b => b.Port)
-                .Include(b => b.Vessel);
+                .Include(b => b.Vessel)
+                .Include(b => b.BafBilling);
 
             if (customerOrderSlipId.HasValue)
             {

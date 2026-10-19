@@ -35,7 +35,9 @@
             if (document.querySelector('.modal.show, .swal2-container, dialog[open]')) return;
             if (window.location.pathname === '/' || window.location.pathname === '/MSAP/Home/Index') return;
             e.preventDefault();
-            history.back();
+            var backLink = document.querySelector('a[data-ui-back]');
+            if (backLink) backLink.click();
+            else history.back();
             return;
         }
         var el = document.querySelector('[data-hotkey="' + key + '"]');

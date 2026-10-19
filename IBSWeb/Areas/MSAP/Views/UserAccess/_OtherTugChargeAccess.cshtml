@@ -1,9 +1,0 @@
-@model UserAccess
-<fieldset class="border border-outline-variant rounded p-3">
-    <legend class="modern-label ui-label px-1">Other Tug Charges</legend>
-    <div class="flex flex-wrap gap-4">
-        <label class="flex items-center gap-2"><input asp-for="CanManageOtherTugCharges" class="form-check-input" /><span class="text-sm">Prepare provider charges</span></label>
-        <label class="flex items-center gap-2"><input asp-for="CanConfirmOtherTugCharges" class="form-check-input" /><span class="text-sm">Review and confirm provider charges</span></label>
-    </div>
-    <p class="text-sm mt-3">Assign preparation and confirmation separately to authorized users. Admin and SuperAdmin have both actions. Payment stays in IBS.</p>
-</fieldset>

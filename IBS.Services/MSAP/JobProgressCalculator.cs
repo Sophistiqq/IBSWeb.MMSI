@@ -264,23 +264,11 @@ namespace IBS.Services.MSAP
                 result.Guidance = "Recorded service tickets still need charge calculation. Review the affected tickets and their calculation details before billing.";
                 return result;
             }
-            List<DispatchTicket> tariff = active.Where(t => t.Status is MsapConstants.DispatchTicketStatus.ForTariff or MsapConstants.DispatchTicketStatus.Disapproved).ToList();
-            if (tariff.Count > 0)
+            if (active.Any(t => t.Status is MsapConstants.DispatchTicketStatus.ForTariff or MsapConstants.DispatchTicketStatus.Disapproved or MsapConstants.DispatchTicketStatus.ForApproval))
             {
-                result.Stage = TariffStage;
-                result.Tickets = tariff;
-                result.Guidance = $"{tariff.Count} Dispatch Ticket(s) need tariff preparation or correction. Finish these before approval.";
-                SetAction(result, tariff[0].Status == MsapConstants.DispatchTicketStatus.Disapproved ? "Correct Tariff" : "Set Tariff", "DispatchTicket",
-                    tariff[0].Status == MsapConstants.DispatchTicketStatus.Disapproved ? "EditTariff" : "SetTariff", tariff[0].DispatchTicketId, ProcedureEnum.SetTariff, "tariff preparation");
-                return result;
-            }
-            List<DispatchTicket> approval = active.Where(t => t.Status == MsapConstants.DispatchTicketStatus.ForApproval).ToList();
-            if (approval.Count > 0)
-            {
-                result.Stage = ApprovalStage;
-                result.Tickets = approval;
-                result.Guidance = $"{approval.Count} Dispatch Ticket(s) are awaiting tariff approval. All active tickets must be approved before billing.";
-                SetAction(result, "Review Charges", "DispatchTicket", "Preview", approval[0].DispatchTicketId, ProcedureEnum.ApproveTariff, "tariff approval");
+                result.Stage = 2;
+                result.Stopped = true;
+                result.Guidance = "These tickets use a retired tariff workflow. Review the actual service records and applicable rates before preparing billing.";
                 return result;
             }
             List<DispatchTicket> unbilled = active.Where(t => t.Status == MsapConstants.DispatchTicketStatus.ForBilling && !t.BillingId.HasValue).ToList();
@@ -338,7 +326,7 @@ namespace IBS.Services.MSAP
                 string action = deposit != null ? (deposit.ReturnedDate.HasValue ? "Redeposit" : "Record Deposit") : "Apply Clearing Date";
                 result.Guidance = $"Receipt #{result.BankingCollection.MsapCollectionNumber}: {result.BankingCollection.PaymentStatus}. Complete banking for every linked receipt before finishing the job.";
                 SetAction(result, action, "Collection", "Banking", result.BankingCollection.MsapCollectionId,
-                    ProcedureEnum.CreateCollection, deposit != null ? "collection deposit" : "collection clearing");
+                    ProcedureEnum.AccessTreasury, deposit != null ? "collection deposit" : "collection clearing");
                 return result;
             }
             result.Stage = CompletedStage;

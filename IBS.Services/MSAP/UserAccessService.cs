@@ -19,6 +19,15 @@ namespace IBS.Services.MSAP
     {
         public async Task<bool> CheckAccess(string id, ProcedureEnum procedure, CancellationToken cancellationToken = default)
         {
+            if (!Enum.IsDefined(procedure) || procedure is ProcedureEnum.SetTariff or ProcedureEnum.ApproveTariff
+                or ProcedureEnum.DeleteDispatchTicket or ProcedureEnum.DeleteCustomerOrderSlip
+                or ProcedureEnum.CloseCustomerOrderSlip or ProcedureEnum.ReverseBilling
+                or ProcedureEnum.CreateDisbursement or ProcedureEnum.ManagePostedPeriod or ProcedureEnum.ViewInventoryReport
+                or ProcedureEnum.ManageMsapImport)
+            {
+                return false;
+            }
+
             string? role = await roleService.GetUserRoleAsync(id);
             if (role is MsapRoles.Admin or MsapRoles.SuperAdmin)
             {
@@ -38,22 +47,29 @@ namespace IBS.Services.MSAP
                 return false;
             }
 
+            bool canViewBillings = userAccess.CanCreateBilling || userAccess.CanEditBilling || userAccess.CanDeleteBilling
+                || userAccess.CanApproveFinalBilling || userAccess.CanCreateCollection || userAccess.CanAccessTreasury
+                || userAccess.CanViewMaritimeReport;
+            bool canViewCollections = userAccess.CanCreateCollection || userAccess.CanAccessTreasury || userAccess.CanViewMaritimeReport;
+            bool canViewOperations = userAccess.CanCreateCustomerOrderSlip || userAccess.CanEditCustomerOrderSlip
+                || userAccess.CanApproveSchedule || userAccess.CanCreateDispatchTicket || userAccess.CanEditDispatchTicket
+                || userAccess.CanManageOtherTugCharges || userAccess.CanConfirmOtherTugCharges || canViewBillings || canViewCollections;
+
             return procedure switch
             {
+                ProcedureEnum.AccessMsap => canViewOperations || userAccess.CanViewRates || userAccess.CanManageRates
+                    || userAccess.CanApproveRateUpload || userAccess.CanManageMaritimeMasterFile,
+                ProcedureEnum.ViewOperations => canViewOperations,
+                ProcedureEnum.ViewBillings => canViewBillings,
+                ProcedureEnum.ViewCollections => canViewCollections,
                 ProcedureEnum.CreateDispatchTicket => userAccess.CanCreateDispatchTicket,
                 ProcedureEnum.EditDispatchTicket => userAccess.CanEditDispatchTicket,
-                ProcedureEnum.DeleteDispatchTicket => userAccess.CanDeleteDispatchTicket,
-                ProcedureEnum.SetTariff => userAccess.CanSetTariff,
-                ProcedureEnum.ApproveTariff => userAccess.CanApproveTariff,
                 ProcedureEnum.CreateBilling => userAccess.CanCreateBilling,
                 ProcedureEnum.EditBilling => userAccess.CanEditBilling,
                 ProcedureEnum.DeleteBilling => userAccess.CanDeleteBilling,
-                ProcedureEnum.ReverseBilling => userAccess.CanReverseBilling,
                 ProcedureEnum.CreateCollection => userAccess.CanCreateCollection,
                 ProcedureEnum.CreateCustomerOrderSlip => userAccess.CanCreateCustomerOrderSlip,
                 ProcedureEnum.EditCustomerOrderSlip => userAccess.CanEditCustomerOrderSlip,
-                ProcedureEnum.DeleteCustomerOrderSlip => userAccess.CanDeleteCustomerOrderSlip,
-                ProcedureEnum.CloseCustomerOrderSlip => userAccess.CanCloseCustomerOrderSlip,
                 ProcedureEnum.ApproveSchedule => userAccess.CanApproveSchedule,
                 ProcedureEnum.ViewRates => userAccess.CanViewRates || userAccess.CanManageRates || userAccess.CanApproveRateUpload,
                 ProcedureEnum.ManageRates => userAccess.CanManageRates,
@@ -62,10 +78,7 @@ namespace IBS.Services.MSAP
                 ProcedureEnum.ApproveRateUpload => userAccess.CanApproveRateUpload,
                 ProcedureEnum.ApproveFinalBilling => userAccess.CanApproveFinalBilling,
                 ProcedureEnum.AccessTreasury => userAccess.CanAccessTreasury,
-                ProcedureEnum.CreateDisbursement => userAccess.CanCreateDisbursement,
-                ProcedureEnum.ManageMsapImport => userAccess.CanManageMsapImport,
                 ProcedureEnum.ManageMaritimeMasterFile => userAccess.CanManageMaritimeMasterFile,
-                ProcedureEnum.ViewInventoryReport => userAccess.CanViewInventoryReport,
                 ProcedureEnum.ViewMaritimeReport => userAccess.CanViewMaritimeReport,
                 _ => false
             };
@@ -105,6 +118,8 @@ namespace IBS.Services.MSAP
         {
             try
             {
+                model.Id = 0;
+                ClearRetiredPermissions(model);
                 if (await roleService.GetUserRoleAsync(model.UserId) != MsapRoles.User)
                 {
                     return ServiceResult.Failure("Procedure permissions can only be assigned to an active MSAP User.");
@@ -125,7 +140,7 @@ namespace IBS.Services.MSAP
                     await unitOfWork.UserAccess.AddAsync(model, cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
 
-                    AuditTrail auditTrail = await CreateAuditAsync(username, $"Created User Access for {model.DisplayName}. Rate access: view={model.CanViewRates}, prepare={model.CanManageRates}, approve={model.CanApproveRateUpload}. Other Tug Charges: prepare={model.CanManageOtherTugCharges}, confirm={model.CanConfirmOtherTugCharges}.", model.Id, model.UserId);
+                    AuditTrail auditTrail = await CreateAuditAsync(username, $"Created User Access for {model.DisplayName}. Schedule: prepare={model.CanCreateCustomerOrderSlip}, edit={model.CanEditCustomerOrderSlip}, approve={model.CanApproveSchedule}. Tickets: record={model.CanCreateDispatchTicket}, edit/recalculate={model.CanEditDispatchTicket}. Billing: prepare={model.CanCreateBilling}, edit={model.CanEditBilling}, discard draft={model.CanDeleteBilling}, approve={model.CanApproveFinalBilling}. Collections: prepare={model.CanCreateCollection}, banking={model.CanAccessTreasury}. Rates: view={model.CanViewRates}, prepare={model.CanManageRates}, approve={model.CanApproveRateUpload}. Other Tug Charges: prepare={model.CanManageOtherTugCharges}, confirm={model.CanConfirmOtherTugCharges}. References={model.CanManageMaritimeMasterFile}, import={model.CanManageMsapImport}, reports={model.CanViewMaritimeReport}.", model.Id, model.UserId);
                     await unitOfWork.AuditTrail.AddAsync(auditTrail, cancellationToken);
 
                     await unitOfWork.SaveAsync(cancellationToken);
@@ -149,6 +164,13 @@ namespace IBS.Services.MSAP
                 {
                     return ServiceResult.Failure("User access not found.", ServiceResultStatus.NotFound);
                 }
+
+                if (existing.UserId != model.UserId || await roleService.GetUserRoleAsync(existing.UserId) != MsapRoles.User)
+                {
+                    return ServiceResult.Failure("Permissions can only be changed for the selected active MSAP User.");
+                }
+                ClearRetiredPermissions(model);
+                model.DisplayName = existing.DisplayName;
 
                 var changes = new List<string>();
                 if (existing.CanManageOtherTugCharges != model.CanManageOtherTugCharges)
@@ -181,10 +203,10 @@ namespace IBS.Services.MSAP
                 if (existing.CanDeleteBilling != model.CanDeleteBilling) changes.Add($"Delete Billing: {existing.CanDeleteBilling} → {model.CanDeleteBilling}");
                 if (existing.CanReverseBilling != model.CanReverseBilling) changes.Add($"Reverse Billing: {existing.CanReverseBilling} → {model.CanReverseBilling}");
                 if (existing.CanCreateCollection != model.CanCreateCollection) changes.Add($"Create Collection: {existing.CanCreateCollection} → {model.CanCreateCollection}");
-                if (existing.CanCreateCustomerOrderSlip != model.CanCreateCustomerOrderSlip) changes.Add($"Create JO: {existing.CanCreateCustomerOrderSlip} → {model.CanCreateCustomerOrderSlip}");
-                if (existing.CanEditCustomerOrderSlip != model.CanEditCustomerOrderSlip) changes.Add($"Edit JO: {existing.CanEditCustomerOrderSlip} → {model.CanEditCustomerOrderSlip}");
-                if (existing.CanDeleteCustomerOrderSlip != model.CanDeleteCustomerOrderSlip) changes.Add($"Delete JO: {existing.CanDeleteCustomerOrderSlip} → {model.CanDeleteCustomerOrderSlip}");
-                if (existing.CanCloseCustomerOrderSlip != model.CanCloseCustomerOrderSlip) changes.Add($"Close JO: {existing.CanCloseCustomerOrderSlip} → {model.CanCloseCustomerOrderSlip}");
+                if (existing.CanCreateCustomerOrderSlip != model.CanCreateCustomerOrderSlip) changes.Add($"Create schedule: {existing.CanCreateCustomerOrderSlip} → {model.CanCreateCustomerOrderSlip}");
+                if (existing.CanEditCustomerOrderSlip != model.CanEditCustomerOrderSlip) changes.Add($"Edit booking: {existing.CanEditCustomerOrderSlip} → {model.CanEditCustomerOrderSlip}");
+                if (existing.CanDeleteCustomerOrderSlip != model.CanDeleteCustomerOrderSlip) changes.Add($"Retired delete COS: {existing.CanDeleteCustomerOrderSlip} → {model.CanDeleteCustomerOrderSlip}");
+                if (existing.CanCloseCustomerOrderSlip != model.CanCloseCustomerOrderSlip) changes.Add($"Retired close COS: {existing.CanCloseCustomerOrderSlip} → {model.CanCloseCustomerOrderSlip}");
                 if (existing.CanApproveSchedule != model.CanApproveSchedule)
                 {
                     changes.Add($"Approve Schedule: {existing.CanApproveSchedule} → {model.CanApproveSchedule}");
@@ -193,7 +215,7 @@ namespace IBS.Services.MSAP
                 {
                     changes.Add($"Approve Final Billing: {existing.CanApproveFinalBilling} → {model.CanApproveFinalBilling}");
                 }
-                if (existing.CanAccessTreasury != model.CanAccessTreasury) changes.Add($"Access Treasury: {existing.CanAccessTreasury} → {model.CanAccessTreasury}");
+                if (existing.CanAccessTreasury != model.CanAccessTreasury) changes.Add($"Collection banking: {existing.CanAccessTreasury} → {model.CanAccessTreasury}");
                 if (existing.CanCreateDisbursement != model.CanCreateDisbursement) changes.Add($"Create Disbursement: {existing.CanCreateDisbursement} → {model.CanCreateDisbursement}");
                 if (existing.CanManageMsapImport != model.CanManageMsapImport) changes.Add($"Manage Import: {existing.CanManageMsapImport} → {model.CanManageMsapImport}");
                 if (existing.CanManageMaritimeMasterFile != model.CanManageMaritimeMasterFile) changes.Add($"Manage Maritime MF: {existing.CanManageMaritimeMasterFile} → {model.CanManageMaritimeMasterFile}");
@@ -246,6 +268,19 @@ namespace IBS.Services.MSAP
                 logger.LogError(ex, "Failed to edit user access");
                 return ServiceResult.Failure($"Failed to edit user access: {ExceptionHelper.GetErrorMessage(ex)}");
             }
+        }
+
+        private static void ClearRetiredPermissions(UserAccess model)
+        {
+            model.CanSetTariff = false;
+            model.CanApproveTariff = false;
+            model.CanDeleteDispatchTicket = false;
+            model.CanDeleteCustomerOrderSlip = false;
+            model.CanCloseCustomerOrderSlip = false;
+            model.CanReverseBilling = false;
+            model.CanCreateDisbursement = false;
+            model.CanViewInventoryReport = false;
+            model.CanManageMsapImport = false;
         }
 
         private async Task<AuditTrail> CreateAuditAsync(string username, string activity, int recordId, string targetUserId)

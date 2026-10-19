@@ -33,7 +33,7 @@
         <header class="ui-page-header">
             <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">COS records</a></li><li aria-current="page">@Model.CustomerOrderSlipNumber</li></ol></nav>
             <h1 class="ui-page-title" data-page-header>@(approvalPending ? "Urgent service entry" : "COS details & tickets")</h1>
-            <a asp-action="Index" class="modern-btn-secondary ui-page-action">Back to list</a>
+            <a asp-action="Index" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
             <div class="ui-page-description cos-details-status">
                 <span class="schedule-status-pill">@statusLabel</span>
                 <span class="ui-body ui-muted">@Model.CustomerOrderSlipNumber</span>

@@ -1,4 +1,9 @@
-@if (User.Identity?.IsAuthenticated == true)
+@inject IBS.Services.MSAP.AccessControl.IAccessControlService AccessControl
+@{
+    var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+}
+@if (User.Identity?.IsAuthenticated == true && userId != null
+    && await AccessControl.HasAccessAsync(userId, IBS.Models.MSAP.Enums.ProcedureEnum.AccessMsap))
 {
     <li class="mnav-item" role="none">
         <a class="mnav-trigger" asp-area="MSAP" asp-controller="Home" asp-action="Index" role="menuitem">

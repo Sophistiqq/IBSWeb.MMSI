@@ -68,12 +68,17 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(UserAccess model, CancellationToken cancellationToken = default)
+        public async Task<IActionResult> Create([Bind("UserId,CanCreateCustomerOrderSlip,CanEditCustomerOrderSlip,CanApproveSchedule,CanCreateDispatchTicket,CanEditDispatchTicket,CanViewRates,CanManageRates,CanApproveRateUpload,CanCreateBilling,CanEditBilling,CanDeleteBilling,CanApproveFinalBilling,CanCreateCollection,CanAccessTreasury,CanManageOtherTugCharges,CanConfirmOtherTugCharges,CanManageMaritimeMasterFile,CanViewMaritimeReport")] UserAccess model, CancellationToken cancellationToken = default)
         {
             ApplicationUser? actor = await userManager.GetUserAsync(User);
             if (actor == null)
             {
                 return Challenge();
+            }
+            if (!ModelState.IsValid)
+            {
+                await userAccessService.PopulateUsersAsync(model, cancellationToken);
+                return View(model);
             }
             var result = await userAccessService.CreateAsync(model, actor.UserName!, cancellationToken);
 
@@ -104,12 +109,19 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(UserAccess model, CancellationToken cancellationToken = default)
+        public async Task<IActionResult> Edit([Bind("Id,UserId,CanCreateCustomerOrderSlip,CanEditCustomerOrderSlip,CanApproveSchedule,CanCreateDispatchTicket,CanEditDispatchTicket,CanViewRates,CanManageRates,CanApproveRateUpload,CanCreateBilling,CanEditBilling,CanDeleteBilling,CanApproveFinalBilling,CanCreateCollection,CanAccessTreasury,CanManageOtherTugCharges,CanConfirmOtherTugCharges,CanManageMaritimeMasterFile,CanViewMaritimeReport")] UserAccess model, CancellationToken cancellationToken = default)
         {
             ApplicationUser? actor = await userManager.GetUserAsync(User);
             if (actor == null)
             {
                 return Challenge();
+            }
+            if (!ModelState.IsValid)
+            {
+                await userAccessService.PopulateUsersAsync(model, cancellationToken);
+                var existing = await userAccessService.GetByIdAsync(model.Id, cancellationToken);
+                model.DisplayName = existing?.DisplayName ?? "Name unavailable";
+                return View(model);
             }
             var result = await userAccessService.UpdateAsync(model, actor.UserName!, cancellationToken);
 

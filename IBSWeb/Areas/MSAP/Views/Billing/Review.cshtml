@@ -30,7 +30,7 @@
                 <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">Billing</a></li><li>@Model.MsapBillingNumber</li><li aria-current="page">Review</li></ol></nav>
                 <h1 class="ui-page-title" data-page-header>Review billing</h1>
                 <div class="billing-review-header-actions">
-                    <a asp-action="Index" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-secondary ui-page-action">Review list</a>
+                    <a asp-action="Index" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
                     <a asp-action="Preview" asp-route-id="@Model.MsapBillingId" asp-route-printCopy="@canPrint" target="_blank" class="modern-btn-primary ui-page-action">Preview statements</a>
                 </div>
                 <p class="ui-page-description ui-caption ui-muted">@Model.MsapBillingNumber · @component · @(Model.Status == MsapConstants.BillingStatus.ForPosting ? "Awaiting final approval" : "Approved") · @(Model.IsUndocumented ? "Undocumented" : "Documented")</p>

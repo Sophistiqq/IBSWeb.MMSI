@@ -27,14 +27,14 @@
                     </button>
                     @if (Model.CustomerOrderSlipId.HasValue)
                     {
-                        <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value" class="modern-btn-secondary">
-                            <span class="material-symbols-outlined">arrow_back</span> BACK
+                        <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value" class="modern-btn-secondary" data-ui-back>
+                            <span class="material-symbols-outlined">arrow_back</span> Back
                         </a>
                     }
                     else
                     {
-                        <a asp-action="Index" class="modern-btn-secondary">
-                            <span class="material-symbols-outlined">arrow_back</span> BACK
+                        <a asp-action="Index" class="modern-btn-secondary" data-ui-back>
+                            <span class="material-symbols-outlined">arrow_back</span> Back
                         </a>
                     }
                 </div>

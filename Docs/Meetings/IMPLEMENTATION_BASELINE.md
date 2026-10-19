@@ -1,5 +1,13 @@
 # MSAP implementation baseline
 
+## Historical baseline and current checkpoint
+
+The initial 16 October source-trace tables below describe the code at that inspection, including old Job Order naming, synthetic-ticket creation and unpersisted Sales Book findings. They do **not** describe the current implementation. Later milestone entries record subsequent work.
+
+For the consolidated 19 October status, unresolved gaps, validation limits and user-access review sequence, see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md#current-status-and-next-goal--19-october-2026). Current Sales Book snapshots are persisted; stable accounting source IDs are implemented, but actual GL posting and IBS tugboat payment integration remain future work. Current source access uses active MSAP roles, Admin/SuperAdmin procedure authority and per-user grants; the older access findings require comparison against this implementation rather than automatic reuse.
+
+19 October access follow-through: the implementation plan now records supported action grants, derived read dependencies, independent collection banking, retired legacy mutation/import/raw-edit entry points and targeted validation. No schema or live user assignments changed. Use that current access section rather than the original authorization inventory below.
+
 Source inspection: 16 October 2026. No production database was queried or changed. This is the phase 0 source trace; Finance reconciliation and fresh-database migration rehearsal remain release prerequisites. The user clarified that the application has no actual business data and deployment will start fresh, so legacy inventory/conversion/backfill is not required.
 
 ## Existing flow and required coverage

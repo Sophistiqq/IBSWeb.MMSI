@@ -42,14 +42,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// <summary>
         /// Displays the list of all COS records.
         /// </summary>
-        [RequireAnyAccess(
-            "Access denied. You don't have permission to access COS records.",
-            ProcedureEnum.CreateCustomerOrderSlip,
-            ProcedureEnum.EditCustomerOrderSlip,
-            ProcedureEnum.DeleteCustomerOrderSlip,
-            ProcedureEnum.CloseCustomerOrderSlip,
-            ProcedureEnum.ManageOtherTugCharges,
-            ProcedureEnum.ConfirmOtherTugCharges)]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> Index()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -63,14 +56,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAnyAccess(
-            "Access denied.",
-            ProcedureEnum.CreateCustomerOrderSlip,
-            ProcedureEnum.EditCustomerOrderSlip,
-            ProcedureEnum.DeleteCustomerOrderSlip,
-            ProcedureEnum.CloseCustomerOrderSlip,
-            ProcedureEnum.ManageOtherTugCharges,
-            ProcedureEnum.ConfirmOtherTugCharges)]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> GetCustomerOrderSlipList([FromForm] DataTablesParameters parameters, CancellationToken cancellationToken)
         {
             try
@@ -103,66 +89,20 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         #endregion
 
-        #region Create
-
-        /// <summary>
-        /// Displays the form to create a new COS.
-        /// </summary>
         [HttpGet]
-        [RequireAccess(ProcedureEnum.CreateCustomerOrderSlip, "Access denied. You don't have permission to create COS records.")]
-        public async Task<IActionResult> Create(CancellationToken cancellationToken)
+        [RequireAccess(ProcedureEnum.CreateCustomerOrderSlip)]
+        public IActionResult Create()
         {
-            var viewModel = await customerOrderSlipService.PopulateCustomerOrderSlipViewModelAsync(null, cancellationToken);
-
-            return View(viewModel);
+            return RedirectToAction("Create", "VesselSchedule");
         }
 
-        /// <summary>
-        /// Processes the creation of a new COS.
-        /// </summary>
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.CreateCustomerOrderSlip, "Access denied. You don't have permission to create COS records.")]
-        public async Task<IActionResult> Create(CustomerOrderSlipViewModel viewModel, CancellationToken cancellationToken)
-        {
-            var customerOrderSlip = MapToEntity(viewModel);
-
-            var result = await customerOrderSlipService.CreateCustomerOrderSlipAsync(customerOrderSlip, User.Identity?.Name ?? "Unknown", cancellationToken);
-
-            if (result.IsSuccess)
-            {
-                TempData["success"] = result.Message;
-                return RedirectToAction(nameof(Details), new { id = result.Data });
-            }
-
-            TempData["error"] = result.Message ?? "An error occurred.";
-            await customerOrderSlipService.PopulateCustomerOrderSlipViewModelAsync(viewModel, cancellationToken);
-            return View(viewModel);
-        }
-
-        #endregion
 
         #region Details
 
         /// <summary>
         /// Displays the details of a specific COS.
         /// </summary>
-        [RequireAnyAccess(
-            "Access denied. You don't have permission to view COS records.",
-            ProcedureEnum.ApproveSchedule,
-            ProcedureEnum.CreateDispatchTicket,
-            ProcedureEnum.EditDispatchTicket,
-            ProcedureEnum.SetTariff,
-            ProcedureEnum.ApproveTariff,
-            ProcedureEnum.CreateBilling,
-            ProcedureEnum.ApproveFinalBilling,
-            ProcedureEnum.CreateCollection,
-            ProcedureEnum.CreateCustomerOrderSlip,
-            ProcedureEnum.EditCustomerOrderSlip,
-            ProcedureEnum.DeleteCustomerOrderSlip,
-            ProcedureEnum.CloseCustomerOrderSlip,
-            ProcedureEnum.ManageOtherTugCharges,
-            ProcedureEnum.ConfirmOtherTugCharges)]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> Details(int id, CancellationToken cancellationToken, int? expectedServiceEntryId = null, int? dispatchTicketId = null, bool editTicket = false)
         {
             var customerOrderSlip = await customerOrderSlipService.GetCustomerOrderSlipByIdAsync(id, cancellationToken);
@@ -177,21 +117,14 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ViewData["BillingNumber"] = billing?.MsapBillingNumber;
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            ViewBag.CanSetTariff = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.SetTariff);
-            ViewBag.CanApproveTariff = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveTariff);
             ViewBag.CanEditTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditDispatchTicket);
-            ViewBag.CanDeleteTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteDispatchTicket);
             ViewBag.CanEditCustomerOrderSlip = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditCustomerOrderSlip);
             ViewBag.CanCreateDispatchTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateDispatchTicket);
             ViewData["CanManageOtherTugCharges"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ManageOtherTugCharges);
             ViewData["CanViewOtherTugCharges"] = ViewData["CanManageOtherTugCharges"] is true || userId != null
                 && await accessControl.HasAccessAsync(userId, ProcedureEnum.ConfirmOtherTugCharges);
             ViewData["OtherTugCharges"] = await otherTugCharges.GetForCosAsync(id, cancellationToken);
-            ViewData["CanViewActualTicket"] = ViewData["CanViewOtherTugCharges"] is true || ViewBag.CanSetTariff == true || ViewBag.CanApproveTariff == true
-                || ViewBag.CanCreateDispatchTicket == true || ViewBag.CanEditTicket == true || ViewBag.CanDeleteTicket == true
-                || (userId != null && (await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateBilling)
-                    || await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveFinalBilling)
-                    || await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateCollection)));
+            ViewData["CanViewActualTicket"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ViewOperations);
             var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == id, cancellationToken);
             if (schedule != null)
             {
@@ -269,22 +202,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         #endregion
 
-        [RequireAnyAccess(
-            "Access denied. You don't have permission to view COS records.",
-            ProcedureEnum.ApproveSchedule,
-            ProcedureEnum.CreateDispatchTicket,
-            ProcedureEnum.EditDispatchTicket,
-            ProcedureEnum.SetTariff,
-            ProcedureEnum.ApproveTariff,
-            ProcedureEnum.CreateBilling,
-            ProcedureEnum.ApproveFinalBilling,
-            ProcedureEnum.CreateCollection,
-            ProcedureEnum.CreateCustomerOrderSlip,
-            ProcedureEnum.EditCustomerOrderSlip,
-            ProcedureEnum.DeleteCustomerOrderSlip,
-            ProcedureEnum.CloseCustomerOrderSlip,
-            ProcedureEnum.ManageOtherTugCharges,
-            ProcedureEnum.ConfirmOtherTugCharges)]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> Progress(int? customerOrderSlipId, List<int>? billingIds, List<int>? dispatchTicketIds, int? actionStage, CancellationToken cancellationToken)
         {
             ViewData["JobProgressActionStage"] = actionStage;
@@ -423,7 +341,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// Retrieves detailed information for a specific Dispatch Ticket.
         /// </summary>
         [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateCustomerOrderSlip, ProcedureEnum.EditCustomerOrderSlip)]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> GetTicketDetails(int id, CancellationToken cancellationToken)
         {
             var details = await dispatchTicketService.GetTicketDetailsAsync(id, cancellationToken);
