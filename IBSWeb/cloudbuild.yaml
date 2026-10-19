@@ -45,7 +45,7 @@
       - '--set-env-vars'
       - 'ASPNETCORE_ENVIRONMENT=Production'
       - '--set-secrets'
-      - 'ConnectionStrings__MMSIConnection=MMSIConnection:latest,Calendarific__ApiKey=CalendarificApiKey:latest'
+      - 'ConnectionStrings__MMSIConnection=MMSIConnectionDev:latest,Calendarific__ApiKey=CalendarificApiKey:latest'
       - '--set-cloudsql-instances'
       - 'integrated-business-system:us-central1:ibs-instance'
       - '--quiet'
@@ -59,7 +59,7 @@ substitutions:
   _AR_HOSTNAME: us-central1-docker.pkg.dev
   _AR_REPOSITORY: ibsweb
   _DEPLOY_REGION: us-central1
-  _SERVICE_NAME: mmsi-ibsweb
+  _SERVICE_NAME: mmsi-ibsweb-msap
   _PLATFORM: managed
 
 options:
