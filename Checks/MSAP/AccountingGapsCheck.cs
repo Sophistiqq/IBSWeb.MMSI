@@ -51,6 +51,16 @@ namespace Checks.MSAP
             ticket.TimeArrived = new TimeOnly(8, 0, 2);
             second.TimeLeft = new TimeOnly(9, 0); second.TimeArrived = new TimeOnly(9, 0, 2);
             Check(SbmaShareCalculator.Allocate([ticket, second]).Values.Sum() == 5.83m, "SBMA per-tug rounding residual was lost.");
+            var tiny = Enumerable.Range(1, 5).Select(id => new DispatchTicket
+            {
+                DispatchTicketId = id, CustomerOrderSlipId = 2, TugBoatId = 2,
+                DateLeft = date, DateArrived = date, TimeLeft = new TimeOnly(8, 0),
+                TimeArrived = new TimeOnly(8, 0).Add(TimeSpan.FromTicks(id == 5 ? 1 : 34700)),
+                ExpectedServiceEntry = entry
+            }).ToList();
+            Dictionary<int, decimal> tinyShares = SbmaShareCalculator.Allocate(tiny);
+            Check(tinyShares.Values.All(x => x >= 0m) && tinyShares.Values.Sum() == 0.02m,
+                "Fractional ticket rounding produced a negative residual or lost the COS/tug total.");
             using var db = new IBS.DataAccess.MSAP.Data.MsapDbContext(
                 new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<IBS.DataAccess.MSAP.Data.MsapDbContext>()
                     .UseNpgsql("Host=localhost;Database=unused;Username=unused").Options);

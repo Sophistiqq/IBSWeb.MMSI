@@ -17,7 +17,7 @@ namespace IBS.Services.MSAP
                 {
                     var ticket = ordered[index];
                     decimal amount = index == ordered.Count - 1 ? total - allocated
-                        : Calculate(ticket, enabled ?? ticket.ExpectedServiceEntry?.VesselSchedule?.SbmaEnabled == true);
+                        : Math.Min(total - allocated, Calculate(ticket, enabled ?? ticket.ExpectedServiceEntry?.VesselSchedule?.SbmaEnabled == true));
                     amounts[ticket.DispatchTicketId] = amount;
                     allocated += amount;
                 }
