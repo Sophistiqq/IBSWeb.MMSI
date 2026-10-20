@@ -2329,6 +2329,11 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("TugboatOwnerId"));
 
+                    b.Property<string>("Address")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("address");
+
                     b.Property<decimal>("FixedRate")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
@@ -2338,6 +2343,16 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("varchar(10)")
                         .HasColumnName("msap_recid");
+
+                    b.Property<string>("TaxType")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("tax_type");
+
+                    b.Property<string>("Tin")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("tin");
 
                     b.Property<string>("TugboatOwnerName")
                         .IsRequired()
@@ -2350,6 +2365,16 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("varchar(3)")
                         .HasColumnName("tugboat_owner_number");
+
+                    b.Property<string>("VatType")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("vat_type");
+
+                    b.Property<decimal?>("WithholdingTaxPercent")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("withholding_tax_percent");
 
                     b.HasKey("TugboatOwnerId")
                         .HasName("pk_mmsi_tugboat_owners");

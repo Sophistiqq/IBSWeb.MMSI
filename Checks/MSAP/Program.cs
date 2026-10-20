@@ -34,6 +34,12 @@ if (args.Contains("--workspace-only", StringComparer.Ordinal))
     return;
 }
 
+if (args.Contains("--tugboat-owner-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TugboatOwnerCheck.RunAsync();
+    return;
+}
+
 if (args.Contains("--workspace-database", StringComparer.Ordinal))
 {
     await Checks.MSAP.TugboatWorkspaceDatabaseCheck.RunAsync();

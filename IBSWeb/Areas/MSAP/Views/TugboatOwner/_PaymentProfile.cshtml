@@ -1,0 +1,42 @@
+@model IBS.Models.MSAP.ViewModels.TugboatOwnerViewModel
+
+<fieldset class="flex flex-column gap-3 mt-4">
+    <legend class="modern-headline-md">Payment Profile</legend>
+    <p>Complete this profile before paying the owner through AP Trade.</p>
+    <div>
+        <label asp-for="Address" class="modern-label ui-label"></label>
+        <input asp-for="Address" class="form-control ui-input" />
+        <span asp-validation-for="Address" class="text-error"></span>
+    </div>
+    <div>
+        <label asp-for="Tin" class="modern-label ui-label"></label>
+        <input asp-for="Tin" class="form-control ui-input" />
+        <span asp-validation-for="Tin" class="text-error"></span>
+    </div>
+    <div>
+        <label asp-for="VatType" class="modern-label ui-label"></label>
+        <select asp-for="VatType" class="form-select ui-input">
+            <option value="">Select classification</option>
+            <option>Vatable</option><option>Zero-Rated</option><option>Exempt</option>
+        </select>
+        <span asp-validation-for="VatType" class="text-error"></span>
+    </div>
+    <div>
+        <label asp-for="TaxType" class="modern-label ui-label"></label>
+        <select asp-for="TaxType" class="form-select ui-input">
+            <option value="">Select classification</option>
+            <option>Withholding Tax</option><option>Exempt</option>
+        </select>
+        <span asp-validation-for="TaxType" class="text-error"></span>
+    </div>
+    <div>
+        <label asp-for="WithholdingTaxPercent" class="modern-label ui-label"></label>
+        <select asp-for="WithholdingTaxPercent" class="form-select ui-input">
+            <option value="">Select when withholding applies</option>
+            <option value="0.005">0.5%</option><option value="0.01">1%</option>
+            <option value="0.02">2%</option><option value="0.05">5%</option><option value="0.10">10%</option>
+            <option value="0">Exempt</option>
+        </select>
+        <span asp-validation-for="WithholdingTaxPercent" class="text-error"></span>
+    </div>
+</fieldset>

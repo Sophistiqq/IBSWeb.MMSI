@@ -38,6 +38,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(TugboatOwnerViewModel model, CancellationToken cancellationToken = default)
         {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
             var result = await tugboatOwnerService.CreateAsync(model, userManager.GetUserName(User)!, cancellationToken);
 
             if (result.IsSuccess)
@@ -65,6 +69,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(TugboatOwnerViewModel model, CancellationToken cancellationToken)
         {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
             var result = await tugboatOwnerService.UpdateAsync(model, userManager.GetUserName(User)!, cancellationToken);
 
             if (result.IsSuccess)
