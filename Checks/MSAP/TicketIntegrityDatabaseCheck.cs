@@ -8,6 +8,7 @@ using IBS.Models.MSAP.MasterFile;
 using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP;
 using IBS.Utility.MSAP.Constants;
+using IBS.Utility.MSAP.Helpers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -139,11 +140,25 @@ namespace Checks.MSAP
             db.ChangeTracker.Clear();
             var edited = await db.MsapDispatchTickets.SingleAsync(x => x.DispatchTicketId == first.Data);
             Check(edited.COSNumber == reference && edited.SbmaShareAmount == 4.38m, "Edit trusted a supplied COS or lost stored SBMA.");
+            edit.FromEntity(edited);
+            Check((await dispatch.UpdateDispatchTicketAsync(edit, Image(), null, "Check", default)).IsSuccess,
+                "Valid attachment replacement failed.");
+            string retainedImage = files.Names.Single();
+            files.FailUpload = true;
+            edit.TimeArrived = new TimeOnly(8, 0, 4);
+            Check(!(await dispatch.UpdateDispatchTicketAsync(edit, Image(), null, "Check", default)).IsSuccess,
+                "Failed replacement upload reported success.");
+            db.ChangeTracker.Clear();
+            edited = await db.MsapDispatchTickets.SingleAsync(x => x.DispatchTicketId == first.Data);
+            Check(edited.ImageName == retainedImage && edited.TimeArrived == new TimeOnly(8, 0, 3)
+                && edited.SbmaShareAmount == 4.38m && files.Names.SetEquals([retainedImage]),
+                "Failed edit lost the old attachment or committed changed times/SBMA.");
+            int uploadCount = files.Uploads;
             int count = await db.MsapDispatchTickets.CountAsync(x => x.CustomerOrderSlipId == parent.CustomerOrderSlipId);
             files.FailUpload = true;
             Check(!(await dispatch.CreateDispatchTicketAsync(Input("F"), Image(), null, "Check", default)).IsSuccess,
                 "A failed attachment upload reported success.");
-            Check(files.Uploads == 1 && files.Names.Count == 0 && await db.MsapDispatchTickets.CountAsync(x => x.CustomerOrderSlipId == parent.CustomerOrderSlipId) == count,
+            Check(files.Uploads == uploadCount + 1 && files.Names.SetEquals([retainedImage]) && await db.MsapDispatchTickets.CountAsync(x => x.CustomerOrderSlipId == parent.CustomerOrderSlipId) == count,
                 "Failed upload left a file or partial ticket.");
             files.FailUpload = false;
 
@@ -163,12 +178,17 @@ namespace Checks.MSAP
             late.DateLeft = late.DateArrived = late.Date;
             Check(!(await dispatch.CreateDispatchTicketAsync(late, Image(), null, "Check", default)).IsSuccess,
                 "New SBMA allocation altered closed-period sibling rounding.");
-            Check(files.Uploads == 2 && files.Names.Count == 0
+            Check(files.Uploads == uploadCount + 2 && files.Names.SetEquals([retainedImage])
                 && await db.MsapDispatchTickets.CountAsync(x => x.CustomerOrderSlipId == parent.CustomerOrderSlipId) == count,
                 "A failure after initial ticket persistence left a file or partial database record.");
             var reopened = await db.MsapPostedPeriods.SingleAsync(x => x.Id == closed.Id);
             reopened.IsClosed = false;
             await db.SaveChangesAsync();
+
+            ServiceResult<int>[] competing = await Task.WhenAll(CreateConcurrentAsync("C1"), CreateConcurrentAsync("C2"));
+            Check(competing.Count(x => x.IsSuccess) == 1
+                && await db.MsapDispatchTickets.CountAsync(x => x.VesselScheduleServiceEntryId == uploadEntry.VesselScheduleServiceEntryId) == 1,
+                "Concurrent ticket entry created duplicate actuals or rejected both valid submissions.");
 
             foreach (string assignment in new[] { "time_arrived = NULL", "sbma_share_amount = -1", "customer_order_slip_id = 2147483647" })
             {
@@ -185,7 +205,18 @@ namespace Checks.MSAP
                     await transaction.RollbackAsync();
                 }
             }
-            Console.WriteLine("PASS: migration rollback/reapply, missing approval/rates, partial/backwards times, wrong linkage, approved zero rates, COS identity, persisted SBMA/rounding/report subsets, edit and upload rollback, and SQL constraints (isolated database).");
+            Console.WriteLine("PASS: migration rollback/reapply, missing approval/rates, partial/backwards times, wrong linkage, approved zero rates, COS identity, persisted SBMA/rounding/report subsets, concurrent duplicate entry, edit/replacement upload rollback, and SQL constraints (isolated database).");
+
+            async Task<ServiceResult<int>> CreateConcurrentAsync(string suffix)
+            {
+                await using var competingDb = new MsapDbContext(new DbContextOptionsBuilder<MsapDbContext>().UseNpgsql(connection).Options);
+                await using var competingShared = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseNpgsql(connection).Options);
+                var competingService = new DispatchTicketService(new UnitOfWork(competingDb, competingShared),
+                    new FixtureStorage(), NullLogger<DispatchTicketService>.Instance);
+                var input = Input("F");
+                input.DispatchNumber = reference + suffix;
+                return await competingService.CreateDispatchTicketAsync(input, null, null, "Check", default);
+            }
 
             async Task RejectAsync(DispatchTicketViewModel input, string message)
             {

@@ -40,9 +40,11 @@ namespace Checks.MSAP
             await db.Database.MigrateAsync();
             Check(!db.Database.HasPendingModelChanges(), "Owner-profile migration differs from the model.");
             string[] migrations = db.Database.GetMigrations().ToArray();
-            string sql = db.GetService<IMigrator>().GenerateScript(migrations[^2], migrations[^1]);
+            int profile = Array.FindIndex(migrations, x => x.EndsWith("_AddTugboatOwnerPaymentProfile", StringComparison.Ordinal));
+            Check(profile > 0, "Owner-profile migration was not found.");
+            string sql = db.GetService<IMigrator>().GenerateScript(migrations[profile - 1], migrations[profile]);
             Check(!sql.Contains("UPDATE ") && !sql.Contains("DROP TABLE"), "Owner migration contains a data repair or table replacement.");
-            await db.GetService<IMigrator>().MigrateAsync(migrations[^2]);
+            await db.GetService<IMigrator>().MigrateAsync(migrations[profile - 1]);
             await db.Database.MigrateAsync();
             Check(identity.OrderBy(x => x.Key).SequenceEqual((await db.MsapTugboatOwners
                 .ToDictionaryAsync(x => x.TugboatOwnerId, x => x.TugboatOwnerNumber)).OrderBy(x => x.Key)), "Owner migration changed master identities.");

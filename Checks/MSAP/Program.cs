@@ -28,6 +28,18 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
+if (args.Contains("--rebuild-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.RebuildDatabaseCheck.RunAsync();
+    return;
+}
+
+if (args.Contains("--source-database-audit", StringComparer.Ordinal))
+{
+    await Checks.MSAP.RebuildDatabaseCheck.AuditSourceAsync();
+    return;
+}
+
 if (args.Contains("--workspace-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.TugboatWorkspaceCheck.RunAsync();
@@ -129,7 +141,9 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 builder.Logging.SetMinimumLevel(LogLevel.Error);
 builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
 {
-    ["ConnectionStrings:MMSIConnection"] = "Host=localhost;Database=msap_check;Username=postgres"
+    ["ConnectionStrings:MMSIConnection"] = args.Contains("--rebuild-render-only", StringComparer.Ordinal)
+        ? Checks.MSAP.TugboatOwnerCheck.TestConnection()
+        : "Host=localhost;Database=msap_check;Username=postgres"
 });
 builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("MMSIConnection")));
 builder.Services.AddScoped<IBS.Utility.TugboatWorkspace>();
@@ -138,7 +152,8 @@ builder.Services.AddDefaultIdentity<ApplicationUser>().AddRoles<IdentityRole>().
 builder.Services.AddScoped<IBS.DataAccess.Repository.IRepository.IUnitOfWork, IBS.DataAccess.Repository.UnitOfWork>();
 builder.Services.AddMsapModule(builder.Configuration);
 if (args.Contains("--calendar-render-only", StringComparer.Ordinal)
-    || args.Contains("--schedule-render-only", StringComparer.Ordinal))
+    || args.Contains("--schedule-render-only", StringComparer.Ordinal)
+    || args.Contains("--rebuild-render-only", StringComparer.Ordinal))
 {
     builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
 }
@@ -150,6 +165,11 @@ app.UseEndpoints(endpoints => endpoints.MapControllerRoute("default", "{area=Use
 #pragma warning restore ASP0014
 using var scope = app.Services.CreateScope();
 var services = scope.ServiceProvider;
+if (args.Contains("--rebuild-render-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.RebuildRenderingCheck.RunAsync(services);
+    return;
+}
 if (args.Contains("--schedule-render-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.ScheduleFormRenderingCheck.RunAsync(services);
@@ -182,7 +202,10 @@ Check(services.GetRequiredService<IBS.DataAccess.MSAP.Repository.IRepository.IUn
 
 var actions = services.GetRequiredService<IActionDescriptorCollectionProvider>().ActionDescriptors.Items.OfType<ControllerActionDescriptor>().ToList();
 var moduleActions = actions.Where(a => a.ControllerTypeInfo.Namespace?.StartsWith("IBSWeb.Areas.MSAP", StringComparison.Ordinal) == true).ToList();
-Check(moduleActions.Select(a => a.ControllerTypeInfo).Distinct().Count() == 32, "An imported controller is missing.");
+Check(moduleActions.Select(a => a.ControllerTypeInfo).Distinct().Count() == 31,
+    "Expected 31 active MSAP controllers; found " + moduleActions.Select(a => a.ControllerTypeInfo).Distinct().Count()
+    + ": " + string.Join(", ", moduleActions.Select(a => a.ControllerName).Distinct().Order()));
+Check(!moduleActions.Any(a => a.ControllerName == "Data"), "Retired direct data changes are exposed as endpoints.");
 Check(moduleActions.All(a => a.RouteValues["area"] is "MSAP" or "MSAPAdmin" or "MSAPSuperAdmin"), "An MSAP controller collides with a base area.");
 Check(moduleActions.All(action => action.FilterDescriptors.Any(filter =>
     filter.Filter is AuthorizeFilter authorize && authorize.AuthorizeData?.Any(data => data.Policy == MsapRoles.AccessPolicy) == true)),
@@ -315,15 +338,22 @@ foreach (var status in new[] { "For Deposit", "Deposited", "Returned", "Redeposi
     var html = output.ToString();
     if (status is "For Deposit" or "Returned")
     {
-        string expectedBank = status == "Returned" ? "8" : "7";
-        Check(Regex.IsMatch(html, $"<option value=\"{expectedBank}\" selected(?:=\"selected\")?>"), "Select the saved bank when present, otherwise the first available bank.");
+        if (status == "Returned")
+        {
+            Check(Regex.IsMatch(html, "<option value=\"8\" selected(?:=\"selected\")?>"), "Retain the saved receiving bank on redeposit.");
+        }
+        else
+        {
+            Check(!Regex.IsMatch(html, "<option value=\"[78]\" selected(?:=\"selected\")?>"),
+                "A new deposit with multiple accounts must require an explicit bank choice.");
+        }
         Check(html.Contains("id=\"depositBank\"", StringComparison.Ordinal) && html.Contains("Another MMSI Bank", StringComparison.Ordinal), "The bank dropdown must retain all available accounts.");
         Check(!html.Contains("value=\"Clear\"", StringComparison.Ordinal), "An undeposited or returned receipt must not offer clearing.");
     }
     Check(html.Contains("id=\"collectionBankingForm\"", StringComparison.Ordinal), "ModernAlert banking form is missing.");
     Check(!html.Contains("Collection → Deposit → Clear", StringComparison.Ordinal), "Banking inputs must not render another progress section.");
 }
-Console.WriteLine("PASS: collection banking forms render eligible actions and keep the bank dropdown visible and automatically select the first bank.");
+Console.WriteLine("PASS: collection banking forms retain saved accounts and require an explicit choice when multiple receiving banks are available.");
 var jobProgressView = engine.GetView(null, "/Areas/MSAP/Views/Shared/_JobProgress.cshtml", false);
 Check(jobProgressView.Success, "Shared Job Progress partial is missing.");
 foreach (bool allowed in new[] { false, true })

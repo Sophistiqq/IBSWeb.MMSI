@@ -25,7 +25,7 @@ namespace Checks.MSAP
 {
     internal static class TugboatWorkspaceDatabaseCheck
     {
-        public static async Task RunAsync()
+        public static async Task<string> RunAsync()
         {
             IConfigurationRoot configuration = new ConfigurationBuilder().SetBasePath(Path.GetFullPath("IBSWeb"))
                 .AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", true)
@@ -212,6 +212,7 @@ namespace Checks.MSAP
             workspace.Select(null, "MMSI");
             Console.WriteLine("PASS: cloned local data, source/detail isolation, shared numbering, write guards, posting/rebuild/reversal, company/tugboat reconciliation, close/reopen, balance carry-forward and migration rollback/reapply.");
             Console.WriteLine($"Retained test database: {target.Database}");
+            return target.Database!;
 
             async Task<FilprideCheckVoucherHeader> CreateVoucherAsync(int? tugboatId, decimal amount, DateOnly date)
             {
