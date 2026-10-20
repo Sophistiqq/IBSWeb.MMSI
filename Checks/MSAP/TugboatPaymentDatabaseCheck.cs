@@ -5,6 +5,7 @@ using IBS.Models;
 using IBS.Models.Filpride;
 using IBS.Models.Enums;
 using IBS.Models.Filpride.AccountsPayable;
+using IBS.Models.Filpride.MasterFile;
 using IBS.Models.Filpride.ViewModels;
 using IBS.Models.MSAP;
 using IBS.Services;
@@ -72,8 +73,18 @@ namespace Checks.MSAP
             charge.Lines[0].Amount = 1120m;
             source.ChangeTracker.Clear();
             var bank = await db.FilprideBankAccounts.FirstAsync(b => b.IsActive);
-            string expense = await db.FilprideChartOfAccounts.Where(a => !a.IsMain && !a.IsHidden && a.AccountNumber.StartsWith("5"))
-                .Select(a => a.AccountNumber).FirstAsync();
+            // Clone-only COGS classification; production mapping remains a Finance decision.
+            var costRoot = await db.FilprideChartOfAccounts.SingleAsync(a => a.AccountNumber == "500000000");
+            List<string> costBranches = await db.FilprideChartOfAccounts.IgnoreQueryFilters(["MasterVisibility"])
+                .Where(a => a.ParentAccountId == costRoot.AccountId).Select(a => a.AccountNumber).ToListAsync();
+            long lastCostBranch = costBranches.Select(long.Parse).Max();
+            var serviceCosts = CostAccount("MMSI service costs (test)", (lastCostBranch + 1000000).ToString(), costRoot);
+            var externalTugs = CostAccount("External tug services (test)", (lastCostBranch + 1010000).ToString(), serviceCosts);
+            var expense = CostAccount("Services by Other Tugs (test)", (lastCostBranch + 1010100).ToString(), externalTugs);
+            db.Add(serviceCosts);
+            db.Add(externalTugs);
+            db.Add(expense);
+            await db.SaveChangesAsync();
             var journal = new FilprideJournalVoucherHeader
             {
                 JournalVoucherHeaderNo = "J" + Guid.NewGuid().ToString("N")[..12],
@@ -88,7 +99,8 @@ namespace Checks.MSAP
                 PostedBy = "Payment poster",
                 Details = []
             };
-            journal.Details.Add(new FilprideJournalVoucherDetail { AccountNo = expense, Debit = 1120m });
+            journal.Details.Add(new FilprideJournalVoucherDetail { AccountNo = expense.AccountNumber, Debit = 1000m });
+            journal.Details.Add(new FilprideJournalVoucherDetail { AccountNo = "101060200", Debit = 120m });
             journal.Details.Add(new FilprideJournalVoucherDetail { AccountNo = TugboatPaymentService.ApAccount, Credit = 1120m });
             db.Add(journal);
             await db.SaveChangesAsync();
@@ -206,7 +218,18 @@ namespace Checks.MSAP
                 Check(!await scoped.FilprideTugboatPayments.AnyAsync(p => p.CheckVoucherHeaderId == active), "Company payment leaked into a tugboat workspace.");
                 await RejectAsync(() => Service(scoped, storage).CreateAsync(Form(), null, "Payment check", default), "Company-level provider AP entered a tugboat workspace.");
             }
-            Console.WriteLine($"PASS: AP Other Tugs gross/VAT/EWT, posted liability validation, upload rollback, source locks, duplicate/concurrent reservations, immutable snapshots, post/unpost/void/cancel and workspace isolation. Clone fixture charge={charge.OtherTugChargeId}, draft CV={active}.");
+            Console.WriteLine($"PASS: AP Other Tugs gross/VAT/EWT, posted liability validation, upload rollback, source locks, duplicate/concurrent reservations, immutable snapshots, post/unpost/void/cancel, named service-cost/input-VAT recognition without duplicate P&L expense, AP reconciliation and workspace isolation. Clone fixture charge={charge.OtherTugChargeId}, draft CV={active}.");
+
+            static FilprideChartOfAccount CostAccount(string name, string number, FilprideChartOfAccount parent)
+            {
+                parent.HasChildren = true;
+                return new FilprideChartOfAccount
+                {
+                    AccountName = name, AccountNumber = number, ParentAccount = parent, Level = parent.Level + 1,
+                    AccountType = parent.AccountType, NormalBalance = parent.NormalBalance,
+                    FinancialStatementType = parent.FinancialStatementType, CreatedBy = "Payment check"
+                };
+            }
 
             ApplicationDbContext Open()
             {
@@ -248,6 +271,16 @@ namespace Checks.MSAP
                 Check(rows.Count == count && rows.Sum(g => g.Debit) == total && rows.Sum(g => g.Credit) == total
                     && rows.All(g => g.CounterpartyType == CounterpartyType.TugboatOwner && g.CounterpartyId == owner.TugboatOwnerId),
                     "Payment ledger is unbalanced, duplicated or lost owner identity.");
+                Check(await db.FilprideGeneralLedgerBooks.Where(g => g.Reference == journal.JournalVoucherHeaderNo && g.AccountId == expense.AccountId)
+                        .SumAsync(g => g.Debit - g.Credit) == 1000m
+                    && await db.FilprideGeneralLedgerBooks.Where(g => g.Reference == journal.JournalVoucherHeaderNo && g.AccountNo == "101060200")
+                        .SumAsync(g => g.Debit - g.Credit) == 120m
+                    && !await db.FilprideGeneralLedgerBooks.AnyAsync(g => g.Reference == number && g.Account.FinancialStatementType == "PnL"),
+                    "Settlement/rebuild/reversal duplicated the service cost or treated recoverable input VAT as a P&L charge.");
+                decimal payable = await db.FilprideGeneralLedgerBooks.Where(g => g.AccountNo == TugboatPaymentService.ApAccount
+                        && (g.Reference == journal.JournalVoucherHeaderNo || g.Reference == number))
+                    .SumAsync(g => g.Credit - g.Debit);
+                Check(payable == (count == 3 ? 0m : 1120m), "Payment/reversal did not reconcile to the initially recognized provider liability.");
             }
         }
 
