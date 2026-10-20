@@ -184,7 +184,7 @@ namespace Checks.MSAP
             var sourceJournal = new FilprideJournalVoucherHeader
             {
                 JournalVoucherHeaderNo = journalCode,
-                Particulars = jobReference, JVReason = "Workspace check", Type = "Documented", PostedBy = "Workspace check", CreatedBy = "Workspace check",
+                Particulars = jobReference, JVReason = "Workspace check", Payee = "Workspace check", Type = "Documented", PostedBy = "Workspace check", CreatedBy = "Workspace check",
                 Date = firstMonth, AutoReverseNextMonth = true, Details =
                 [
                     new FilprideJournalVoucherDetail { AccountNo = expense.AccountNumber, AccountName = expense.AccountName, Debit = 10m, TransactionNo = journalCode },

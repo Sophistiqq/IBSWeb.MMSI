@@ -54,9 +54,10 @@ namespace Checks.MSAP
             route.Values["area"] = "MSAP";
             route.Values["controller"] = "TugboatOwner";
             string owner = await RenderAsync("/Areas/MSAP/Views/TugboatOwner/_PaymentProfile.cshtml",
-                new TugboatOwnerViewModel { Address = "<check>", Tin = "TIN", VatType = "Vatable", TaxType = "Withholding Tax", WithholdingTaxPercent = 0.02m });
+                new TugboatOwnerViewModel { Address = "<check>", Tin = "TIN", VatType = "Vatable", TaxType = "Withholding Tax", WithholdingTaxPercent = 0.0200m });
             Check(owner.Contains("&lt;check&gt;", StringComparison.Ordinal) && owner.Contains("name=\"WithholdingTaxPercent\"", StringComparison.Ordinal)
-                && !owner.Contains("SupplierId", StringComparison.Ordinal), "Owner profile rendering duplicated Supplier entry or lost encoded values.");
+                && owner.Contains("value=\"0.02\" selected=\"selected\"", StringComparison.Ordinal)
+                && !owner.Contains("SupplierId", StringComparison.Ordinal), "Owner profile rendering lost the stored decimal rate/encoded values or duplicated Supplier entry.");
 
             route.Values["controller"] = "DispatchTicket";
             var ticket = new DispatchTicketViewModel { COSNumber = "COS-<check>", DispatchNumber = "ACTUAL-1" };
