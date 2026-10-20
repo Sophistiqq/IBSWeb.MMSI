@@ -1,5 +1,8 @@
 using System.Security.Claims;
 using IBS.Models.MSAP.ViewModels;
+using IBS.Models.Filpride.ViewModels;
+using IBS.Models.MSAP;
+using IBS.Models.MSAP.MasterFile;
 using IBS.Services;
 using IBS.Utility;
 using IBSWeb.Workspaces;
@@ -67,6 +70,34 @@ namespace Checks.MSAP
                 && !actual.Contains("name=\"COSNumber\"", StringComparison.Ordinal)
                 && actual.Contains("name=\"VesselScheduleServiceEntryId\"", StringComparison.Ordinal),
                 "Actual-ticket form lost canonical COS display, approved service linkage or strict-save guidance.");
+            workspace.Select(null, "MMSI / All tugboats");
+            route.Values["area"] = "Filpride";
+            route.Values["controller"] = "CheckVoucherTrade";
+            route.Values["action"] = "CreateTugboatPayment";
+            var paymentForm = new TugboatPaymentViewModel
+            {
+                OwnerId = 1, ChargeId = 1,
+                Owners = [new SelectListItem("Owner <check>", "1")],
+                Charges = [new SelectListItem("Bill <check>", "1")],
+                Owner = new TugboatOwner { TugboatOwnerName = "Owner <check>", Address = "Saved address", Tin = "Saved TIN", VatType = "Vatable", TaxType = "Withholding Tax", WithholdingTaxPercent = 0.02m },
+                Charge = new OtherTugCharge { ProviderReference = "Bill <check>" }, Gross = 1120m, Withholding = 20m
+            };
+            string paymentHtml = await RenderAsync("/Areas/Filpride/Views/CheckVoucherTrade/CreateTugboatPayment.cshtml", paymentForm);
+            Check(paymentHtml.Contains("Owner &lt;check&gt;", StringComparison.Ordinal)
+                && paymentHtml.Contains("name=\"Documentation.IsDocumentedByOtherCompany\"", StringComparison.Ordinal)
+                && paymentHtml.Contains("__RequestVerificationToken", StringComparison.Ordinal)
+                && paymentHtml.Contains("name=\"__Workspace\"", StringComparison.Ordinal)
+                && !paymentHtml.Contains("name=\"SupplierId\"", StringComparison.Ordinal),
+                "Provider payment form lost encoded snapshots, nested documentation, CSRF or workspace protection.");
+            var controller = typeof(IBSWeb.Areas.Filpride.Controllers.CheckVoucherTradeController);
+            foreach (string method in new[] { "PostTugboatPayment", "UnpostTugboatPayment", "CancelTugboatPayment", "VoidTugboatPayment", "PrintTugboatPayment" })
+            {
+                var endpoint = controller.GetMethod(method)!;
+                Check(endpoint.IsDefined(typeof(HttpPostAttribute), true) && endpoint.IsDefined(typeof(ValidateAntiForgeryTokenAttribute), true)
+                    && endpoint.IsDefined(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true),
+                    "A payment mutation is missing POST, CSRF or authorization: " + method);
+            }
+            Console.WriteLine("PASS: Razor AP Other Tugs owner snapshots, nested documentation, CSRF/workspace marker and protected payment mutations.");
             Console.WriteLine("PASS: Razor workspace selection/antiforgery, stale-form marker, owner payment profile and strict ticket form render correctly.");
 
             async Task<string> RenderAsync<T>(string path, T model)

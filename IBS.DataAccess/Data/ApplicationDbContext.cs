@@ -114,6 +114,8 @@ namespace IBS.DataAccess.Data
 
         #region Accounts Payable
 
+        public DbSet<FilprideTugboatPayment> FilprideTugboatPayments { get; set; }
+
         public DbSet<FilprideCheckVoucherHeader> FilprideCheckVoucherHeaders { get; set; }
         public DbSet<FilprideCheckVoucherDetail> FilprideCheckVoucherDetails { get; set; }
         public DbSet<FilprideJournalVoucherHeader> FilprideJournalVoucherHeaders { get; set; }
@@ -597,6 +599,18 @@ namespace IBS.DataAccess.Data
             });
 
             #endregion -- Receving Report --
+
+            builder.Entity<FilprideTugboatPayment>(payment =>
+            {
+                payment.HasOne(p => p.Voucher).WithOne(v => v.TugboatPayment)
+                    .HasForeignKey<FilprideTugboatPayment>(p => p.CheckVoucherHeaderId).OnDelete(DeleteBehavior.Restrict);
+                payment.HasOne(p => p.LiabilityJournalVoucher).WithMany()
+                    .HasForeignKey(p => p.LiabilityJournalVoucherId).OnDelete(DeleteBehavior.Restrict);
+                payment.HasIndex(p => p.OtherTugChargeId).IsUnique().HasFilter("released_at IS NULL");
+                payment.HasIndex(p => p.LiabilityJournalVoucherId).IsUnique().HasFilter("released_at IS NULL");
+                payment.ToTable("filpride_tugboat_payments", table => table.HasCheckConstraint("ck_tugboat_payment_amounts",
+                    "gross_amount > 0 AND withholding_amount >= 0 AND withholding_amount < gross_amount"));
+            });
 
             #region -- Check Voucher Header --
 

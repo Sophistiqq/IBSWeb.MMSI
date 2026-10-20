@@ -306,6 +306,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 .AsNoTracking()
                 .Include(checkVoucher => checkVoucher.Details)
                 .Include(checkVoucher => checkVoucher.Supplier)
+                .Include(checkVoucher => checkVoucher.TugboatPayment)
                 .Where(checkVoucher =>
                     checkVoucher.PostedBy != null &&
                     checkVoucher.Date >= startDate &&
@@ -384,7 +385,11 @@ namespace IBS.DataAccess.Repository.Filpride
                     });
             }
 
-            if (header.SupplierId.HasValue)
+            if (header.TugboatPayment != null)
+            {
+                ledgers.SetCounterparty(CounterpartyType.TugboatOwner, header.TugboatPayment.TugboatOwnerId, header.Payee);
+            }
+            else if (header.SupplierId.HasValue)
             {
                 ledgers.SetCounterparty(
                     CounterpartyType.Supplier,
@@ -404,6 +409,10 @@ namespace IBS.DataAccess.Repository.Filpride
             FilprideCheckVoucherHeader header,
             CancellationToken cancellationToken)
         {
+            if (header.CvType == nameof(CVType.OtherTugs))
+            {
+                return false;
+            }
             var supplierName = header.Supplier?.SupplierName;
 
             if (supplierName == null && header.SupplierId.HasValue)
@@ -422,6 +431,10 @@ namespace IBS.DataAccess.Repository.Filpride
 
         private static bool ShouldSkipGeneralLedgerEntries(FilprideCheckVoucherHeader header)
         {
+            if (header.CvType == nameof(CVType.OtherTugs))
+            {
+                return false;
+            }
             var supplierName = header.Supplier?.SupplierName ?? header.SupplierName ?? header.Payee;
             return ShouldSkipGeneralLedgerEntries(supplierName);
         }

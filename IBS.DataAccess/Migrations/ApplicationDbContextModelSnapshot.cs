@@ -1237,6 +1237,86 @@ namespace IBS.DataAccess.Migrations
                     b.ToTable("filpride_receiving_reports", (string)null);
                 });
 
+            modelBuilder.Entity("IBS.Models.Filpride.AccountsPayable.FilprideTugboatPayment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ChargeRevision")
+                        .HasColumnType("integer")
+                        .HasColumnName("charge_revision");
+
+                    b.Property<int>("CheckVoucherHeaderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("check_voucher_header_id");
+
+                    b.Property<decimal>("GrossAmount")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("gross_amount");
+
+                    b.Property<int>("LiabilityJournalVoucherId")
+                        .HasColumnType("integer")
+                        .HasColumnName("liability_journal_voucher_id");
+
+                    b.Property<string>("LiabilitySnapshot")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("liability_snapshot");
+
+                    b.Property<int>("OtherTugChargeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("other_tug_charge_id");
+
+                    b.Property<string>("ProviderReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("provider_reference");
+
+                    b.Property<DateTime?>("ReleasedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("released_at");
+
+                    b.Property<string>("SourceSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source_snapshot");
+
+                    b.Property<int>("TugboatOwnerId")
+                        .HasColumnType("integer")
+                        .HasColumnName("tugboat_owner_id");
+
+                    b.Property<decimal>("WithholdingAmount")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("withholding_amount");
+
+                    b.HasKey("Id")
+                        .HasName("pk_filpride_tugboat_payments");
+
+                    b.HasIndex("CheckVoucherHeaderId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_filpride_tugboat_payments_check_voucher_header_id");
+
+                    b.HasIndex("LiabilityJournalVoucherId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_filpride_tugboat_payments_liability_journal_voucher_id")
+                        .HasFilter("released_at IS NULL");
+
+                    b.HasIndex("OtherTugChargeId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_filpride_tugboat_payments_other_tug_charge_id")
+                        .HasFilter("released_at IS NULL");
+
+                    b.ToTable("filpride_tugboat_payments", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_tugboat_payment_amounts", "gross_amount > 0 AND withholding_amount >= 0 AND withholding_amount < gross_amount");
+                        });
+                });
+
             modelBuilder.Entity("IBS.Models.Filpride.AccountsReceivable.FilprideCollectionReceipt", b =>
                 {
                     b.Property<int>("CollectionReceiptId")
@@ -5702,6 +5782,27 @@ namespace IBS.DataAccess.Migrations
                     b.Navigation("PurchaseOrder");
                 });
 
+            modelBuilder.Entity("IBS.Models.Filpride.AccountsPayable.FilprideTugboatPayment", b =>
+                {
+                    b.HasOne("IBS.Models.Filpride.AccountsPayable.FilprideCheckVoucherHeader", "Voucher")
+                        .WithOne("TugboatPayment")
+                        .HasForeignKey("IBS.Models.Filpride.AccountsPayable.FilprideTugboatPayment", "CheckVoucherHeaderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_filpride_tugboat_payments_filpride_check_voucher_headers_ch");
+
+                    b.HasOne("IBS.Models.Filpride.AccountsPayable.FilprideJournalVoucherHeader", "LiabilityJournalVoucher")
+                        .WithMany()
+                        .HasForeignKey("LiabilityJournalVoucherId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_filpride_tugboat_payments_filpride_journal_voucher_headers_");
+
+                    b.Navigation("LiabilityJournalVoucher");
+
+                    b.Navigation("Voucher");
+                });
+
             modelBuilder.Entity("IBS.Models.Filpride.AccountsReceivable.FilprideCollectionReceipt", b =>
                 {
                     b.HasOne("IBS.Models.Filpride.MasterFile.FilprideBankAccount", "BankAccount")
@@ -6382,6 +6483,8 @@ namespace IBS.DataAccess.Migrations
             modelBuilder.Entity("IBS.Models.Filpride.AccountsPayable.FilprideCheckVoucherHeader", b =>
                 {
                     b.Navigation("Details");
+
+                    b.Navigation("TugboatPayment");
                 });
 
             modelBuilder.Entity("IBS.Models.Filpride.AccountsPayable.FilprideJournalVoucherHeader", b =>

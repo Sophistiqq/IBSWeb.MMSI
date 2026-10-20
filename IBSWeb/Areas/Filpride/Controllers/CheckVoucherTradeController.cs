@@ -35,6 +35,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         private readonly ILogger<CheckVoucherTradeController> _logger;
         private readonly ISubAccountResolver _subAccountResolver;
         private readonly CheckVoucherDocumentationService _documentationService;
+        private readonly TugboatPaymentService _tugboatPayments;
         private const string _apTradePayableAccountNo = "201010100";
         private const string _apNonTradePayableAccountNo = "201020200";
         private const string _commissionPayableAccountNo = "201010200";
@@ -57,7 +58,8 @@ namespace IBSWeb.Areas.Filpride.Controllers
             ICloudStorageService cloudStorageService,
             ILogger<CheckVoucherTradeController> logger,
             ISubAccountResolver subAccountResolver,
-            CheckVoucherDocumentationService documentationService)
+            CheckVoucherDocumentationService documentationService,
+            TugboatPaymentService tugboatPayments)
         {
             _unitOfWork = unitOfWork;
             _userManager = userManager;
@@ -66,6 +68,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             _logger = logger;
             _subAccountResolver = subAccountResolver;
             _documentationService = documentationService;
+            _tugboatPayments = tugboatPayments;
         }
 
         private string GetUserFullName()
@@ -301,6 +304,106 @@ namespace IBSWeb.Areas.Filpride.Controllers
                     Text = s.AccountNumber + " " + s.AccountName
                 })
                 .ToList();
+        }
+
+        [HttpGet]
+        [Authorize(Policy = nameof(CheckVoucherTrade.CheckVoucherTradeCreate))]
+        public async Task<IActionResult> CreateTugboatPayment(int ownerId, int chargeId, CancellationToken cancellationToken)
+        {
+            var model = new TugboatPaymentViewModel { OwnerId = ownerId, ChargeId = chargeId };
+            try { await _tugboatPayments.PrepareAsync(model, cancellationToken); }
+            catch (InvalidOperationException ex) { ModelState.AddModelError(string.Empty, ex.Message); }
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Policy = nameof(CheckVoucherTrade.CheckVoucherTradeCreate))]
+        public async Task<IActionResult> CreateTugboatPayment(TugboatPaymentViewModel model, IFormFile? file, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (ModelState.IsValid)
+                {
+                    int id = await _tugboatPayments.CreateAsync(model, file, GetUserFullName(), cancellationToken);
+                    TempData["success"] = "Payment draft created. The complete provider bill is reserved; cancellation or voiding releases it.";
+                    return RedirectToAction(nameof(Print), new { id });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not create AP Other Tugs voucher");
+                ModelState.AddModelError(string.Empty, ex is InvalidOperationException ? ex.Message : "Payment could not be saved. Reload and review the source and payment details.");
+            }
+            try { await _tugboatPayments.PrepareAsync(model, cancellationToken); }
+            catch (InvalidOperationException ex) { ModelState.AddModelError(string.Empty, ex.Message); }
+            return View(model);
+        }
+
+        private async Task<IActionResult> ChangeTugboatPaymentAsync(int id, string operation, string? reason, bool json, CancellationToken ct)
+        {
+            try
+            {
+                await _tugboatPayments.ChangeStatusAsync(id, operation, GetUserFullName(), reason, ct);
+                if (json) { return Json(new { success = true, message = $"AP Other Tugs payment: {operation} completed." }); }
+                TempData["success"] = $"AP Other Tugs payment: {operation} completed.";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not {Operation} AP Other Tugs voucher {Id}", operation, id);
+                string error = ex is InvalidOperationException ? ex.Message : "Payment status could not be changed. Reload and review the source details.";
+                if (json) { return Json(new { success = false, message = error }); }
+                TempData["error"] = error;
+            }
+            return RedirectToAction(nameof(Print), new { id });
+        }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [Authorize(Policy = nameof(CheckVoucherTrade.CheckVoucherTradePreview))]
+        public async Task<IActionResult> PrintTugboatPayment(int id, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await _tugboatPayments.ChangeStatusAsync(id, "Print", GetUserFullName(), null, cancellationToken);
+                var voucher = await _tugboatPayments.GetAsync(id, cancellationToken);
+                ViewData["PaymentLines"] = TugboatPaymentService.Lines(voucher!.TugboatPayment!);
+                ViewData["PrintPayment"] = true;
+                return View("TugboatPayment", voucher);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not print AP Other Tugs voucher {Id}", id);
+                TempData["error"] = ex is InvalidOperationException ? ex.Message : "The voucher could not be printed.";
+                return RedirectToAction(nameof(Print), new { id });
+            }
+        }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [Authorize(Policy = nameof(CheckVoucherTrade.CheckVoucherTradePost))]
+        public Task<IActionResult> PostTugboatPayment(int id, CancellationToken cancellationToken)
+        {
+            return ChangeTugboatPaymentAsync(id, "Post", null, false, cancellationToken);
+        }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [Authorize(Policy = nameof(CheckVoucherTrade.CheckVoucherTradeUnpost))]
+        public Task<IActionResult> UnpostTugboatPayment(int id, CancellationToken cancellationToken)
+        {
+            return ChangeTugboatPaymentAsync(id, "Unpost", null, false, cancellationToken);
+        }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [Authorize(Policy = nameof(CheckVoucherTrade.CheckVoucherTradeCancel))]
+        public Task<IActionResult> CancelTugboatPayment(int id, string? reason, CancellationToken cancellationToken)
+        {
+            return ChangeTugboatPaymentAsync(id, "Cancel", reason, false, cancellationToken);
+        }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin")]
+        public Task<IActionResult> VoidTugboatPayment(int id, string? reason, CancellationToken cancellationToken)
+        {
+            return ChangeTugboatPaymentAsync(id, "Void", reason, false, cancellationToken);
         }
 
         public IActionResult Index(string? view)
@@ -1063,6 +1166,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [HttpGet]
         public async Task<IActionResult> Edit(int? id, CancellationToken cancellationToken)
         {
+            if (await _tugboatPayments.GetAsync((id ?? 0), cancellationToken) != null)
+            {
+                return BadRequest("AP Other Tugs drafts are corrected by cancel-and-recreate. Open the payment preview.");
+            }
+
             if (id == null)
             {
                 return NotFound();
@@ -1184,6 +1292,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(CheckVoucherTradeViewModel viewModel, IFormFile? file, CancellationToken cancellationToken)
         {
+            if (await _tugboatPayments.GetAsync(viewModel.CVId, cancellationToken) != null)
+            {
+                return BadRequest("AP Other Tugs drafts are corrected by cancel-and-recreate. Open the payment preview.");
+            }
+
 
             viewModel.PONo = (await _unitOfWork.FilpridePurchaseOrder
                     .GetAllAsync(p => !p.IsSubPo, cancellationToken))
@@ -1673,6 +1786,15 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 return NotFound();
             }
 
+            if (header.CvType == nameof(CVType.OtherTugs))
+            {
+                var paymentVoucher = await _tugboatPayments.GetAsync(id.Value, cancellationToken);
+                ViewData["PaymentLines"] = TugboatPaymentService.Lines(paymentVoucher!.TugboatPayment!);
+                await _unitOfWork.FilprideAuditTrail.AddAsync(new FilprideAuditTrail(GetUserFullName(), $"Preview AP Other Tugs voucher {header.CheckVoucherHeaderNo}", "Check Voucher"), cancellationToken);
+                await _unitOfWork.SaveAsync(cancellationToken);
+                return View("TugboatPayment", paymentVoucher);
+            }
+
             var details = await _dbContext.FilprideCheckVoucherDetails
                 .Where(cvd => cvd.CheckVoucherHeaderId == header.CheckVoucherHeaderId)
                 .ToListAsync(cancellationToken);
@@ -1730,6 +1852,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [Authorize(Policy = nameof(CheckVoucherTrade.CheckVoucherTradePreview))]
         public async Task<IActionResult> Printed(int id, int? supplierId, CancellationToken cancellationToken)
         {
+            if (await _tugboatPayments.GetAsync(id, cancellationToken) != null)
+            {
+                return BadRequest("Use the protected AP Other Tugs print action on its preview page.");
+            }
+
             var cv = await _unitOfWork.FilprideCheckVoucher
                 .GetAsync(x => x.CheckVoucherHeaderId == id, cancellationToken);
 
@@ -1766,6 +1893,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [Authorize(Policy = nameof(CheckVoucherTrade.CheckVoucherTradePost))]
         public async Task<IActionResult> Post(int id, int? supplierId, CancellationToken cancellationToken)
         {
+            if (await _tugboatPayments.GetAsync(id, cancellationToken) != null)
+            {
+                return BadRequest("Use the protected AP Other Tugs payment actions on its preview page.");
+            }
+
             var modelHeader = await _unitOfWork.FilprideCheckVoucher.GetAsync(cv => cv.CheckVoucherHeaderId == id, cancellationToken);
 
             if (modelHeader == null)
@@ -1897,6 +2029,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Cancel(int id, string? cancellationRemarks, CancellationToken cancellationToken)
         {
+            if (await _tugboatPayments.GetAsync(id, cancellationToken) != null)
+            {
+                return await ChangeTugboatPaymentAsync(id, "Cancel", cancellationRemarks, true, cancellationToken);
+            }
+
             var model = await _unitOfWork.FilprideCheckVoucher
                 .GetAsync(cv => cv.CheckVoucherHeaderId == id, cancellationToken);
 
@@ -1976,6 +2113,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Void(int id, CancellationToken cancellationToken)
         {
+            if (await _tugboatPayments.GetAsync(id, cancellationToken) != null)
+            {
+                return await ChangeTugboatPaymentAsync(id, "Void", "Voided by administrator", true, cancellationToken);
+            }
+
             var model = await _unitOfWork.FilprideCheckVoucher.GetAsync(cv => cv.CheckVoucherHeaderId == id, cancellationToken);
 
             if (model == null)
@@ -2061,6 +2203,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [Authorize(Policy = nameof(CheckVoucherTrade.CheckVoucherTradeUnpost))]
         public async Task<IActionResult> Unpost(int id, CancellationToken cancellationToken)
         {
+            if (await _tugboatPayments.GetAsync(id, cancellationToken) != null)
+            {
+                return BadRequest("Use the protected AP Other Tugs payment actions on its preview page.");
+            }
+
             var cvHeader = await _unitOfWork.FilprideCheckVoucher.GetAsync(cv => cv.CheckVoucherHeaderId == id, cancellationToken);
 
             if (cvHeader == null)
@@ -3596,6 +3743,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [HttpGet]
         public async Task<IActionResult> EditCommissionPayment(int? id, CancellationToken cancellationToken)
         {
+            if (await _tugboatPayments.GetAsync((id ?? 0), cancellationToken) != null)
+            {
+                return BadRequest("AP Other Tugs drafts are corrected by cancel-and-recreate. Open the payment preview.");
+            }
+
             if (id == null)
             {
                 return NotFound();
@@ -3699,6 +3851,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> EditCommissionPayment(CommissionPaymentViewModel viewModel, IFormFile? file, CancellationToken cancellationToken)
         {
+            if (await _tugboatPayments.GetAsync(viewModel.CvId, cancellationToken) != null)
+            {
+                return BadRequest("AP Other Tugs drafts are corrected by cancel-and-recreate. Open the payment preview.");
+            }
+
 
             viewModel.Suppliers = await _unitOfWork.GetFilprideCommissioneeListAsyncById(cancellationToken);
             viewModel.BankAccounts = await _unitOfWork.GetFilprideBankAccountListById(cancellationToken);
@@ -4065,6 +4222,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [HttpGet]
         public async Task<IActionResult> EditHaulerPayment(int? id, CancellationToken cancellationToken)
         {
+            if (await _tugboatPayments.GetAsync((id ?? 0), cancellationToken) != null)
+            {
+                return BadRequest("AP Other Tugs drafts are corrected by cancel-and-recreate. Open the payment preview.");
+            }
+
             if (id == null)
             {
                 return NotFound();
@@ -4168,6 +4330,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> EditHaulerPayment(HaulerPaymentViewModel viewModel, IFormFile? file, CancellationToken cancellationToken)
         {
+            if (await _tugboatPayments.GetAsync(viewModel.CvId, cancellationToken) != null)
+            {
+                return BadRequest("AP Other Tugs drafts are corrected by cancel-and-recreate. Open the payment preview.");
+            }
+
 
             viewModel.Suppliers = await _unitOfWork.GetFilprideHaulerListAsyncById(cancellationToken);
             viewModel.BankAccounts = await _unitOfWork.GetFilprideBankAccountListById(cancellationToken);

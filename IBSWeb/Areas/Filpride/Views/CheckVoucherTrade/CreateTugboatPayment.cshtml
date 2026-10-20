@@ -1,0 +1,53 @@
+@model TugboatPaymentViewModel
+@{
+    ViewData["Title"] = "AP Other Tugs payment";
+}
+<div class="container-fluid py-3">
+    <h1>AP Other Tugs payment</h1>
+    <p>Pay one confirmed provider bill in full. The owner supplies the payee and tax details.</p>
+    <div asp-validation-summary="All" class="text-danger" role="alert"></div>
+    <form asp-action="CreateTugboatPayment" method="get" class="card card-body mb-3">
+        <div class="row g-3">
+            <div class="col-md-5"><label for="selectOwnerId">Tugboat owner</label><select name="ownerId" id="selectOwnerId" class="form-select"><option value="0">Select owner</option>@foreach (var option in Model.Owners) { <option value="@option.Value" selected="@(option.Value == Model.OwnerId.ToString())">@option.Text</option> }</select></div>
+            <div class="col-md-5"><label for="selectChargeId">Confirmed provider bill</label><select name="chargeId" id="selectChargeId" class="form-select"><option value="0">Select confirmed provider bill</option>@foreach (var option in Model.Charges) { <option value="@option.Value" selected="@(option.Value == Model.ChargeId.ToString())">@option.Text</option> }</select></div>
+            <div class="col-md-2 align-self-end"><button type="submit" class="btn btn-secondary">Load selection</button></div>
+        </div>
+        <small>Select an owner and load its bills, then select a bill and load its payment details.</small>
+    </form>
+    @if (Model.Owner != null && Model.Charge != null)
+    {
+        <section class="card card-body mb-3" aria-label="Owner payment profile">
+            <h2 class="h5">@Model.Owner.TugboatOwnerName · @Model.Charge.ProviderReference</h2>
+            <p>@Model.Owner.Address · TIN @Model.Owner.Tin</p>
+            <p>@Model.Owner.VatType · @Model.Owner.TaxType · Withholding @((Model.Owner.WithholdingTaxPercent ?? 0).ToString("P2"))</p>
+            <dl class="row"><dt class="col-sm-3">Gross payable</dt><dd class="col-sm-9">@Model.Gross.ToString("N2")</dd><dt class="col-sm-3">Withholding</dt><dd class="col-sm-9">@Model.Withholding.ToString("N2")</dd><dt class="col-sm-3">Check amount</dt><dd class="col-sm-9">@Model.Net.ToString("N2")</dd></dl>
+            <p>All @Model.Charge.Lines.Count service allocations are included. Blank or unsupported owner profiles must be completed in MSAP before payment.</p>
+        </section>
+        <form asp-action="CreateTugboatPayment" method="post" enctype="multipart/form-data" class="card card-body">
+            <input asp-for="OwnerId" type="hidden" /><input asp-for="ChargeId" type="hidden" />
+            <div class="mb-3">
+                <label asp-for="LiabilityJournalId"></label><select asp-for="LiabilityJournalId" asp-items="Model.Journals" class="form-select"><option value="0">Select posted AP journal</option></select>
+                <p class="text-muted">Accounting must approve and post the gross AP liability first. Its payee must match the owner and its reference must match this provider bill. Withholding is applied on payment. An unavailable or mismatched liability blocks payment.</p>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4"><label asp-for="Date"></label><input asp-for="Date" type="date" class="form-control" /></div>
+                <div class="col-md-4"><label asp-for="Type">Document type</label><select asp-for="Type" class="form-select check-voucher-document-type"><option value="Documented">Documented</option><option value="Undocumented">Undocumented</option></select></div>
+                <div class="col-md-4"><label asp-for="BankId"></label><select asp-for="BankId" asp-items="Model.Banks" class="form-select"><option value="0">Select bank</option></select></div>
+                <div class="col-md-6"><label asp-for="CheckNo"></label><input asp-for="CheckNo" class="form-control" /></div>
+                <div class="col-md-6"><label asp-for="CheckDate"></label><input asp-for="CheckDate" type="date" class="form-control" /></div>
+                <div class="col-12"><label asp-for="Particulars"></label><textarea asp-for="Particulars" class="form-control"></textarea></div>
+            </div>
+            <partial name="_CheckVoucherDocumentation" for="Documentation" />
+            <label for="paymentFile">Supporting document · PDF / JPEG / PNG, up to 10 MB</label><input id="paymentFile" name="file" type="file" accept="application/pdf,image/png,image/jpeg" class="form-control mb-3" />
+            <p>Saving reserves the provider bill. Corrections use cancellation and a new voucher.</p>
+            <div><button type="submit" class="btn btn-primary">Create payment draft</button> <a asp-action="Index" class="btn btn-secondary">Back</a></div>
+        </form>
+    }
+    else
+    {
+        <a asp-action="Index" class="btn btn-secondary">Back</a>
+    }
+</div>
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

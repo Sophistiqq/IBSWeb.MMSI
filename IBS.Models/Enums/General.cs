@@ -97,7 +97,8 @@ namespace IBS.Models.Enums
         Payment,
         Supplier,
         Commission,
-        Hauler
+        Hauler,
+        OtherTugs
     }
 
     public enum ModuleType
@@ -150,6 +151,7 @@ namespace IBS.Models.Enums
         Customer = 1,
         Supplier = 2,
         BankAccount = 3,
-        Company = 4
+        Company = 4,
+        TugboatOwner = 5
     }
 }

@@ -65,6 +65,12 @@ if (args.Contains("--billing-integrity-database", StringComparer.Ordinal))
     return;
 }
 
+if (args.Contains("--tugboat-payment-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TugboatPaymentDatabaseCheck.RunAsync();
+    return;
+}
+
 if (args.Contains("--other-tug-progress-database", StringComparer.Ordinal))
 {
     await Checks.MSAP.OtherTugProgressDatabaseCheck.RunAsync();
@@ -160,6 +166,9 @@ builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
 });
 builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("MMSIConnection")));
 builder.Services.AddScoped<IBS.Utility.TugboatWorkspace>();
+builder.Services.AddScoped<IBS.Services.TugboatPaymentService>();
+builder.Services.AddScoped<IBS.Services.ICloudStorageService, IBS.Services.CloudStorageService>();
+builder.Services.AddScoped<IBS.Services.CheckVoucherDocumentationService>();
 builder.Services.AddScoped<IBS.Services.TugboatWorkspaceService>();
 builder.Services.AddDefaultIdentity<ApplicationUser>().AddRoles<IdentityRole>().AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddScoped<IBS.DataAccess.Repository.IRepository.IUnitOfWork, IBS.DataAccess.Repository.UnitOfWork>();

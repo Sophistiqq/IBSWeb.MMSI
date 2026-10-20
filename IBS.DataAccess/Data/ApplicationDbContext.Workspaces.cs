@@ -46,6 +46,8 @@ namespace IBS.DataAccess.Data
                 x => !WorkspaceTugboatId.HasValue || x.CheckVoucherHeader!.WorkspaceTugboatId == WorkspaceTugboatId);
             builder.Entity<FilprideJournalVoucherDetail>().HasQueryFilter(TugboatWorkspace.FilterName,
                 x => !WorkspaceTugboatId.HasValue || x.JournalVoucherHeader!.WorkspaceTugboatId == WorkspaceTugboatId);
+            builder.Entity<FilprideTugboatPayment>().HasQueryFilter(TugboatWorkspace.FilterName,
+                x => !WorkspaceTugboatId.HasValue || x.Voucher.WorkspaceTugboatId == WorkspaceTugboatId);
             builder.Entity<FilprideCVTradePayment>().HasQueryFilter(TugboatWorkspace.FilterName,
                 x => !WorkspaceTugboatId.HasValue || x.CV.WorkspaceTugboatId == WorkspaceTugboatId);
             builder.Entity<FilprideMultipleCheckVoucherPayment>().HasQueryFilter(TugboatWorkspace.FilterName,

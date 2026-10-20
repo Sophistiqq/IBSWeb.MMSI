@@ -83,6 +83,7 @@ builder.Services.AddControllersWithViews(options => options.Filters.Add<IBSWeb.W
 builder.Services.AddMsapModule(builder.Configuration);
 builder.Services.AddScoped<ProvisionalReceiptTaggingService>();
 builder.Services.AddScoped<CheckVoucherDocumentationService>();
+builder.Services.AddScoped<TugboatPaymentService>();
 builder.Services.AddOptions<BrandingOptions>()
     .Bind(builder.Configuration.GetSection(BrandingOptions.SectionName))
     .Validate(BrandingOptions.IsValid, "Branding configuration is incomplete.")

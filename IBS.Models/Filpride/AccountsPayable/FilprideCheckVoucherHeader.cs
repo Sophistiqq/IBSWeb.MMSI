@@ -12,6 +12,10 @@ namespace IBS.Models.Filpride.AccountsPayable
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int CheckVoucherHeaderId { get; set; }
 
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        public FilprideTugboatPayment? TugboatPayment { get; set; }
+
         [StringLength(13)]
         public string? CheckVoucherHeaderNo { get; set; }
 

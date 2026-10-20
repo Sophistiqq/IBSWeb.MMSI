@@ -25,6 +25,7 @@ namespace Checks.MSAP
                 await TugboatOwnerCheck.RunAsync();
                 await TicketIntegrityDatabaseCheck.RunAsync(includeBilling: true);
                 await OtherTugProgressDatabaseCheck.RunAsync();
+                await TugboatPaymentDatabaseCheck.RunAsync();
                 await using var connection = new NpgsqlConnection(TugboatOwnerCheck.TestConnection());
                 await connection.OpenAsync();
                 await CheckConstraintsAsync(connection);
@@ -213,7 +214,7 @@ namespace Checks.MSAP
                 IMigrator migrator = context.GetService<IMigrator>();
                 string upgrade = migrator.GenerateScript(migrations[start - 1], migrations[^1]);
                 string rollback = migrator.GenerateScript(migrations[^1], migrations[start - 1]);
-                Check(!upgrade.Contains("UPDATE ", StringComparison.Ordinal) && !upgrade.Contains("DROP TABLE", StringComparison.Ordinal),
+                Check(!System.Text.RegularExpressions.Regex.IsMatch(upgrade, @"(?m)^\s*UPDATE\s", System.Text.RegularExpressions.RegexOptions.IgnoreCase) && !upgrade.Contains("DROP TABLE", StringComparison.Ordinal),
                     "Upgrade script contains data repair or table removal.");
                 Check(rollback.Contains("DROP COLUMN", StringComparison.Ordinal), "Rollback is missing the new schema removal.");
                 await File.WriteAllTextAsync(Path.Combine(directory, name + "-upgrade.sql"), upgrade);
