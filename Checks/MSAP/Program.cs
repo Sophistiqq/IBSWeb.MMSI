@@ -58,6 +58,12 @@ if (args.Contains("--ticket-integrity-database", StringComparer.Ordinal))
     return;
 }
 
+if (args.Contains("--billing-integrity-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TicketIntegrityDatabaseCheck.RunAsync(includeBilling: true);
+    return;
+}
+
 if (args.Contains("--workspace-database", StringComparer.Ordinal))
 {
     await Checks.MSAP.TugboatWorkspaceDatabaseCheck.RunAsync();

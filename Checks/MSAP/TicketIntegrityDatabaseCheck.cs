@@ -20,7 +20,7 @@ namespace Checks.MSAP
 {
     internal static class TicketIntegrityDatabaseCheck
     {
-        public static async Task RunAsync()
+        public static async Task RunAsync(bool includeBilling = false)
         {
             string connection = TugboatOwnerCheck.TestConnection();
             await using var db = new MsapDbContext(new DbContextOptionsBuilder<MsapDbContext>()
@@ -79,7 +79,7 @@ namespace Checks.MSAP
             {
                 TugboatId = anotherTug.TugboatId, ServiceId = service.ServiceId,
                 TariffBasis = TariffChargeBasis.PerHour, BafMethod = BafCalculationMethod.PerHour,
-                ManualTariffRate = 0m, ManualBafRate = 0m
+                ManualTariffRate = 100m, ManualBafRate = 10m
             };
             schedule.ServiceEntries.AddRange([secondEntry, uploadEntry]);
             var roundingEntry = new VesselScheduleServiceEntry
@@ -206,6 +206,11 @@ namespace Checks.MSAP
                 }
             }
             Console.WriteLine("PASS: migration rollback/reapply, missing approval/rates, partial/backwards times, wrong linkage, approved zero rates, COS identity, persisted SBMA/rounding/report subsets, concurrent duplicate entry, edit/replacement upload rollback, and SQL constraints (isolated database).");
+            if (includeBilling)
+            {
+                await BillingIntegrityDatabaseCheck.RunAsync(db, shared, work, dispatch,
+                    parent.CustomerOrderSlipId, roundingEntry.VesselScheduleServiceEntryId);
+            }
 
             async Task<ServiceResult<int>> CreateConcurrentAsync(string suffix)
             {

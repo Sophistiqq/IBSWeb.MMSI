@@ -164,7 +164,7 @@ namespace IBS.Services.MSAP
             model.TerminalId = job.TerminalId;
             model.Terminal = job.Terminal;
             model.VoyageNumber = job.VoyageNumber;
-            model.COSNumber = job.COSNumber;
+            model.COSNumber = job.CustomerOrderSlipNumber;
             ApplyCustomerTaxSettings(model);
             model.Terms = (model.Principal?.Terms ?? customer.CustomerTerms) ?? "COD";
             model.DueDate = await unitOfWork.Terms.ComputeDueDateAsync(model.Terms, model.Date, cancellationToken);
@@ -426,10 +426,48 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Only billings with 'For Posting' status can be edited.");
                 }
 
-                var customer = await unitOfWork.Customer.GetAsync(c => c.CustomerId == model.CustomerId, cancellationToken);
-                if (customer == null)
+                if (model.Date == default)
                 {
-                    return ServiceResult.Failure("Customer not found.");
+                    return ServiceResult.Failure("Billing date is required.");
+                }
+                var customer = await unitOfWork.Customer.GetAsync(c => c.CustomerId == model.CustomerId, cancellationToken);
+                if (customer == null || !customer.IsActive || customer.Company != currentModel.Company)
+                {
+                    return ServiceResult.Failure("Customer is unavailable for this company.");
+                }
+
+                if (currentModel.CustomerOrderSlipId is not > 0
+                    || model.CustomerOrderSlipId.HasValue && model.CustomerOrderSlipId != currentModel.CustomerOrderSlipId)
+                {
+                    return ServiceResult.Failure("Billing must retain its original COS.");
+                }
+                var job = await unitOfWork.CustomerOrderSlip.GetCustomerOrderSlipWithDetailsAsync(currentModel.CustomerOrderSlipId.Value, cancellationToken);
+                if (job == null || job.CustomerId != customer.CustomerId)
+                {
+                    return ServiceResult.Failure("The customer must match the original COS.");
+                }
+                if (model.ToBillDispatchTickets != null)
+                {
+                    var selected = new HashSet<int>();
+                    foreach (string value in model.ToBillDispatchTickets)
+                    {
+                        if (!int.TryParse(value, out int id) || !selected.Add(id))
+                        {
+                            return ServiceResult.Failure("Select each COS ticket once.");
+                        }
+                    }
+                    if (!selected.SetEquals(job.DispatchTickets.Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted)
+                        .Select(t => t.DispatchTicketId)))
+                    {
+                        return ServiceResult.Failure("All COS tickets must stay together. Partial or mixed-COS billing is not allowed.");
+                    }
+                }
+                var principal = model.BilledTo == "PRINCIPAL"
+                    ? await unitOfWork.Principal.GetAsync(p => p.PrincipalId == model.PrincipalId && p.CustomerId == customer.CustomerId && p.IsActive, cancellationToken)
+                    : null;
+                if (model.BilledTo == "PRINCIPAL" && principal == null)
+                {
+                    return ServiceResult.Failure("Select an active principal belonging to the service customer.");
                 }
 
                 string? progressBlocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, currentModel.CustomerOrderSlipId, JobProgressCalculator.BillingStage, cancellationToken);
@@ -470,19 +508,19 @@ namespace IBS.Services.MSAP
                 currentModel.Customer = customer;
                 ApplyCustomerTaxSettings(currentModel);
                 currentModel.CustomerId = model.CustomerId;
-                currentModel.PrincipalId = model.PrincipalId;
-                currentModel.VoyageNumber = model.VoyageNumber;
-                currentModel.COSNumber = model.COSNumber;
+                currentModel.Principal = principal;
+                currentModel.PrincipalId = principal?.PrincipalId;
+                currentModel.IsPrincipal = principal != null;
+                currentModel.VoyageNumber = job.VoyageNumber;
+                currentModel.COSNumber = job.CustomerOrderSlipNumber;
                 currentModel.Date = model.Date;
+                currentModel.Terms = (principal?.Terms ?? customer.CustomerTerms) ?? "COD";
+                currentModel.DueDate = await unitOfWork.Terms.ComputeDueDateAsync(currentModel.Terms, model.Date, cancellationToken);
                 currentModel.Year = model.Date.Year;
-                currentModel.PortId = model.PortId;
-                currentModel.TerminalId = model.TerminalId;
-                currentModel.VesselId = model.VesselId;
-                currentModel.BilledTo = model.BilledTo;
-                if (model.CustomerOrderSlipId.HasValue)
-                {
-                    currentModel.CustomerOrderSlipId = model.CustomerOrderSlipId;
-                }
+                currentModel.PortId = job.PortId;
+                currentModel.TerminalId = job.TerminalId;
+                currentModel.VesselId = job.VesselId;
+                currentModel.BilledTo = principal != null ? "PRINCIPAL" : "LOCAL";
 
                 if (model.ToBillDispatchTickets != null)
                 {
@@ -659,7 +697,7 @@ namespace IBS.Services.MSAP
                     billing.ApprovedByUserId = null;
                     billing.ApprovedAt = null;
                     billing.UnpostedBy = username;
-                    billing.UnpostedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                    billing.UnpostedDate = DateTime.UtcNow;
                     billing.UnpostRemarks = remarks;
 
                     await unitOfWork.Billing.VoidSalesBookAsync(billing.MsapBillingId, username, remarks,
@@ -779,7 +817,7 @@ namespace IBS.Services.MSAP
                     PortId = customerOrderSlip.PortId,
                     TerminalId = customerOrderSlip.TerminalId,
                     VoyageNumber = customerOrderSlip.VoyageNumber,
-                    COSNumber = customerOrderSlip.COSNumber
+                    COSNumber = customerOrderSlip.CustomerOrderSlipNumber
                 },
                 Tickets = tickets
             });
@@ -927,7 +965,7 @@ namespace IBS.Services.MSAP
 
         private async Task<ServiceResult?> GuardClosedPeriodAsync(DateOnly date, CancellationToken ct)
         {
-            if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(date.Year, date.Month, ct))
+            if ((await unitOfWork.PostedPeriod.GetByYearMonthAsync(date.Year, date.Month, ct))?.IsClosed == true)
             {
                 return ServiceResult.Failure($"Cannot modify: {date:MMMM yyyy} is closed.");
             }
