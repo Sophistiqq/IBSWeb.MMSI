@@ -6,6 +6,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
 {
     public interface IDispatchTicketRepository : IRepository<DispatchTicket>
     {
+        Task<List<DispatchTicket>> GetOtherTugChargeTicketsAsync(int cosId, CancellationToken ct);
+
         Task SaveAsync(CancellationToken cancellationToken);
 
         Task<DispatchTicket?> GetDispatchTicketWithDetailsAsync(int id, CancellationToken cancellationToken = default);

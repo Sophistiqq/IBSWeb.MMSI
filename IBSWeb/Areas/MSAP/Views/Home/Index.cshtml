@@ -4,7 +4,8 @@
     ViewData["IsFullWidth"] = Model.ShowDashboard;
     var day = Model.UpdatedAt.Date;
     var dateValue = day.ToString("yyyy-MM-dd");
-    bool hasReviews = Model.CanApproveSchedule || Model.CanApproveRates || Model.CanApproveBilling;
+    bool hasReviews = Model.CanApproveSchedule || Model.CanApproveRates || Model.CanApproveBilling
+        || Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges;
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/modern-dashboard.css" asp-append-version="true" />
@@ -61,7 +62,23 @@ else
             }
             else if (hasReviews)
             {
-                <section class="dashboard-approvals" aria-label="Approvals across all dates">
+                <section class="dashboard-approvals" aria-label="Follow-ups and approvals across all dates">
+                    @if (Model.CanManageOtherTugCharges)
+                    {
+                        <article class="ui-panel dashboard-metric @(Model.MissingOtherTugTicketCount > 0 ? "ui-attention" : "")">
+                            <h2 class="ui-section-title">AP Other Tugs · Missing inputs</h2><strong>@Model.MissingOtherTugTicketCount.ToString("N0")</strong>
+                            <p class="ui-caption ui-muted">Actual tickets needing provider costs · All dates</p>
+                            <a href="#missing-provider-costs" class="modern-btn-secondary ui-button">Record AP Other Tugs</a>
+                        </article>
+                    }
+                    @if (Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges)
+                    {
+                        <article class="ui-panel dashboard-metric @(Model.OtherTugChargeReviewCount > 0 ? "ui-attention" : "")">
+                            <h2 class="ui-section-title">AP Other Tugs · For confirmation</h2><strong>@Model.OtherTugChargeReviewCount.ToString("N0")</strong>
+                            <p class="ui-caption ui-muted">Provider bills awaiting confirmation · All dates</p>
+                            <a href="#provider-charge-reviews" class="modern-btn-secondary ui-button">@(Model.CanConfirmOtherTugCharges ? "Review AP Other Tugs" : "Open AP Other Tugs drafts")</a>
+                        </article>
+                    }
                     @if (Model.CanApproveSchedule)
                     {
                         <article class="ui-panel dashboard-metric @(Model.ScheduleReviews > 0 ? "ui-attention" : "")">
@@ -303,11 +320,11 @@ else
             @if ((Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges) && Model.DataError == null)
             {
                 <section class="ui-panel ui-stack" aria-labelledby="provider-heading">
-                    <h2 id="provider-heading" class="ui-section-title">Other Tug Charges</h2>
+                    <h2 id="provider-heading" class="ui-section-title">AP Other Tugs</h2>
                     <p class="ui-caption ui-muted">Provider costs are recorded and confirmed here. Payments remain a separate IBS responsibility.</p>
                     @if (Model.CanManageOtherTugCharges)
                     {
-                        <div class="ui-stack">
+                        <div class="ui-stack" id="missing-provider-costs">
                             <h3 id="missing-provider-heading" class="ui-label">Missing provider costs · @Model.MissingOtherTugTicketCount tickets</h3>
                             <div class="dashboard-table-wrap">
                                 <table class="dashboard-table" aria-labelledby="missing-provider-heading">
@@ -320,7 +337,7 @@ else
                                             <td>@ticket.DispatchNumber</td>
                                             <td>@ticket.Tugboat.TugboatName</td>
                                             <td>@ticket.DateLeft?.ToString("dd MMM yyyy")</td>
-                                            <td><a asp-controller="OtherTugCharge" asp-action="Editor" asp-route-customerOrderSlipId="@ticket.CustomerOrderSlipId" asp-route-ticketId="@ticket.DispatchTicketId">Record charges</a></td>
+                                            <td><a asp-controller="OtherTugCharge" asp-action="Editor" asp-route-customerOrderSlipId="@ticket.CustomerOrderSlipId" asp-route-id="" asp-route-ticketId="@ticket.DispatchTicketId">Record charges</a></td>
                                         </tr>
                                     }
                                     @if (Model.MissingOtherTugTicketCount == 0) { <tr><td colspan="5" class="dashboard-empty">No actual tickets missing provider cost entries.</td></tr> }
@@ -330,7 +347,7 @@ else
                             <p class="ui-caption ui-muted">Showing @Model.MissingOtherTugTickets.Count of @Model.MissingOtherTugTicketCount tickets. Missing costs do not block operational ticket recording or customer billing.</p>
                         </div>
                     }
-                    <div class="ui-stack">
+                    <div class="ui-stack" id="provider-charge-reviews">
                         <h3 id="provider-review-heading" class="ui-label">@(Model.CanConfirmOtherTugCharges ? "Awaiting confirmation" : "Draft provider charges") · @Model.OtherTugChargeReviewCount documents</h3>
                         <div class="dashboard-table-wrap">
                             <table class="dashboard-table" aria-labelledby="provider-review-heading">

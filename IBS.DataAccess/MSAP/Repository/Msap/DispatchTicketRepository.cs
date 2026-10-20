@@ -5,6 +5,7 @@ using IBS.DataAccess.MSAP.Repository.Msap.IRepository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.ViewModels;
 using IBS.Utility.MSAP.Constants;
+using IBS.Utility.MSAP.Helpers;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +15,30 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
         : Repository<DispatchTicket>(db), IDispatchTicketRepository
     {
         private readonly MsapDbContext _db = db;
+
+        public static IQueryable<DispatchTicket> QueryOtherTugChargeTickets(MsapDbContext db)
+        {
+            DateTime now = DateTimeHelper.GetCurrentPhilippineTime();
+            DateOnly today = DateOnly.FromDateTime(now);
+            TimeOnly currentTime = TimeOnly.FromDateTime(now);
+            return db.MsapDispatchTickets.Where(t => t.Customer.Company == MsapConstants.Company_MMSI
+                && !t.Tugboat.IsCompanyOwned && t.Tugboat.TugboatOwnerId != null && t.VesselScheduleServiceEntryId != null
+                && t.ExpectedServiceEntry!.CancelledAt == null
+                && t.CustomerOrderSlipId != null && (t.CustomerOrderSlip!.Status == MsapConstants.CustomerOrderSlipStatus.Open
+                    || t.CustomerOrderSlip.Status == MsapConstants.CustomerOrderSlipStatus.Closed)
+                && t.Status != MsapConstants.DispatchTicketStatus.Deleted && t.DispatchNumber != "" && t.DateLeft != null && t.DateArrived != null
+                && t.TimeLeft != null && t.TimeArrived != null
+                && (t.DateArrived < today || t.DateArrived == today && t.TimeArrived <= currentTime)
+                && (t.DateArrived > t.DateLeft || t.DateArrived == t.DateLeft && t.TimeArrived > t.TimeLeft));
+        }
+
+        public async Task<List<DispatchTicket>> GetOtherTugChargeTicketsAsync(int cosId, CancellationToken ct)
+        {
+            return await QueryOtherTugChargeTickets(_db).AsNoTracking()
+                .Where(t => t.CustomerOrderSlipId == cosId)
+                .Include(t => t.OtherTugChargeLine).ThenInclude(l => l!.Charge)
+                .OrderBy(t => t.DispatchTicketId).ToListAsync(ct);
+        }
 
         public async Task SaveAsync(CancellationToken cancellationToken)
         {

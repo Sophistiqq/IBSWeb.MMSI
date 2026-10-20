@@ -30,7 +30,7 @@
                         }
                         else if (canManage && ticket.Tugboat.TugboatOwnerId.HasValue)
                         {
-                            <a asp-controller="OtherTugCharge" asp-action="Editor" asp-route-ticketId="@ticket.DispatchTicketId" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="cos-ticket-link">Record provider charge</a>
+                            <a asp-controller="OtherTugCharge" asp-action="Editor" asp-route-id="" asp-route-ticketId="@ticket.DispatchTicketId" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="cos-ticket-link">Record provider charge</a>
                         }
                         else { <span class="ui-caption ui-muted">@(ticket.Tugboat.TugboatOwnerId.HasValue ? "Finance follow-up" : "Assign the tugboat provider in master files")</span> }
                     </td>

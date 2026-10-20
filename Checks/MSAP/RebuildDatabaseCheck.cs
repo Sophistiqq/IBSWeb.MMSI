@@ -24,6 +24,7 @@ namespace Checks.MSAP
                 Environment.SetEnvironmentVariable("IBS_REBUILD_TEST_DATABASE", database);
                 await TugboatOwnerCheck.RunAsync();
                 await TicketIntegrityDatabaseCheck.RunAsync(includeBilling: true);
+                await OtherTugProgressDatabaseCheck.RunAsync();
                 await using var connection = new NpgsqlConnection(TugboatOwnerCheck.TestConnection());
                 await connection.OpenAsync();
                 await CheckConstraintsAsync(connection);
