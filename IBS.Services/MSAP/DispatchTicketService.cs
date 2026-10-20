@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
@@ -35,7 +36,7 @@ namespace IBS.Services.MSAP
                     viewModel.PortId = customerOrderSlip.PortId;
                     viewModel.TerminalId = customerOrderSlip.TerminalId;
                     viewModel.VoyageNumber = customerOrderSlip.VoyageNumber;
-                    viewModel.COSNumber = customerOrderSlip.COSNumber;
+                    viewModel.COSNumber = customerOrderSlip.CustomerOrderSlipNumber;
                     viewModel.Date = viewModel.VesselScheduleServiceEntryId.HasValue
                         ? viewModel.Date == default ? DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()) : viewModel.Date
                         : customerOrderSlip.Date;
@@ -63,11 +64,18 @@ namespace IBS.Services.MSAP
 
         public async Task<ServiceResult<int>> CreateDispatchTicketAsync(DispatchTicketViewModel viewModel, IFormFile? imageFile, IFormFile? videoFile, string username, CancellationToken cancellationToken)
         {
+            DispatchTicket? created = null;
             try
             {
                 if (!viewModel.CustomerOrderSlipId.HasValue)
                 {
                     return ServiceResult<int>.Failure("Dispatch tickets must be created under a COS.");
+                }
+
+                string? readinessError = await ValidateReadyAsync(viewModel, cancellationToken);
+                if (readinessError != null)
+                {
+                    return ServiceResult<int>.Failure(readinessError);
                 }
 
                 if (!await IsCustomerOrderSlipEditableAsync(viewModel.CustomerOrderSlipId, cancellationToken))
@@ -106,22 +114,7 @@ namespace IBS.Services.MSAP
                 }
 
                 var model = viewModel.ToEntity();
-
-                if (imageFile is { Length: > 0 })
-                {
-                    var ext = Path.GetExtension(imageFile.FileName);
-                    var name = Path.GetFileNameWithoutExtension(imageFile.FileName);
-                    model.ImageName = $"{name}-img-{DateTimeHelper.GetCurrentPhilippineTime():yyyyMMddHHmmss}{ext}";
-                    model.ImageSavedUrl = await cloudStorageService.UploadFileAsync(imageFile, model.ImageName);
-                }
-
-                if (videoFile is { Length: > 0 })
-                {
-                    var ext = Path.GetExtension(videoFile.FileName);
-                    var name = Path.GetFileNameWithoutExtension(videoFile.FileName);
-                    model.VideoName = $"{name}-vid-{DateTimeHelper.GetCurrentPhilippineTime():yyyyMMddHHmmss}{ext}";
-                    model.VideoSavedUrl = await cloudStorageService.UploadFileAsync(videoFile, model.VideoName);
-                }
+                created = model;
 
                 model.CreatedBy = username;
                 model.CreatedDate = DateTimeHelper.GetCurrentPhilippineTime();
@@ -137,7 +130,7 @@ namespace IBS.Services.MSAP
                         model.PortId = customerOrderSlip.PortId;
                         model.TerminalId = customerOrderSlip.TerminalId;
                         model.VoyageNumber = customerOrderSlip.VoyageNumber;
-                        model.COSNumber = customerOrderSlip.COSNumber;
+                        model.COSNumber = customerOrderSlip.CustomerOrderSlipNumber;
                         model.Date = model.VesselScheduleServiceEntryId.HasValue ? viewModel.Date : customerOrderSlip.Date;
                     }
                 }
@@ -201,12 +194,17 @@ namespace IBS.Services.MSAP
                     {
                         throw new InvalidOperationException("Choose a tugboat assigned to this vessel schedule.");
                     }
+                    readinessError = await ValidateReadyAsync(viewModel, cancellationToken);
+                    if (readinessError != null)
+                    {
+                        throw new InvalidOperationException(readinessError);
+                    }
                     model.CustomerId = parent.CustomerId;
                     model.VesselId = parent.VesselId;
                     model.PortId = parent.PortId;
                     model.TerminalId = parent.TerminalId;
                     model.VoyageNumber = parent.VoyageNumber;
-                    model.COSNumber = parent.COSNumber;
+                    model.COSNumber = parent.CustomerOrderSlipNumber;
                     model.Date = model.VesselScheduleServiceEntryId.HasValue ? viewModel.Date : parent.Date;
                     if (model.VesselScheduleServiceEntryId.HasValue)
                     {
@@ -220,8 +218,30 @@ namespace IBS.Services.MSAP
                     {
                         chargeBlocker = await ScheduledTicketCharges.ApplyAsync(unitOfWork, model, booking, username, cancellationToken);
                     }
+                    if (chargeBlocker != null)
+                    {
+                        throw new InvalidOperationException(chargeBlocker);
+                    }
+                    if (imageFile is { Length: > 0 })
+                    {
+                        var ext = Path.GetExtension(imageFile.FileName);
+                        var name = Path.GetFileNameWithoutExtension(imageFile.FileName);
+                        model.ImageName = $"{name}-img-{Guid.NewGuid():N}{ext}";
+                        model.ImageSavedUrl = await cloudStorageService.UploadFileAsync(imageFile, model.ImageName);
+                    }
+
+                    if (videoFile is { Length: > 0 })
+                    {
+                        var ext = Path.GetExtension(videoFile.FileName);
+                        var name = Path.GetFileNameWithoutExtension(videoFile.FileName);
+                        model.VideoName = $"{name}-vid-{Guid.NewGuid():N}{ext}";
+                        model.VideoSavedUrl = await cloudStorageService.UploadFileAsync(videoFile, model.VideoName);
+                    }
+
+
                     await unitOfWork.DispatchTicket.AddAsync(model, cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
+                    await RefreshSbmaAsync(model, cancellationToken);
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Create dispatch ticket #{model.DispatchNumber}{(chargeBlocker == null ? "" : $"; {chargeBlocker}")}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
                 }, cancellationToken);
@@ -230,6 +250,7 @@ namespace IBS.Services.MSAP
             }
             catch (Exception ex)
             {
+                await DeleteFilesAsync([created?.ImageName, created?.VideoName]);
                 logger.LogError(ex, "Failed to create dispatch ticket");
                 return ServiceResult<int>.Failure($"Failed to create dispatch ticket: {ExceptionHelper.GetErrorMessage(ex)}");
             }
@@ -327,6 +348,11 @@ namespace IBS.Services.MSAP
                     decimal oldNet = ticket.TotalNetRevenue;
                     decimal oldBaf = ticket.BAFRate;
                     var blocker = ScheduledTicketCharges.Apply(ticket, schedule, entry, preview.Tariff, preview.Baf);
+                    if (blocker != null)
+                    {
+                        throw new InvalidOperationException(blocker);
+                    }
+                    await RefreshSbmaAsync(ticket, ct);
                     ticket.TariffBy = username;
                     ticket.TariffDate = DateTimeHelper.GetCurrentPhilippineTime();
                     ticket.EditedBy = username;
@@ -346,12 +372,22 @@ namespace IBS.Services.MSAP
 
         public async Task<ServiceResult> UpdateDispatchTicketAsync(DispatchTicketViewModel viewModel, IFormFile? imageFile, IFormFile? videoFile, string username, CancellationToken cancellationToken)
         {
+            DispatchTicket? ticket = null;
+            string? originalImage = null;
+            string? originalVideo = null;
+            bool committed = false;
             try
             {
-                var ticket = await unitOfWork.DispatchTicket.GetAsync(t => t.DispatchTicketId == viewModel.DispatchTicketId, cancellationToken);
+                ticket = await unitOfWork.DispatchTicket.GetAsync(t => t.DispatchTicketId == viewModel.DispatchTicketId, cancellationToken);
+                originalImage = ticket?.ImageName;
+                originalVideo = ticket?.VideoName;
                 if (ticket?.VesselScheduleServiceEntryId == null)
                 {
-                    return await UpdateDispatchTicketCoreAsync(viewModel, imageFile, videoFile, username, cancellationToken);
+                    return ServiceResult.Failure("Link this ticket to an approved COS service before editing.");
+                }
+                if (viewModel.VesselScheduleServiceEntryId != ticket.VesselScheduleServiceEntryId)
+                {
+                    return ServiceResult.Failure("The ticket must retain its original COS service link.");
                 }
                 var result = ServiceResult.Failure("An open COS and active schedule are required before editing this ticket.");
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
@@ -369,13 +405,32 @@ namespace IBS.Services.MSAP
                         return;
                     }
                     result = await UpdateDispatchTicketCoreAsync(viewModel, imageFile, videoFile, username, cancellationToken);
+                    if (!result.IsSuccess)
+                    {
+                        throw new InvalidOperationException(result.Message);
+                    }
                 }, cancellationToken);
+                committed = result.IsSuccess;
                 return result;
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ServiceResult.Failure(ex.Message);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to update expected service ticket {Id}", viewModel.DispatchTicketId);
                 return ServiceResult.Failure("Failed to update the ticket. Refresh the COS and try again.");
+            }
+            finally
+            {
+                if (ticket != null)
+                {
+                    await DeleteFilesAsync([
+                        ticket.ImageName != originalImage ? committed ? originalImage : ticket.ImageName : null,
+                        ticket.VideoName != originalVideo ? committed ? originalVideo : ticket.VideoName : null
+                    ]);
+                }
             }
         }
 
@@ -383,6 +438,11 @@ namespace IBS.Services.MSAP
         {
             try
             {
+                string? readinessError = await ValidateReadyAsync(viewModel, cancellationToken);
+                if (readinessError != null)
+                {
+                    return ServiceResult.Failure(readinessError);
+                }
                 if (!await IsTicketCustomerOrderSlipEditableAsync(viewModel.DispatchTicketId!.Value, cancellationToken))
                 {
                     return ServiceResult.Failure("Cannot edit ticket — parent COS is cancelled or closed.");
@@ -430,35 +490,6 @@ namespace IBS.Services.MSAP
                     {
                         changes.Add($"{name}: '{oldVal}' -> '{newVal}'");
                     }
-                }
-
-                // File management
-                if (imageFile != null)
-                {
-                    if (!string.IsNullOrEmpty(currentModel.ImageName))
-                    {
-                        await cloudStorageService.DeleteFileAsync(currentModel.ImageName);
-                    }
-
-                    var ext = Path.GetExtension(imageFile.FileName);
-                    var name = Path.GetFileNameWithoutExtension(imageFile.FileName);
-                    currentModel.ImageName = $"{name}-img-{DateTimeHelper.GetCurrentPhilippineTime():yyyyMMddHHmmss}{ext}";
-                    currentModel.ImageSavedUrl = await cloudStorageService.UploadFileAsync(imageFile, currentModel.ImageName);
-                    changes.Add("Image updated");
-                }
-
-                if (videoFile != null)
-                {
-                    if (!string.IsNullOrEmpty(currentModel.VideoName))
-                    {
-                        await cloudStorageService.DeleteFileAsync(currentModel.VideoName);
-                    }
-
-                    var ext = Path.GetExtension(videoFile.FileName);
-                    var name = Path.GetFileNameWithoutExtension(videoFile.FileName);
-                    currentModel.VideoName = $"{name}-vid-{DateTimeHelper.GetCurrentPhilippineTime():yyyyMMddHHmmss}{ext}";
-                    currentModel.VideoSavedUrl = await cloudStorageService.UploadFileAsync(videoFile, currentModel.VideoName);
-                    changes.Add("Video updated");
                 }
 
                 // Date validation and total hours
@@ -520,7 +551,7 @@ namespace IBS.Services.MSAP
                         - currentModel.DateLeft!.Value.ToDateTime(currentModel.TimeLeft!.Value);
                     currentModel.RawDurationMinutes = (int)duration.TotalMinutes;
                     currentModel.RawDurationHours = (decimal)duration.TotalHours;
-                    currentModel.COSNumber = (await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == currentModel.CustomerOrderSlipId, cancellationToken))!.COSNumber;
+                    currentModel.COSNumber = (await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == currentModel.CustomerOrderSlipId, cancellationToken))!.CustomerOrderSlipNumber;
                     currentModel.Date = viewModel.Date;
                 }
 
@@ -569,7 +600,31 @@ namespace IBS.Services.MSAP
                         return ServiceResult.Failure("The linked schedule is unavailable.");
                     }
                     var chargeBlocker = await ScheduledTicketCharges.ApplyAsync(unitOfWork, currentModel, schedule, username, cancellationToken);
-                    changes.Add(chargeBlocker ?? "Charges recalculated from approved schedule terms and service-date rates");
+                    if (chargeBlocker != null)
+                    {
+                        return ServiceResult.Failure(chargeBlocker);
+                    }
+                    changes.Add("Charges recalculated from approved schedule terms and service-date rates");
+                }
+
+                await RefreshSbmaAsync(currentModel, cancellationToken);
+                // File management
+                if (imageFile != null)
+                {
+                    var ext = Path.GetExtension(imageFile.FileName);
+                    var name = Path.GetFileNameWithoutExtension(imageFile.FileName);
+                    currentModel.ImageName = $"{name}-img-{Guid.NewGuid():N}{ext}";
+                    currentModel.ImageSavedUrl = await cloudStorageService.UploadFileAsync(imageFile, currentModel.ImageName);
+                    changes.Add("Image updated");
+                }
+
+                if (videoFile != null)
+                {
+                    var ext = Path.GetExtension(videoFile.FileName);
+                    var name = Path.GetFileNameWithoutExtension(videoFile.FileName);
+                    currentModel.VideoName = $"{name}-vid-{Guid.NewGuid():N}{ext}";
+                    currentModel.VideoSavedUrl = await cloudStorageService.UploadFileAsync(videoFile, currentModel.VideoName);
+                    changes.Add("Video updated");
                 }
 
                 var auditMessage = changes.Any()
@@ -1096,6 +1151,7 @@ namespace IBS.Services.MSAP
                 }
 
                 model.Status = MsapConstants.DispatchTicketStatus.Deleted;
+                await RefreshSbmaAsync(model, cancellationToken);
                 model.EditedBy = username;
                 model.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
@@ -1137,19 +1193,50 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Ticket is not in a deleted state.");
                 }
 
+                var restoredInput = new DispatchTicketViewModel();
+                restoredInput.FromEntity(model);
+                string? readinessError = await ValidateReadyAsync(restoredInput, cancellationToken);
+                if (readinessError != null)
+                {
+                    return ServiceResult.Failure(readinessError);
+                }
+
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
                     if (model.CustomerOrderSlipId.HasValue)
                     {
-                        var parent = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(model.CustomerOrderSlipId.Value, cancellationToken);
                         var booking = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == model.CustomerOrderSlipId, cancellationToken);
+                        if (booking != null)
+                        {
+                            booking = await unitOfWork.VesselSchedule.GetForUpdateAsync(booking.VesselScheduleId, cancellationToken);
+                        }
+                        var parent = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(model.CustomerOrderSlipId.Value, cancellationToken);
                         if (parent?.Status != MsapConstants.CustomerOrderSlipStatus.Open ||
                             booking?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
                         {
                             throw new InvalidOperationException("Cannot restore a ticket under a closed, cancelled or operationally completed booking.");
                         }
                     }
+                    readinessError = await ValidateReadyAsync(restoredInput, cancellationToken);
+                    if (readinessError != null)
+                    {
+                        throw new InvalidOperationException(readinessError);
+                    }
                     model.Status = MsapConstants.DispatchTicketStatus.ForTariff;
+                    model.COSNumber = restoredInput.COSNumber;
+
+                    var readyBooking = await unitOfWork.VesselSchedule.GetAsync(x => x.CustomerOrderSlipId == model.CustomerOrderSlipId, cancellationToken);
+                    var readySchedule = readyBooking == null ? null : await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(readyBooking.VesselScheduleId, cancellationToken);
+                    if (readySchedule == null)
+                    {
+                        throw new InvalidOperationException("The approved schedule is unavailable.");
+                    }
+                    string? chargeError = await ScheduledTicketCharges.ApplyAsync(unitOfWork, model, readySchedule, username, cancellationToken);
+                    if (chargeError != null)
+                    {
+                        throw new InvalidOperationException(chargeError);
+                    }
+                    await RefreshSbmaAsync(model, cancellationToken);
 
                     model.EditedBy = username;
                     model.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
@@ -1355,6 +1442,77 @@ namespace IBS.Services.MSAP
             };
         }
 
+        private async Task<string?> ValidateReadyAsync(DispatchTicketViewModel model, CancellationToken ct)
+        {
+            var results = new List<ValidationResult>();
+            if (!Validator.TryValidateObject(model, new ValidationContext(model), results, true))
+            {
+                return results[0].ErrorMessage;
+            }
+            string? error = await ValidateExpectedActualAsync(model, ct);
+            if (error != null)
+            {
+                return error;
+            }
+
+            var parent = await unitOfWork.CustomerOrderSlip.GetAsync(x => x.CustomerOrderSlipId == model.CustomerOrderSlipId, ct);
+            var booking = await unitOfWork.VesselSchedule.GetAsync(x => x.CustomerOrderSlipId == model.CustomerOrderSlipId, ct);
+            var schedule = booking == null ? null : await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(booking.VesselScheduleId, ct);
+            var entry = schedule?.ServiceEntries.SingleOrDefault(x => x.VesselScheduleServiceEntryId == model.VesselScheduleServiceEntryId);
+            if (parent == null || schedule == null || entry == null)
+            {
+                return "Select an approved COS service before saving its ticket.";
+            }
+
+            model.CustomerId = parent.CustomerId;
+            model.VesselId = parent.VesselId;
+            model.PortId = parent.PortId;
+            model.TerminalId = parent.TerminalId;
+            model.VoyageNumber = parent.VoyageNumber;
+            model.COSNumber = parent.CustomerOrderSlipNumber;
+            var preview = await ScheduledTicketCharges.PreviewAsync(unitOfWork, model.ToEntity(), schedule, ct);
+            return ScheduledTicketCharges.GetBlocker(preview.Ticket, schedule, entry, preview.Tariff, preview.Baf);
+        }
+
+        private async Task RefreshSbmaAsync(DispatchTicket ticket, CancellationToken ct)
+        {
+            var schedule = await unitOfWork.VesselSchedule.GetAsync(x => x.CustomerOrderSlipId == ticket.CustomerOrderSlipId, ct);
+            List<DispatchTicket> siblings = (await unitOfWork.DispatchTicket.GetAllAsync(x => x.CustomerOrderSlipId == ticket.CustomerOrderSlipId, ct)).ToList();
+            Dictionary<int, decimal> amounts = SbmaShareCalculator.Allocate(
+                siblings.Where(x => x.Status != MsapConstants.DispatchTicketStatus.Deleted), schedule?.SbmaEnabled == true);
+            foreach (DispatchTicket sibling in siblings)
+            {
+                decimal amount = amounts.GetValueOrDefault(sibling.DispatchTicketId);
+                if (amount == sibling.SbmaShareAmount)
+                {
+                    continue;
+                }
+                if (sibling.Status == MsapConstants.DispatchTicketStatus.Billed
+                    || await GuardClosedPeriodAsync(sibling.Date, ct) != null
+                    || sibling.DateLeft.HasValue && await GuardClosedPeriodAsync(sibling.DateLeft.Value, ct) != null
+                    || sibling.DateArrived.HasValue && await GuardClosedPeriodAsync(sibling.DateArrived.Value, ct) != null)
+                {
+                    throw new InvalidOperationException("SBMA rounding would change a billed or closed-period ticket.");
+                }
+                sibling.SbmaShareAmount = amount;
+            }
+        }
+
+        private async Task DeleteFilesAsync(IEnumerable<string?> names)
+        {
+            foreach (string name in names.Where(x => !string.IsNullOrEmpty(x)).Cast<string>())
+            {
+                try
+                {
+                    await cloudStorageService.DeleteFileAsync(name);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Could not remove dispatch attachment {FileName}", name);
+                }
+            }
+        }
+
         private async Task<string?> ValidateExpectedActualAsync(DispatchTicketViewModel model, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(model.DispatchNumber) || model.DispatchNumber.Trim().Length > 20
@@ -1372,17 +1530,18 @@ namespace IBS.Services.MSAP
             {
                 return "Choose a valid tug master for the actual service.";
             }
-            if (model.Date == default)
+            if (model.Date == default || model.Date > DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()))
             {
-                return "Enter the actual ticket date.";
+                return "Enter a valid actual ticket date that is not in the future.";
             }
-            return (await GuardClosedPeriodAsync(model.DateLeft.Value, ct))?.Message
+            return (await GuardClosedPeriodAsync(model.DateArrived.Value, ct))?.Message
+                ?? (await GuardClosedPeriodAsync(model.DateLeft.Value, ct))?.Message
                 ?? (await GuardClosedPeriodAsync(model.Date, ct))?.Message;
         }
 
         private async Task<ServiceResult?> GuardClosedPeriodAsync(DateOnly date, CancellationToken ct)
         {
-            if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(date.Year, date.Month, ct))
+            if ((await unitOfWork.PostedPeriod.GetByYearMonthAsync(date.Year, date.Month, ct))?.IsClosed == true)
             {
                 return ServiceResult.Failure($"Cannot modify: {date:MMMM yyyy} is closed.");
             }

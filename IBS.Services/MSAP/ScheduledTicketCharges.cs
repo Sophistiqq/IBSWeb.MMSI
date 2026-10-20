@@ -155,7 +155,8 @@ namespace IBS.Services.MSAP
             {
                 return "The ticket does not match its approved service requirement.";
             }
-            if (schedule.ApprovedRevision != schedule.Revision || schedule.Status == MsapConstants.VesselScheduleStatus.Tentative)
+            if (schedule.ApprovedRevision != schedule.Revision
+                || schedule.Status is MsapConstants.VesselScheduleStatus.Tentative or MsapConstants.VesselScheduleStatus.Cancelled)
             {
                 return "The current COS revision requires approval.";
             }
@@ -190,7 +191,7 @@ namespace IBS.Services.MSAP
             if (!entry.ManualBafRate.HasValue && (bafRate == null || !bafRate.ApprovedAt.HasValue
                 || bafRate.AsOfDate < BafCycleStart(ticket.DateLeft.Value)))
             {
-                return $"BAF coverage is awaiting approval for the week beginning {BafCycleStart(ticket.DateLeft.Value):dd MMM yyyy}. The actual ticket is retained; approve the applicable BAF and recalculate charges before billing.";
+                return $"Approve BAF coverage for the week beginning {BafCycleStart(ticket.DateLeft.Value):dd MMM yyyy} before saving this ticket.";
             }
             var discount = schedule.SkipCosDiscount ? 0m : schedule.CosDiscountPercent.GetValueOrDefault();
             return discount is < 0 or > 100 ? "The approved COS discount must be between 0% and 100%." : null;

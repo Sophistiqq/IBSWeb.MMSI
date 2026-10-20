@@ -40,6 +40,12 @@ if (args.Contains("--tugboat-owner-database", StringComparer.Ordinal))
     return;
 }
 
+if (args.Contains("--ticket-integrity-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TicketIntegrityDatabaseCheck.RunAsync();
+    return;
+}
+
 if (args.Contains("--workspace-database", StringComparer.Ordinal))
 {
     await Checks.MSAP.TugboatWorkspaceDatabaseCheck.RunAsync();

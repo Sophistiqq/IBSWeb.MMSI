@@ -318,7 +318,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 // Includes billed records by billing date and qualifying unbilled records by dispatch date.
                 var data = await unitOfWork.Report.GetDispatchReportData(dateFrom, dateTo, ct, filterByBillingDate: true);
                 var collectionShares = await AllocateCollectionsByTicketAsync(data, ct);
-                var sbmaShares = IBS.Services.MSAP.SbmaShareCalculator.Allocate(data);
+                var sbmaShares = data.ToDictionary(t => t.DispatchTicketId, t => t.SbmaShareAmount);
 
                 // Load all masterfile entities required for dynamic columns (as in old system curtug, curowner, curcustomer)
                 var companyOwnedTugboats = (await unitOfWork.Tugboat.GetAllAsync(cancellationToken: ct))
