@@ -4,6 +4,8 @@
 @using Microsoft.AspNetCore.Identity
 @inject IOptions<BrandingOptions> BrandingOptions
 @inject UserManager<ApplicationUser> UserManager
+@inject IBS.Utility.TugboatWorkspace Workspace
+@inject IBS.Services.TugboatWorkspaceService WorkspaceService
 
 @{
     var branding = BrandingOptions.Value;
@@ -29,6 +31,10 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <meta name="ibs-workspace" content="@WorkspaceService.Protect(User, Workspace.TugboatId)" />
+    }
     <title>@ViewData["Title"] - @branding.CompanyShortName</title>
     <link id="favicon-light" href="@Url.Content(branding.FaviconLightPath)" rel="shortcut icon" type="image/svg+xml" />
     <link id="favicon-dark" href="@Url.Content(branding.FaviconDarkPath)" rel="shortcut icon" type="image/svg+xml" />
@@ -64,6 +70,16 @@
     }
 
     <div class="container">
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            @if (ViewContext.RouteData.Values["area"] as string is "Filpride" or "User")
+            {
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 my-2">
+                    <span>@(Workspace.TugboatId.HasValue ? $"Accounting workspace: {Workspace.Name}" : "Consolidated MMSI · New transactions: company level")</span>
+                    <partial name="_TugboatWorkspace" />
+                </div>
+            }
+        }
         <partial name="_Notification" />
         <main role="main">
             <input type="hidden" id="hfUsername" value="@userName" />

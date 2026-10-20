@@ -28,6 +28,18 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
+if (args.Contains("--workspace-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TugboatWorkspaceCheck.RunAsync();
+    return;
+}
+
+if (args.Contains("--workspace-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TugboatWorkspaceDatabaseCheck.RunAsync();
+    return;
+}
+
 if (args.Contains("--master-import-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.MasterFileImportCheck.RunAsync();
@@ -108,6 +120,8 @@ builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
     ["ConnectionStrings:MMSIConnection"] = "Host=localhost;Database=msap_check;Username=postgres"
 });
 builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("MMSIConnection")));
+builder.Services.AddScoped<IBS.Utility.TugboatWorkspace>();
+builder.Services.AddScoped<IBS.Services.TugboatWorkspaceService>();
 builder.Services.AddDefaultIdentity<ApplicationUser>().AddRoles<IdentityRole>().AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddScoped<IBS.DataAccess.Repository.IRepository.IUnitOfWork, IBS.DataAccess.Repository.UnitOfWork>();
 builder.Services.AddMsapModule(builder.Configuration);

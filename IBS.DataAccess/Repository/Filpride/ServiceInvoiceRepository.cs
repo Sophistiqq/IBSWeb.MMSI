@@ -34,6 +34,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastSv = await _db
                 .FilprideServiceInvoices
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.ServiceInvoiceNo!.Length)
                 .ThenByDescending(x => x.ServiceInvoiceNo)
@@ -58,6 +59,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastSv = await _db
                 .FilprideServiceInvoices
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.ServiceInvoiceNo!.Length)
                 .ThenByDescending(x => x.ServiceInvoiceNo)
@@ -409,6 +411,7 @@ namespace IBS.DataAccess.Repository.Filpride
             ledgers.Add(
                 new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = model.WorkspaceTugboatId,
                     Date = isCurrent ? period : DateOnly.FromDateTime(today),
                     Reference = model.ServiceInvoiceNo,
                     Description = particulars,
@@ -430,6 +433,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = isCurrent ? period : DateOnly.FromDateTime(today),
                         Reference = model.ServiceInvoiceNo,
                         Description = particulars,
@@ -449,6 +453,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = isCurrent ? period : DateOnly.FromDateTime(today),
                         Reference = model.ServiceInvoiceNo,
                         Description = particulars,
@@ -467,6 +472,7 @@ namespace IBS.DataAccess.Repository.Filpride
             ledgers.Add(
                 new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = model.WorkspaceTugboatId,
                     Date = isCurrent ? period : DateOnly.FromDateTime(today),
                     Reference = model.ServiceInvoiceNo,
                     Description = particulars,
@@ -486,6 +492,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = isCurrent ? period : DateOnly.FromDateTime(today),
                         Reference = model.ServiceInvoiceNo,
                         Description = particulars,
@@ -506,6 +513,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = period,
                         Reference = model.ServiceInvoiceNo,
                         Description = particulars,
@@ -523,6 +531,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = period,
                         Reference = model.ServiceInvoiceNo,
                         Description = particulars,

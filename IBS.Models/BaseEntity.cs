@@ -5,6 +5,10 @@ namespace IBS.Models
 {
     public class BaseEntity
     {
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int? WorkspaceTugboatId { get; set; }
+
         [Display(Name = "Created By")]
         [Column(TypeName = "varchar(100)")]
         public string? CreatedBy { get; set; }

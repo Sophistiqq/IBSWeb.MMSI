@@ -33,6 +33,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastSi = await _db
                 .FilprideSalesInvoices
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.SalesInvoiceNo!.Length)
                 .ThenByDescending(x => x.SalesInvoiceNo)
@@ -57,6 +58,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastSi = await _db
                 .FilprideSalesInvoices
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.SalesInvoiceNo!.Length)
                 .ThenByDescending(x => x.SalesInvoiceNo)

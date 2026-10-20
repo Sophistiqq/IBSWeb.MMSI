@@ -130,6 +130,7 @@ namespace IBS.Services
 
                         var newHeader = new FilprideJournalVoucherHeader
                         {
+                            WorkspaceTugboatId = sourceJv.WorkspaceTugboatId,
                             Type = sourceJv.Type,
                             JournalVoucherHeaderNo = generatedCode,
                             Date = dateToday,
@@ -241,6 +242,7 @@ namespace IBS.Services
                     ledgers.Add(
                         new FilprideGeneralLedgerBook
                         {
+                            WorkspaceTugboatId = journalVoucherHeader.WorkspaceTugboatId,
                             Date = postedDate,
                             Reference = journalVoucherHeader.JournalVoucherHeaderNo!,
                             Description = $"Reversal of {journalVoucherHeader.Particulars}",

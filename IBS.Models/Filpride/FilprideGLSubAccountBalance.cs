@@ -7,6 +7,10 @@ namespace IBS.Models.Filpride
 {
     public class FilprideGLSubAccountBalance
     {
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int? WorkspaceTugboatId { get; set; }
+
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public Guid Id { get; set; }

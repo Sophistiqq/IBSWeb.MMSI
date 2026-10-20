@@ -33,6 +33,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCv = await _db
                 .FilprideCheckVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CheckVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.CheckVoucherHeaderNo)
@@ -57,6 +58,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCv = await _db
                 .FilprideCheckVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CheckVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.CheckVoucherHeaderNo)
@@ -167,6 +169,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCv = await _db
                 .FilprideCheckVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CheckVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.CheckVoucherHeaderNo)
@@ -191,6 +194,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCv = await _db
                 .FilprideCheckVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CheckVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.CheckVoucherHeaderNo)
@@ -225,6 +229,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCv = await _db
                 .FilprideCheckVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CheckVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.CheckVoucherHeaderNo)
@@ -249,6 +254,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCv = await _db
                 .FilprideCheckVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CheckVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.CheckVoucherHeaderNo)
@@ -360,6 +366,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = header.WorkspaceTugboatId,
                         Date = header.Date,
                         Reference = header.CheckVoucherHeaderNo!,
                         Description = header.Particulars!,

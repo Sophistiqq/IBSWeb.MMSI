@@ -3,6 +3,7 @@ using IBS.DataAccess.Repository.IRepository;
 using IBS.Models.Enums;
 using IBS.Models.Filpride.Books;
 using IBS.Models.Filpride;
+using IBS.Utility;
 using IBS.Utility.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -24,17 +25,25 @@ namespace IBS.Services
 
         private readonly IUnitOfWork _unitOfWork;
 
+        private readonly TugboatWorkspace _workspace;
+
         public MonthlyClosureService(ApplicationDbContext dbContext,
             ILogger<MonthlyClosureService> logger,
-            IUnitOfWork unitOfWork)
+            IUnitOfWork unitOfWork, TugboatWorkspace workspace)
         {
             _dbContext = dbContext;
             _logger = logger;
             _unitOfWork = unitOfWork;
+            _workspace = workspace;
         }
 
         public async Task CloseAsync(DateOnly monthDate, string user, CancellationToken cancellationToken = default)
         {
+            if (_workspace.TugboatId.HasValue)
+            {
+                throw new InvalidOperationException("Close MMSI periods from the consolidated workspace.");
+            }
+
             await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
             try
             {
@@ -64,6 +73,23 @@ namespace IBS.Services
                 //await AutoReversalForCvWithoutDcrDate(monthDate, cancellationToken);
                 await ComputeNibit(monthDate, cancellationToken);
                 await RecordGlPeriodBalance(monthDate, cancellationToken);
+
+                List<int> tugboatIds = await _dbContext.FilprideGeneralLedgerBooks
+                    .Where(x => x.WorkspaceTugboatId.HasValue)
+                    .Select(x => x.WorkspaceTugboatId!.Value).Distinct().ToListAsync(cancellationToken);
+                try
+                {
+                    foreach (int tugboatId in tugboatIds)
+                    {
+                        _workspace.Select(tugboatId, $"Tugboat {tugboatId}");
+                        await ComputeNibit(monthDate, cancellationToken);
+                        await RecordGlPeriodBalance(monthDate, cancellationToken);
+                    }
+                }
+                finally
+                {
+                    _workspace.Select(null, "MMSI / All tugboats");
+                }
 
                 await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -152,6 +178,7 @@ namespace IBS.Services
 
                         ledgers.Add(new FilprideGeneralLedgerBook
                         {
+                            WorkspaceTugboatId = cv.WorkspaceTugboatId,
                             Date = endOfPreviousMonth,
                             Reference = cv.CheckVoucherHeaderNo!,
                             Description = cv.Particulars!,
@@ -170,6 +197,7 @@ namespace IBS.Services
 
                         ledgers.Add(new FilprideGeneralLedgerBook
                         {
+                            WorkspaceTugboatId = cv.WorkspaceTugboatId,
                             Date = periodMonth,
                             Reference = cv.CheckVoucherHeaderNo!,
                             Description = cv.Particulars!,
@@ -227,7 +255,7 @@ namespace IBS.Services
                 }
 
                 var generalLedgers = await _dbContext.FilprideGeneralLedgerBooks
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                     .Include(gl => gl.Account)
                     .ThenInclude(filprideChartOfAccount => filprideChartOfAccount.ParentAccount) // Level 4
                     .Where(gl =>
@@ -278,6 +306,7 @@ namespace IBS.Services
 
                 var nibitForThePeriod = new FilprideMonthlyNibit
                 {
+                    WorkspaceTugboatId = _workspace.TugboatId,
                     Month = periodMonth.Month,
                     Year = periodMonth.Year,
                     NetIncome = nibit,
@@ -319,7 +348,7 @@ namespace IBS.Services
 
                 // Get all accounts from COA for the period
                 var allAccounts = await _dbContext.FilprideChartOfAccounts
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                     .OrderBy(x => x.AccountNumber)
                     .ToListAsync(cancellationToken);
 
@@ -330,7 +359,7 @@ namespace IBS.Services
                 }
 
                 var glEntries = await _dbContext.FilprideGeneralLedgerBooks
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                     .Include(x => x.Account)
                     .Where(x =>
 
@@ -375,7 +404,7 @@ namespace IBS.Services
 
                 // Get beginning balances for all accounts
                 var beginningBalancesDict = await _dbContext.FilprideGlPeriodBalances
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                     .Where(x => x.IsValid && accountIds.Contains(x.AccountId) && x.PeriodEndDate < periodEnd)
                     .GroupBy(x => x.AccountId)
                     .Select(g => new
@@ -407,6 +436,7 @@ namespace IBS.Services
 
                     glBalances.Add(new FilprideGLPeriodBalance
                     {
+                        WorkspaceTugboatId = _workspace.TugboatId,
                         AccountId = account.AccountId,
                         PeriodStartDate = periodMonth,
                         PeriodEndDate = periodEnd,
@@ -426,7 +456,7 @@ namespace IBS.Services
                 if (glGroupedBySubAccount.Any())
                 {
                     var subAccountBeginningBalances = await _dbContext.FilprideGlSubAccountBalances
-                        .IgnoreQueryFilters()
+                        .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                         .Where(x => x.IsValid && accountIds.Contains(x.AccountId) && x.PeriodEndDate < periodEnd)
                         .ToListAsync(cancellationToken);
 
@@ -460,6 +490,7 @@ namespace IBS.Services
 
                         subAccountBalances.Add(new FilprideGLSubAccountBalance
                         {
+                            WorkspaceTugboatId = _workspace.TugboatId,
                             AccountId = subAccount.AccountId,
                             SubAccountType = subAccount.SubAccountType.Value,
                             SubAccountId = subAccount.SubAccountId.Value,
@@ -504,12 +535,17 @@ namespace IBS.Services
 
         public async Task OpenAsync(DateOnly monthDate, string user, CancellationToken cancellationToken = default)
         {
+            if (_workspace.TugboatId.HasValue)
+            {
+                throw new InvalidOperationException("Reopen MMSI periods from the consolidated workspace.");
+            }
+
             await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
             try
             {
                 await _dbContext.FilprideMonthlyNibits
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity", "BalanceWorkspace"])
                      .Where(n =>
                         n.IsValid &&
                          (n.Year > monthDate.Year ||
@@ -518,7 +554,7 @@ namespace IBS.Services
                          e.SetProperty(d => d.IsValid, false), cancellationToken);
 
                 await _dbContext.FilprideGlSubAccountBalances
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity", "BalanceWorkspace"])
                     .Where(s =>
                         s.IsValid &&
                         s.PeriodStartDate >= monthDate)
@@ -526,7 +562,7 @@ namespace IBS.Services
                         e.SetProperty(d => d.IsValid, false), cancellationToken);
 
                 await _dbContext.FilprideGlPeriodBalances
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity", "BalanceWorkspace"])
                     .Where(s =>
                         s.IsValid &&
                         s.PeriodStartDate >= monthDate)
