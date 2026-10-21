@@ -34,6 +34,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCm = await _db
                 .FilprideCreditMemos
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CreditMemoNo!.Length)
                 .ThenByDescending(x => x.CreditMemoNo)
@@ -58,6 +59,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCm = await _db
                 .FilprideCreditMemos
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CreditMemoNo)
                 .FirstOrDefaultAsync(x =>
@@ -132,6 +134,7 @@ namespace IBS.DataAccess.Repository.Filpride
                     new()
                     {
                         Date = model.TransactionDate,
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Reference = model.CreditMemoNo!,
                         Description = customerOrderSlip.ProductName,
                         AccountId = arTradeReceivableTitle.AccountId,
@@ -152,6 +155,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.CreditMemoNo!,
                         Description = customerOrderSlip.ProductName,
@@ -170,6 +174,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.CreditMemoNo!,
                         Description = customerOrderSlip.ProductName,
@@ -186,6 +191,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = model.WorkspaceTugboatId,
                     Date = model.TransactionDate,
                     Reference = model.CreditMemoNo!,
                     Description = customerOrderSlip.ProductName,
@@ -203,6 +209,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.CreditMemoNo!,
                         Description = customerOrderSlip.ProductName,
@@ -288,6 +295,7 @@ namespace IBS.DataAccess.Repository.Filpride
                     new()
                     {
                         Date = model.TransactionDate,
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Reference = model.CreditMemoNo!,
                         Description = serviceInvoice.ServiceName,
                         AccountId = arNonTradeTitle.AccountId,
@@ -308,6 +316,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.CreditMemoNo!,
                         Description = serviceInvoice.ServiceName,
@@ -326,6 +335,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.CreditMemoNo!,
                         Description = serviceInvoice.ServiceName,
@@ -342,6 +352,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = model.WorkspaceTugboatId,
                     Date = model.TransactionDate,
                     Reference = model.CreditMemoNo!,
                     Description = serviceInvoice.ServiceName,
@@ -359,6 +370,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.CreditMemoNo!,
                         Description = serviceInvoice.ServiceName,

@@ -63,6 +63,12 @@ body.mnav-enabled {
 }
 
 /* ── Brand ── */
+.mnav-brand-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
 .mnav-brand {
     font-family: var(--mnav-font-display);
     font-size: 20px;
@@ -78,6 +84,44 @@ body.mnav-enabled {
 }
 .mnav-brand:hover { color: var(--mnav-on-primary); text-decoration: none; }
 .mnav-brand img { height: 32px; width: auto; object-fit: contain; }
+
+/* ── Accounting workspace ── */
+#modern-navbar .mnav-workspace {
+    display: flex;
+    align-items: center;
+    flex: 0 0 220px;
+    gap: 6px;
+    margin: 0;
+}
+#modern-navbar .mnav-workspace select {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--mnav-on-primary-20);
+    border-radius: 8px;
+    background-color: var(--mnav-primary-container);
+    color: var(--mnav-on-primary);
+    color-scheme: dark;
+    font: 500 13px var(--mnav-font);
+    cursor: pointer;
+}
+#modern-navbar .mnav-workspace button {
+    flex-shrink: 0;
+    border: 1px solid var(--mnav-on-primary-20);
+    cursor: pointer;
+}
+#modern-navbar .mnav-workspace select:focus-visible,
+#modern-navbar .mnav-workspace button:focus-visible {
+    outline: 2px solid var(--mnav-on-primary-70);
+    outline-offset: 2px;
+}
+@media (max-width: 576px) {
+    #modern-navbar .mnav-workspace {
+        flex: 1 1 140px;
+        min-width: 0;
+    }
+}
 
 /* ── Nav list ── */
 .mnav-list {
@@ -512,7 +556,7 @@ body.mnav-enabled {
 .mnav-nav-area {
     display: none;
 }
-@media (min-width: 1540px) {
+@media (min-width: 1780px) {
     .mnav-nav-area {
         display: flex;
         align-items: center;
@@ -533,7 +577,7 @@ body.mnav-enabled {
     color: var(--mnav-on-primary);
     cursor: pointer;
 }
-@media (min-width: 1540px) { .mnav-hamburger { display: none; } }
+@media (min-width: 1780px) { .mnav-hamburger { display: none; } }
 
 /* ── Mobile Drawer ── */
 .mnav-drawer {

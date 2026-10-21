@@ -1,0 +1,87 @@
+@model IBS.Models.MSAP.MasterFile.BankAccountViewModel
+
+@{
+    ViewData["Title"] = "Create Bank Account";
+    ViewData["IsFullWidth"] = true;
+}
+
+<div class="modern-layout app-ui">
+    <form asp-action="Create" method="post" id="mainForm">
+        <main class="modern-container ui-page">
+            <div class="flex-stack ui-page-toolbar">
+                <div>
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li><a asp-action="Index">Bank Accounts</a></li><li aria-current="page">New Bank Account</li></ol></nav>
+                    <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
+                </div>
+                <div class="flex gap-2 ui-actions">
+                    <button type="submit" class="modern-btn-primary">
+                        <span class="material-symbols-outlined">save</span> Save Changes
+                    </button>
+                    <a asp-action="Index" class="modern-btn-secondary">
+                        <span class="material-symbols-outlined">cancel</span> Cancel
+                    </a>
+                </div>
+            </div>
+
+            <div class="modern-grid justify-center">
+                <section class="modern-col-8">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
+                            <span class="material-symbols-outlined">account_balance</span>
+                            <h2 class="modern-headline-md ui-section-title">Bank Account Details</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
+
+                            <div class="modern-grid">
+                                <div class="modern-col-6">
+                                    <label asp-for="BankAccountCode" class="modern-label ui-label">Code <span class="text-error">*</span></label>
+                                    <input asp-for="BankAccountCode" class="form-control ui-input" placeholder="Enter code" />
+                                    <span asp-validation-for="BankAccountCode" class="text-error text-xs"></span>
+                                </div>
+                                <div class="modern-col-6">
+                                    <label asp-for="Bank" class="modern-label ui-label">Bank <span class="text-error">*</span></label>
+                                    <input asp-for="Bank" class="form-control ui-input" placeholder="Enter bank name" />
+                                    <span asp-validation-for="Bank" class="text-error text-xs"></span>
+                                </div>
+                            </div>
+
+                            <div class="modern-grid mt-3">
+                                <div class="modern-col-6">
+                                    <label asp-for="Branch" class="modern-label ui-label">Branch <span class="text-error">*</span></label>
+                                    <input asp-for="Branch" class="form-control ui-input" placeholder="Enter branch" />
+                                    <span asp-validation-for="Branch" class="text-error text-xs"></span>
+                                </div>
+                                <div class="modern-col-6">
+                                    <label asp-for="AccountNo" class="modern-label ui-label">Account No <span class="text-error">*</span></label>
+                                    <input asp-for="AccountNo" class="form-control ui-input" placeholder="Enter account number" />
+                                    <span asp-validation-for="AccountNo" class="text-error text-xs"></span>
+                                </div>
+                            </div>
+
+                            <div class="modern-grid mt-3">
+                                <div class="modern-col-6">
+                                    <label asp-for="AccountName" class="modern-label ui-label">Account Name <span class="text-error">*</span></label>
+                                    <input asp-for="AccountName" class="form-control ui-input" placeholder="Enter account name" />
+                                    <span asp-validation-for="AccountName" class="text-error text-xs"></span>
+                                </div>
+                                <div class="modern-col-6">
+                                    <label asp-for="Company" class="modern-label ui-label">Company <span class="text-error">*</span></label>
+                                    <select asp-for="Company" class="form-control ui-input">
+                                        <option value="">--Select Company--</option>
+                                        <option value="Filpride">Filpride</option>
+                                        <option value="MMSI">MMSI</option>
+                                    </select>
+                                    <span asp-validation-for="Company" class="text-error text-xs"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </form>
+</div>
+
+@section Scripts {
+    }

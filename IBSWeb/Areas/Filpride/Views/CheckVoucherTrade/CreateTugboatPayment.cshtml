@@ -1,0 +1,458 @@
+@using IBS.Models.Enums
+@model TugboatPaymentViewModel
+
+@{
+    ViewData["Title"] = "Check Voucher Trade Tugboat Payment - Create";
+}
+
+<link rel="stylesheet" href="~/css/form-style.css">
+
+<div class="loader-container">
+    <div class="loader"></div>
+    <div class="loader-text">Loading...</div>
+</div>
+<div class="card shadow border-0 mt-4">
+    <div class="card-header bg-secondary bg-gradient ml-0 py-3">
+        <div class="row">
+            <div class="col-12 text-center">
+                <h2 class="text-white py-2">@ViewData["Title"]</h2>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-4">
+        <form method="post" enctype="multipart/form-data" id="paymentForm">
+            @Html.AntiForgeryToken()
+            <div id="selectedAllocations"></div>
+            <div class="row">
+                <div class="col-12 col-md-4">
+                    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+                    <div class="form-group mb-3">
+                        <label class="control-label">Type<span class="required">*</span></label>
+                        <select asp-for="Type" class="form-select js-select2 border-0 shadow check-voucher-document-type" style="width:100%; max-height: 200px;" required>
+                            <option value="" selected disabled>Select payment type</option>
+                            @foreach (var documentType in Enum.GetValues<DocumentType>())
+                            {
+                                <option value="@documentType">@documentType.ToString()</option>
+                            }
+                        </select>
+                        <span asp-validation-for="Type" class="text-danger"></span>
+                    </div>
+                    <partial name="_CheckVoucherDocumentation" for="Documentation" />
+                    <div class="form-group mb-3">
+                        <label asp-for="OwnerId" class="control-label"></label><span class="required">*</span>
+                        <select asp-for="OwnerId" asp-items="@Model.Owners" class="form-select js-select2 tugboat-owner" style="width:100%">
+                            <option></option>
+                        </select>
+                        <span asp-validation-for="OwnerId" class="text-danger"></span>
+                    </div>
+                    <div id="owner-profile-error" class="text-danger mb-3" role="alert"></div>
+                    <div class="form-floating mb-3">
+                        <input asp-for="Payee" type="text" class="form-control payeeName" placeholder="" readonly />
+                        <label asp-for="Payee" class="control-label"></label>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input asp-for="Address" type="text" class="form-control" placeholder="" readonly />
+                        <label asp-for="Address" class="control-label"></label>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input asp-for="Tin" type="text" class="form-control" placeholder="" readonly />
+                        <label asp-for="Tin" class="control-label"></label>
+                    </div>
+                </div>
+                <div class="col-12 col-md-8">
+                    <div class="row mb-3 overflow-auto" style="max-height: 300px;">
+                        <table>
+                            <thead class="sticky-top bg-white">
+                            <tr>
+                                <th colspan="9" class="text-center py-3">
+                                    <span>DISPATCH TICKET LIST</span>
+                                    <span class="selected-rr-count ms-2 px-2 py-1 rounded-pill" style="display: none; background: linear-gradient(135deg, #5a9a9a, #4a8a8a); color: white; font-size: 0.75rem; vertical-align: middle;">
+                                        <span id="selectedCount">0</span> selected
+                                    </span>
+                                </th>
+                            </tr>
+                            <tr>
+                                <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
+                                <th>COS No.</th>
+                                <th>Provider Reference</th>
+                                <th>Tugboat</th>
+                                <th>Dispatch Ticket</th>
+                                <th>Status</th>
+                                <th class="text-end">Amount</th>
+                                <th class="text-end">Amount Paid</th>
+                                <th class="text-end">Balance</th>
+                            </tr>
+                            </thead>
+                            <tbody class="rrAmount">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                    <div class="form-group mb-3">
+                        <label asp-for="CosIds" class="control-label">COS No.</label><span class="required">*</span>
+                        <select asp-for="CosIds" asp-items="@Model.CustomerOrderSlips" class="form-select js-multiple GetTicketList" multiple="multiple" style="width:100%" required>
+                            <option></option>
+                        </select>
+                        <span asp-validation-for="CosIds" class="text-danger"></span>
+                    </div>
+                <div class="form-group mb-3">
+                    <label asp-for="DefaultPayableAmount" class="control-label">Payment Amount</label><span class="required">*</span>
+                    <input asp-for="DefaultPayableAmount" type="number" min="0.0001" step="0.0001" class="form-control" readonly required />
+                    <span asp-validation-for="DefaultPayableAmount" class="text-danger"></span>
+                </div>
+                    <div class="form-floating mb-3">
+                        <input asp-for="OldCVNo" type="text" class="form-control" placeholder="" required/>
+                        <span asp-validation-for="OldCVNo" class="text-danger"></span>
+                        <label asp-for="OldCVNo" class="control-label mx-2">Old CV #<span class="required">*</span></label>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label asp-for="Date" class="control-label"></label><span class="required">*</span>
+                        <input asp-for="Date"
+                               type="Date"
+                               class="form-control"/>
+                        <span asp-validation-for="Date" class="text-danger"></span>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label asp-for="BankId" class="control-label"></label><span class="required">*</span>
+                        <select asp-for="BankId" asp-items="@Model.Banks" class="form-select js-select2" id="bankAccounts" style="width:100%">
+                            <option></option>
+                        </select>
+                        <span asp-validation-for="BankId" class="text-danger"></span>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input asp-for="CheckNo" type="text" class="form-control" placeholder="" />
+                        <label asp-for="CheckNo" class="control-label mx-2">Check No<span class="required">*</span></label>
+                        <span asp-validation-for="CheckNo" class="text-danger"></span>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label asp-for="CheckDate" class="control-label"></label><span class="required">*</span>
+                        <input asp-for="CheckDate" type="date" class="form-control" />
+                        <span asp-validation-for="CheckDate" class="text-danger"></span>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input asp-for="Particulars" type="text" class="form-control" placeholder="" />
+                        <span asp-validation-for="Particulars" class="text-danger"></span>
+                        <label asp-for="Particulars" class="control-label mx-2">Particulars<span class="required">*</span></label>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label class="control-label">Upload File (Optional)</label>
+                        <input name="file" type="file" class="form-control" accept="application/pdf,image/png,image/jpeg" />
+                    </div>
+                <br />
+                <div class="form-group table-responsive">
+                    <table class="table" style="min-width: 800px">
+                        <thead>
+                            <tr>
+                                <th>Account No.</th>
+                                <th>Account Title</th>
+                                <th>Debit</th>
+                                <th>Credit</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="accountingEntriesBody">
+                            <tr>
+                                <td><input type="text" name="AccountNumber" value="201020500" class="w-100" style='border:none' readonly /></td>
+                                <td><input type='text' name="AccountTitle" value='AP - Trade - Other Tugs' class="w-100" style='border:none' readonly /></td>
+                                <td><input type='text' name="Debit" value='0.0000' class="w-100 totalNetOfEWT" style='border:none' readonly /></td>
+                                <td><input type='text' name="Credit" value='0.0000' class="w-100" style='border:none' readonly /></td>
+                                <td></td>
+                            </tr>
+                            <tr>
+                                <td><input type="text" name="AccountNumber" value="101010100" class="w-100" style='border:none' readonly /></td>
+                                <td><input type='text' name="AccountTitle" value="Cash in Bank" class="w-100 accountTitle" style='border:none' readonly /></td>
+                                <td><input type='text' name="Debit" value='0.0000' class="w-100" style='border:none' readonly /></td>
+                                <td><input type='text' name="Credit" value="0.0000" class="w-100 cib-credit money" style='border:none' readonly /></td>
+                                <td></td>
+                            </tr>
+                            <tr id="withholdingRow" style="display:none">
+                                <td><input id="WithholdingAccount" type="text" name="AccountNumber" class="w-100" style="border:none" readonly /></td>
+                                <td><input id="WithholdingTitle" type="text" value="Expanded Withholding Tax" class="w-100" style="border:none" readonly /></td>
+                                <td><input type="text" name="Debit" value="0.0000" class="w-100" style="border:none" readonly /></td>
+                                <td><input id="WithholdingAmount" type="text" name="Credit" value="0.0000" class="w-100" style="border:none" readonly /></td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                        <tbody>
+                            <tr>
+                                <td class="text-end" colspan="2">TOTAL:</td>
+                                <td class="totalDebit">0.0000</td>
+                                <td class="totalCredit">0.0000</td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p id="billSelectionSummary" class="text-muted small" aria-live="polite"></p>
+                <br />
+                <div id="balance-error-message" class="text-danger mt-2"></div>
+                <div class="row pt-2">
+                    <div class="col-6 col-md-3">
+                        <button type="submit" class="btn btn-primary form-control">Create</button>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <a asp-area="Filpride" asp-controller="CheckVoucherTrade" asp-action="Index" class="btn btn-outline-primary border form-control">Back to List</a>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts
+{
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+    <script>
+        let bills = @Json.Serialize(Model.Bills);
+        let allocations = getAllocations(bills);
+        const selectedAllocations = new Set(@Json.Serialize(Model.AllocationIds));
+        let payment = { gross: @Json.Serialize(Model.Gross), withholding: @Json.Serialize(Model.Withholding), net: @Json.Serialize(Model.Net) };
+        let selectionVersion = 0;
+        let selectionRequest = null;
+        let duplicateCheckNo = false;
+        let owner = @Json.Serialize(Model.Owner);
+        let profileError = @Json.Serialize(Model.OwnerProfileError);
+        let withholdingAccount = @Json.Serialize(Model.WithholdingAccountNumber);
+
+
+        $(document).ready(function () {
+            renderOwner(true);
+            $('.tugboat-owner').on('change', loadOwner);
+            $('.GetTicketList').on('change', function () {
+                const cosIds = ($('#CosIds').val() ?? []).map(Number);
+                allocations.filter(line => !cosIds.includes(line.cosId)).forEach(line => selectedAllocations.delete(line.allocationId));
+                displayRecords(false);
+            });
+            $('#paymentForm').on('submit', function (event) {
+                if (!validateDebitAndCredit() || !$('.selectCheckbox:checked').length || profileError) {
+                    event.preventDefault();
+                }
+            });
+        });
+
+        function loadOwner() {
+            const ownerId = Number($('#OwnerId').val());
+            const version = ++selectionVersion;
+            if (selectionRequest) { selectionRequest.abort(); }
+            selectedAllocations.clear();
+            resetPayment();
+            bills = [];
+            allocations = [];
+            owner = null;
+            profileError = null;
+            withholdingAccount = null;
+            $('#CosIds').empty().trigger('change.select2');
+            renderOwner(false);
+            if (!ownerId) { return; }
+            selectionRequest = $.getJSON('@Url.Action("GetTugboatPaymentDetails")', { ownerId: ownerId })
+                .done(function (data) {
+                    if (version !== selectionVersion) { return; }
+                    owner = data.owner;
+                    profileError = data.ownerProfileError;
+                    withholdingAccount = data.withholdingAccountNumber;
+                    bills = data.bills;
+                    allocations = getAllocations(bills);
+                    const slips = new Map(allocations.filter(line => line.cosId).map(line => [line.cosId, line.cosNumber]));
+                    slips.forEach((number, id) => $('#CosIds').append(new Option(number, id)));
+                    $('#CosIds').trigger('change.select2');
+                    renderOwner(false);
+                })
+                .fail(function () {
+                    if (version === selectionVersion) {
+                        profileError = 'Unable to load owner details. Select the owner again to retry.';
+                        renderOwner(false);
+                    }
+                });
+        }
+
+        function renderOwner(restore) {
+            $('.payeeName').val(owner?.tugboatOwnerName ?? '');
+            $('#Address').val(owner?.address ?? '');
+            $('#Tin').val(owner?.tin ?? '');
+            $('#owner-profile-error').text(profileError ?? '');
+            $('#withholdingRow').toggle(Boolean(withholdingAccount)).find('input[name]').prop('disabled', !withholdingAccount);
+            $('#WithholdingAccount').val(withholdingAccount ?? '');
+            $('#WithholdingTitle').val('Expanded Withholding Tax ' + ((owner?.withholdingTaxPercent ?? 0) * 100) + '%');
+            displayRecords(restore);
+        }
+
+        function displayRecords(restore) {
+            const cosIds = ($('#CosIds').val() ?? []).map(Number);
+            const lines = allocations.filter(line => cosIds.includes(line.cosId));
+            const tbody = $('.rrAmount').empty();
+            lines.forEach(line => {
+                const amountDue = line.gross ?? line.amount;
+                const available = !profileError && line.gross > 0;
+                const selected = available && selectedAllocations.has(line.allocationId);
+                const row = $('<tr>').attr({ 'data-balance': amountDue });
+                const checkbox = $('<input>').attr({ type: 'checkbox', class: 'selectCheckbox', 'aria-label': 'Select ' + line.ticketNumber })
+                    .val(line.allocationId).prop('disabled', !available).prop('checked', selected);
+                row.append($('<td>').append(checkbox));
+                row.append($('<td>').text(line.cosNumber));
+                row.append($('<td>').text(line.providerReference));
+                row.append($('<td>').text(line.tugboatName));
+                row.append($('<td>').text(line.ticketNumber));
+                row.append($('<td>').text('Unpaid'));
+                row.append($('<td>').addClass('text-end grossAmount').text(formatNumberToFour(amountDue)));
+                const amount = $('<input>').attr({ type: 'text', class: 'paymentAmount text-end', readonly: true })
+                    .val(selected ? formatNumberToFour(amountDue) : '').toggle(selected);
+                row.append($('<td>').addClass('text-end').append(amount));
+                row.append($('<td>').addClass('text-end balance').text(formatNumberToFour(selected ? 0 : amountDue)));
+                tbody.append(row);
+            });
+            if (!lines.length) {
+                tbody.append($('<tr>').append($('<td>').attr('colspan', 9).addClass('text-center').text(cosIds.length ? 'No confirmed unpaid dispatch allocations available for the selected COS.' : 'Select a COS to view dispatch allocations.')));
+            }
+            updateAmounts();
+        }
+
+        function getAllocations(bills) {
+            return bills.flatMap(bill => bill.lines.map(line => ({ ...line, chargeId: bill.chargeId, providerReference: bill.providerReference })));
+        }
+
+        function resetPayment() {
+            payment = { gross: 0, withholding: 0, net: 0 };
+        }
+
+        function toggleSelectAll(selectAllCheckbox) {
+            $('.selectCheckbox:enabled').each(function () {
+                if (selectAllCheckbox.checked) { selectedAllocations.add(Number(this.value)); }
+                else { selectedAllocations.delete(Number(this.value)); }
+            });
+            displayRecords(false);
+        }
+
+        $(document).on('change', '.selectCheckbox', function () {
+            if (this.checked) { selectedAllocations.add(Number(this.value)); }
+            else { selectedAllocations.delete(Number(this.value)); }
+            displayRecords(false);
+        });
+
+        function updateAmounts() {
+            const selected = allocations.filter(line => selectedAllocations.has(line.allocationId));
+            payment = {
+                gross: selected.reduce((total, line) => total + line.gross, 0),
+                withholding: selected.reduce((total, line) => total + line.withholding, 0),
+                net: selected.reduce((total, line) => total + line.net, 0)
+            };
+            const inputs = $('#selectedAllocations').empty();
+            selected.forEach(line => inputs.append($('<input>').attr({ type: 'hidden', name: 'AllocationIds' }).val(line.allocationId)));
+            $('.totalNetOfEWT').val(formatNumberToFour(payment.gross));
+            $('#WithholdingAmount').val(formatNumberToFour(payment.withholding));
+            $('#DefaultPayableAmount').val(payment.net.toFixed(4));
+            $('#selectedCount').text(selected.length);
+            $('.selected-rr-count').toggle(selected.length > 0);
+            $('#billSelectionSummary').text(selected.length ? selected.length + ' tickets selected for payment.' : '');
+            const available = $('.selectCheckbox:enabled').length;
+            $('#selectAll').prop('checked', available > 0 && available === $('.selectCheckbox:checked').length);
+            updateTotalDebitAndCredit();
+        }
+
+        function updateTotalDebitAndCredit() {
+            var totalDebit = 0;
+            var totalCreditExcludingCib = 0;
+            var hasCreditOverflow = false;
+
+            $("#accountingEntriesBody tr, .defaultEntry tr").each(function () {
+                var debitField = $(this).find("td:eq(2) input");
+                var creditField = $(this).find("td:eq(3) input");
+                if (creditField.prop('disabled')) { return; }
+                var debitInput = debitField.val();
+                var creditInput = creditField.val();
+                debitInput = debitInput ? String(debitInput) : "";
+                creditInput = creditInput ? String(creditInput) : "";
+
+                var debit = parseNumber(debitInput);
+                var credit = parseNumber(creditInput);
+
+                totalDebit += debit;
+
+                if (!creditField.hasClass("cib-credit")) {
+                    totalCreditExcludingCib += credit;
+                }
+
+            });
+
+            var cashInBankAmount = totalDebit - totalCreditExcludingCib;
+            if (cashInBankAmount < 0 || (cashInBankAmount === 0 && totalCreditExcludingCib > 0)) {
+                hasCreditOverflow = true;
+                cashInBankAmount = 0;
+            }
+
+            $(".cib-credit").val(formatNumberToFour(cashInBankAmount));
+
+            var totalCredit = totalCreditExcludingCib + cashInBankAmount;
+
+            $(".totalDebit").text(formatNumberToFour(totalDebit));
+            $(".totalCredit").text(formatNumberToFour(totalCredit));
+            $("#credit").val("0.0000");
+            validateDebitAndCredit(hasCreditOverflow);
+        }
+
+        function validateDebitAndCredit(hasCreditOverflow = false) {
+            var totalDebit = parseNumber($(".totalDebit").text());
+            var totalCredit = parseNumber($(".totalCredit").text());
+            var errorMessage = "";
+            var isValid = true;
+
+            if (profileError || duplicateCheckNo || selectedAllocations.size === 0) {
+                errorMessage = profileError || (duplicateCheckNo ? 'Check # already exists.' : 'Select at least one ticket for payment.');
+                isValid = false;
+            } else if (hasCreditOverflow) {
+                errorMessage = "Credit entries must be less than the available Cash in Bank amount.";
+                isValid = false;
+            } else if (totalDebit !== totalCredit) {
+                errorMessage = "Debit and Credit totals must be equal.";
+                isValid = false;
+            } else if (totalDebit === 0 && totalCredit === 0) {
+                errorMessage = "Debit and Credit cannot both be zero.";
+                isValid = false;
+            } else if (totalDebit === 0 || totalCredit === 0) {
+                errorMessage = "Debit and Credit cannot be zero.";
+                isValid = false;
+            }
+
+            $("#balance-error-message").text(errorMessage);
+            $("#paymentForm button[type='submit']").prop("disabled", !isValid);
+
+            return isValid;
+        }
+
+        $('input[name="CheckNo"]').on('blur', function() {
+            var checkNo = $(this).val();
+
+            if (checkNo) {
+                $.ajax({
+                    url: '@Url.Action("CheckNoIsExist", "CheckVoucherTrade", new { area = "Filpride" })',
+                    type: "GET",
+                    data: { checkNo: checkNo, bankId: $('select[name="BankId"]').val() },
+                    success: function(exists) {
+                        const submitButton = $('#paymentForm button[type="submit"]');
+
+                        duplicateCheckNo = exists;
+                        if (exists) {
+                            alert("Check # already exists. Please enter a different number.");
+                            $('input[name="CheckNo"]').addClass('is-invalid');
+
+                            if ($('input[name="CheckNo"]').next('.text-danger.check-no-exists').length === 0) {
+                                $('input[name="CheckNo"]').after('<span class="text-danger check-no-exists">Check # already exists</span>');
+                            }
+
+                            submitButton.prop('disabled', true);
+                        } else {
+                            $('input[name="CheckNo"]').removeClass('is-invalid');
+                            $('.check-no-exists').remove();
+                            validateDebitAndCredit();
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.log("Error checking CheckNo: " + error);
+                    }
+                });
+            }
+        });
+    </script>
+}

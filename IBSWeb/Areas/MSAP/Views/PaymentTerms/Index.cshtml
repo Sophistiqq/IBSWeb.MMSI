@@ -1,0 +1,81 @@
+@{
+    ViewData["Title"] = "Payment Terms";
+    ViewData["IsFullWidth"] = true;
+}
+
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
+        <div class="flex-stack ui-page-toolbar">
+            <div>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Payment Terms</li></ol></nav>
+                <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
+            </div>
+            <p>Payment terms are maintained in Filpride and shared with MSAP.</p>
+        </div>
+
+        <div class="modern-card ui-card">
+            <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">payments</span>
+                    <h2 class="modern-headline-md ui-section-title">Terms List</h2>
+                </div>
+            </div>
+            <div class="modern-card-body ui-card-body">
+                <table class="modern-table ui-table" id="paginatedTable">
+                    <thead>
+                        <tr>
+                            <th>Terms Code</th>
+                            <th>Days</th>
+                            <th>Months</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+@section Scripts{
+    <script>
+        $(document).ready(function () {
+            let table = $('#paginatedTable').DataTable({
+                "order": [[0, 'asc']],
+                "processing": true,
+                "serverSide": true,
+                "stateDuration": 86400,
+                "language": {
+                    "processing": `<div class="d-flex justify-content-center">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                 </div>`
+                },
+                "ajax": {
+                    "url": "@Url.Action("GetPaymentTerms", "PaymentTerms", new { area = "MSAP" })",
+                    "type": "POST",
+                    "data": function (d) {
+                        return $.extend({}, d, {
+                            __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                        });
+                    },
+                    "error": function (xhr, error, thrown) {
+                        console.error('DataTables error:', error);
+                        alert('An error occurred while loading the data');
+                    }
+                },
+                "preDrawCallback": function (settings) {
+                    $('#paginatedTable').addClass('table-loading');
+                },
+                "drawCallback": function (settings) {
+                    $('#paginatedTable').removeClass('table-loading');
+                    $('[data-bs-toggle="tooltip"]').tooltip();
+                },
+                "columns": [
+                    { "data": "termsCode" },
+                    { "data": "numberOfDays" },
+                    { "data": "numberOfMonths" }
+                ]
+            });
+        });
+    </script>
+}

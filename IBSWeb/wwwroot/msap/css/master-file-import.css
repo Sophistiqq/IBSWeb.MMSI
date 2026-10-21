@@ -1,0 +1,59 @@
+.master-import-workspace {
+    --ui-section-gap: var(--ui-space-4);
+}
+
+.master-import-workspace #masterImportErrors {
+    margin: 0;
+    padding: var(--ui-space-3) var(--ui-space-5);
+}
+
+.master-import-workspace :is(#masterImportErrors, #ignoredMasterFiles, #masterImportedRates):empty {
+    display: none;
+}
+
+.master-import-workspace .master-import-row-state {
+    width: 24rem;
+    min-width: 24rem;
+    max-width: 24rem;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+}
+
+.master-import-row-state > :is(strong, p) {
+    display: block;
+    max-width: 24rem;
+    white-space: normal;
+}
+
+.master-import-editor {
+    max-height: 38rem;
+}
+
+.master-import-editor .ui-table {
+    width: max-content;
+    min-width: 100%;
+}
+
+.master-import-editor .ui-table td {
+    vertical-align: top;
+}
+
+.master-import-editor th {
+    position: sticky !important;
+    top: 0;
+    z-index: 1;
+    background: var(--ui-surface);
+}
+
+.master-import-editor .ui-input {
+    width: 14rem;
+}
+
+.master-import-editor .master-import-cell-edited {
+    background: #fff8e6;
+    border-color: #a88a42;
+}
+
+.master-import-editor [aria-invalid="true"] {
+    border-color: var(--ui-error);
+}

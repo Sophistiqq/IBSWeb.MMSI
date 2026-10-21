@@ -1,0 +1,227 @@
+@model CustomerOrderSlip
+@{
+    ViewData["Title"] = $"COS {Model.CustomerOrderSlipNumber}";
+    ViewData["IsFullWidth"] = true;
+    ViewData["Cos"] = Model;
+    var booking = ViewBag.VesselSchedule as VesselSchedule;
+    var progress = (JobProgressViewModel)ViewBag.JobProgress;
+    var entries = booking?.ServiceEntries ?? new List<VesselScheduleServiceEntry>();
+    var pendingServices = entries.Where(entry => !entry.CancelledAt.HasValue && !Model.DispatchTickets.Any(ticket => ticket.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId)).ToList();
+    var approvalPending = booking != null && (booking.ApprovedRevision != booking.Revision || booking.Status == MsapConstants.VesselScheduleStatus.Tentative);
+    var bookingClosed = booking?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
+    var canRecord = ViewBag.CanCreateDispatchTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open
+        && !bookingClosed && ViewBag.HasBilling != true;
+    ViewData["CanRecordExpectedService"] = canRecord;
+    ViewData["CanCancelExpectedService"] = ViewBag.CanEditCustomerOrderSlip == true && !bookingClosed
+        && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && ViewBag.HasBilling != true;
+    var tugIds = entries.Select(entry => entry.TugboatId).Concat(Model.DispatchTickets.Select(ticket => ticket.TugBoatId)).Distinct().ToList();
+    var statusLabel = bookingClosed && booking != null ? MsapConstants.VesselScheduleStatus.GetDisplayName(booking.Status)
+        : approvalPending ? booking!.ApprovedRevision.HasValue ? "Pending reapproval" : "Approval pending"
+        : booking != null && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open ? "COS approved"
+        : MsapConstants.CustomerOrderSlipStatus.GetDisplayName(Model.Status);
+    var ticketEntry = ViewBag.ActualTicketEntry as DispatchTicketViewModel;
+    var viewedTicket = ViewData["ViewedTicket"] as DispatchTicket;
+    var selectedEntry = entries.FirstOrDefault(entry => entry.VesselScheduleServiceEntryId == ticketEntry?.VesselScheduleServiceEntryId);
+}
+<link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/cos-details.css" asp-append-version="true" />
+<div class="schedule-screen-layout app-ui">
+    <partial name="_WorkflowProgress" model="progress" />
+    <main class="cos-details-workspace ui-stack">
+        @Html.AntiForgeryToken()
+        <header class="ui-page-header">
+            <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">COS records</a></li><li aria-current="page">@Model.CustomerOrderSlipNumber</li></ol></nav>
+            <h1 class="ui-page-title" data-page-header>@(approvalPending ? "Urgent service entry" : "COS details & tickets")</h1>
+            <a asp-action="Index" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
+            <div class="ui-page-description cos-details-status">
+                <span class="schedule-status-pill">@statusLabel</span>
+                <span class="ui-body ui-muted">@Model.CustomerOrderSlipNumber</span>
+                @if (entries.Count > 0)
+                {
+                    <span class="ui-body ui-muted">@(entries.Count(entry => !entry.CancelledAt.HasValue) - pendingServices.Count) of @entries.Count(entry => !entry.CancelledAt.HasValue) tickets entered · @pendingServices.Count pending</span>
+                }
+            </div>
+        </header>
+        @if (approvalPending)
+        {
+            <p class="ui-panel ui-body ui-attention">Approval pending · Actual ticket entry is allowed. Charges and billing remain pending until schedule approval.</p>
+        }
+        <section class="ui-panel ui-panel--compact ui-stack" id="cosBookingDetails" aria-label="COS booking details">
+            <dl class="schedule-review-fields cos-details-fields">
+                <div><dt class="ui-caption ui-muted">Customer</dt><dd class="ui-value">@Model.Customer.CustomerName</dd></div>
+                <div><dt class="ui-caption ui-muted">Vessel</dt><dd class="ui-value">@Model.Vessel.VesselName</dd></div>
+                <div><dt class="ui-caption ui-muted">Port / terminal</dt><dd class="ui-value">@Model.Port.PortName / @Model.Terminal.TerminalName</dd></div>
+                <div><dt class="ui-caption ui-muted">Voyage</dt><dd class="ui-value">@(Model.VoyageNumber ?? "—")</dd></div>
+                <div class="cos-planned-window"><dt class="ui-caption ui-muted">Planned window · Philippine time</dt><dd class="ui-value">@(Model.PlannedStartTime?.ToString("dd MMM yyyy, HH:mm") ?? "Not scheduled") @(Model.PlannedEndTime.HasValue ? $"– {Model.PlannedEndTime:dd MMM yyyy, HH:mm}" : "")</dd></div>
+                @if (booking != null)
+                {
+                    <div><dt class="ui-caption ui-muted">COS discount</dt><dd class="ui-value">@(booking.SkipCosDiscount ? "0% · Skipped" : $"{booking.CosDiscountPercent.GetValueOrDefault():0.##}% · Applied")</dd></div>
+                    <div><dt class="ui-caption ui-muted">SBMA share</dt><dd class="ui-value">@(booking.SbmaEnabled ? "Enabled · Actual time" : "Disabled")</dd></div>
+                }
+            </dl>
+            <div class="cos-details-links">
+                @if (booking != null)
+                {
+                    <a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@booking.VesselScheduleId">View vessel schedule</a>
+                }
+                @if (ViewBag.CanEditCustomerOrderSlip == true && booking == null && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && ViewBag.HasDispatchTickets != true && ViewBag.HasBilling != true)
+                {
+                    <a asp-action="Edit" asp-route-id="@Model.CustomerOrderSlipId">Edit COS</a>
+                }
+            </div>
+        </section>
+        <section class="ui-panel ui-stack" id="cosServices" aria-labelledby="cosServicesTitle">
+            <div class="cos-section-heading">
+                <h2 class="ui-section-title" id="cosServicesTitle">Services &amp; tickets</h2>
+                @if (pendingServices.Count > 0)
+                {
+                    <span class="schedule-status-pill ui-status ui-attention">@pendingServices.Count ticket(s) missing</span>
+                }
+                @if (entries.Count == 0 && canRecord)
+                {
+                    <a asp-controller="DispatchTicket" asp-action="Create" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-secondary">Add ticket</a>
+                }
+            </div>
+            @if (ViewBag.HasBilling == true)
+            {
+                <p class="ui-body ui-muted">Billing #@ViewBag.BillingNumber is linked to this COS. Ticket modifications are restricted.</p>
+            }
+            <div class="schedule-services-table" role="region" aria-label="Services and tickets by tugboat" tabindex="0">
+                <table class="schedule-review-table cos-services-table">
+                    <thead><tr>
+                        <th>Service</th>
+                        <th>Ticket number</th>
+                        <th>Actual hours</th><th>Billable hours</th><th>Service status</th><th>Action</th>
+                    </tr></thead>
+                    <tbody>
+                        @foreach (var tugId in tugIds)
+                        {
+                            var tugEntries = entries.Where(entry => entry.TugboatId == tugId).ToList();
+                            var tugTickets = Model.DispatchTickets.Where(ticket => ticket.TugBoatId == tugId).ToList();
+                            var tug = tugEntries.FirstOrDefault()?.Tugboat ?? tugTickets.First().Tugboat;
+                            <tr class="cos-tug-group"><th colspan="6">@tug.TugboatName <span class="ui-caption ui-muted">@(tug.IsCompanyOwned ? "Company-owned" : "Subcontractor")</span></th></tr>
+                            @foreach (var entry in tugEntries)
+                            {
+                                var ticket = tugTickets.FirstOrDefault(item => item.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId);
+                                <partial name="_ServiceTicketRow" model="Tuple.Create<VesselScheduleServiceEntry?, DispatchTicket?>(entry, ticket)" />
+                            }
+                            @foreach (var ticket in tugTickets.Where(item => !tugEntries.Any(entry => entry.VesselScheduleServiceEntryId == item.VesselScheduleServiceEntryId)))
+                            {
+                                <partial name="_ServiceTicketRow" model="Tuple.Create<VesselScheduleServiceEntry?, DispatchTicket?>(null, ticket)" />
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (tugIds.Count == 0) { <p class="ui-body ui-muted">No services or tickets recorded.</p> }
+        </section>
+        @if (ticketEntry != null)
+        {
+            <section class="ui-panel ui-stack" id="actualTicketEntry" aria-labelledby="actualTicketTitle">
+                <div class="cos-section-heading"><h2 class="ui-section-title" id="actualTicketTitle">@(ViewData["EditActualTicket"] is true ? "Edit actual ticket" : ticketEntry.DispatchTicketId.HasValue ? "View actual ticket" : "Enter actual ticket") · @(selectedEntry?.Tugboat.TugboatName ?? viewedTicket?.Tugboat.TugboatName) / @(selectedEntry?.Service.ServiceName ?? viewedTicket?.Service.ServiceName)</h2><span class="schedule-status-pill">@(ticketEntry.DispatchTicketId.HasValue ? "Recorded" : "Not saved yet")</span></div>
+                <partial name="_ActualTicketEntry" model="ticketEntry" />
+            </section>
+        }
+        <partial name="_OtherTugCharges" model="Model" />
+        @if (!string.IsNullOrWhiteSpace(Model.Remarks))
+        {
+            <section class="ui-panel ui-stack"><h2 class="ui-section-title">Planning notes</h2><p class="ui-body schedule-note">@Model.Remarks</p></section>
+        }
+        <section class="ui-panel" id="timelineAccordion" aria-label="Workflow activity">
+            <button type="button" id="timelineToggle" class="cos-timeline-toggle" aria-expanded="false" aria-controls="timelineBody"><span class="ui-section-title">Workflow timeline</span><span class="material-symbols-outlined" id="timelineChevron" aria-hidden="true">expand_more</span></button>
+            <div id="timelineBody" style="overflow:hidden;max-height:0;opacity:0"><div id="timelineContainer"><p class="ui-body ui-muted">Expand to load the workflow activity.</p></div></div>
+        </section>
+        <footer class="cos-details-footer">
+            <span class="ui-caption ui-muted">@progress.Guidance</span>
+            <span class="ui-body">@Model.DispatchTickets.Count ticket(s) · Calculated billing ₱ @Model.DispatchTickets.Where(ticket => ticket.Status != MsapConstants.DispatchTicketStatus.CalculationPending).Sum(ticket => ticket.TotalBilling).ToString("N2")
+                @if (Model.DispatchTickets.Any(ticket => ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending))
+                {
+                    <span class="ui-caption ui-muted">· Unresolved charges excluded</span>
+                }</span>
+        </footer>
+    </main>
+</div>
+
+@section Scripts {
+    <script src="~/msap/js/cos-ticket-entry.js" asp-append-version="true"></script>
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '.job-progress-timeline', title: 'Job stages', text: 'Follow COS approval, service tickets, billing, final bill approval, collection, deposit, and clearing. Direct COS records bypass vessel planning and COS approval.', interactive: false },
+            { selector: '.job-progress-next', title: 'Next action', text: 'Read the guidance for the current stage and any blockers before continuing.', interactive: false },
+            { selector: '#cosBookingDetails', title: 'Order details', text: 'Review the customer, vessel, location, references, and planned schedule. Direct orders can be edited here when their status and access allow it.', interactive: false },
+            { selector: '#cosServices', title: 'Dispatch Tickets', text: 'Add service tickets when allowed, then review each ticket’s timeline, tugboat, billing amount, and status. Use View ticket to review saved actual service details.', interactive: false },
+            { selector: '#timelineAccordion', title: 'Activity timeline', text: 'Expand this section to load the COS activity history.', interactive: false },
+            { selector: '.cos-details-footer', title: 'Order totals', text: 'See the total ticket count and accumulated billing amount for this COS.', interactive: false }
+        ];
+    </script>
+    <script>
+        const PageConfig = {
+            customerOrderSlipId: @Model.CustomerOrderSlipId,
+            customerOrderSlipNumber: '@Model.CustomerOrderSlipNumber',
+            status: '@Model.Status',
+            hasTickets: @(Model.DispatchTickets.Any() ? "true" : "false"),
+            messages: {
+                error:   @Json.Serialize(TempData.Peek("error") ?? TempData.Peek("Denied")),
+                success: @Json.Serialize(TempData.Peek("success")),
+                warning: @Json.Serialize(TempData.Peek("warning"))
+            }
+        };
+
+        $(document).ready(function () {
+            @if (TempData["PromptAddTicket"] is true && (booking == null || booking.ServiceEntries.Count == 0) && ViewBag.CanCreateDispatchTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && !bookingClosed && !ViewBag.HasBilling && Model.DispatchTickets.All(t => t.Status != MsapConstants.DispatchTicketStatus.Billed))
+            {
+                <text>
+                ModernAlert.confirm({ title: 'Dispatch Ticket saved', text: 'Do you need to add more tickets?', icon: 'question', confirmText: 'Add another ticket', cancelText: 'Continue with existing tickets' })
+                    .then(result => { if (result.isConfirmed) window.location.href = '@Url.Action("Create", "DispatchTicket", new { area = "MSAP", customerOrderSlipId = Model.CustomerOrderSlipId })'; });
+                </text>
+            }
+            // Show TempData messages
+            if (PageConfig.messages.error) {
+                ModernAlert.error(PageConfig.messages.error);
+            }
+            if (PageConfig.messages.success) {
+                ModernAlert.success(PageConfig.messages.success);
+            }
+            if (PageConfig.messages.warning) {
+                ModernAlert.warning(PageConfig.messages.warning);
+            }
+
+            // Accordion: lazy-load timeline on first expand
+            let timelineLoaded = false;
+            $('#timelineToggle').on('click', function () {
+                const $body = $('#timelineBody');
+                const $chevron = $('#timelineChevron');
+                const isExpanded = $(this).attr('aria-expanded') === 'true';
+
+                if (isExpanded) {
+                    // Collapse
+                    $body.css({ 'max-height': '0', 'opacity': '0' });
+                    $chevron.css('transform', 'rotate(0deg)');
+                    $(this).attr('aria-expanded', 'false');
+                } else {
+                    // Expand
+                    $(this).attr('aria-expanded', 'true');
+                    $chevron.css('transform', 'rotate(180deg)');
+
+                    if (!timelineLoaded) {
+                        timelineLoaded = true;
+                        loadTimeline();
+                    }
+
+                    // Set to a large enough max-height so content fully shows
+                    $body.css({ 'max-height': '5000px', 'opacity': '1' });
+                }
+            });
+        });
+
+        function loadTimeline() {
+            $.get('@Url.Action("GetTimeline", "AuditTrail", new { area = "MSAP" })', { id: PageConfig.customerOrderSlipId }, function(data) {
+                $('#timelineContainer').html(data);
+            }).fail(function() {
+                $('#timelineContainer').html('<div class="text-center py-4 text-danger"><p>Failed to load timeline.</p></div>');
+            });
+        }
+
+    </script>
+}

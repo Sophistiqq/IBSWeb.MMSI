@@ -1,0 +1,13 @@
+@model CreateCollectionViewModel
+@{
+    ViewData["Title"] = "Record collection";
+    ViewData["IsFullWidth"] = true;
+}
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/collection-form.css" asp-append-version="true" />
+<partial name="_CollectionForm" model="Model" />
+@section Scripts
+{
+    <script src="~/msap/js/job-progress.js" asp-append-version="true"></script>
+    <script src="~/msap/js/collection-form.js" asp-append-version="true"></script>
+}

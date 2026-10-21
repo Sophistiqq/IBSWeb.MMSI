@@ -438,7 +438,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             var viewModel = new GeneralLedgerReportViewModel
             {
                 ChartOfAccounts = await _dbContext.FilprideChartOfAccounts
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                     .Where(coa => !coa.HasChildren)
                     .OrderBy(coa => coa.AccountNumber)
                     .Select(s => new SelectListItem
@@ -744,7 +744,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                     1
                 ).AddDays(-1);
                 var glPeriodBalances = await _dbContext.FilprideGlPeriodBalances
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                     .Include(g => g.Account)
                     .Where(pb => accountNumbers.Contains(pb.Account.AccountNumber!) &&
                                  pb.IsValid &&
@@ -1711,7 +1711,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             var viewModel = new GeneralLedgerReportViewModel
             {
                 ChartOfAccounts = await _dbContext.FilprideChartOfAccounts
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                     .Where(coa => !coa.HasChildren)
                     .OrderBy(coa => coa.AccountNumber)
                     .Select(s => new SelectListItem
@@ -1753,7 +1753,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
 
                 // Query subsidiary ledger balances from database
                 var subsidiaryLedgers = await _dbContext.FilprideGlSubAccountBalances
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                     .Include(s => s.Account)
                     .Where(s =>
                         s.IsValid &&

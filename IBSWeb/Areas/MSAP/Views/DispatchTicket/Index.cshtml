@@ -1,0 +1,230 @@
+@{
+
+
+    ViewData["Title"] = "Dispatch Tickets";
+    ViewData["IsFullWidth"] = true;
+    var hasFrom = DateOnly.TryParseExact(Context.Request.Query["from"], "yyyy-MM-dd", out var periodFrom);
+    var hasTo = DateOnly.TryParseExact(Context.Request.Query["to"], "yyyy-MM-dd", out var periodTo);
+    var hasPeriod = hasFrom && hasTo && periodFrom <= periodTo;
+    var periodSearch = hasPeriod ? $"{periodFrom:yyyy-MM-dd}..{periodTo:yyyy-MM-dd}" : "";
+}
+
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
+        <!-- Header Section -->
+        <div class="flex-stack ui-page-toolbar">
+            <div>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Dispatch Tickets</li></ol></nav>
+                <h1 class="modern-headline-lg ui-page-title" data-page-header>@ViewData["Title"]</h1>
+            </div>
+            <div class="flex gap-2 ui-actions">
+                <!-- Add New Button if needed in future -->
+            </div>
+        </div>
+
+        <!-- Filter Group -->
+        <div class="flex flex-wrap gap-2">
+            <button id="filterAll" class="modern-btn-secondary active">ALL</button>
+            <button id="filterCalculationPending" class="modern-btn-secondary">CALCULATION PENDING</button>
+            <button id="filterForBilling" class="modern-btn-secondary">FOR BILLING</button>
+            <button id="filterBilled" class="modern-btn-secondary">BILLED</button>
+        </div>
+
+        @if (hasPeriod)
+        {
+            <p id="dispatchPeriod" class="modern-label ui-label">Dispatch dates: @periodFrom.ToString("MMM d, yyyy")–@periodTo.ToString("MMM d, yyyy") · <a asp-action="Index">Clear date range</a></p>
+        }
+
+        <!-- Table Card -->
+        <div class="modern-card ui-card">
+            <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">confirmation_number</span>
+                    <h2 class="modern-headline-md ui-section-title">Ticket Registry</h2>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="modern-label mb-0 ui-label" style="color: var(--on-surface-variant)">Filter by Date:</label>
+                    <input type="date" id="dateFilter" class="modern-input ui-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
+                </div>
+            </div>
+            <div class="modern-card-body ui-card-body">
+                <div class="modern-table-container">
+                    <table class="modern-table ui-table" id="paginatedTable">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>COS #</th>
+                                <th>Ticket #</th>
+                                <th>Billing #</th>
+                                <th>Start</th>
+                                <th>End</th>
+                                <th>Activity/Service</th>
+                                <th>Port-Terminal</th>
+                                <th>Tugboat</th>
+                                <th>Customer</th>
+                                <th>Vessel</th>
+                                <th>Status</th>
+                                <th class="text-center">Actions</th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<style>
+    .modern-btn-secondary.active {
+        background-color: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+    .modern-btn-secondary.modern-btn-error.active {
+        background-color: var(--error);
+        color: white;
+        border-color: var(--error);
+    }
+</style>
+
+@section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '#filterAll', title: 'Ticket status filters', text: 'Choose a status above the registry to focus on tickets awaiting calculation, ready for billing, or billed.', interactive: false },
+            { selector: '#dateFilter', title: 'Filter by date', text: 'Filter tickets by dispatch date. A date range may also be applied from another screen and can be cleared above the registry.', interactive: false },
+            { selector: '#paginatedTable', title: 'Ticket registry', text: 'Review service times, vessel, tugboat, customer, billing link, and status. Open a ticket number to inspect it or use Actions for permitted work.', interactive: false }
+        ];
+    </script>
+    <script>
+        $(document).ready(function () {
+            const previewUrl = '@Url.Action("Preview", "DispatchTicket")';
+            let filterType = '@ViewBag.FilterType';
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const statusFilter = urlParams.get('status') || '';
+            let periodSearch = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(periodSearch));
+
+            let table = $('#paginatedTable').DataTable(ModernTable.config({
+                order: [[0, 'desc']],
+                stateLoadParams: function(settings, data) {
+                    if (periodSearch) {
+                        data.search.search = '';
+                        data.columns.forEach(column => column.search.search = '');
+                    }
+                },
+                columnDefs: [{ orderable: false, targets: [12] }],
+                ajax: ModernTable.ajax("@Url.Action("GetDispatchTicketLists", "DispatchTicket", new { area = "MSAP" })", (d) => {
+                    d.filterType = filterType;
+                    if (periodSearch) d.columns[0].search.value = periodSearch;
+                    return d;
+                }),
+                columns: [
+                    { data: "date", defaultContent: "" },
+                    { data: "cosNumber", defaultContent: "" },
+                    {
+                        data: "dispatchNumber",
+                        render: (data, type, row) => `<a href="${previewUrl}?id=${row.dispatchTicketId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${data}</a>`
+                    },
+                    { data: "billing.msapBillingNumber", defaultContent: "" },
+                    {
+                        data: "dateLeft",
+                        render: (data, type, row) => ModernTable.render.dateTime(row.dateLeft, row.timeLeft)
+                    },
+                    {
+                        data: "dateArrived",
+                        render: (data, type, row) => ModernTable.render.dateTime(row.dateArrived, row.timeArrived)
+                    },
+                    { data: "service.serviceName", defaultContent: "" },
+                    {
+                        data: null,
+                        orderable: false,
+                        render: (data, type, row) => {
+                            const portName = row.terminal?.port?.portName ?? "";
+                            const terminalName = row.terminal?.terminalName ?? "";
+                            return portName || terminalName ? `${portName} - ${terminalName}` : "";
+                        }
+                    },
+                    { data: "tugboat.tugboatName", defaultContent: "" },
+                    {
+                        data: "customer.customerName",
+                        render: (data, type, row) => row.customerId ? data : `<span class="italic text-xs opacity-60">(For Customer Assigning)</span>`
+                    },
+                    { data: "vessel.vesselName", defaultContent: "" },
+                    {
+                        data: "status",
+                        className: "text-center",
+                        render: (data) => {
+                            let statusClass = "";
+                            if (data === "@MsapConstants.DispatchTicketStatus.CalculationPending") return ModernTable.render.badge("Calculation pending", "ui-status ui-critical");
+                            if (data === "@MsapConstants.DispatchTicketStatus.ForTariff") statusClass = "ui-status ui-attention";
+                            else if (data === "@MsapConstants.DispatchTicketStatus.ForApproval") statusClass = "ui-status ui-attention";
+                            else if (data === "@MsapConstants.DispatchTicketStatus.Disapproved") statusClass = "ui-status ui-critical";
+                            else if (data === "@MsapConstants.DispatchTicketStatus.ForBilling") statusClass = "ui-status ui-attention";
+                            else if (data === "@MsapConstants.DispatchTicketStatus.Billed") statusClass = "ui-status ui-complete";
+                            return ModernTable.render.badge(data, statusClass);
+                        }
+                    },
+                    {
+                        data: null,
+                        orderable: false,
+                        className: "text-center",
+                        render: (data, type, row) => ModernTable.render.dropdown([
+                            {
+                                label: 'View Details',
+                                icon: 'visibility',
+                                url: `${previewUrl}?id=${row.dispatchTicketId}`
+                            }
+                        ])
+                    }
+                ],
+                initComplete: function() {
+                    if (statusFilter) {
+                        this.api().column(11).search(statusFilter).draw();
+                        updateFilterButtons(statusFilter);
+                    }
+                }
+            }));
+
+            // Date filter
+            $('#dateFilter').on('change', function () {
+                periodSearch = '';
+                $('#dispatchPeriod').remove();
+                const url = new URL(window.location);
+                url.searchParams.delete('from');
+                url.searchParams.delete('to');
+                window.history.replaceState({}, '', url);
+                table.column(0).search($(this).val()).draw();
+            });
+
+            // Filter button handlers
+            $('.modern-btn-secondary[id^="filter"]').on('click', function() {
+                const id = $(this).attr('id');
+                let status = '';
+                if (id === 'filterCalculationPending') status = '@MsapConstants.DispatchTicketStatus.CalculationPending';
+                else if (id === 'filterForBilling') status = '@MsapConstants.DispatchTicketStatus.ForBilling';
+                else if (id === 'filterBilled') status = '@MsapConstants.DispatchTicketStatus.Billed';
+
+                filterType = '';
+                table.column(11).search(status).draw();
+                updateUrl(status);
+                updateFilterButtons(status);
+            });
+
+            function updateUrl(status) {
+                const url = new URL(window.location);
+                if (status) url.searchParams.set('status', status);
+                else url.searchParams.delete('status');
+                window.history.replaceState({}, '', url);
+            }
+
+            function updateFilterButtons(status) {
+                $('.modern-btn-secondary').removeClass('active');
+                if (!status) $('#filterAll').addClass('active');
+                else if (status === "@MsapConstants.DispatchTicketStatus.CalculationPending") $('#filterCalculationPending').addClass('active');
+                else if (status === "@MsapConstants.DispatchTicketStatus.ForBilling") $('#filterForBilling').addClass('active');
+                else if (status === "@MsapConstants.DispatchTicketStatus.Billed") $('#filterBilled').addClass('active');
+            }
+        });
+
+    </script>
+}

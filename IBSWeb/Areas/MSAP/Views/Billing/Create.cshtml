@@ -1,0 +1,159 @@
+@model Billing
+@{
+    ViewData["Title"] = "Prepare billing";
+    ViewData["IsFullWidth"] = true;
+}
+
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/billing-preparation.css" asp-append-version="true" />
+
+<div class="modern-layout app-ui billing-preparation">
+    <form id="billingPreparationForm" method="post" asp-action="Create" novalidate data-download
+          data-customer-url="@Url.Action("GetCustomerDetail")"
+          data-cos-list-url="@Url.Action("GetBillableCustomerOrderSlips")"
+          data-tickets-url="@Url.Action("GetDispatchTicketsByCustomerOrderSlip")"
+          data-principals-url="@Url.Action("GetPrincipalsByCustomer")"
+          data-progress-url="@Url.Action("Progress", "CustomerOrderSlip")"
+          data-index-url="@Url.Action("Index")"
+          data-details-url="@Url.Action("Details", "CustomerOrderSlip")"
+          data-initial-cos="@Model.CustomerOrderSlipId">
+        @Html.AntiForgeryToken()
+        <main class="billing-workspace">
+            <aside class="ui-panel schedule-details-progress billing-progress" aria-label="Job Progress">
+                <div id="financialJobProgress" data-progress-url="@Url.Action("Progress", "CustomerOrderSlip")" data-action-stage="5">
+                    <h2 class="ui-section-title">Job Progress</h2>
+                    <p class="ui-caption ui-muted">Select a COS to see its progress.</p>
+                </div>
+            </aside>
+            <div class="ui-stack billing-content">
+                <header class="ui-page-header">
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">Billing</a></li><li aria-current="page">Prepare billing</li></ol></nav>
+                    <h1 class="ui-page-title" data-page-header>Prepare billing</h1>
+                    <div class="billing-review-header-actions">
+                        <a class="modern-btn-secondary ui-page-action" asp-action="Index" data-ui-back>Back</a>
+                        <a id="cosDetailsLink" class="modern-btn-secondary ui-page-action" asp-action="Index" hidden>COS details</a>
+                    </div>
+                    <p class="ui-page-description ui-caption ui-muted" id="billingReadiness" role="status">Select a customer and COS to load completed services.</p>
+                </header>
+
+                <section class="ui-panel ui-stack" aria-label="Booking details">
+                    <div class="billing-fields">
+                        <div class="ui-field">
+                            <label asp-for="CustomerId" class="ui-label">Service customer *</label>
+                            <select asp-for="CustomerId" asp-items="Model.Customers" class="js-modern-select" data-placeholder="Select customer" required>
+                                <option value="">Select customer</option>
+                            </select>
+                        </div>
+                        <div class="ui-field">
+                            <label for="CustomerOrderSlipSelect" class="ui-label">COS *</label>
+                            <select asp-for="CustomerOrderSlipId" class="js-modern-select" id="CustomerOrderSlipSelect" data-placeholder="Select COS" disabled required>
+                                <option value="">Select COS</option>
+                            </select>
+                        </div>
+                        <div class="ui-field"><span class="ui-caption ui-muted">Vessel</span><p id="bookingVessel" class="ui-body">—</p></div>
+                        <div class="ui-field"><span class="ui-caption ui-muted">Port / terminal</span><p id="bookingLocation" class="ui-body">—</p></div>
+                    </div>
+                    <div class="billing-booking-facts">
+                        <div><span class="ui-caption ui-muted">Voyage</span><p id="bookingVoyage" class="ui-body">—</p></div>
+                        <div><span class="ui-caption ui-muted">Service dates</span><p id="bookingDates" class="ui-body">—</p></div>
+                        <div><span class="ui-caption ui-muted">COS discount</span><p id="bookingDiscount" class="ui-body">—</p></div>
+                        <div><span class="ui-caption ui-muted">Terms</span><p id="bookingTerms" class="ui-body">—</p></div>
+                    </div>
+                </section>
+
+                <section class="ui-panel ui-stack" aria-labelledby="billingHeading">
+                    <div class="billing-section-heading">
+                        <h2 id="billingHeading" class="ui-section-title">Billing details</h2>
+                        <div class="billing-tax-options">
+                            <label class="billing-check"><input asp-for="IsUndocumented" /> Undocumented</label>
+                            <label class="billing-check"><input asp-for="SeparateBaf" /> Separate Basic and BAF</label>
+                        </div>
+                    </div>
+                    <div class="billing-number-fields">
+                        <div class="ui-field">
+                            <label for="MsapBillingNumber" id="basicNumberLabel" class="ui-label">Billing number *</label>
+                            <input asp-for="MsapBillingNumber" class="modern-input" placeholder="B000000" maxlength="10" required />
+                        </div>
+                        <div class="ui-field" id="bafNumberField" hidden>
+                            <label asp-for="BafBillingNumber" class="ui-label">BAF billing number *</label>
+                            <input asp-for="BafBillingNumber" class="modern-input" maxlength="10" disabled />
+                        </div>
+                        <div class="ui-field">
+                            <label asp-for="Date" class="ui-label">Billing date *</label>
+                            <input asp-for="Date" type="date" class="modern-input" required value="@(Model.Date != default ? Model.Date.ToString("yyyy-MM-dd") : DateTimeHelper.GetCurrentPhilippineTime().ToString("yyyy-MM-dd"))" />
+                        </div>
+                    </div>
+                    <div class="billing-recipient-fields">
+                        <div class="ui-field">
+                            <label asp-for="BilledTo" class="ui-label">Bill to *</label>
+                            <select asp-for="BilledTo" class="js-modern-select">
+                                <option value="LOCAL">Customer</option>
+                            </select>
+                        </div>
+                        <div id="principalField" class="ui-field" hidden>
+                            <label for="PrincipalSelect" class="ui-label">Principal *</label>
+                            <select asp-for="PrincipalId" class="js-modern-select" id="PrincipalSelect" disabled>
+                                <option value="">Select principal</option>
+                            </select>
+                        </div>
+                        <div class="billing-tax-options" aria-label="Tax settings from service customer">
+                            <label class="billing-check"><input type="checkbox" id="customerVat" disabled /> VAT</label>
+                            <label class="billing-check"><input type="checkbox" id="customerVatInclusive" checked disabled /> VAT inclusive</label>
+                            <label class="billing-check"><input type="checkbox" id="customerWithholding" disabled /> Print withholding</label>
+                            <span class="ui-caption ui-muted">From service customer settings</span>
+                        </div>
+                    </div>
+                    <div class="billing-recipient">
+                        <div><span class="ui-caption ui-muted">Statement address</span><p id="recipientAddress" class="ui-body">—</p></div>
+                        <div><span class="ui-caption ui-muted">Statement TIN</span><p id="recipientTin" class="ui-body">—</p></div>
+                        <div><span class="ui-caption ui-muted">Payment terms</span><p id="recipientTerms" class="ui-body">—</p></div>
+                    </div>
+                    <p id="recipientNote" class="ui-caption ui-muted">The statement is addressed to the service customer.</p>
+                </section>
+
+                <section class="ui-panel ui-stack" aria-labelledby="servicesHeading">
+                    <div class="billing-section-heading">
+                        <h2 id="servicesHeading" class="ui-section-title">Completed services</h2>
+                        <span class="ui-caption ui-muted">Approved rates · COS discount applied</span>
+                    </div>
+                    <div class="billing-table-scroll">
+                        <table class="billing-service-table">
+                            <thead><tr><th>Service</th><th>Actual hours</th><th>Billable hours</th><th>Basic after discount</th><th>BAF after discount</th><th>Tariff / BAF source</th></tr></thead>
+                            <tbody id="completedServices"><tr><td colspan="6">Select a customer and COS to view completed services.</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <div class="billing-summary-grid">
+                    <section class="ui-panel ui-stack">
+                        <div class="billing-section-heading"><h2 id="basicSummaryHeading" class="ui-section-title">Basic</h2><span class="billing-badge split-only" hidden>Separate balance</span></div>
+                        <div class="billing-amount"><span>Services after COS discount</span><strong id="basicCharges">0.00</strong></div>
+                        <p class="ui-caption ui-muted">SBMA share · Provisional placement</p>
+                        <div class="billing-amount billing-summary-total"><strong id="basicDueLabel">Final amount due</strong><strong>To be calculated</strong></div>
+                        <p class="ui-caption ui-muted">Reminder: confirm SBMA placement and financial treatment.</p>
+                    </section>
+                    <section class="ui-panel ui-stack">
+                        <div class="billing-section-heading"><h2 id="bafSummaryHeading" class="ui-section-title">BAF</h2><span class="billing-badge split-only" hidden>Separate balance</span></div>
+                        <div class="billing-amount"><span>BAF after COS discount</span><strong id="bafCharges">0.00</strong></div>
+                        <p class="ui-caption ui-muted">VAT / withholding · From customer settings</p>
+                        <div class="billing-amount billing-summary-total"><strong>Final amount due</strong><strong>Calculated in statement preview</strong></div>
+                        <p id="balanceNote" class="ui-caption ui-muted">The charges are included in one billing balance.</p>
+                    </section>
+                </div>
+
+                <footer class="billing-footer">
+                    <p id="preparationNote" class="ui-caption ui-muted">One preparation · One billing number</p>
+                    <div class="billing-footer-actions">
+                        <button type="submit" id="previewBilling" class="modern-btn-secondary ui-page-action" formaction="@Url.Action("PreviewPreparation")" formtarget="_blank" disabled>Preview statements</button>
+                        <button type="submit" id="saveBilling" class="modern-btn-primary ui-page-action" disabled>Save for reviewing</button>
+                    </div>
+                </footer>
+            </div>
+        </main>
+    </form>
+</div>
+
+@section Scripts {
+    <script src="~/msap/js/job-progress.js" asp-append-version="true"></script>
+    <script src="~/msap/js/billing-preparation.js" asp-append-version="true"></script>
+}

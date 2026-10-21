@@ -30,10 +30,15 @@
 <header id="modern-navbar" role="banner" aria-label="Main Navigation">
 
     <!-- ── Brand ── -->
-    <a class="mnav-brand" asp-area="" asp-controller="Home" asp-action="Index">
-        <img src="@Url.Content(branding.NavbarLogoPath)" alt="@branding.CompanyShortName logo" width="@branding.NavbarLogoWidth" height="@branding.NavbarLogoHeight" />
-        <span class="d-none d-sm-inline">@branding.CompanyShortName</span>
-    </a>
+    <div class="mnav-brand-group">
+        <a class="mnav-brand" asp-area="" asp-controller="Home" asp-action="Index">
+            <img src="@Url.Content(branding.NavbarLogoPath)" alt="@branding.CompanyShortName logo" width="@branding.NavbarLogoWidth" height="@branding.NavbarLogoHeight" />
+        </a>
+        @if (SignInManager.IsSignedIn(User))
+        {
+            <partial name="_TugboatWorkspace" />
+        }
+    </div>
 
     @if (SignInManager.IsSignedIn(User))
     {
@@ -77,6 +82,7 @@
         <!-- ── Desktop Navigation ── -->
         <nav class="mnav-nav-area" aria-label="Main menu">
             <ul class="mnav-list" role="menubar">
+                <partial name="/Areas/MSAP/Views/Shared/_BaseNavigation.cshtml" />
 
                 <!-- Home -->
                 <li class="mnav-item" role="none">

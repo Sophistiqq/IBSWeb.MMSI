@@ -1,0 +1,93 @@
+/* User Manual - Docs Layout */
+.docs-layout {
+    display: flex;
+    gap: 0;
+    min-height: calc(100vh - 5rem);
+    margin: -1rem 0 0 0;
+    margin-top: -1.5rem;
+    background-color: var(--surface);
+    color: var(--on-surface);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.docs-sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--surface-container-low);
+    border-right: 1px solid var(--outline-variant);
+    padding: 1.5rem 0;
+    overflow-y: auto;
+    position: sticky;
+    top: 5rem;
+    height: calc(100vh - 5rem);
+}
+
+.docs-sidebar-title {
+    font-size: .85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--on-surface-variant);
+    padding: 0 1.25rem .75rem;
+    border-bottom: 1px solid var(--outline-variant);
+    margin-bottom: .5rem;
+}
+
+.docs-sidebar-item {
+    display: block;
+    padding: .5rem 1.25rem;
+    color: var(--on-surface-variant);
+    text-decoration: none;
+    font-size: .9rem;
+    border-left: 3px solid transparent;
+    transition: all .15s;
+}
+
+.docs-sidebar-item:hover {
+    background: var(--surface-container-high);
+    color: var(--primary);
+}
+
+.docs-sidebar-item.active {
+    background: var(--surface-container-high);
+    color: var(--primary);
+    border-left-color: var(--primary);
+    font-weight: 600;
+}
+
+.docs-content {
+    flex: 1;
+    padding: 2rem 3rem;
+    overflow-x: auto;
+}
+
+.docs-content h1 { font-size: 2rem; margin-top: 0; margin-bottom: 1rem; font-weight: 700; color: var(--on-surface); }
+.docs-content h2 { font-size: 1.5rem; margin-top: 2rem; border-bottom: 1px solid var(--outline-variant); padding-bottom: .5rem; color: var(--on-surface); }
+.docs-content h3 { font-size: 1.2rem; margin-top: 1.5rem; color: var(--on-surface); }
+.docs-content h4 { font-size: 1.1rem; margin-top: 1.25rem; color: var(--on-surface); }
+.docs-content p { line-height: 1.7; margin-bottom: 1rem; }
+.docs-content table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+.docs-content th, .docs-content td { border: 1px solid var(--outline-variant); padding: .5rem .75rem; text-align: left; }
+.docs-content th { background: var(--surface-container-low); font-weight: 600; }
+.docs-content code { background: var(--surface-container-high); padding: .15em .4em; border-radius: 3px; font-size: .875em; color: var(--on-surface); }
+.docs-content pre { background: var(--surface-container-low); border: 1px solid var(--outline-variant); border-radius: 6px; padding: 1rem; overflow-x: auto; }
+.docs-content pre code { background: none; padding: 0; }
+.docs-content ul, .docs-content ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+.docs-content li { margin-bottom: .25rem; }
+.docs-content blockquote { border-left: 4px solid var(--primary); padding: .5rem 1rem; margin: 1rem 0; background: var(--surface-container-low); border-radius: 0 6px 6px 0; color: var(--on-surface-variant); }
+.docs-content hr { margin: 2rem 0; border-color: var(--outline-variant); }
+.docs-content a { color: var(--primary); }
+.docs-content a:hover { text-decoration: underline; }
+.docs-content strong { font-weight: 600; }
+.docs-content img { max-width: 100%; height: auto; display: block; margin: 1rem 0; border: 1px solid var(--outline-variant); border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+@media (max-width: 768px) {
+    .docs-sidebar { display: none; }
+    .docs-content { padding: 1.5rem; }
+}
+
+/* Mermaid dark mode: classDefs hardcode light pastel fills (inline !important, can't be overridden).
+   Keep them light and force dark label text so it stays readable. */
+[data-bs-theme="dark"] .docs-content .mermaid .nodeLabel {
+    color: #111827 !important;
+}

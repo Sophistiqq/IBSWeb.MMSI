@@ -1,0 +1,403 @@
+/* Shared schedule/COS workspace, review tables and approval dialog.
+   Page primitives come from css/ui-system.css; Job Progress comes from workflow-ui.css. */
+.schedule-muted {
+    color: var(--on-surface-variant);
+    margin: .35rem 0 0;
+}
+
+.schedule-actions {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+}
+
+.schedule-actions .modern-input {
+    width: auto;
+}
+
+.schedule-note {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.schedule-action-item,
+.schedule-delete-option {
+    padding-top: .75rem;
+    border-top: 1px solid var(--outline-variant);
+}
+
+.schedule-action-cancel h3 {
+    color: var(--error);
+}
+
+.schedule-delete-option {
+    font-size: .8rem;
+}
+
+.schedule-delete-option summary {
+    cursor: pointer;
+    color: var(--on-surface-variant);
+}
+
+/* Schedule approval dialog. */
+.schedule-confirm-review {
+    text-align: left;
+    font-size: .875rem;
+}
+
+.schedule-confirm-review dl {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) 2fr;
+    gap: .4rem .75rem;
+}
+
+.schedule-confirm-review dt {
+    color: var(--on-surface-variant);
+}
+
+.schedule-confirm-review dd {
+    margin: 0;
+}
+
+.modern-swal-popup:has(.schedule-confirm-review) {
+    width: min(720px, calc(100vw - 2rem)) !important;
+}
+
+/* Shared workspace and progress placement. */
+.schedule-screen-layout {
+    display: grid;
+    grid-template-columns: var(--ui-progress-width) minmax(0, 1fr);
+    gap: var(--ui-grid-gap);
+    width: 100%;
+    max-width: 100%;
+    padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-5);
+    background: var(--surface-container-low);
+    align-items: start;
+    box-sizing: border-box;
+}
+
+.schedule-job-progress-panel {
+    position: sticky;
+    top: calc(var(--mnav-height, 0px) + 12px);
+}
+
+.schedule-main-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--ui-summary-width);
+    gap: var(--ui-grid-gap);
+    min-width: 0;
+    align-items: start;
+}
+
+.schedule-main-workspace > form {
+    min-width: 0;
+}
+
+.schedule-header-stack {
+    grid-column: 1 / -1;
+    margin: 0;
+}
+
+.schedule-status-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2) var(--ui-space-3);
+    flex-wrap: wrap;
+}
+
+.schedule-status-pill {
+    align-self: flex-start;
+    background: color-mix(in srgb, var(--on-surface, #111827) 8%, var(--surface-container-lowest, #ffffff));
+    color: var(--on-surface, #374151);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-semibold);
+    padding: var(--ui-space-1) var(--ui-space-2);
+    border-radius: 4px;
+    border: none;
+}
+
+.schedule-screen-layout .field-validation-valid {
+    display: none;
+}
+
+.schedule-pill-badge {
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-semibold);
+    padding: 0 var(--ui-space-2);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--on-surface, #111827) 6%, var(--surface-container-lowest, #ffffff));
+    color: var(--on-surface, #374151);
+    border: 1px solid var(--outline-variant, #e5e7eb);
+}
+
+.schedule-services-table {
+    overflow-x: auto;
+}
+
+.schedule-pending-notice {
+    color: #b45309;
+    font-size: .7rem;
+    font-weight: 500;
+    margin-top: .15rem;
+}
+
+.schedule-bottom-bar {
+    border-top: 1px solid var(--outline-variant);
+    flex-wrap: wrap;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-4);
+    padding-top: var(--ui-space-4);
+    margin-top: var(--ui-space-2);
+}
+
+.schedule-action-buttons {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+}
+
+.schedule-summary-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-section-gap);
+    position: sticky;
+    top: calc(var(--mnav-height, 0px) + 12px);
+}
+
+.schedule-metrics-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-4);
+}
+
+.schedule-metric-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: var(--ui-text-body);
+    color: var(--on-surface-variant, #6b7280);
+    gap: var(--ui-space-3);
+    line-height: var(--ui-leading-body);
+}
+
+.schedule-metric-row strong {
+    font-weight: var(--ui-weight-medium);
+    color: var(--on-surface, #111827);
+    font-size: var(--ui-text-section);
+}
+
+.schedule-confirm-services {
+    margin-top: calc(var(--mnav-height, 0px) + 12px);
+    padding-top: .75rem;
+    border-top: 1px solid var(--outline-variant);
+}
+
+.schedule-confirm-table-wrapper {
+    overflow-x: auto;
+    margin-top: .5rem;
+}
+
+.schedule-confirm-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .85rem;
+}
+
+.schedule-confirm-table th,
+.schedule-confirm-table td {
+    padding: .5rem .65rem;
+    text-align: left;
+    border-bottom: 1px solid var(--outline-variant);
+}
+
+.schedule-confirm-table th {
+    color: var(--on-surface-variant);
+    font-weight: 600;
+    font-size: .75rem;
+    background: var(--surface-container-low);
+}
+
+.schedule-confirm-guidance {
+    margin-top: .85rem;
+    font-size: .85rem;
+    color: var(--on-surface-variant);
+}
+
+.schedule-screen-layout [hidden] {
+    display: none !important;
+}
+
+.schedule-screen-layout :is(input, select, textarea, button, a, [tabindex]):focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* Read-only booking and service review. */
+.schedule-review-content {
+    min-width: 0;
+}
+
+.schedule-review-workspace .schedule-summary-sidebar {
+    position: static;
+}
+
+.schedule-review-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ui-section-gap) var(--ui-grid-gap);
+    margin: 0;
+}
+
+.schedule-review-fields > div {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-field-gap);
+    min-width: 0;
+}
+
+.schedule-review-booking-fields {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.schedule-review-commercial-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.schedule-review-tug-heading {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-3) var(--ui-space-5);
+}
+
+.schedule-review-tug-heading > :last-child {
+    margin-left: auto;
+}
+
+.schedule-review-table {
+    width: 100%;
+    min-width: 660px;
+    border-collapse: collapse;
+    font-size: var(--ui-text-body);
+}
+
+.schedule-review-table th,
+.schedule-review-table td {
+    padding: var(--ui-space-3) var(--ui-space-2);
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--outline-variant);
+}
+
+.schedule-review-table th {
+    color: var(--on-surface-variant);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-medium);
+}
+
+.schedule-review-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.schedule-review-table small {
+    display: block;
+    margin-top: var(--ui-space-1);
+}
+
+.schedule-review-table [data-review-rate] {
+    font-variant-numeric: tabular-nums;
+}
+
+.schedule-review-manual {
+    display: inline-block;
+    padding: var(--ui-space-1) var(--ui-space-2);
+    font-weight: var(--ui-weight-semibold);
+    border-radius: var(--ui-radius);
+    background: var(--surface-container);
+}
+
+.schedule-review-footer {
+    margin: 0;
+    padding-top: var(--ui-space-4);
+}
+
+.schedule-review-actions details > :not(summary) {
+    margin-top: var(--ui-space-4);
+}
+
+.schedule-review-actions :is(.modern-btn-secondary, .modern-btn-error) {
+    width: 100%;
+    white-space: normal;
+}
+
+@media (max-width: 1399px) {
+    .schedule-review-booking-fields {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 1200px) {
+    .schedule-screen-layout {
+        grid-template-columns: calc(var(--ui-progress-width) - var(--ui-space-6)) minmax(0, 1fr);
+    }
+
+    .schedule-main-workspace {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .schedule-summary-sidebar {
+        position: static;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767px) {
+    .schedule-review-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .schedule-screen-layout {
+        grid-template-columns: minmax(0, 1fr);
+        padding: var(--ui-space-2);
+    }
+
+    .schedule-job-progress-panel {
+        position: static;
+    }
+
+    .schedule-header-stack {
+        flex-wrap: wrap;
+        gap: var(--ui-space-3);
+    }
+
+    .schedule-summary-sidebar {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .schedule-action-buttons {
+        flex-wrap: wrap;
+    }
+}
+
+.modern-swal-popup div:has(> .schedule-confirm-review) {
+    max-width: none;
+}
+
+.app-ui .schedule-details-header-actions {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-3);
+}
+
+@media (max-width: 767px) {
+    .app-ui .schedule-details-header-actions {
+        grid-column: 1;
+        grid-row: auto;
+    }
+}

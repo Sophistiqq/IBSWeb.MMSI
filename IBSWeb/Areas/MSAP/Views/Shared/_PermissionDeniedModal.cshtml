@@ -1,0 +1,54 @@
+@{
+    var message = ViewData["message"] as string ?? "You don't have permission to perform this action.";
+    var title = ViewData["title"] as string ?? "Access Denied";
+    var requiredPermission = ViewData["requiredPermission"] as string;
+}
+
+<div class="permission-denied-content text-center py-4">
+    <div class="mb-4">
+        <i class="bi bi-shield-lock text-danger" style="font-size: 5rem; opacity: 0.8;"></i>
+    </div>
+
+    <h4 class="text-danger fw-bold mb-3">@title</h4>
+
+    <p class="text-muted fs-5 mb-3">@message</p>
+
+    @if (!string.IsNullOrEmpty(requiredPermission))
+    {
+        <div class="alert alert-info text-start d-inline-block mb-3">
+            <small>
+                <i class="bi bi-info-circle me-2"></i>
+                <strong>Required Permission:</strong> @requiredPermission
+            </small>
+        </div>
+    }
+
+    <div class="alert alert-warning d-inline-block" role="alert">
+        <small>
+            <i class="bi bi-person-check me-1"></i>
+            Please contact your administrator to request access to this feature.
+        </small>
+    </div>
+
+    <div class="mt-4">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <i class="bi bi-x-circle me-1"></i>
+            Close
+        </button>
+    </div>
+</div>
+
+<style>
+    .permission-denied-content {
+        max-width: 500px;
+        margin: 0 auto;
+    }
+
+    .permission-denied-content .bi-shield-lock {
+        display: block;
+    }
+
+    .permission-denied-content h4 {
+        font-weight: 600;
+    }
+</style>

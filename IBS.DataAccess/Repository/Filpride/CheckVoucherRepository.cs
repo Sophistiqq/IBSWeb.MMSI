@@ -33,6 +33,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCv = await _db
                 .FilprideCheckVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CheckVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.CheckVoucherHeaderNo)
@@ -57,6 +58,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCv = await _db
                 .FilprideCheckVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CheckVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.CheckVoucherHeaderNo)
@@ -167,6 +169,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCv = await _db
                 .FilprideCheckVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CheckVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.CheckVoucherHeaderNo)
@@ -191,6 +194,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCv = await _db
                 .FilprideCheckVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CheckVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.CheckVoucherHeaderNo)
@@ -225,6 +229,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCv = await _db
                 .FilprideCheckVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CheckVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.CheckVoucherHeaderNo)
@@ -249,6 +254,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCv = await _db
                 .FilprideCheckVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CheckVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.CheckVoucherHeaderNo)
@@ -300,6 +306,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 .AsNoTracking()
                 .Include(checkVoucher => checkVoucher.Details)
                 .Include(checkVoucher => checkVoucher.Supplier)
+                .Include(checkVoucher => checkVoucher.TugboatPayments)
                 .Where(checkVoucher =>
                     checkVoucher.PostedBy != null &&
                     checkVoucher.Date >= startDate &&
@@ -360,6 +367,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = header.WorkspaceTugboatId,
                         Date = header.Date,
                         Reference = header.CheckVoucherHeaderNo!,
                         Description = header.Particulars!,
@@ -377,7 +385,11 @@ namespace IBS.DataAccess.Repository.Filpride
                     });
             }
 
-            if (header.SupplierId.HasValue)
+            if (header.TugboatPayments.Count > 0)
+            {
+                ledgers.SetCounterparty(CounterpartyType.TugboatOwner, header.TugboatPayments[0].TugboatOwnerId, header.Payee);
+            }
+            else if (header.SupplierId.HasValue)
             {
                 ledgers.SetCounterparty(
                     CounterpartyType.Supplier,
@@ -397,6 +409,10 @@ namespace IBS.DataAccess.Repository.Filpride
             FilprideCheckVoucherHeader header,
             CancellationToken cancellationToken)
         {
+            if (header.CvType == nameof(CVType.OtherTugs))
+            {
+                return false;
+            }
             var supplierName = header.Supplier?.SupplierName;
 
             if (supplierName == null && header.SupplierId.HasValue)
@@ -415,6 +431,10 @@ namespace IBS.DataAccess.Repository.Filpride
 
         private static bool ShouldSkipGeneralLedgerEntries(FilprideCheckVoucherHeader header)
         {
+            if (header.CvType == nameof(CVType.OtherTugs))
+            {
+                return false;
+            }
             var supplierName = header.Supplier?.SupplierName ?? header.SupplierName ?? header.Payee;
             return ShouldSkipGeneralLedgerEntries(supplierName);
         }

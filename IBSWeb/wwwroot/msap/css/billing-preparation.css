@@ -1,0 +1,260 @@
+.billing-preparation .billing-workspace {
+    display: grid;
+    grid-template-columns: var(--ui-progress-width) minmax(0, 1fr);
+    gap: var(--ui-grid-gap);
+    padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-5);
+    align-items: start;
+}
+
+.billing-preparation .billing-content {
+    min-width: 0;
+}
+
+.billing-preparation .billing-progress {
+    position: sticky;
+    top: var(--ui-space-5);
+}
+
+.billing-preparation .financial-job-progress {
+    margin: 0;
+}
+
+.billing-preparation .billing-fields {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--ui-space-4) var(--ui-space-5);
+}
+
+.billing-preparation .billing-section-heading,
+.billing-preparation .billing-amount,
+.billing-preparation .billing-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-4);
+}
+
+.billing-preparation .billing-tax-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-5);
+}
+
+.billing-preparation .billing-check {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    min-height: var(--ui-control-height);
+    margin: 0;
+    cursor: pointer;
+}
+
+.billing-preparation input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--on-surface);
+    flex-shrink: 0;
+}
+
+.billing-preparation .billing-recipient {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+    gap: var(--ui-space-4);
+    padding-top: var(--ui-space-4);
+    border-top: 1px solid var(--outline-variant);
+}
+
+.billing-preparation .billing-badge {
+    padding: var(--ui-space-1) var(--ui-space-2);
+    border: 0;
+    border-radius: var(--ui-radius);
+    background: var(--surface-container);
+    color: var(--on-surface);
+    font: inherit;
+    font-size: var(--ui-text-caption);
+}
+
+.billing-preparation .billing-table-scroll {
+    overflow-x: auto;
+}
+
+.billing-preparation .billing-service-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--ui-text-body);
+}
+
+.billing-preparation .billing-service-table :is(th, td) {
+    padding: var(--ui-space-3);
+    text-align: left;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.billing-preparation .billing-service-table thead th {
+    color: var(--on-surface-variant);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-medium);
+}
+
+.billing-preparation .billing-service-table td:nth-last-child(3),
+.billing-preparation .billing-service-table td:nth-last-child(4),
+.billing-preparation .billing-service-table td:last-child {
+    font-variant-numeric: tabular-nums;
+}
+
+.billing-preparation .billing-tugboat-row {
+    background: var(--surface-container);
+}
+
+.billing-preparation .billing-tugboat-row th {
+    font-weight: var(--ui-weight-semibold);
+}
+
+.billing-preparation .billing-ticket-number {
+    display: block;
+    font-size: var(--ui-text-caption);
+    color: var(--on-surface-variant);
+}
+
+.billing-preparation .billing-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ui-space-5);
+}
+
+.billing-preparation .billing-footer {
+    padding: var(--ui-space-2) 0;
+}
+
+.billing-preparation .billing-footer .ui-page-action {
+    min-width: 15rem;
+    background: var(--on-surface);
+    border-color: var(--on-surface);
+    color: var(--surface-container-lowest);
+}
+
+.billing-preparation a,
+.billing-preparation a:hover {
+    text-decoration: none;
+}
+
+.billing-preparation [hidden] {
+    display: none !important;
+}
+
+@media (max-width: 1200px) {
+    .billing-preparation .billing-workspace {
+        grid-template-columns: calc(var(--ui-progress-width) - var(--ui-space-6)) minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 1199px) {
+    .billing-preparation .billing-fields,
+    .billing-preparation .billing-recipient {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767px) {
+    .billing-preparation .billing-workspace,
+    .billing-preparation .billing-fields,
+    .billing-preparation .billing-recipient,
+    .billing-preparation .billing-summary-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .billing-preparation .billing-workspace {
+        padding: var(--ui-space-2);
+    }
+
+    .billing-preparation .billing-progress {
+        position: static;
+    }
+
+    .billing-preparation .billing-footer {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+.billing-preparation .billing-number-fields,
+.billing-preparation .billing-recipient-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--ui-space-5);
+    align-items: end;
+}
+
+.billing-preparation .billing-booking-facts {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--ui-space-4);
+    padding-top: var(--ui-space-4);
+    border-top: 1px solid var(--outline-variant);
+}
+
+.billing-preparation .billing-tax-options {
+    align-items: center;
+    gap: var(--ui-space-3);
+}
+
+.billing-preparation .billing-summary-total {
+    padding-top: var(--ui-space-4);
+    border-top: 1px solid var(--outline-variant);
+}
+
+.billing-preparation .billing-preview-options,
+.billing-preparation .billing-footer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-4);
+}
+
+.billing-preparation .billing-footer .modern-btn-secondary {
+    background: var(--surface-container-lowest);
+    border-color: var(--outline-variant);
+    color: var(--on-surface);
+}
+
+@media (max-width: 1199px) {
+    .billing-preparation .billing-recipient-fields,
+    .billing-preparation .billing-booking-facts {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767px) {
+    .billing-preparation .billing-number-fields,
+    .billing-preparation .billing-recipient-fields,
+    .billing-preparation .billing-booking-facts {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .billing-preparation .billing-footer-actions > button {
+        width: 100%;
+    }
+}
+
+.billing-preparation .billing-tugboat-owner {
+    margin-left: var(--ui-space-5);
+    font-weight: var(--ui-weight-regular);
+}
+
+.billing-preparation .billing-review-header-actions {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-3);
+}
+
+@media (max-width: 767px) {
+    .billing-preparation .billing-review-header-actions {
+        grid-column: 1;
+        grid-row: auto;
+    }
+}

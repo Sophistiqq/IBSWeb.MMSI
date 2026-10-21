@@ -1,0 +1,200 @@
+/* =========================================================
+   Quick Access Sidebar — redesigned with modern-ui.css tokens
+   ========================================================= */
+
+#qa-panel {
+    position: fixed;
+    top: 72px;
+    left: 0;
+    z-index: 1050;
+    background: var(--surface-container-lowest);
+    border-right: 1px solid var(--outline-variant);
+    border-bottom: 1px solid var(--outline-variant);
+    border-radius: 0 0 8px 0;
+    box-shadow: 4px 4px 16px rgba(0,0,0,0.1);
+    width: 280px;
+    height: calc(100vh - 72px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: translateX(0);
+    transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+#qa-panel.qa-hidden {
+    transform: translateX(-280px);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.25s ease, opacity 0.15s ease;
+}
+
+.qa-panel-header {
+    padding: 10px 14px 10px 28px;
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+
+.qa-panel-header span {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--on-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+#qa-close-btn {
+    width: 24px;
+    height: 24px;
+    background: rgba(255,255,255,0.15);
+    color: var(--on-primary);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s;
+    padding: 0;
+}
+
+#qa-close-btn:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+#qa-close-btn .material-symbols-outlined {
+    font-size: 16px;
+    font-variation-settings: 'wght' 400;
+}
+
+.qa-search-wrap {
+    padding: 8px 12px 8px 28px;
+    border-bottom: 1px solid var(--outline-variant);
+    flex-shrink: 0;
+}
+
+.qa-search-wrap input {
+    width: 100%;
+    border: 1px solid var(--outline-variant);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 0.82rem;
+    outline: none;
+}
+
+.qa-search-wrap input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(5,22,22,0.15);
+}
+
+.qa-list-area {
+    overflow-y: auto;
+    flex: 1;
+    padding: 6px 0;
+}
+
+.qa-section-label {
+    font-size: .7rem;
+    font-weight: 600;
+    color: var(--on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 8px 14px 2px 28px;
+}
+
+.qa-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 7px 14px 7px 28px;
+    text-decoration: none;
+    color: var(--on-surface);
+    font-size: 0.84rem;
+    transition: background 0.15s;
+}
+
+.qa-item-label {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    min-width: 0;
+    display: block;
+}
+
+.qa-item-crumb {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--on-surface-variant);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    margin-top: 1px;
+}
+
+.qa-item:hover .qa-item-crumb {
+    color: inherit;
+    opacity: 0.7;
+}
+
+.qa-item:hover {
+    background: var(--surface-container-high);
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.qa-divider {
+    border: none;
+    border-top: 1px solid var(--surface-container-high);
+    margin: 4px 0;
+}
+
+.qa-footer {
+    border-top: 1px solid var(--outline-variant);
+    padding: 8px 14px 8px 28px;
+    flex-shrink: 0;
+}
+
+.qa-clear-btn {
+    background: none;
+    border: none;
+    color: var(--on-surface-variant);
+    font-size: 0.78rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.15s;
+}
+
+.qa-clear-btn:hover {
+    color: var(--error);
+}
+
+.qa-empty {
+    padding: 24px 14px 24px 28px;
+    text-align: center;
+    color: var(--on-surface-variant);
+    font-size: 0.82rem;
+}
+
+.qa-list-area::-webkit-scrollbar {
+    width: 4px;
+}
+
+.qa-list-area::-webkit-scrollbar-thumb {
+    background: var(--outline-variant);
+    border-radius: 4px;
+}
+
+#qa-close-btn:focus-visible,
+.qa-clear-btn:focus-visible,
+.qa-item:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}

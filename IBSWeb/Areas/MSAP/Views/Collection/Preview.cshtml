@@ -1,0 +1,164 @@
+@using System.Security.Claims
+@using IBS.Services.MSAP.AccessControl
+@inject IAccessControlService AccessControl
+@model Collection
+@{
+    ViewData["Title"] = "Collection receipt " + Model.MsapCollectionNumber;
+    ViewData["IsFullWidth"] = true;
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    bool canPrepare = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.CreateCollection);
+    bool canBank = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.AccessTreasury);
+    ViewData["JobProgressActionStage"] = Model.DepositDate.HasValue ? JobProgressCalculator.ClearingStage : JobProgressCalculator.DepositStage;
+    ViewData["JobProgressActionTargetId"] = Model.MsapCollectionId;
+    bool canEdit = canPrepare && !Model.IsMonthClosed && !Model.IsPrinted && !Model.DepositDate.HasValue && !Model.ReturnedDate.HasValue && !Model.ClearedDate.HasValue;
+    var progressItems = (ViewBag.JobProgressItems as IEnumerable<JobProgressViewModel> ?? []).ToList();
+}
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/collection-form.css" asp-append-version="true" />
+<div class="modern-layout app-ui collection-form">
+    <main class="collection-workspace">
+        <aside class="ui-panel schedule-details-progress" aria-label="Job Progress">
+            @if (progressItems.Count > 0)
+            {
+                <partial name="_JobProgressList" model="progressItems" />
+            }
+            else
+            {
+                <h2 class="ui-section-title">Job Progress</h2>
+                <p class="ui-caption ui-muted">No COS is linked to this receipt.</p>
+            }
+        </aside>
+        <div class="ui-stack collection-content">
+            <header class="ui-page-header">
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">Collections</a></li><li aria-current="page">@Model.MsapCollectionNumber</li></ol></nav>
+                <h1 class="ui-page-title" data-page-header>Receipt @Model.MsapCollectionNumber</h1>
+                <a asp-action="Index" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
+                <p class="ui-page-description ui-caption ui-muted">@Model.PaymentStatus / @(Model.IsUndocumented ? "Undocumented" : "Documented") / @Model.Date.ToString(MsapConstants.Date_Format)</p>
+            </header>
+            <section class="ui-panel collection-heading @(Model.ClearedDate.HasValue ? "" : Model.ReturnedDate.HasValue && !Model.DepositDate.HasValue ? "ui-critical" : "ui-attention")" aria-label="Receipt actions">
+                <div>
+                    <h2 class="ui-section-title">Receipt banking</h2>
+                    <p class="ui-caption ui-muted">Banking updates this receipt once for all covered billings.</p>
+                </div>
+                <div class="collection-actions">
+                    @if (canEdit)
+                    {
+                        <a asp-action="Edit" asp-route-id="@Model.MsapCollectionId" class="modern-btn-secondary">Edit receipt</a>
+                    }
+                    @if (canBank && !Model.IsMonthClosed && !Model.ClearedDate.HasValue)
+                    {
+                        @if (!Model.DepositDate.HasValue)
+                        {
+                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Deposit" data-collection-banking="@(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")" class="modern-btn-primary">@(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")</a>
+                        }
+                        else
+                        {
+                            @if (Model.CheckAmount > 0)
+                            {
+                                <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.ReturnCheck" data-collection-banking="Record returned check" class="modern-btn-secondary">Return check</a>
+                            }
+                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Clear" data-collection-banking="Record clearing" class="modern-btn-primary">Record clearing</a>
+                        }
+                    }
+                </div>
+                @if (Model.IsMonthClosed)
+                {
+                    <p class="ui-caption ui-muted">This receipt belongs to a closed period.</p>
+                }
+                else if (Model.ClearedDate.HasValue)
+                {
+                    <p class="ui-caption ui-muted">This receipt has cleared. Other receipts or unpaid bills may still remain on the COS.</p>
+                }
+            </section>
+            <section class="ui-panel ui-stack" aria-labelledby="receiptDetailsHeading">
+                <h2 id="receiptDetailsHeading" class="ui-section-title">Receipt details</h2>
+                <div class="collection-fields">
+                    <div class="ui-field"><span class="ui-caption ui-muted">Service customer</span><p class="ui-body">@Model.Customer?.CustomerName</p></div>
+                    <div class="ui-field"><span class="ui-caption ui-muted">TIN</span><p class="ui-body">@(Model.Customer?.CustomerTin ?? "Not recorded")</p></div>
+                    <div class="ui-field"><span class="ui-caption ui-muted">Reference number</span><p class="ui-body">@(Model.ReferenceNo ?? "Not recorded")</p></div>
+                    <div class="ui-field"><span class="ui-caption ui-muted">Address</span><p class="ui-body">@Model.Customer?.CustomerAddress</p></div>
+                    <div class="ui-field"><span class="ui-caption ui-muted">Business style</span><p class="ui-body">@(Model.Customer?.BusinessStyle ?? "Not recorded")</p></div>
+                </div>
+            </section>
+            <section class="ui-panel ui-stack" aria-labelledby="coveredBillingsHeading">
+                <h2 id="coveredBillingsHeading" class="ui-section-title">Billings covered by this receipt</h2>
+                <div class="collection-table-scroll">
+                    <table class="collection-table">
+                        <thead><tr><th>Billing</th><th>Component</th><th>Billing date</th><th>Bill amount</th><th>Gross paid by receipt</th><th>Remaining bill balance</th></tr></thead>
+                        <tbody>
+                            @if (Model.PaidBills is { Count: > 0 })
+                            {
+                                @foreach (var billing in Model.PaidBills)
+                                {
+                                    <tr>
+                                        <td><a asp-controller="Billing" asp-action="Review" asp-route-id="@billing.MsapBillingId">@billing.MsapBillingNumber</a></td>
+                                        <td>@(billing.BasicBillingId.HasValue ? "BAF" : billing.BafBilling != null ? "Basic" : "Combined")</td>
+                                        <td>@billing.Date.ToString(MsapConstants.Date_Format)</td>
+                                        <td>@billing.Amount.ToString("N2")</td><td>@billing.AmountPaid.ToString("N2")</td><td>@billing.Balance.ToString("N2")</td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr><td colspan="6">No billings are linked to this receipt.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="ui-caption ui-muted">Each billing keeps its own payment allocation and remaining balance. A paid balance does not mean the receipt has cleared.</p>
+            </section>
+            <div class="collection-settlement-layout">
+                <div class="ui-stack">
+                    <section class="ui-panel ui-stack" aria-labelledby="checkDetailsHeading">
+                        <h2 id="checkDetailsHeading" class="ui-section-title">Check details</h2>
+                        @if (Model.CheckAmount > 0)
+                        {
+                            <div class="collection-fields collection-fields--two">
+                                <div class="ui-field"><span class="ui-caption ui-muted">Check's issuing bank</span><p class="ui-body">@(Model.CheckBank ?? "Not recorded")</p></div>
+                                <div class="ui-field"><span class="ui-caption ui-muted">Issuing branch</span><p class="ui-body">@(Model.CheckBranch ?? "Not recorded")</p></div>
+                                <div class="ui-field"><span class="ui-caption ui-muted">Check number</span><p class="ui-body">@Model.CheckNumber</p></div>
+                                <div class="ui-field"><span class="ui-caption ui-muted">Check date</span><p class="ui-body">@(Model.CheckDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="ui-body ui-muted">No check payment recorded.</p>
+                        }
+                    </section>
+                    <section class="ui-panel ui-stack" aria-labelledby="depositDetailsHeading">
+                        <h2 id="depositDetailsHeading" class="ui-section-title">Deposit and clearing</h2>
+                        <div class="ui-field"><span class="ui-caption ui-muted">MMSI receiving bank account</span><p class="ui-body">@(Model.BankAccount?.Bank ?? "Not recorded")</p><p class="ui-caption ui-muted">@(Model.BankAccountNumber ?? Model.BankAccount?.AccountNo) / @(Model.BankAccountName ?? Model.BankAccount?.AccountName)</p></div>
+                        <div class="collection-fields">
+                            <div class="ui-field"><span class="ui-caption ui-muted">@(Model.ReturnedDate.HasValue ? "Latest deposit" : "Deposit date")</span><p class="ui-body">@(Model.DepositDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
+                            <div class="ui-field"><span class="ui-caption ui-muted">Last check return</span><p class="ui-body">@(Model.ReturnedDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
+                            <div class="ui-field"><span class="ui-caption ui-muted">Clearing date</span><p class="ui-body">@(Model.ClearedDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
+                        </div>
+                    </section>
+                </div>
+                <section class="ui-panel ui-stack collection-summary" aria-labelledby="receiptTotalsHeading">
+                    <h2 id="receiptTotalsHeading" class="ui-section-title">Receipt totals</h2>
+                    <dl>
+                        <div><dt>Cash received</dt><dd>@Model.CashAmount.ToString("N2")</dd></div>
+                        <div><dt>Check received</dt><dd>@Model.CheckAmount.ToString("N2")</dd></div>
+                        <div><dt>Net received</dt><dd>@Model.Amount.ToString("N2")</dd></div>
+                        <div><dt>EWT withheld</dt><dd>@Model.EWT.ToString("N2")</dd></div>
+                        <div><dt>WVAT withheld</dt><dd>@Model.WVAT.ToString("N2")</dd></div>
+                        <div class="collection-summary-total"><dt>Gross amount settled</dt><dd>@Model.Total.ToString("N2")</dd></div>
+                    </dl>
+                </section>
+            </div>
+            <section class="ui-panel ui-field"><h2 class="ui-section-title">Remarks</h2><p class="ui-body collection-remarks">@(string.IsNullOrWhiteSpace(Model.Remarks) ? "No remarks." : Model.Remarks)</p></section>
+        </div>
+    </main>
+</div>
+@section Scripts
+{
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '#receiptDetailsHeading', title: 'Receipt details', text: 'Review the service customer and payment reference.', interactive: false },
+            { selector: '#coveredBillingsHeading', title: 'Covered billings', text: 'Each billing retains its own allocated payment and remaining balance.', interactive: false },
+            { selector: '#checkDetailsHeading', title: 'Check details', text: 'The issuing bank belongs to the payer. The MMSI receiving account is recorded separately at deposit.', interactive: false },
+            { selector: '#depositDetailsHeading', title: 'Deposit and clearing', text: 'Record the receiving account, actual deposit date and clearing date for this receipt.', interactive: false }
+        ];
+    </script>
+}

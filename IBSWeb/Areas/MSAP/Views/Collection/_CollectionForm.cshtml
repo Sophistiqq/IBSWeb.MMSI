@@ -1,0 +1,108 @@
+@model CreateCollectionViewModel
+@{
+    bool editing = Model.MsapCollectionId.HasValue;
+    string title = editing ? "Edit collection" : "Record collection";
+}
+<div class="modern-layout app-ui collection-form collection-entry">
+    <form id="collectionForm" method="post" asp-action="@(editing ? "Edit" : "Create")"
+          data-billings-url="@Url.Action("GetUncollectedBillingsForTable")"
+          data-initial-cos="@Model.CustomerOrderSlipId">
+        @Html.AntiForgeryToken()
+        <input asp-for="MsapCollectionId" type="hidden" />
+        <input asp-for="Amount" type="hidden" />
+        <script type="application/json" id="collectionPayments">@Html.Raw(Json.Serialize(Model.BillingPayments))</script>
+        <main class="collection-workspace">
+            <aside class="ui-panel schedule-details-progress" aria-label="Job Progress">
+                <h2 class="ui-section-title" id="collectionProgressHeading">Job Progress</h2>
+                <div class="ui-field collection-progress-picker">
+                    <label for="progressCos" class="ui-caption ui-muted">Viewing COS</label>
+                    <select id="progressCos" class="js-modern-select" data-placeholder="Select billings to view progress" disabled><option value="">Select billings to view progress</option></select>
+                </div>
+                <div id="financialJobProgress" data-progress-url="@Url.Action("Progress", "CustomerOrderSlip")" data-action-stage="7"></div>
+            </aside>
+            <div class="ui-stack collection-content">
+                <header class="ui-page-header">
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">Collections</a></li><li aria-current="page">@title</li></ol></nav>
+                    <h1 class="ui-page-title" data-page-header>@title</h1>
+                    <a asp-action="Index" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
+                    <p class="ui-page-description ui-caption ui-muted">One receipt / check / Separate allocation and balance for each bill</p>
+                </header>
+                <div asp-validation-summary="All" class="text-error" role="alert"></div>
+                <p id="collectionError" class="text-error" role="alert" hidden></p>
+                <section class="ui-panel collection-fields" aria-label="Billing filters">
+                    <div class="ui-field">
+                        <label asp-for="CustomerId" class="ui-label">Service customer *</label>
+                        @if (editing)
+                        {
+                            <input asp-for="CustomerId" type="hidden" />
+                            <input class="modern-input" value="@(Model.Customers?.FirstOrDefault(c => c.Value == Model.CustomerId.ToString())?.Text)" readonly aria-label="Service customer" />
+                        }
+                        else
+                        {
+                            <select asp-for="CustomerId" asp-items="Model.Customers" class="js-modern-select" required><option value="">Select customer</option></select>
+                        }
+                    </div>
+                    <div class="ui-field"><label for="billedParty" class="ui-label">Billed party / Filter</label><select id="billedParty" class="js-modern-select" data-placeholder="All billed parties"><option value="">All billed parties</option></select></div>
+                    <div class="ui-field"><span class="ui-caption ui-muted">Selected billings</span><strong id="selectedCount">0 bills / 0 COS</strong></div>
+                </section>
+                <section class="ui-panel ui-stack" aria-labelledby="allocationHeading">
+                    <div class="collection-heading"><h2 id="allocationHeading" class="ui-section-title">Billing allocation</h2><input id="billingSearch" class="modern-input" type="search" placeholder="Search billing number or COS..." aria-label="Search billing number or COS" /></div>
+                    <div class="collection-table-scroll">
+                        <table class="collection-table">
+                            <thead><tr><th><input id="selectAllBillings" type="checkbox" aria-label="Select all visible eligible bills" /></th><th>Billing / COS</th><th>Gross balance</th><th>Withholding</th><th>Net available</th><th>Full net payment</th><th>Balance after allocation</th></tr></thead>
+                            <tbody id="collectionBillings"><tr><td colspan="7">Select a customer to load billings.</td></tr></tbody>
+                        </table>
+                    </div>
+                    <p class="ui-caption ui-muted">Each selected bill is paid in full at its net balance after withholding. One receipt can cover multiple bills. Unapproved bills cannot be selected. Bills on another receipt must be reviewed on that receipt.</p>
+                </section>
+                <section class="ui-panel ui-stack" aria-labelledby="collectionDetailsHeading">
+                    <div class="collection-heading"><h2 id="collectionDetailsHeading" class="ui-section-title">Collection details</h2><label class="collection-check"><input asp-for="IsUndocumented" /> Undocumented</label></div>
+                    <div class="collection-fields">
+                        <div class="ui-field"><label asp-for="MsapCollectionNumber" class="ui-label">Collection / receipt number *</label><input asp-for="MsapCollectionNumber" class="modern-input" maxlength="10" required /><span asp-validation-for="MsapCollectionNumber" class="text-error"></span></div>
+                        <div class="ui-field"><label asp-for="Date" class="ui-label">Collection date *</label><input asp-for="Date" type="date" class="modern-input" required value="@(Model.Date != default ? Model.Date.ToString("yyyy-MM-dd") : DateTimeHelper.GetCurrentPhilippineTime().ToString("yyyy-MM-dd"))" /></div>
+                        <div class="ui-field"><label asp-for="ReferenceNo" class="ui-label">Reference number</label><input asp-for="ReferenceNo" class="modern-input" /></div>
+                    </div>
+                </section>
+                <div class="collection-settlement-layout">
+                    <div class="ui-stack">
+                        <section class="ui-panel ui-stack" aria-labelledby="paymentHeading">
+                            <h2 id="paymentHeading" class="ui-section-title">Payment and withholding</h2>
+                            <div class="collection-fields collection-fields--two">
+                                <div class="ui-field"><label asp-for="CashAmount" class="ui-label">Cash payment</label><input asp-for="CashAmount" type="number" min="0" step="0.01" class="modern-input" required /></div>
+                                <div class="ui-field"><label asp-for="CheckAmount" class="ui-label">Check payment</label><input asp-for="CheckAmount" type="number" min="0" step="0.01" class="modern-input" required /></div>
+                                <div class="ui-field"><label asp-for="EWT" class="ui-label">Total EWT / From selected allocations</label><input asp-for="EWT" type="number" min="0" step="0.01" class="modern-input" readonly /></div>
+                                <div class="ui-field"><label asp-for="WVAT" class="ui-label">Total WVAT / From selected allocations</label><input asp-for="WVAT" type="number" min="0" step="0.01" class="modern-input" readonly /></div>
+                            </div>
+                        </section>
+                        <section class="ui-panel ui-stack" aria-labelledby="checkHeading">
+                            <h2 id="checkHeading" class="ui-section-title">Check details</h2>
+                            <p class="ui-caption ui-muted">Date, number and issuing bank are required when receiving a check.</p>
+                            <div class="collection-fields collection-fields--two">
+                                <div class="ui-field"><label asp-for="CheckDate" class="ui-label">Check date</label><input asp-for="CheckDate" type="date" class="modern-input" /></div>
+                                <div class="ui-field"><label asp-for="CheckNumber" class="ui-label">Check number</label><input asp-for="CheckNumber" type="text" class="modern-input" /></div>
+                                <div class="ui-field"><label asp-for="CheckBank" class="ui-label">Issuing bank</label><input asp-for="CheckBank" type="text" class="modern-input" /></div>
+                                <div class="ui-field"><label asp-for="CheckBranch" class="ui-label">Bank branch</label><input asp-for="CheckBranch" type="text" class="modern-input" /></div>
+                            </div>
+                        </section>
+                    </div>
+                    <section class="ui-panel ui-stack collection-summary" aria-labelledby="settlementHeading">
+                        <h2 id="settlementHeading" class="ui-section-title">Receipt settlement</h2>
+                        <dl>
+                            <div><dt>Selected billings</dt><dd id="summaryCount">0</dd></div>
+                            <div><dt>Selected gross balance</dt><dd id="summaryGross">0.00</dd></div>
+                            <div><dt>Cash + check received</dt><dd id="summaryReceived">0.00</dd></div>
+                            <div><dt>Allocated EWT</dt><dd id="summaryEwt">0.00</dd></div>
+                            <div><dt>Allocated WVAT</dt><dd id="summaryWvat">0.00</dd></div>
+                            <div class="collection-summary-total"><dt>Gross amount allocated</dt><dd id="summaryAllocated">0.00</dd></div>
+                            <div><dt>Remaining selected balance</dt><dd id="summaryRemaining">0.00</dd></div>
+                        </dl>
+                        <p id="settlementStatus" class="ui-caption" role="status">Cash plus check must match the allocated net payments.</p>
+                        <p class="ui-caption ui-muted">Zero balance does not mean cleared. Deposit and clearing follow receipt entry.</p>
+                    </section>
+                </div>
+                <section class="ui-panel ui-field"><label asp-for="Remarks" class="ui-label">Remarks</label><textarea asp-for="Remarks" class="modern-input" rows="2" placeholder="Add payment reference notes..."></textarea></section>
+                <footer class="collection-heading"><p class="ui-caption ui-muted">One receipt covers the selected bills. Each billing keeps its own allocation and balance.</p><div class="collection-actions"><a class="modern-btn-secondary" asp-action="Index">Cancel</a><button type="submit" class="modern-btn-primary" id="saveCollection">@(editing ? "Save changes" : "Save collection")</button></div></footer>
+            </div>
+        </main>
+    </form>
+</div>

@@ -1,0 +1,60 @@
+@model Supplier
+
+@{
+    ViewData["Title"] = "Deactivate Supplier";
+    ViewData["IsFullWidth"] = true;
+}
+
+<div class="modern-layout app-ui">
+    <form method="post" enctype="multipart/form-data">
+        <main class="modern-container ui-page">
+            <div class="flex-stack ui-page-toolbar">
+                <div>
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li><a asp-action="Index">Suppliers</a></li><li aria-current="page">Deactivate Supplier</li></ol></nav>
+                    <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
+                </div>
+                <div class="flex gap-2 ui-actions">
+                    <button type="submit" class="modern-btn-primary">
+                        <span class="material-symbols-outlined">person_off</span> Deactivate
+                    </button>
+                    <a asp-action="Index" class="modern-btn-secondary">
+                        <span class="material-symbols-outlined">cancel</span> Cancel
+                    </a>
+                </div>
+            </div>
+
+            <div class="modern-grid justify-center">
+                <section class="modern-col-6">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
+                            <span class="material-symbols-outlined">person_off</span>
+                            <h2 class="modern-headline-md ui-section-title">Supplier Information</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
+                            <input asp-for="SupplierId" hidden />
+
+                            <div class="flex flex-column gap-3">
+                                <div>
+                                    <label asp-for="SupplierName" class="modern-label ui-label">Supplier Name</label>
+                                    <input asp-for="SupplierName" class="form-control ui-input" disabled readonly />
+                                </div>
+                                <div>
+                                    <label asp-for="SupplierAddress" class="modern-label ui-label">Address</label>
+                                    <input asp-for="SupplierAddress" class="form-control ui-input" disabled readonly />
+                                </div>
+                                <div>
+                                    <label asp-for="SupplierTin" class="modern-label ui-label">TIN</label>
+                                    <input asp-for="SupplierTin" class="form-control ui-input" disabled readonly />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </form>
+</div>
+
+@section Scripts {
+    }

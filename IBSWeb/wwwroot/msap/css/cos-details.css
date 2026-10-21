@@ -1,0 +1,236 @@
+.cos-details-workspace {
+    min-width: 0;
+}
+
+.cos-details-status,
+.cos-section-heading,
+.cos-details-links,
+.cos-details-footer {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-3);
+}
+
+.cos-section-heading,
+.cos-details-footer {
+    justify-content: space-between;
+}
+
+.cos-details-fields {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.cos-planned-window {
+    grid-column: span 2;
+}
+
+.cos-details-links:empty {
+    display: none;
+}
+
+.cos-details-links a,
+.cos-ticket-link {
+    color: var(--on-surface);
+    font-weight: var(--ui-weight-semibold);
+    text-decoration: none;
+}
+
+.cos-details-links a:hover,
+.cos-ticket-link:hover {
+    text-decoration: underline;
+}
+
+.cos-services-table {
+    min-width: 760px;
+}
+
+.cos-services-table :is(th, td) {
+    font-size: var(--ui-text-body);
+    padding: var(--ui-space-3);
+    vertical-align: middle;
+    text-align: left;
+}
+
+.cos-services-table .cos-tug-group th {
+    background: color-mix(in srgb, var(--on-surface) 9%, var(--surface-container-lowest));
+    color: var(--on-surface);
+    border: 0;
+    font-weight: var(--ui-weight-semibold);
+}
+
+.cos-tug-group .ui-caption {
+    margin-left: var(--ui-space-4);
+    font-weight: var(--ui-weight-regular);
+}
+
+.cos-services-table .schedule-status-pill {
+    display: inline-block;
+    white-space: nowrap;
+}
+
+.cos-details-workspace .modern-btn-dropdown {
+    font-size: var(--ui-text-caption);
+    border-radius: var(--ui-radius);
+    box-shadow: none;
+}
+
+.cos-entry-fields {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: var(--ui-grid-gap);
+}
+
+.cos-entry-fields > div {
+    grid-column: span 2;
+}
+
+.cos-entry-fields > .cos-entry-half {
+    grid-column: span 3;
+}
+
+.cos-entry-fields > .cos-entry-remarks {
+    grid-column: 1 / -1;
+}
+
+.cos-entry-fields .modern-input {
+    min-width: 0;
+    width: 100%;
+}
+
+.cos-date-time {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(5rem, .65fr);
+    gap: var(--ui-space-2);
+}
+
+.cos-duration-preview {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ui-grid-gap);
+    border-top: 1px solid var(--outline-variant);
+    padding-top: var(--ui-space-4);
+}
+
+.cos-duration-preview p {
+    grid-column: 1 / -1;
+}
+
+.cos-entry-footer {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: var(--ui-space-3);
+}
+
+.cos-entry-footer a,
+.cos-entry-footer a:hover {
+    text-decoration: none;
+}
+
+.cos-entry-footer :is(a, button) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 44px;
+    min-width: 160px;
+}
+
+.cos-timeline-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--on-surface);
+    text-align: left;
+}
+
+.cos-details-footer {
+    border-top: 1px solid var(--outline-variant);
+    padding-top: var(--ui-space-4);
+}
+
+@media (max-width: 1200px) {
+    .cos-details-fields {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767px) {
+    .cos-details-fields,
+    .cos-entry-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .cos-planned-window,
+    .cos-entry-fields > div,
+    .cos-entry-fields > .cos-entry-half,
+    .cos-entry-fields > .cos-entry-remarks {
+        grid-column: auto;
+    }
+
+    .cos-entry-footer :is(a, button) {
+        flex: 1;
+    }
+}
+
+.cos-ticket-blocker {
+    display: block;
+    max-width: 24rem;
+    margin-top: var(--ui-space-2);
+    white-space: normal;
+}
+
+.cos-ticket-charges {
+    border-top: 1px solid var(--outline-variant);
+    padding-top: var(--ui-space-4);
+}
+
+button.cos-ticket-link {
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+}
+
+button.cos-ticket-link:hover {
+    text-decoration: none;
+}
+
+.cos-service-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--ui-space-2);
+}
+
+.cos-service-actions > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: var(--ui-space-1) var(--ui-space-2);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    background: var(--ui-surface);
+    white-space: nowrap;
+}
+
+.cos-service-actions > a:hover {
+    background: var(--ui-surface-muted);
+    text-decoration: none;
+}
+
+.cos-service-actions .cos-service-cancel {
+    color: var(--ui-state-ink);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-medium);
+}

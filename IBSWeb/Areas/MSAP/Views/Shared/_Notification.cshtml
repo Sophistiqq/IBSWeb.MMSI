@@ -1,0 +1,27 @@
+@if (TempData["success"] != null)
+{
+    <script>
+        ModernAlert.success(@Html.Raw(Json.Serialize(TempData["success"])));
+    </script>
+}
+
+@if (TempData["error"] != null)
+{
+    <script>
+        ModernAlert.error(@Html.Raw(Json.Serialize(TempData["error"])));
+    </script>
+}
+
+@if (TempData["warning"] != null)
+{
+    <script>
+        ModernAlert.warning(@Html.Raw(Json.Serialize(TempData["warning"])));
+    </script>
+}
+
+@if (TempData["info"] != null)
+{
+    <script>
+        ModernAlert.info(@Html.Raw(Json.Serialize(TempData["info"])));
+    </script>
+}

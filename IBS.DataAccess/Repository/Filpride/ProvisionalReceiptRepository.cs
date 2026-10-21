@@ -55,7 +55,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 }
 
                 var category = await _db.FilprideCollectionCategories
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                     .Include(c => c.CreditAccount)
                     .SingleOrDefaultAsync(c => c.Id == receipt.CollectionCategoryId, cancellationToken)
                     ?? throw new InvalidOperationException("The receipt collection category could not be found.");
@@ -96,7 +96,7 @@ namespace IBS.DataAccess.Repository.Filpride
             CancellationToken cancellationToken = default)
         {
             var receipts = await _db.FilprideProvisionalReceipts
-                .IgnoreQueryFilters()
+                .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                 .AsNoTracking()
                 .Include(receipt => receipt.CollectionCategory)
                 .ThenInclude(category => category.CreditAccount)
@@ -219,6 +219,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = receipt.WorkspaceTugboatId,
                     Date = postedDate,
                     Reference = receipt.SeriesNumber,
                     Description = description,
@@ -238,6 +239,7 @@ namespace IBS.DataAccess.Repository.Filpride
             AddDebit(cwv, receipt.WVAT);
             ledgers.Add(new FilprideGeneralLedgerBook
             {
+                WorkspaceTugboatId = receipt.WorkspaceTugboatId,
                 Date = postedDate,
                 Reference = receipt.SeriesNumber,
                 Description = description,
@@ -344,6 +346,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCr = await _db
                 .FilprideProvisionalReceipts
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.SeriesNumber.Length)
                 .ThenByDescending(x => x.SeriesNumber)
@@ -368,6 +371,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCr = await _db
                 .FilprideProvisionalReceipts
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.SeriesNumber.Length)
                 .ThenByDescending(x => x.SeriesNumber)
@@ -406,6 +410,7 @@ namespace IBS.DataAccess.Repository.Filpride
             ledgers.Add(
                 new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = provisionalReceipt.WorkspaceTugboatId,
                     Date = provisionalReceipt.ClearedDate!.Value,
                     Reference = provisionalReceipt.SeriesNumber,
                     Description = description,
@@ -428,6 +433,7 @@ namespace IBS.DataAccess.Repository.Filpride
             ledgers.Add(
                 new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = provisionalReceipt.WorkspaceTugboatId,
                     Date = provisionalReceipt.ClearedDate!.Value,
                     Reference = provisionalReceipt.SeriesNumber,
                     Description = description,

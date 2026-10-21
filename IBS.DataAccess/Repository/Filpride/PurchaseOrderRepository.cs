@@ -35,6 +35,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastPo = await _db
                 .FilpridePurchaseOrders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.PurchaseOrderNo!.Length)
                 .ThenByDescending(x => x.PurchaseOrderNo)
@@ -60,6 +61,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastPo = await _db
                 .FilpridePurchaseOrders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.PurchaseOrderNo!.Length)
                 .ThenByDescending(x => x.PurchaseOrderNo)

@@ -1,0 +1,143 @@
+@model Billing
+@{
+    ViewData["Title"] = "Review billing";
+    ViewData["IsFullWidth"] = true;
+    var progressItems = (ViewBag.JobProgressItems as IEnumerable<JobProgressViewModel>)?.ToList() ?? [];
+    var related = Model.BasicBilling ?? Model.BafBilling;
+    bool bafOnly = Model.BasicBillingId.HasValue;
+    bool basicOnly = Model.BafBilling != null;
+    string component = bafOnly ? "BAF" : basicOnly ? "Basic" : "Basic and BAF";
+    string? blocker = ViewData["PostingBlocker"] as string;
+    bool canPrint = BillingService.CanPrint(Model);
+    bool canPost = ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && ViewData["IsPeriodClosed"] is not true;
+}
+<style media="print">
+    body { display: none !important; }
+</style>
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/billing-preparation.css" asp-append-version="true" />
+
+<div class="modern-layout app-ui billing-preparation">
+    <div class="billing-workspace">
+        <div class="ui-stack">
+            @foreach (var progress in progressItems)
+            {
+                <partial name="_WorkflowProgress" model="progress" />
+            }
+        </div>
+        <main class="billing-content ui-stack">
+            <header class="ui-page-header">
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">Billing</a></li><li>@Model.MsapBillingNumber</li><li aria-current="page">Review</li></ol></nav>
+                <h1 class="ui-page-title" data-page-header>Review billing</h1>
+                <div class="billing-review-header-actions">
+                    <a asp-action="Index" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
+                    <a asp-action="Preview" asp-route-id="@Model.MsapBillingId" asp-route-printCopy="@canPrint" target="_blank" class="modern-btn-primary ui-page-action">Preview statements</a>
+                </div>
+                <p class="ui-page-description ui-caption ui-muted">@Model.MsapBillingNumber · @component · @(Model.Status == MsapConstants.BillingStatus.ForPosting ? "Awaiting final approval" : "Approved") · @(Model.IsUndocumented ? "Undocumented" : "Documented")</p>
+            </header>
+            @if (Model.ApprovedAt.HasValue)
+            {
+                <p class="ui-caption ui-muted">Approved by @(Model.ApprovedByUser?.UserName ?? Model.ApprovedByUserId) · revision @Model.ApprovedRevision · @Model.ApprovedAt.Value.ToString("dd MMM yyyy HH:mm")</p>
+            }
+            @if (related != null)
+            {
+                <section class="ui-panel billing-section-heading" aria-label="Related billing">
+                    <div><h2 class="ui-section-title">Related bill · @related.MsapBillingNumber</h2><p class="ui-caption ui-muted">@(bafOnly ? "Basic" : "BAF") · @related.Status · Separate balance</p></div>
+                    <a asp-action="Review" asp-route-id="@related.MsapBillingId" class="modern-btn-secondary">Review related bill</a>
+                </section>
+            }
+            <section class="ui-panel ui-stack" aria-label="Billing recipient and booking">
+                <div class="billing-fields">
+                    <div><span class="ui-caption ui-muted">Service customer</span><p class="ui-body">@Model.Customer.CustomerName</p></div>
+                    <div><span class="ui-caption ui-muted">Bill to</span><p class="ui-body">@(Model.Principal?.PrincipalName ?? Model.Customer.CustomerName)</p></div>
+                    <div><span class="ui-caption ui-muted">Vessel</span><p class="ui-body">@Model.Vessel.VesselName</p></div>
+                    <div><span class="ui-caption ui-muted">Port / terminal</span><p class="ui-body">@Model.Port.PortName / @Model.Terminal.TerminalName</p></div>
+                </div>
+                <div class="billing-recipient">
+                    <div><span class="ui-caption ui-muted">Statement address</span><p class="ui-body">@(Model.Principal?.Address1 ?? Model.Customer.CustomerAddress)</p></div>
+                    <div><span class="ui-caption ui-muted">Statement TIN</span><p class="ui-body">@(Model.Principal?.TIN ?? Model.Customer.CustomerTin)</p></div>
+                    <div><span class="ui-caption ui-muted">Payment terms</span><p class="ui-body">@Model.Terms</p></div>
+                </div>
+                <p class="ui-caption ui-muted">@(Model.IsVatable ? "VAT" : "Non-VAT") · @(Model.IsVatInclusive ? "VAT inclusive" : "VAT exclusive") · @(Model.PrintWht ? "Print withholding" : "No printed withholding")</p>
+            </section>
+            <section class="ui-panel ui-stack" aria-labelledby="reviewChargesHeading">
+                <h2 id="reviewChargesHeading" class="ui-section-title">@component charges for review</h2>
+                <div class="billing-table-scroll">
+                    <table class="billing-service-table">
+                        <thead><tr><th>Service / ticket</th><th>Actual / billed hours</th><th>Basic rate</th><th>BAF rate</th><th>Source · Basic / BAF</th><th>After discount</th></tr></thead>
+                        <tbody>
+                            @foreach (var group in (Model.PaidDispatchTickets ?? []).GroupBy(t => t.Tugboat.TugboatName))
+                            {
+                                <tr class="billing-tugboat-row"><th colspan="6" scope="rowgroup">@group.Key<span class="billing-tugboat-owner ui-caption ui-muted">@(group.First().Tugboat.IsCompanyOwned ? "Company-owned" : "Subcontractor")</span></th></tr>
+                                @foreach (var ticket in group)
+                                {
+                                    <tr>
+                                        <td>@ticket.Service.ServiceName<span class="billing-ticket-number">@ticket.DispatchNumber</span></td>
+                                        <td>@(ticket.RawDurationHours?.ToString("N2") ?? "—") / @ticket.TotalHours.ToString("N2")</td>
+                                        <td>@(bafOnly ? "—" : ticket.DispatchRate.ToString("N2"))</td>
+                                        <td>@(basicOnly ? "—" : ticket.BAFRate.ToString("N2"))</td>
+                                        <td>@(bafOnly ? "—" : ticket.IsManualTariffRate ? "Manual" : "Table") / @(basicOnly ? "—" : ticket.IsManualBafRate ? "Manual" : "Table")</td>
+                                        <td>@(bafOnly ? ticket.BAFNetRevenue.ToString("N2") : basicOnly ? ticket.DispatchNetRevenue.ToString("N2") : ticket.TotalNetRevenue.ToString("N2"))</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="ui-panel ui-stack" aria-label="Saved billing totals">
+                <h2 class="ui-section-title">@Model.MsapBillingNumber · @component amounts</h2>
+                <div class="billing-amount"><span>Basic charges after discount</span><strong>@Model.DispatchAmount.ToString("N2")</strong></div>
+                <div class="billing-amount"><span>BAF charges after discount</span><strong>@Model.BAFAmount.ToString("N2")</strong></div>
+                <div class="billing-amount billing-summary-total"><strong>Statement total</strong><strong>@Model.Amount.ToString("N2")</strong></div>
+                <div class="billing-amount"><span>Remaining billing balance</span><strong>@Model.Balance.ToString("N2")</strong></div>
+                @if (basicOnly)
+                {
+                    <p class="ui-caption ui-muted">Reminder: confirm SBMA placement and financial treatment.</p>
+                }
+            </section>
+            <section class="ui-stack" aria-labelledby="ticketImagesHeading">
+                <h2 id="ticketImagesHeading" class="ui-section-title">Ticket images</h2>
+                @if (Model.PaidDispatchTickets?.Any(t => !string.IsNullOrEmpty(t.ImageSignedUrl)) == true)
+                {
+                    <partial name="_TicketImages" model="Model" />
+                }
+                else
+                {
+                    <p class="ui-caption ui-muted">No ticket images are available.</p>
+                }
+            </section>
+            <footer class="billing-footer">
+                <p class="ui-caption ui-muted">Final approval applies to @Model.MsapBillingNumber only.</p>
+                @if (canPost)
+                {
+                    <form asp-action="Review" asp-route-id="@Model.MsapBillingId" method="post" id="postReviewedBilling">
+                        <input type="hidden" name="reviewedRevision" value="@Model.Revision" />
+                        <button class="modern-btn-primary ui-page-action" type="submit">Approve final bill @Model.MsapBillingNumber</button>
+                    </form>
+                }
+                else
+                {
+                    <p class="@(blocker != null || ViewData["IsPeriodClosed"] is true ? "ui-notice ui-critical" : "ui-caption ui-muted")">@(blocker ?? (ViewData["IsPeriodClosed"] is true ? "This accounting period is closed." : Model.Status == MsapConstants.BillingStatus.ForPosting ? "Waiting for an authorized final-bill approver." : "This billing has already been approved."))</p>
+                }
+            </footer>
+        </main>
+    </div>
+</div>
+@section Scripts {
+    <script>
+        $('#postReviewedBilling').on('submit', async function (event) {
+            event.preventDefault();
+            const form = this;
+            const button = form.querySelector('button');
+            if (button.disabled) return;
+            button.disabled = true;
+            try {
+                const result = await ModernAlert.confirm({ title: 'Approve this final bill?', text: 'Approve this numbered bill after reviewing its charges, statement and ticket images.', confirmText: 'Approve final bill', cancelText: 'Keep reviewing' });
+                if (result.isConfirmed) form.submit();
+            } finally {
+                button.disabled = false;
+            }
+        });
+    </script>
+}

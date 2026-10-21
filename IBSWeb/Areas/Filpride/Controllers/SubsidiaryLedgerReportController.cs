@@ -1170,7 +1170,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             var viewModel = new SubsidiaryLedgerReportViewModel
             {
                 ChartOfAccounts = await _dbContext.FilprideChartOfAccounts
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                     .Where(coa => !coa.HasChildren)
                     .OrderBy(coa => coa.AccountNumber)
                     .Select(s => new SelectListItem
@@ -1195,7 +1195,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             }
 
             model.ChartOfAccounts = await _dbContext.FilprideChartOfAccounts
-                .IgnoreQueryFilters()
+                .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                 .Where(coa => !coa.HasChildren)
                 .OrderBy(coa => coa.AccountNumber)
                 .Select(s => new SelectListItem
@@ -1259,7 +1259,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                     1
                 ).AddDays(-1);
                 var glSubAccountBalances = await _dbContext.FilprideGlSubAccountBalances
-                    .IgnoreQueryFilters()
+                    .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                     .Include(g => g.Account)
                     .Where(pb => accountNumbers.Contains(pb.Account.AccountNumber!) &&
                                  pb.IsValid &&

@@ -18,4 +18,5 @@
     <ProjectReference Include="..\IBS.DTOs\IBS.DTOs.csproj" />
   </ItemGroup>
 
+  <Import Project="MSAP/MSAP.props" />
 </Project>

@@ -1,0 +1,5 @@
+@model decimal?
+@if (Model.HasValue)
+{
+    @Model.Value.ToString("N2")
+}

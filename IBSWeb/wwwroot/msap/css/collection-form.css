@@ -1,0 +1,81 @@
+.collection-workspace {
+    display: grid;
+    grid-template-columns: var(--ui-progress-width) minmax(0, 1fr);
+    gap: var(--ui-grid-gap);
+    padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-5);
+    align-items: start;
+}
+.collection-entry .job-progress-heading h2 { display: none; }
+.collection-content { min-width: 0; }
+.collection-progress-picker { margin-top: var(--ui-space-4); }
+.collection-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: center;
+    gap: var(--ui-space-4) var(--ui-space-5);
+}
+.collection-fields--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.collection-heading, .collection-actions, .collection-check {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-4);
+}
+.collection-check { justify-content: start; margin: 0; }
+.collection-heading input[type="search"] { width: min(24rem, 50%); }
+.collection-settlement-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 1fr);
+    gap: var(--ui-section-gap);
+}
+.collection-form input[type="checkbox"] { width: 1rem; height: 1rem; accent-color: var(--on-surface); }
+.collection-table-scroll { overflow-x: auto; }
+.collection-table { width: 100%; border-collapse: collapse; font-size: var(--ui-text-body); }
+.collection-table :is(th, td) { padding: var(--ui-space-3); border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
+.collection-table th { color: var(--on-surface-variant); font-size: var(--ui-text-caption); font-weight: var(--ui-weight-semibold); white-space: nowrap; }
+.collection-table :is(th, td):nth-child(n+3) { text-align: right; }
+.collection-table td:nth-child(2) { min-width: 11rem; }
+.collection-table td .modern-input { min-width: 8rem; text-align: right; }
+.collection-table tr.is-selected { background: var(--surface-container-low); }
+.collection-table tr.is-unavailable { color: var(--on-surface-variant); }
+.collection-table tr:last-child td { border-bottom: 0; }
+.collection-summary dl { margin: 0; }
+.collection-summary dl > div { display: flex; justify-content: space-between; gap: var(--ui-space-4); padding: var(--ui-space-3) 0; }
+.collection-summary dt { font-weight: var(--ui-weight-regular); color: var(--on-surface-variant); }
+.collection-summary dd { margin: 0; font-variant-numeric: tabular-nums; }
+.collection-summary .collection-summary-total { border-top: 1px solid var(--outline-variant); margin-top: var(--ui-space-4); padding-top: var(--ui-space-5); font-weight: var(--ui-weight-semibold); }
+.collection-summary-total dt { color: var(--on-surface); font-weight: inherit; }
+.collection-actions > * { display: inline-flex; justify-content: center; min-width: 10rem; min-height: 2.75rem; text-decoration: none; }
+.collection-form .modern-btn-primary { background: var(--on-surface); color: var(--surface-container-lowest); border-color: var(--on-surface); }
+.collection-form input[readonly] { background: var(--surface-container-low); }
+@media (max-width: 1200px) {
+    .collection-workspace { grid-template-columns: calc(var(--ui-progress-width) - var(--ui-space-6)) minmax(0, 1fr); }
+    .collection-settlement-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 767px) {
+    .collection-workspace { grid-template-columns: minmax(0, 1fr); padding: var(--ui-space-2); }
+    .collection-fields { grid-template-columns: minmax(0, 1fr); }
+    .collection-heading { flex-wrap: wrap; }
+    .collection-heading input[type="search"] { width: 100%; }
+    .collection-actions { width: 100%; flex-wrap: wrap; }
+    .collection-actions > * { flex: 1; }
+}
+
+.collection-page {
+    padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-5);
+    min-width: 0;
+}
+.collection-date-filter {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-3);
+}
+.collection-remarks { white-space: pre-wrap; overflow-wrap: anywhere; }
+.collection-form .financial-job-progress { margin: 0; }
+.collection-form .financial-job-progress > .job-progress + a { display: block; margin-top: var(--ui-space-5); }
+.collection-form .collection-table a { color: inherit; font-weight: var(--ui-weight-medium); text-decoration: none; }
+.collection-form .collection-table a:hover { text-decoration: underline; }
+@media (max-width: 767px) {
+    .collection-page { padding: var(--ui-space-2); }
+    .collection-date-filter { width: 100%; flex-wrap: wrap; }
+}

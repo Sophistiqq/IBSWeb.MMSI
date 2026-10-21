@@ -1,0 +1,263 @@
+/* Dashboard uses the same spacing, typography and flat panels as the workflow pages. */
+.app-ui.dashboard-workspace {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-5);
+    --ui-section-gap: var(--ui-space-4);
+}
+
+.dashboard-workspace a {
+    color: var(--on-surface);
+    text-decoration: none;
+}
+
+.dashboard-workspace a:hover {
+    text-decoration: none;
+    color: var(--on-surface);
+}
+
+.dashboard-workspace a:focus-visible {
+    outline: 2px solid var(--on-surface);
+    outline-offset: 3px;
+}
+
+.dashboard-workspace .dashboard-actions {
+    padding: 0;
+}
+
+.dashboard-header .dashboard-actions > a {
+    min-height: 2.75rem;
+    min-width: 10rem;
+}
+
+.dashboard-rate {
+    background: var(--surface-container);
+}
+
+.dashboard-rate p {
+    margin-top: var(--ui-space-2);
+}
+
+.dashboard-approvals, .dashboard-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    gap: var(--ui-space-4);
+}
+
+.dashboard-metric, .dashboard-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--ui-space-2);
+    min-width: 0;
+    padding: var(--ui-space-4);
+}
+
+.dashboard-workspace :is(.dashboard-metric, .dashboard-stat) > strong {
+    font-size: var(--ui-text-page);
+    font-weight: var(--ui-weight-bold);
+    line-height: var(--ui-leading-heading);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+}
+
+.dashboard-metric .modern-btn-secondary {
+    align-self: stretch;
+    margin-top: auto;
+}
+
+.dashboard-stat h3 {
+    margin: 0;
+    color: var(--on-surface-variant);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-regular);
+}
+
+.dashboard-stat p {
+    margin: 0;
+    color: var(--on-surface-variant);
+    font-size: var(--ui-text-caption);
+}
+
+.dashboard-main {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
+    align-items: start;
+    gap: var(--ui-space-4);
+}
+
+.dashboard-main > :only-child {
+    grid-column: 1 / -1;
+}
+
+.dashboard-main > *, .dashboard-review {
+    min-width: 0;
+}
+
+.dashboard-review {
+    scroll-margin-top: var(--ui-space-5);
+}
+
+.dashboard-review + .dashboard-review {
+    padding-top: var(--ui-space-4);
+    border-top: 1px solid var(--outline-variant);
+}
+
+.dashboard-table-wrap {
+    overflow-x: auto;
+}
+
+.dashboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--ui-text-body);
+}
+
+.dashboard-table :is(th, td) {
+    padding: var(--ui-space-3) var(--ui-space-2);
+    text-align: left;
+    vertical-align: middle;
+}
+
+.dashboard-table th {
+    color: var(--on-surface-variant);
+    font-size: var(--ui-text-caption);
+    font-weight: var(--ui-weight-medium);
+    white-space: nowrap;
+}
+
+.dashboard-table td {
+    border-bottom: 1px solid var(--outline-variant);
+}
+
+.dashboard-table small {
+    display: block;
+    margin-top: var(--ui-space-1);
+    color: var(--on-surface-variant);
+    font-size: var(--ui-text-caption);
+}
+
+.dashboard-window {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard-status {
+    display: inline-block;
+    padding: var(--ui-space-1) var(--ui-space-2);
+    border-radius: var(--ui-radius);
+    background: var(--surface-container);
+    color: var(--on-surface);
+    font-size: var(--ui-text-caption);
+    white-space: nowrap;
+}
+
+.dashboard-header .dashboard-status {
+    margin-right: var(--ui-space-2);
+}
+
+.dashboard-header .ui-page-description > a {
+    margin-left: var(--ui-space-2);
+}
+
+.dashboard-upcoming {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dashboard-upcoming li {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-1);
+}
+
+.dashboard-upcoming a, .dashboard-end-link, .dashboard-table a {
+    font-weight: var(--ui-weight-medium);
+}
+
+.dashboard-end-link {
+    align-self: flex-end;
+    font-size: var(--ui-text-caption);
+}
+
+.dashboard-banking, .dashboard-footer {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: center;
+    gap: var(--ui-space-4);
+    padding: var(--ui-space-4);
+}
+
+:is(.dashboard-banking, .dashboard-footer) > div:not(.dashboard-actions) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+}
+
+.dashboard-banking strong, .dashboard-footer strong {
+    font-size: var(--ui-text-body);
+    font-weight: var(--ui-weight-semibold);
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard-empty {
+    margin: 0;
+    padding: var(--ui-space-4);
+    color: var(--on-surface-variant);
+    font-size: var(--ui-text-body);
+}
+
+.dashboard-notice {
+    margin: 0;
+    background: var(--surface-container);
+}
+
+@media (max-width: 1100px) {
+    .dashboard-main { grid-template-columns: minmax(0, 1fr); }
+    .dashboard-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .dashboard-footer .dashboard-actions { grid-column: 1 / -1; }
+}
+
+@media (max-width: 767px) {
+    .app-ui.dashboard-workspace { padding: var(--ui-space-2); }
+    .dashboard-workspace .dashboard-actions { justify-self: stretch; }
+    .dashboard-header .dashboard-actions > a { flex: 1; }
+    .dashboard-banking, .dashboard-footer { grid-template-columns: minmax(0, 1fr); }
+    .dashboard-table { min-width: 36rem; }
+}
+
+.dashboard-state-key {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-3);
+}
+
+.dashboard-workspace :is(.dashboard-metric, .dashboard-stat):is(.ui-attention, .ui-critical) > strong {
+    color: var(--ui-state-ink);
+}
+
+.dashboard-banking > :is(.ui-attention, .ui-critical) {
+    border-inline-start: 3px solid var(--ui-state-accent);
+    padding-inline-start: var(--ui-space-3);
+}
+
+.dashboard-workspace .dashboard-table td:last-child > a {
+    display: inline-block;
+    padding: var(--ui-space-1) var(--ui-space-3);
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--ui-radius);
+    background: var(--surface-container-lowest);
+    white-space: nowrap;
+}
+
+.dashboard-workspace .dashboard-table td:last-child > a:hover {
+    background: var(--surface-container);
+    border-color: var(--on-surface-variant);
+}

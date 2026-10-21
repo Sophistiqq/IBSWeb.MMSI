@@ -1,0 +1,76 @@
+@model IBS.Models.MSAP.ViewModels.MasterFileImportViewModel
+@{
+    ViewData["Title"] = "Master File Import";
+    ViewData["IsFullWidth"] = true;
+}
+<link rel="stylesheet" href="~/msap/css/master-file-import.css" asp-append-version="true" />
+<div class="modern-layout app-ui">
+    <main class="ui-page ui-stack master-import-workspace" id="masterImportWorkspace" data-export-url="@Url.Action("Export")" data-corrections-url="@Url.Action("Corrections")">
+        <header class="ui-page-header">
+            <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-controller="Home" asp-action="Index">MSAP</a></li><li>Master File References</li><li aria-current="page">Import</li></ol></nav>
+            <h1 class="ui-page-title" data-page-header>Master File Import</h1>
+            <div class="ui-page-action ui-actions"><a asp-action="Template" class="ui-button">Download Excel headers</a><a asp-controller="Home" asp-action="Index" class="ui-button" data-ui-back>Back</a></div>
+            <p class="ui-page-description ui-caption ui-muted">Validate CSVs, review additions and changes, then import the reviewed files. The batch is saved together; validation errors save nothing.</p>
+        </header>
+        <form asp-action="Index" method="post" enctype="multipart/form-data" id="masterImportForm" class="ui-stack">
+            @Html.AntiForgeryToken()
+            <input asp-for="ReviewedFingerprint" type="hidden" />
+            <section class="ui-panel ui-panel--compact ui-stack">
+                <h2 class="ui-section-title">1. Select master files or a completed workbook</h2>
+                <div class="ui-field-grid">
+                    <div class="ui-field"><label class="ui-label" for="masterFiles">CSV files / returned Excel workbook</label><input type="file" id="masterFiles" name="Files" accept=".csv,.xlsx" multiple class="ui-input" /></div>
+                    <div class="ui-field"><label class="ui-label" for="masterFolder">Or select a folder</label><input type="file" id="masterFolder" name="Files" webkitdirectory directory multiple class="ui-input" /></div>
+                </div>
+                <p class="ui-caption ui-muted">Supported: bankacct.csv, customer.csv, port.csv, services.csv (or service.csv), tugboatowner.csv, tugmaster.csv (or master.csv), vessel.csv, terminal.csv, tugboat.csv, principal.csv and tariff.csv. Exact file names are used. Other files are ignored and listed below.</p>
+                <p class="ui-caption ui-muted">Dependencies are processed automatically: ports before terminals, owners before tugboats and customers before principals. Tariff data creates independent Tariff and BAF review drafts; live rates change only after rate approval. Up to 5 MB per CSV / 10 MB per workbook, 10,000 rows per master and 20 MB total. Financial records, users and access assignments are not imported here.</p>
+            </section>
+            <section class="ui-panel ui-panel--compact ui-stack">
+                <h2 class="ui-section-title">2. Review import options</h2>
+                <label class="ui-caption d-flex align-items-center gap-2"><input asp-for="UpdateExisting" /> Update matching master records using source fields</label>
+                <p class="ui-caption ui-muted">Off: add new codes and compare existing records. On: update supplied master fields while retaining IDs. Withholding, discount and IOC settings change only when explicitly supplied; blank added fields preserve existing settings. Existing tugboat home ports are retained. No records are deleted and no ticket/billing amounts are recalculated.</p>
+                <div class="ui-field-grid">
+                    <div class="ui-field">
+                        <label asp-for="NewTugboatPortCode" class="ui-label">Home port for new tugboats without a PORT column</label>
+                        <select asp-for="NewTugboatPortCode" asp-items="Model.Ports" class="js-modern-select"><option value="">Select an explicit port, if needed</option></select>
+                    </div>
+                    <div class="ui-field">
+                        <label asp-for="NonVatableTaxType" class="ui-label">Fallback for legacy VATABLE=False (per-customer VAT type takes priority)</label>
+                        <select asp-for="NonVatableTaxType" class="js-modern-select"><option value="">Choose only after Accounting confirms</option><option value="Exempt">VAT-exempt</option><option value="Zero-Rated">Zero-rated</option></select>
+                    </div>
+                </div>
+                <p class="ui-caption ui-muted">Complete customer VAT type, withholding tax, withholding VAT and default COS discount separately. New records need explicit confirmations; blank does not mean False or 0. Export a correction workbook after validation to collect missing information from staff, then upload the completed workbook for fresh validation.</p>
+                <div class="ui-actions">
+                    <button type="submit" name="import" value="false" class="ui-button ui-button--primary" id="validateMasters">Validate and compare</button>
+                    <button type="submit" name="import" value="true" class="ui-button ui-button--primary" id="importMasters" disabled>Import reviewed files</button>
+                    <button type="button" class="ui-button" id="exportMasters" disabled>Export cleaned Excel</button>
+                    <button type="button" class="ui-button" id="exportMasterCorrections" disabled>Export issues for completion</button>
+                </div>
+                <p class="ui-caption ui-muted" id="masterImportStatus" role="status" aria-live="polite">Nothing has been imported.</p>
+                <div id="masterImportedRates" class="ui-actions"></div>
+            </section>
+        </form>
+        <section class="ui-panel ui-panel--compact ui-stack" aria-labelledby="masterPreviewHeading">
+            <h2 id="masterPreviewHeading" class="ui-section-title">3. Correct and review master records</h2>
+            <p class="ui-caption ui-muted">Edit highlighted records here, then validate again. Edited cells are yellow. If information needs staff confirmation, export issues for completion: missing cells have notes, and the workbook retains every supplied record for the one-time migration.</p>
+            <div id="masterImportErrors" class="ui-stack ui-caption" role="alert"></div>
+            <p id="ignoredMasterFiles" class="ui-caption ui-muted"></p>
+            <div class="ui-field-grid">
+                <div class="ui-field"><label class="ui-label" for="masterEditorFile">Master file</label><select id="masterEditorFile" class="ui-input"><option value="">Load files to begin</option></select></div>
+                <div class="ui-field"><label class="ui-label" for="masterEditorFilter">Show records</label><select id="masterEditorFilter" class="ui-input"><option value="all">All records</option><option value="attention">Needs attention</option><option value="edited">Edited records</option></select></div>
+                <div class="ui-field"><label class="ui-label" for="masterEditorSearch">Search</label><input id="masterEditorSearch" type="search" class="ui-input" placeholder="Code, name or value" /></div>
+            </div>
+            <p id="masterImportCounts" class="ui-caption ui-muted">Select files and validate to load the editor.</p>
+            <div class="table-responsive master-import-editor" tabindex="0" aria-label="Editable master records">
+                <table class="modern-table ui-table">
+                    <thead id="masterEditorHeaders"><tr><th scope="col">Records appear after validation</th></tr></thead>
+                    <tbody id="masterImportRows"></tbody>
+                </table>
+            </div>
+            <div class="ui-row"><span id="masterEditorPage" class="ui-caption ui-muted"></span><div class="ui-actions"><button type="button" id="masterEditorPrevious" class="ui-button" disabled>Previous</button><button type="button" id="masterEditorNext" class="ui-button" disabled>Next</button></div></div>
+            <noscript><p>JavaScript is required to retain selected files between validation and the reviewed import.</p></noscript>
+        </section>
+    </main>
+</div>
+@section Scripts {
+    <script src="~/msap/js/master-file-import.js" asp-append-version="true"></script>
+}

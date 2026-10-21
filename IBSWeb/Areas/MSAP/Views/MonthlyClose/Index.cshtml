@@ -1,0 +1,43 @@
+@{
+    ViewData["Title"] = "Monthly Close";
+    ViewData["IsFullWidth"] = true;
+}
+
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
+        <div class="flex-stack ui-page-toolbar">
+            <div>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Monthly Close</li></ol></nav>
+                <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
+            </div>
+        </div>
+
+        <div class="modern-grid justify-center">
+            <section class="modern-col-6">
+                <div class="modern-card ui-card">
+                    <div class="modern-card-header-info ui-card-header">
+                        <span class="material-symbols-outlined">event_busy</span>
+                        <h2 class="modern-headline-md ui-section-title">Close a Month</h2>
+                    </div>
+                    <div class="modern-card-body ui-card-body">
+                        <p class="modern-label mb-3 ui-label">Closing a month locks its accounting periods and prevents further modifications.</p>
+                        <form asp-controller="MonthlyClose" asp-action="TriggerMonthlyClosure" method="post">
+                            <div class="flex flex-column gap-4">
+                                <div>
+                                    <label class="modern-label ui-label">Select Month</label>
+                                    <input type="month" name="monthDate" class="form-control ui-input" value="@DateTimeHelper.GetCurrentPhilippineTime().ToString("yyyy-MM")" />
+                                    <span class="text-error"></span>
+                                </div>
+                                <div class="flex gap-2 ui-actions">
+                                    <button type="submit" class="modern-btn-primary">
+                                        <span class="material-symbols-outlined">check_circle</span> Submit
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+</div>

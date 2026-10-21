@@ -1,0 +1,46 @@
+@model VesselSchedule
+@{
+    var closed = Model.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
+}
+@if (!closed && ViewBag.CanEdit == true && ViewBag.CanComplete == true)
+{
+    <div class="schedule-action-item ui-stack">
+        <h3 class="ui-label">Finish vessel service</h3>
+        <p class="ui-body ui-muted">All recorded services have actual end times. Complete service when no more Dispatch Tickets are expected. Billing and collection continue separately.</p>
+        <form asp-action="Complete" method="post" data-schedule-action="Complete">
+            <input type="hidden" name="id" value="@Model.VesselScheduleId" />
+            <button type="submit" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">task_alt</span> Complete Service</button>
+        </form>
+    </div>
+}
+<details class="ui-stack">
+    <summary>Show other actions</summary>
+    @if (!closed && ViewBag.CanEdit == true)
+    {
+        @if (ViewBag.CanRevise == true)
+        {
+            <div class="schedule-action-item ui-stack">
+                <h3 class="ui-label">Adjust the booking</h3><p class="ui-body ui-muted">Editing the schedule returns it to Tentative for review and reapproval while preserving the COS. Bookings with actual tickets or billing cannot be revised.</p>
+                <a asp-action="Edit" asp-route-id="@Model.VesselScheduleId" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">edit_calendar</span> Revise Schedule</a>
+            </div>
+        }
+        <div class="schedule-action-item schedule-action-cancel">
+            @if (ViewBag.CanCancel != true)
+            {
+                <h3 class="ui-label">Cancellation unavailable</h3><p class="ui-body ui-muted">Resolve active Dispatch Tickets and billing before cancelling this schedule.</p>
+            }
+            else
+            {
+                <h3 class="ui-label">Cancel this booking</h3><p class="ui-body ui-muted">@(Model.CustomerOrderSlipId.HasValue ? "Cancels the schedule and its COS together. Records are retained." : "Release the tug bookings and keep this plan on record.")</p>
+                <form asp-action="Cancel" method="post" data-schedule-action="Cancel">
+                    <input type="hidden" name="id" value="@Model.VesselScheduleId" />
+                    <button type="submit" class="modern-btn-error"><span class="material-symbols-outlined" aria-hidden="true">event_busy</span> Cancel Booking</button>
+                </form>
+            }
+        </div>
+    }
+    @if (closed)
+    {
+        <p class="ui-body ui-muted">@(Model.Status == MsapConstants.VesselScheduleStatus.Completed ? "Service is completed. Charge calculation, billing approval and collection can continue." : "This booking is cancelled. Schedule changes are no longer available.")</p>
+    }
+</details>

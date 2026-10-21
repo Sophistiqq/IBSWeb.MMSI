@@ -24,6 +24,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCos = await _db
                 .FilprideCustomerOrderSlips
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CustomerOrderSlipNo.Length)
                 .ThenByDescending(x => x.CustomerOrderSlipNo)

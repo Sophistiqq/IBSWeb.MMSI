@@ -1,0 +1,36 @@
+@model List<RateUpload>
+@{
+    ViewData["Title"] = "Rate updates";
+    ViewData["IsFullWidth"] = true;
+}
+<link rel="stylesheet" href="~/msap/css/rate-maintenance.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<div class="modern-layout">
+    <main class="app-ui rate-workspace ui-stack">
+        <header class="ui-page-header">
+            <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-controller="Home" asp-action="Index">MSAP</a></li><li aria-current="page">Rate updates</li></ol></nav>
+            <h1 class="ui-page-title" data-page-header>Rate updates</h1>
+            @if (ViewData["CanUpload"] is true) { <a asp-action="Editor" class="modern-btn-primary ui-page-action">Open rate editor</a> }
+            <p class="ui-page-description ui-caption ui-muted">Edit tariff and BAF rates separately, then compare and submit selected changes. Saving for review leaves live rates unchanged.</p>
+        </header>
+        <section class="ui-panel ui-stack">
+            <div class="rate-upload-heading"><h2 class="ui-section-title">@(ViewData["AwaitingReview"] is true ? "Awaiting review" : "Recent submissions")</h2><a asp-action="Editor" class="modern-btn-secondary">View rates and exports</a></div>
+            <div class="rate-table-scroll">
+                <table class="modern-table ui-table">
+                    <thead><tr><th>Prepared</th><th>Table</th><th>Prepared by</th><th>Rows</th><th>New / changed</th><th>Status</th><th>Action</th></tr></thead>
+                    <tbody>
+                    @foreach (var upload in Model)
+                    {
+                        <tr class="@(upload.SubmittedAt.HasValue && !upload.ApprovedAt.HasValue ? "ui-attention" : "")"><td>@upload.UploadedAt.ToString("dd MMM yyyy, HH:mm")</td><td>@upload.RateKind</td><td>@upload.UploadedBy</td><td>@upload.TotalRows</td><td>@upload.ChangedRows</td><td>@upload.Status</td><td><a asp-action="Details" asp-route-id="@upload.RateUploadId" class="modern-btn-secondary">Compare rates</a></td></tr>
+                    }
+                    @if (Model.Count == 0) { <tr><td colspan="7">No rate updates have been prepared.</td></tr> }
+                    </tbody>
+                </table>
+            </div>
+            <div class="rate-upload-heading">
+                <p class="ui-caption ui-muted">Latest 50 matching updates · Philippine time</p>
+                <nav class="rate-list-filters" aria-label="Filter rate updates"><a asp-action="Index" class="modern-btn-secondary" aria-current="@(ViewData["AwaitingReview"] is not true ? "page" : null)">All updates</a><a asp-action="Index" asp-route-awaitingReview="true" class="modern-btn-secondary" aria-current="@(ViewData["AwaitingReview"] is true ? "page" : null)">Awaiting review</a></nav>
+            </div>
+        </section>
+    </main>
+</div>

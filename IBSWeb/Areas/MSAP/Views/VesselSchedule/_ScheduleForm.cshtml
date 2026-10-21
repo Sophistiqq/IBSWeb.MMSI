@@ -1,0 +1,422 @@
+@using IBS.Models.MSAP.Enums
+@model VesselScheduleViewModel
+@{
+    var tugOwnerMap = ViewBag.TugboatOwnerMap as Dictionary<int, bool> ?? new Dictionary<int, bool>();
+    var isNew = Model.VesselScheduleId == 0;
+    var selectedTugs = Model.SelectedTugboatIds?.Distinct().ToList() ?? new List<int>();
+}
+<link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/vessel-schedule-form.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+
+<div class="schedule-screen-layout app-ui">
+    <partial name="_BookingProgress" model="Model.VesselScheduleId" />
+
+    <!-- Center Column: Main Workspace Form -->
+    <div class="schedule-main-workspace">
+        <header class="schedule-header-stack ui-page-header">
+            <nav aria-label="Breadcrumb">
+                <ol class="ui-breadcrumb">
+                    <li><a asp-action="Index">Vessel schedules</a></li>
+                    <li aria-current="page">@(isNew ? "New schedule" : "Edit schedule")</li>
+                </ol>
+            </nav>
+            <h1 class="schedule-page-title ui-page-title" data-page-header>@(isNew ? "Create schedule" : "Edit schedule")</h1>
+            <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary schedule-calendar-btn ui-page-action" data-ui-back>
+                <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span> Back
+            </a>
+            <p class="schedule-page-subtitle ui-body ui-muted ui-page-description">Plan the booking and add each tugboat's services.</p>
+            <div class="schedule-status-banner ui-page-description">
+                <span class="schedule-status-pill">@(isNew ? "New booking" : $"Revision {Model.Revision}")</span>
+                <span class="schedule-status-note ui-body ui-muted">@(isNew ? "The booking is reviewed before the COS is created." : "Editing sets this booking back to Tentative for reapproval.")</span>
+            </div>
+        </header>
+
+        <form method="post" id="scheduleForm" class="ui-stack" data-terminals-url="@Url.Action("GetTerminalsByPort")" data-bookings-url="@Url.Action("GetTugboatBookings")" data-details-url="@Url.Action("Details")" data-discount-url="@Url.Action("GetCustomerDiscount")" data-rate-url="@Url.Action("GetTariffRate")">
+            @Html.AntiForgeryToken()
+            <input asp-for="VesselScheduleId" type="hidden" />
+            <input type="hidden" id="AllowConflicts" name="AllowConflicts" value="false" />
+            <div id="scheduleSaveErrors" hidden>
+                @foreach (var error in ViewData.ModelState.Values.SelectMany(state => state.Errors))
+                {
+                    <span data-save-error data-conflict="@error.ErrorMessage.StartsWith("Overlapping plans:", StringComparison.Ordinal).ToString().ToLowerInvariant()">@error.ErrorMessage</span>
+                }
+            </div>
+            <noscript><div asp-validation-summary="All" class="text-error mb-3" role="alert"></div></noscript>
+
+            <!-- Card 1: Booking details -->
+            <section class="schedule-card ui-panel" aria-labelledby="bookingDetailsHeading">
+                <div class="schedule-card-header">
+                    <h2 class="schedule-card-title ui-section-title" id="bookingDetailsHeading">Booking details</h2>
+                    <span class="schedule-required-note ui-caption ui-muted">* Required</span>
+                </div>
+                <div class="schedule-card-body ui-stack">
+                    <div class="schedule-grid-2">
+                        <div class="schedule-field ui-field" data-tour-step="2">
+                            <label asp-for="CustomerId" class="schedule-field-label ui-label">Customer *</label>
+                            <select asp-for="CustomerId" asp-items="Model.Customers" class="js-modern-select" id="CustomerId" required>
+                                <option value="">Select customer</option>
+                            </select>
+                            <span asp-validation-for="CustomerId" class="text-error ui-caption"></span>
+                        </div>
+                        <div class="schedule-field ui-field" data-tour-step="3">
+                            <label asp-for="VesselId" class="schedule-field-label ui-label">Vessel *</label>
+                            <select asp-for="VesselId" asp-items="Model.Vessels" class="js-modern-select" id="VesselId" required>
+                                <option value="">Select vessel</option>
+                            </select>
+                            <span asp-validation-for="VesselId" class="text-error ui-caption"></span>
+                        </div>
+                    </div>
+                    <div class="schedule-grid-3">
+                        <div class="schedule-field ui-field" data-tour-step="5">
+                            <label asp-for="PortId" class="schedule-field-label ui-label">Port *</label>
+                            <select asp-for="PortId" asp-items="Model.Ports" class="js-modern-select" id="PortId" required>
+                                <option value="">Select port</option>
+                            </select>
+                            <span asp-validation-for="PortId" class="text-error ui-caption"></span>
+                        </div>
+                        <div class="schedule-field ui-field" data-tour-step="6">
+                            <label asp-for="TerminalId" class="schedule-field-label ui-label">Terminal *</label>
+                            <select asp-for="TerminalId" asp-items="Model.Terminals" class="js-modern-select" id="TerminalId" required>
+                                <option value="">Select terminal</option>
+                            </select>
+                            <span asp-validation-for="TerminalId" class="text-error ui-caption"></span>
+                        </div>
+                        <div class="schedule-field ui-field" data-tour-step="4">
+                            <label asp-for="VoyageNumber" class="schedule-field-label ui-label">Voyage number</label>
+                            <input asp-for="VoyageNumber" class="modern-input" id="VoyageNumber" maxlength="50" placeholder="VOY-001" />
+                            <span asp-validation-for="VoyageNumber" class="text-error ui-caption"></span>
+                        </div>
+                    </div>
+                    <p id="terminalMessage" class="schedule-muted schedule-field-wide" role="status"></p>
+                    <div class="schedule-grid-2">
+                        <div class="schedule-field ui-field" data-tour-step="7">
+                            <label asp-for="PlannedStart" class="schedule-field-label ui-label">Planned start *</label>
+                            <input asp-for="PlannedStart" type="datetime-local" asp-format="{0:yyyy-MM-ddTHH:mm}" class="modern-input" id="PlannedStart" min="1900-01-01T00:00" max="9998-12-31T23:59" required />
+                            <span asp-validation-for="PlannedStart" class="text-error ui-caption"></span>
+                        </div>
+                        <div class="schedule-field ui-field" data-tour-step="8">
+                            <label asp-for="PlannedEnd" class="schedule-field-label ui-label">Planned end *</label>
+                            <input asp-for="PlannedEnd" type="datetime-local" asp-format="{0:yyyy-MM-ddTHH:mm}" class="modern-input" id="PlannedEnd" min="1900-01-01T00:00" max="9998-12-31T23:59" required />
+                            <span asp-validation-for="PlannedEnd" class="text-error ui-caption"></span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Card 2: Commercial settings -->
+            <section class="schedule-card ui-panel" aria-labelledby="commercialHeading" data-tour-step="15">
+                <div class="schedule-card-header">
+                    <h2 class="schedule-card-title ui-section-title" id="commercialHeading">Commercial settings</h2>
+                </div>
+                <div class="schedule-card-body ui-stack">
+                    <div class="schedule-commercial-row">
+                        <div class="schedule-discount-box">
+                            <label asp-for="CosDiscountPercent" class="schedule-field-label ui-label">Customer discount</label>
+                            <input asp-for="CosDiscountPercent" type="number" step="0.0001" min="0" max="100" class="modern-input schedule-discount-input" id="CosDiscountPercent" placeholder="0.00%" />
+                            <span asp-validation-for="CosDiscountPercent" class="text-error ui-caption"></span>
+                        </div>
+                        <div class="schedule-commercial-switches-inline">
+                            <label class="schedule-checkbox-inline">
+                                <input asp-for="SkipCosDiscount" type="checkbox" id="SkipCosDiscount" />
+                                <span>Skip discount for this COS</span>
+                            </label>
+                            <label class="schedule-checkbox-inline">
+                                <input asp-for="SbmaEnabled" type="checkbox" id="SbmaEnabled" />
+                                <span>Apply SBMA share</span>
+                            </label>
+                        </div>
+                    </div>
+                    <p class="schedule-field-footnote ui-caption ui-muted">Discount applies to tariff and BAF. SBMA uses actual service time for every tug.</p>
+                </div>
+            </section>
+
+            <!-- Section 3: Tugboats & services -->
+            <section class="schedule-services-section" aria-labelledby="tugboatsServicesHeading">
+                <div class="schedule-section-header">
+                    <div>
+                        <h2 class="schedule-section-title ui-section-title" id="tugboatsServicesHeading">Tugboats & services</h2>
+                        <p class="schedule-section-subtitle ui-body ui-muted">Add one service entry for each assist the tug will perform.</p>
+                    </div>
+                    <button type="button" class="modern-btn-secondary js-add-tugboat-btn" id="addTugboatBtn" data-tour-step="12">
+                        <span class="material-symbols-outlined" aria-hidden="true">add</span> Add tugboat
+                    </button>
+                </div>
+
+                <div id="tugServicesContainer" class="schedule-tug-services-list">
+                    @if (selectedTugs.Count > 0)
+                    {
+                        foreach (var tugId in selectedTugs)
+                        {
+                            var entriesForTug = Model.ServiceEntries?.Where(e => e.TugboatId == tugId).ToList() ?? new List<VesselScheduleServiceEntryViewModel>();
+                            var hasTug = tugId > 0;
+                            var isCo = hasTug && tugOwnerMap.TryGetValue(tugId, out var isCompany) && isCompany;
+                            <div class="schedule-tug-card ui-panel" data-tug-id="@tugId" id="tugCard_@tugId">
+                                <div class="schedule-tug-card-header">
+                                    <div class="schedule-tug-card-left">
+                                        <select name="SelectedTugboatIds" class="js-modern-select js-tug-select" data-placeholder="Select tugboat" required>
+                                            <option value="">Select tugboat</option>
+                                            @foreach (var t in Model.Tugboats)
+                                            {
+                                                var optCo = tugOwnerMap.TryGetValue(int.Parse(t.Value), out var c) && c;
+                                                <option value="@t.Value" selected="@(t.Value == tugId.ToString())" data-company-owned="@(optCo ? "true" : "false")">@t.Text</option>
+                                            }
+                                        </select>
+                                        <span class="schedule-pill-badge @(hasTug ? "" : "schedule-badge-muted") js-tug-badge">@(hasTug ? (isCo ? "Company-owned" : "Subcontractor") : "Unassigned")</span>
+                                        <span class="schedule-tug-overlap-status js-tug-overlap">Checking planned overlaps…</span>
+                                    </div>
+                                    <button type="button" class="modern-btn-link text-error js-remove-tug-btn">Remove tug</button>
+                                </div>
+                                <div class="schedule-services-table" role="region" aria-label="Expected services" tabindex="0">
+                                    <div class="schedule-services-table-header">
+                                        <span class="col-service">Service *</span>
+                                        <span class="col-basis">Tariff basis</span>
+                                        <span class="col-rate">Tariff rate</span>
+                                        <span class="col-baf-method">BAF method *</span>
+                                        <span class="col-baf-rate">BAF rate</span>
+                                        <span class="col-action"></span>
+                                    </div>
+                                    <div class="schedule-tug-service-rows js-service-rows">
+                                        @for (int i = 0; i < entriesForTug.Count; i++)
+                                        {
+                                            var entry = entriesForTug[i];
+                                            var rowKey = $"tug_{tugId}_srv_{i}_{Guid.NewGuid():N}";
+                                            <div class="schedule-service-grid-row" data-service-row>
+                                                <input type="hidden" name="ServiceEntries.Index" value="@rowKey" />
+                                                <input type="hidden" name="ServiceEntries[@rowKey].VesselScheduleServiceEntryId" value="@entry.VesselScheduleServiceEntryId" />
+                                                <input type="hidden" name="ServiceEntries[@rowKey].TugboatId" value="@tugId" class="js-tug-id" />
+
+                                                <div class="col-service">
+                                                    <select name="ServiceEntries[@rowKey].ServiceId" class="js-modern-select js-service-select" aria-label="Service" required>
+                                                        <option value="">Select service</option>
+                                                        @foreach (var s in Model.Services)
+                                                        {
+                                                            <option value="@s.Value" selected="@(entry.ServiceId.ToString() == s.Value)">@s.Text</option>
+                                                        }
+                                                    </select>
+                                                </div>
+                                                <div class="col-basis">
+                                                    <select name="ServiceEntries[@rowKey].TariffBasis" class="js-modern-select js-tariff-basis" aria-label="Tariff basis">
+                                                        <option value="PerHour" selected="@(entry.TariffBasis == TariffChargeBasis.PerHour)">Per hour</option>
+                                                        <option value="PerMove" selected="@(entry.TariffBasis == TariffChargeBasis.PerMove)">Per Move</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-rate">
+                                                    <input name="ServiceEntries[@rowKey].ManualTariffRate" value="@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("0.00##") : "")" type="number" step="0.0001" min="0" placeholder="From table" class="modern-input js-tariff-rate" aria-label="Manual tariff rate" readonly />
+                                                    <span class="schedule-rate-provenance js-tariff-provenance ui-caption ui-muted">@(entry.ManualTariffRate.HasValue ? "Manual rate" : "Rate not checked")</span>
+                                                </div>
+                                                <div class="col-baf-method">
+                                                    <select name="ServiceEntries[@rowKey].BafMethod" class="js-modern-select js-baf-method" aria-label="BAF method">
+                                                        <option value="PerHour" selected="@(entry.BafMethod == BafCalculationMethod.PerHour)">Per hour</option>
+                                                        <option value="PerMove" selected="@(entry.BafMethod == BafCalculationMethod.PerMove)">Per Move</option>
+                                                        <option value="Lumpsum" selected="@(entry.BafMethod == BafCalculationMethod.Lumpsum)">Lumpsum</option>
+                                                        <option value="Industry" selected="@(entry.BafMethod == BafCalculationMethod.Industry)">Industry</option>
+                                                    </select>
+                                                    <span class="schedule-pending-notice ui-caption" @(entry.BafMethod is BafCalculationMethod.Lumpsum or BafCalculationMethod.Industry ? "" : "hidden")>Approved amount applied once per service</span>
+                                                </div>
+                                                <div class="col-baf-rate">
+                                                    <input name="ServiceEntries[@rowKey].ManualBafRate" value="@(entry.ManualBafRate.HasValue ? entry.ManualBafRate.Value.ToString("0.00##") : "")" type="number" step="0.0001" min="0" placeholder="From table" class="modern-input js-baf-rate" aria-label="Manual BAF rate" readonly />
+                                                    <span class="schedule-rate-provenance js-baf-provenance ui-caption ui-muted">@(entry.ManualBafRate.HasValue ? "Manual rate" : "Rate not checked")</span>
+                                                </div>
+                                                <div class="col-action">
+                                                    <button type="button" class="modern-btn-icon js-remove-service-btn" title="Remove service" aria-label="Remove service">
+                                                        <span class="material-symbols-outlined">close</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="schedule-tug-card-footer">
+                                    <button type="button" class="modern-btn-link js-add-service-btn" data-tug-id="@tugId">
+                                        <span class="material-symbols-outlined">add</span> Add service
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+                <p id="noTugsAssignedNotice" class="schedule-empty-state" @(selectedTugs.Count > 0 ? "hidden" : "")>
+                    No tugboats assigned yet. Click "+ Add tugboat" above to assign a tugboat and configure services.
+                </p>
+            </section>
+
+            <!-- Card 4: Planning notes -->
+            <section class="schedule-card ui-panel" aria-labelledby="planningNotesHeading" data-tour-step="9">
+                <div class="schedule-card-header">
+                    <h2 class="schedule-card-title ui-section-title" id="planningNotesHeading">Planning notes</h2>
+                </div>
+                <div class="schedule-card-body ui-stack">
+                    <textarea asp-for="Notes" class="modern-input schedule-notes-textarea" id="Notes" rows="2" placeholder="Add coordination notes or service instructions..."></textarea>
+                </div>
+            </section>
+
+            <!-- Bottom Action Bar -->
+            <div class="schedule-bottom-bar" data-tour-step="14">
+                <span class="schedule-save-notice ui-body ui-muted">Saving sends this booking for review.</span>
+                <div class="schedule-action-buttons">
+                    <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">Cancel</a>
+                    <button type="submit" class="ui-button ui-button--primary"><span class="material-symbols-outlined">save</span> Save for reviewing</button>
+                </div>
+            </div>
+        </form>
+        <!-- Right Column: Booking summary & sidebar cards -->
+        <aside class="schedule-summary-sidebar" aria-label="Booking summary and review checklist">
+            <!-- Card 1: Booking summary -->
+            <div class="schedule-summary-card ui-panel ui-stack">
+                <div class="schedule-summary-header">
+                    <h3 class="schedule-card-title ui-section-title">Booking summary</h3>
+                    <span class="schedule-pill-badge" id="summaryRecurringBadge">Recurring</span>
+                </div>
+                <div class="schedule-summary-group">
+                    <div class="schedule-summary-label ui-caption ui-muted">SERVICE LOCATION</div>
+                    <div class="schedule-summary-value-lg ui-value" id="summaryLocation">Select port / terminal</div>
+                </div>
+                <div class="schedule-summary-group">
+                    <div class="schedule-summary-label ui-caption ui-muted">PLANNED WINDOW</div>
+                    <div class="schedule-summary-value-lg ui-value" id="summaryDate">@Model.PlannedStart.ToString("dd MMM yyyy")</div>
+                    <div class="schedule-summary-subvalue ui-body ui-muted" id="summaryTime">@Model.PlannedStart.ToString("HH:mm") – @Model.PlannedEnd.ToString("HH:mm") · Philippine time</div>
+                </div>
+                <hr class="schedule-panel-divider" />
+                <div class="schedule-metrics-list">
+                    <div class="schedule-metric-row">
+                        <span>Tugboats</span>
+                        <strong id="summaryTugCount">@selectedTugs.Count</strong>
+                    </div>
+                    <div class="schedule-metric-row">
+                        <span>Expected services</span>
+                        <strong id="summaryServiceCount">@(Model.ServiceEntries?.Count ?? 0)</strong>
+                    </div>
+                    <div class="schedule-metric-row">
+                        <span>Customer discount</span>
+                        <strong id="summaryDiscount">@(Model.SkipCosDiscount ? "0%" : (Model.CosDiscountPercent.HasValue ? $"{Model.CosDiscountPercent.Value:0.##}%" : "0%"))</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 2: Rates for review -->
+            <div class="schedule-summary-card ui-panel ui-stack">
+                <h3 class="schedule-card-title ui-section-title">Rates for review</h3>
+                <div class="schedule-rate-review-item">
+                    <div class="schedule-rate-review-label ui-label">Tariff rates</div>
+                    <div class="schedule-rate-review-val ui-body ui-muted" id="summaryTariffRates">No services selected</div>
+                </div>
+                <div class="schedule-rate-review-item">
+                    <div class="schedule-rate-review-label ui-label">BAF rates</div>
+                    <div class="schedule-rate-review-val ui-body ui-muted" id="summaryBafRates">No services selected</div>
+                </div>
+                <hr class="schedule-panel-divider" />
+                <div class="schedule-rate-notice ui-caption" id="summaryRatesNotice" role="status">Table estimates use the planned date. Final rates use actual service start.</div>
+            </div>
+
+            <!-- Card 3: Before you save -->
+            <div class="schedule-summary-card ui-panel ui-stack">
+                <h3 class="schedule-card-title ui-section-title">Before you save</h3>
+                <ul class="schedule-guidance-list ui-body ui-muted">
+                    <li>Check the tugboats, service types and manual rate.</li>
+                    <li>Actual ticket numbers and times are entered after service.</li>
+                </ul>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<!-- Dynamic HTML Templates -->
+<template id="tugboatCardTemplate">
+    <div class="schedule-tug-card ui-panel" data-tug-id="__TUG_ID__" id="tugCard___TUG_ID__">
+        <div class="schedule-tug-card-header">
+            <div class="schedule-tug-card-left">
+                <select name="SelectedTugboatIds" class="js-modern-select js-tug-select" data-placeholder="Select tugboat" required>
+                    <option value="">Select tugboat</option>
+                    @foreach (var t in Model.Tugboats)
+                    {
+                        var optCo = tugOwnerMap.TryGetValue(int.Parse(t.Value), out var c) && c;
+                        <option value="@t.Value" data-company-owned="@(optCo ? "true" : "false")">@t.Text</option>
+                    }
+                </select>
+                <span class="schedule-pill-badge schedule-badge-muted js-tug-badge">Unassigned</span>
+                <span class="schedule-tug-overlap-status js-tug-overlap">Checking planned overlaps…</span>
+            </div>
+            <button type="button" class="modern-btn-link text-error js-remove-tug-btn">Remove tug</button>
+        </div>
+        <div class="schedule-services-table" role="region" aria-label="Expected services" tabindex="0">
+            <div class="schedule-services-table-header">
+                <span class="col-service">Service *</span>
+                <span class="col-basis">Tariff basis</span>
+                <span class="col-rate">Tariff rate</span>
+                <span class="col-baf-method">BAF method *</span>
+                <span class="col-baf-rate">BAF rate</span>
+                <span class="col-action"></span>
+            </div>
+            <div class="schedule-tug-service-rows js-service-rows"></div>
+        </div>
+        <div class="schedule-tug-card-footer">
+            <button type="button" class="modern-btn-link js-add-service-btn" data-tug-id="__TUG_ID__">
+                <span class="material-symbols-outlined">add</span> Add service
+            </button>
+        </div>
+    </div>
+</template>
+
+<template id="serviceRowTemplate">
+    <div class="schedule-service-grid-row" data-service-row>
+        <input type="hidden" name="ServiceEntries.Index" value="__KEY__" />
+        <input type="hidden" name="ServiceEntries[__KEY__].VesselScheduleServiceEntryId" value="0" />
+        <input type="hidden" name="ServiceEntries[__KEY__].TugboatId" value="__TUG_ID__" class="js-tug-id" />
+
+        <div class="col-service">
+            <select name="ServiceEntries[__KEY__].ServiceId" class="js-modern-select js-service-select" aria-label="Service" required>
+                <option value="">Select service</option>
+                @foreach (var s in Model.Services)
+                {
+                    <option value="@s.Value">@s.Text</option>
+                }
+            </select>
+        </div>
+        <div class="col-basis">
+            <select name="ServiceEntries[__KEY__].TariffBasis" class="js-modern-select js-tariff-basis" aria-label="Tariff basis">
+                <option value="PerHour" selected>Per hour</option>
+                <option value="PerMove">Per Move</option>
+            </select>
+        </div>
+        <div class="col-rate">
+            <input name="ServiceEntries[__KEY__].ManualTariffRate" type="number" step="0.0001" min="0" placeholder="From table" class="modern-input js-tariff-rate" aria-label="Manual tariff rate" readonly />
+            <span class="schedule-rate-provenance js-tariff-provenance ui-caption ui-muted">Rate not checked</span>
+        </div>
+        <div class="col-baf-method">
+            <select name="ServiceEntries[__KEY__].BafMethod" class="js-modern-select js-baf-method" aria-label="BAF method">
+                <option value="PerHour" selected>Per hour</option>
+                <option value="PerMove">Per Move</option>
+                <option value="Lumpsum">Lumpsum</option>
+                <option value="Industry">Industry</option>
+            </select>
+            <span class="schedule-pending-notice ui-caption" hidden>Approved amount applied once per service</span>
+        </div>
+        <div class="col-baf-rate">
+            <input name="ServiceEntries[__KEY__].ManualBafRate" type="number" step="0.0001" min="0" placeholder="From table" class="modern-input js-baf-rate" aria-label="Manual BAF rate" readonly />
+            <span class="schedule-rate-provenance js-baf-provenance ui-caption ui-muted">Rate not checked</span>
+        </div>
+        <div class="col-action">
+            <button type="button" class="modern-btn-icon js-remove-service-btn" title="Remove service" aria-label="Remove service">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+    </div>
+</template>
+
+<script>
+    window.IBS_TOUR_STEPS = [
+        { step: 1, title: 'Job Progress', text: 'Follow the booking from planning through COS approval, ticket entry, billing, and clearing.', interactive: false },
+        { step: 2, title: 'Customer', text: 'Select the customer requesting this vessel service.', required: true, autoAdvance: true },
+        { step: 3, title: 'Vessel', text: 'Choose the vessel for this visit.', required: true, autoAdvance: true },
+        { step: 4, title: 'Voyage number', text: 'Add the voyage reference if one is available.', required: false, autoAdvance: false },
+        { step: 5, title: 'Port', text: 'Choose the service port. Changing the port clears the terminal selection.', required: true, autoAdvance: true },
+        { step: 6, title: 'Terminal', text: 'Choose a terminal within the selected port, then continue.', required: true, autoAdvance: false },
+        { step: 7, title: 'Planned start', text: 'Enter the expected service start in Philippine time.', required: true, autoAdvance: false },
+        { step: 8, title: 'Planned end', text: 'Enter an end later than the start, including the correct date for overnight service. Actual times are recorded on Dispatch Tickets.', required: true, autoAdvance: false },
+        { step: 9, title: 'Planning notes', text: 'Add service instructions or coordination notes when needed.', required: false, autoAdvance: false },
+        { step: 12, title: 'Add tugboat', text: 'Add tugboats and configure expected services for each assist.', required: false, autoAdvance: false },
+        { step: 14, title: 'Save for reviewing', text: 'Review the booking, commercial options and expected services, then save for reviewing.', interactive: true },
+        { step: 15, title: 'Commercial settings', text: 'Configure customer discount, discount skipping, and SBMA eligibility.', required: false, autoAdvance: false }
+    ];
+</script>

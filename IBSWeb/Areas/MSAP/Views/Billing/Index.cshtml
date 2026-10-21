@@ -1,0 +1,250 @@
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+@{
+
+
+    ViewData["Title"] = "Billing Statements";
+    ViewData["IsFullWidth"] = true;
+    var jobProgress = ViewBag.JobProgressItems as IEnumerable<JobProgressViewModel>;
+}
+
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
+        <!-- Header Section -->
+        <div class="flex-stack ui-page-toolbar">
+            <div>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb">
+                    <li>MSAP</li>
+                    <li aria-current="page">Billing</li>
+                </ol></nav>
+                <h1 class="modern-headline-lg ui-page-title" data-page-header>@ViewData["Title"]</h1>
+            </div>
+            <div class="flex gap-2 ui-actions">
+                @if (ViewBag.CustomerOrderSlipId != null)
+                {
+                    <a asp-action="Index" asp-route-customerOrderSlipId="" asp-route-id="" class="modern-btn-secondary">All Billings</a>
+                }
+                @if (ViewBag.CanPost == true && (jobProgress == null || jobProgress.Any(p => p.Stage == JobProgressCalculator.BillingStage && !p.Stopped)))
+                {
+                    <a asp-action="Create" asp-route-customerOrderSlipId="@ViewBag.CustomerOrderSlipId" class="modern-btn-primary" data-hotkey="c">
+                        <span class="material-symbols-outlined">add_circle</span>
+                        CREATE BILLING
+                    </a>
+                }
+            </div>
+        </div>
+
+        @if (ViewBag.JobProgressItems is IEnumerable<JobProgressViewModel> progress)
+        {
+            <partial name="_JobProgressList" model="progress" />
+        }
+
+        <form id="discardBilling" asp-action="Delete" method="post" hidden>
+            <input type="hidden" name="id" />
+        </form>
+
+        <!-- Filter Group -->
+        <div class="flex flex-wrap gap-2">
+            <button id="filterAll" class="modern-btn-secondary active">ALL</button>
+            <button id="filterForPosting" class="modern-btn-secondary">AWAITING APPROVAL</button>
+            <button id="filterForCollection" class="modern-btn-secondary">FOR COLLECTION</button>
+            <button id="filterCollected" class="modern-btn-secondary">COLLECTED</button>
+        </div>
+
+        <!-- Table Card -->
+        <div class="modern-card ui-card">
+            <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">receipt_long</span>
+                    <h2 class="modern-headline-md ui-section-title">Billing List</h2>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="modern-label mb-0 ui-label" style="color: var(--on-surface-variant)">Filter by Date:</label>
+                    <input type="date" id="dateFilter" class="modern-input ui-input" style="height: 32px; padding: 0 12px; font-size: 0.875rem; border-radius: 6px;">
+                </div>
+            </div>
+            <div class="modern-card-body ui-card-body">
+                <table class="modern-table ui-table" id="paginatedTable">
+                    <thead>
+                        <tr>
+                            <th>DATE</th>
+                            <th>BILLING #</th>
+                            <th>AMOUNT</th>
+                            <th>CUSTOMER</th>
+                            <th>PORT - TERMINAL</th>
+                            <th>VESSEL</th>
+                            <th>DISPATCH TICKET #</th>
+                            <th class="text-center">STATUS</th>
+                            <th class="text-center">ACTIONS</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<style>
+    .modern-btn-secondary.active {
+        background-color: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+</style>
+
+@section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '#filterAll', title: 'Billing stages', text: 'Filter statements awaiting final approval, awaiting collection, or already collected.', interactive: false },
+            { selector: '#dateFilter', title: 'Filter by date', text: 'Choose a billing date to narrow the list.', interactive: false },
+            { selector: '#paginatedTable', title: 'Billing list', text: 'Open a billing number to review the statement. Available actions depend on its status, month close, and your access.', interactive: false }
+        ];
+        if (document.querySelector('.flex-stack .modern-btn-primary')) {
+            window.IBS_TOUR_STEPS.unshift({ selector: '.flex-stack .modern-btn-primary', title: 'Create billing', text: 'Create a statement for eligible approved Dispatch Tickets. The saved billing waits for final approval.', interactive: false });
+        }
+        if (document.querySelector('.financial-job-progress .job-progress')) {
+            window.IBS_TOUR_STEPS.unshift({ selector: '.financial-job-progress', title: 'Job progress', text: 'Review the linked COS stage and its next available action before posting or collecting.', interactive: false });
+        }
+    </script>
+    <script>
+        $(document).ready(function () {
+            const editUrl = '@Url.Action("Edit", "Billing")';
+            const reviewUrl = '@Url.Action("Review", "Billing")';
+            const canEdit = @((ViewBag.CanEdit as bool? ?? false).ToString().ToLower());
+            const canDelete = @((ViewBag.CanDelete as bool? ?? false).ToString().ToLower());
+
+            // Get status from URL on load
+            const urlParams = new URLSearchParams(window.location.search);
+            const statusFilter = urlParams.get('status') || '';
+            const billingNumber = urlParams.get('billingNumber') || '';
+
+            let table = $('#paginatedTable').DataTable(ModernTable.config({
+                order: [[0, 'desc']],
+                columnDefs: [{ orderable: false, targets: [8] }],
+                ajax: ModernTable.ajax("@Url.Action("GetBillingList", "Billing", new { area = "MSAP", customerOrderSlipId = ViewBag.CustomerOrderSlipId })"),
+                columns: [
+                    { data: "date", defaultContent: "" },
+                    {
+                        data: "msapBillingNumber",
+                        render: (data, type, row) => `<a href="${reviewUrl}?id=${row.msapBillingId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${data}</a>`
+                    },
+                    {
+                        data: "amount",
+                        className: "text-right font-bold",
+                        render: (data) => ModernTable.render.currency(data)
+                    },
+                    { data: "customer.customerName", defaultContent: "" },
+                    {
+                        data: null,
+                        orderable: false,
+                        render: (data, type, row) => {
+                            const portName = row.terminal?.port?.portName ?? "";
+                            const terminalName = row.terminal?.terminalName ?? "";
+                            return portName || terminalName ? `${portName} - ${terminalName}` : "";
+                        }
+                    },
+                    { data: "vessel.vesselName", defaultContent: "" },
+                    {
+                        data: "dispatchTicketNumbers",
+                        render: (data, type, row) => {
+                            if (!data) return "";
+                            const parts = data.split(", ");
+                            if (parts.length <= 3) return data;
+                            return `<span title="${data.replace(/"/g, '&quot;')}">${parts.slice(0, 3).join(", ")} +${parts.length - 3} more</span>`;
+                        }
+                    },
+                    {
+                        data: "status",
+                        className: "text-center",
+                        render: (data) => {
+                            let statusClass = "ui-status";
+                            if (data === "@MsapConstants.BillingStatus.ForPosting") return ModernTable.render.badge("Awaiting final approval", "ui-status ui-attention");
+                            else if (data === "@MsapConstants.BillingStatus.ForCollection") statusClass = "ui-status ui-attention";
+                            else if (data === "@MsapConstants.BillingStatus.Collected") statusClass = "ui-status ui-complete";
+                            return ModernTable.render.badge(data, statusClass);
+                        }
+                    },
+                    {
+                        data: null,
+                        orderable: false,
+                        className: "text-center",
+                        render: (data, type, row) => {
+                            if (row.status === "@MsapConstants.BillingStatus.ForPosting") {
+                                return ModernTable.render.dropdown([
+                                    { label: 'Review billing', icon: 'visibility', url: `${reviewUrl}?id=${row.msapBillingId}` },
+                                    { label: 'Edit', icon: 'edit', url: `${editUrl}?id=${row.msapBillingId}`, condition: !row.isMonthClosed && !row.basicBillingId && !row.bafBilling && canEdit },
+                                    { label: 'Delete', icon: 'delete', isError: true, onclick: `confirmDelete(${row.msapBillingId})`, condition: !row.isMonthClosed && canDelete }
+                                ]);
+                            } else {
+                                return ModernTable.render.dropdown([
+                                    { label: 'Review billing', icon: 'visibility', url: `${reviewUrl}?id=${row.msapBillingId}` }
+                                ]);
+                            }
+                        }
+                    }
+                ],
+                initComplete: function() {
+                    if (statusFilter) {
+                        this.api().column(7).search(statusFilter);
+                        updateFilterButtons(statusFilter);
+                    }
+                    if (billingNumber) {
+                        this.api().search(billingNumber);
+                    }
+                    if (statusFilter || billingNumber) {
+                        this.api().draw();
+                    }
+                }
+            }));
+
+            // Date filter handler
+            $('#dateFilter').on('change', function() {
+                table.column(0).search($(this).val()).draw();
+            });
+
+            // Filter button handlers
+            $('.modern-btn-secondary[id^="filter"]').on('click', function() {
+                const id = $(this).attr('id');
+                let status = '';
+                if (id === 'filterForPosting') status = "@MsapConstants.BillingStatus.ForPosting";
+                else if (id === 'filterForCollection') status = "@MsapConstants.BillingStatus.ForCollection";
+                else if (id === 'filterCollected') status = "@MsapConstants.BillingStatus.Collected";
+
+                table.column(7).search(status).draw();
+                updateUrl(status);
+                updateFilterButtons(status);
+            });
+
+            function updateUrl(status) {
+                const url = new URL(window.location);
+                if (status) url.searchParams.set('status', status);
+                else url.searchParams.delete('status');
+                window.history.replaceState({}, '', url);
+            }
+
+            function updateFilterButtons(status) {
+                $('.modern-btn-secondary').removeClass('active');
+                if (!status) $('#filterAll').addClass('active');
+                else if (status === "@MsapConstants.BillingStatus.ForPosting") $('#filterForPosting').addClass('active');
+                else if (status === "@MsapConstants.BillingStatus.ForCollection") $('#filterForCollection').addClass('active');
+                else if (status === "@MsapConstants.BillingStatus.Collected") $('#filterCollected').addClass('active');
+            }
+        });
+
+        function confirmDelete(id) {
+            ModernAlert.confirm({
+                title: 'Are you sure?',
+                text: "This will delete the draft billing and return all dispatch tickets to the queue.",
+                icon: 'warning',
+                confirmText: 'Yes, delete it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    ModernAlert.showLoading("Deleting billing...");
+                    const form = document.getElementById('discardBilling');
+                    form.elements.id.value = id;
+                    form.submit();
+                }
+            });
+        }
+
+    </script>
+}

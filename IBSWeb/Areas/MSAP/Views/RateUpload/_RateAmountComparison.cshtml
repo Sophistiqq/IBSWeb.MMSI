@@ -1,0 +1,22 @@
+@model (decimal? Current, decimal Uploaded)
+@{
+    bool isNew = !Model.Current.HasValue;
+    bool changed = Model.Current.HasValue && Model.Current.Value != Model.Uploaded;
+    decimal difference = Model.Uploaded - Model.Current.GetValueOrDefault();
+}
+<td class="rate-current-amount">@(Model.Current?.ToString("N4") ?? "No previous rate")</td>
+<td class="@(isNew ? "rate-cell-new" : changed ? "rate-cell-changed" : "rate-cell-same")">
+    <strong>@Model.Uploaded.ToString("N4")</strong>
+    @if (isNew)
+    {
+        <small>New amount</small>
+    }
+    else if (changed)
+    {
+        <small>@(difference > 0 ? "Increase" : "Decrease") @(Math.Abs(difference).ToString("N4"))</small>
+    }
+    else
+    {
+        <small>Unchanged</small>
+    }
+</td>

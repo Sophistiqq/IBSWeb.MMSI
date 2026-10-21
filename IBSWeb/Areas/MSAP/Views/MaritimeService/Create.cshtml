@@ -1,0 +1,59 @@
+@model IBS.Models.MSAP.ViewModels.MaritimeServiceViewModel
+
+@{
+    ViewData["Title"] = "Create Activity / Service";
+    ViewData["IsFullWidth"] = true;
+}
+
+<div class="modern-layout app-ui">
+    <form asp-action="Create" method="post" id="mainForm">
+        <main class="modern-container ui-page">
+            <!-- Header Section -->
+            <div class="flex-stack ui-page-toolbar">
+                <div>
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li><a asp-action="Index">Activities / Services</a></li><li aria-current="page">New Activity / Service</li></ol></nav>
+                    <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
+                </div>
+                <div class="flex gap-2 ui-actions">
+                    <button type="submit" class="modern-btn-primary">
+                        <span class="material-symbols-outlined">save</span> Save Changes
+                    </button>
+                    <a asp-action="Index" class="modern-btn-secondary">
+                        <span class="material-symbols-outlined">cancel</span> Cancel
+                    </a>
+                </div>
+            </div>
+
+            <div class="modern-grid justify-center">
+                <section class="modern-col-6">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
+                            <span class="material-symbols-outlined">info</span>
+                            <h2 class="modern-headline-md ui-section-title">Service Details</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
+
+                            <div class="flex flex-column gap-4">
+                                <div>
+                                    <label asp-for="ServiceNumber" class="modern-label ui-label">Service Number <span class="text-error">*</span></label>
+                                    <input asp-for="ServiceNumber" class="form-control ui-input" placeholder="Enter 3-digit code" maxlength="3" />
+                                    <span asp-validation-for="ServiceNumber" class="text-error text-xs"></span>
+                                </div>
+
+                                <div>
+                                    <label asp-for="ServiceName" class="modern-label ui-label">Service Name <span class="text-error">*</span></label>
+                                    <input asp-for="ServiceName" class="form-control ui-input" placeholder="Enter service name" />
+                                    <span asp-validation-for="ServiceName" class="text-error text-xs"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </form>
+</div>
+
+@section Scripts {
+    }

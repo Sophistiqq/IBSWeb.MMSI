@@ -1,0 +1,116 @@
+@using System.Security.Claims
+@using IBS.Services.MSAP.AccessControl
+@inject IAccessControlService AccessControl
+@{
+    ViewData["Title"] = "Collections";
+    ViewData["IsFullWidth"] = true;
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    bool canPrepare = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.CreateCollection);
+}
+
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/collection-form.css" asp-append-version="true" />
+<div class="modern-layout app-ui collection-form">
+    <main class="collection-page ui-stack">
+        <header class="ui-page-header">
+            <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Collections</li></ol></nav>
+            <h1 class="ui-page-title" data-page-header>Collections</h1>
+            @if (canPrepare)
+            {
+                <a id="createCollection" asp-action="Create" class="modern-btn-primary ui-page-action" data-hotkey="c">Record collection</a>
+            }
+            <p class="ui-page-description ui-caption ui-muted">Review receipts, billing payments and deposit or clearing status.</p>
+        </header>
+        <section class="ui-panel ui-stack" aria-labelledby="collectionRecordsHeading">
+            <div class="collection-heading">
+                <h2 id="collectionRecordsHeading" class="ui-section-title">Collection records</h2>
+                <div class="collection-date-filter"><label for="dateFilter" class="ui-label">Collection date</label><input type="date" id="dateFilter" class="modern-input" /></div>
+            </div>
+            <div class="collection-table-scroll">
+                <table class="modern-table ui-table" id="paginatedTable">
+                    <thead><tr><th>Date</th><th>Receipt number</th><th>Check date</th><th>Deposited</th><th class="text-right">Net received</th><th>Service customer</th><th>Status</th><th class="text-center">Actions</th></tr></thead>
+                </table>
+            </div>
+        </section>
+    </main>
+</div>
+@section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '#createCollection', title: 'Record collection', text: 'Create a collection to record payment against eligible posted billings.', interactive: false },
+            { selector: '#dateFilter', title: 'Filter by date', text: 'Choose a collection date to narrow the records.', interactive: false },
+            { selector: '#paginatedTable', title: 'Collection records', text: 'Review payment status, amount, customer, and deposit dates. Open a collection number to inspect its billings and banking progress.', interactive: false }
+        ];
+    </script>
+    <script>
+        $(document).ready(function () {
+            const canPrepare = @canPrepare.ToString().ToLowerInvariant();
+            const previewUrl = '@Url.Action("Preview", "Collection")';
+            const editUrl = '@Url.Action("Edit", "Collection")';
+
+            let table = $('#paginatedTable').DataTable(ModernTable.config({
+                order: [[0, 'desc']],
+                rowCallback: function (row, data) {
+                    $(row).toggleClass('ui-critical', data.paymentStatus === 'Returned')
+                        .toggleClass('ui-attention', data.paymentStatus !== 'Returned' && data.paymentStatus !== 'Cleared');
+                },
+                columnDefs: [{ orderable: false, targets: [6, 7] }],
+                ajax: ModernTable.ajax("@Url.Action("GetCollectionList", "Collection", new { area = "MSAP" })"),
+                columns: [
+                    {
+                        data: "date",
+                        defaultContent: "",
+                        render: (data) => ModernTable.render.date(data)
+                    },
+                    {
+                        data: "msapCollectionNumber",
+                        defaultContent: "",
+                        render: (data, type, row) => `<a href="${previewUrl}?id=${row.msapCollectionId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${data}</a>`
+                    },
+                    {
+                        data: "checkDate",
+                        defaultContent: "",
+                        render: (data) => ModernTable.render.date(data)
+                    },
+                    {
+                        data: "depositDate",
+                        defaultContent: "",
+                        render: (data) => ModernTable.render.date(data)
+                    },
+                    {
+                        data: "amount",
+                        className: "text-right font-bold",
+                        defaultContent: "₱0.00",
+                        render: (data) => ModernTable.render.currency(data)
+                    },
+                    {
+                        data: "customer.customerName",
+                        defaultContent: "",
+                        render: (data) => ModernTable.render.ellipsis(data)
+                    },
+                    {
+                        data: "paymentStatus",
+                        orderable: false,
+                        defaultContent: "For Deposit",
+                        render: (data, type) => type !== 'display' ? data : ModernTable.render.badge(data || 'For Deposit',
+                            data === 'Returned' ? 'ui-status ui-critical' : data === 'Cleared' ? 'ui-status ui-complete' : 'ui-status ui-attention')
+                    },
+                    {
+                        data: null,
+                        orderable: false,
+                        className: "text-center",
+                        render: (data, type, row) => ModernTable.render.dropdown([
+                            { label: 'View Details', icon: 'visibility', url: `${previewUrl}?id=${row.msapCollectionId}` },
+                            { label: 'Edit Record', icon: 'edit', url: `${editUrl}?id=${row.msapCollectionId}`, condition: canPrepare && !row.isMonthClosed && !row.isPrinted && !row.depositDate && !row.returnedDate && !row.clearedDate }
+                        ])
+                    }
+                ]
+            }));
+
+            // Date filter
+            $('#dateFilter').on('change', function () {
+                table.column(0).search($(this).val()).draw();
+            });
+        });
+    </script>
+}

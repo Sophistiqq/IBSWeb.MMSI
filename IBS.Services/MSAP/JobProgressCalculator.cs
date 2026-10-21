@@ -1,0 +1,365 @@
+using System.Text.Json;
+using IBS.DataAccess.MSAP.Repository.IRepository;
+using IBS.Models.MSAP;
+using IBS.Models.MSAP.Enums;
+using IBS.Models.MSAP.ViewModels;
+using IBS.Utility.MSAP.Constants;
+
+namespace IBS.Services.MSAP
+{
+    public static class JobProgressCalculator
+    {
+        public const int TariffStage = 3;
+        public const int ApprovalStage = 4;
+        public const int BillingStage = 5;
+        public const int PostingStage = 6;
+        public const int CollectionStage = 7;
+        public const int DepositStage = 8;
+        public const int ClearingStage = 9;
+        public const int CompletedStage = 10;
+
+        public static async Task<JobProgressViewModel> LoadAsync(IUnitOfWork unitOfWork, CustomerOrderSlip? job, VesselSchedule? schedule, CancellationToken ct)
+        {
+            if (schedule != null)
+            {
+                schedule = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(schedule.VesselScheduleId, ct) ?? schedule;
+            }
+            List<DispatchTicket> tickets = job == null ? [] : (await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == job.CustomerOrderSlipId, ct)).ToList();
+            List<int> billingIds = tickets.Where(t => t.BillingId.HasValue).Select(t => t.BillingId!.Value).Distinct().ToList();
+            List<Billing> billings = job == null ? [] : (await unitOfWork.Billing.GetAllAsync(b => b.CustomerOrderSlipId == job.CustomerOrderSlipId || billingIds.Contains(b.MsapBillingId), ct)).ToList();
+            List<int> collectionIds = billings.Where(b => b.CollectionId.HasValue).Select(b => b.CollectionId!.Value).Distinct().ToList();
+            IEnumerable<Collection> collections = collectionIds.Count == 0 ? []
+                : await unitOfWork.Collection.GetAllAsync(c => collectionIds.Contains(c.MsapCollectionId), ct);
+            var progress = Calculate(job, schedule, tickets, billings, collections);
+            if (job != null && !progress.IsCancelled && !progress.IsInvalidated)
+            {
+                List<DispatchTicket> otherTugTickets = await unitOfWork.DispatchTicket.GetOtherTugChargeTicketsAsync(job.CustomerOrderSlipId, ct);
+                progress.OtherTugTicketCount = otherTugTickets.Count;
+                progress.MissingOtherTugTicketCount = otherTugTickets.Count(t => t.OtherTugChargeLine == null);
+                progress.MissingOtherTugTicketId = otherTugTickets.FirstOrDefault(t => t.OtherTugChargeLine == null)?.DispatchTicketId;
+                List<OtherTugCharge> drafts = otherTugTickets.Where(t => t.OtherTugChargeLine?.Charge.ConfirmedAt == null && t.OtherTugChargeLine != null)
+                    .Select(t => t.OtherTugChargeLine!.Charge).DistinctBy(c => c.OtherTugChargeId).OrderBy(c => c.OtherTugChargeId).ToList();
+                progress.OtherTugChargeReviewCount = drafts.Count;
+                progress.OtherTugChargeReviewId = drafts.FirstOrDefault()?.OtherTugChargeId;
+                progress.ConfirmedOtherTugTicketCount = otherTugTickets.Count(t => t.OtherTugChargeLine?.Charge.ConfirmedAt != null);
+            }
+            if (schedule != null)
+            {
+                foreach (var ticket in tickets.Where(t => t.Status == MsapConstants.DispatchTicketStatus.ForBilling && !t.BillingId.HasValue && billings.Count == 0))
+                {
+                    var entry = schedule.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
+                    if (entry == null)
+                    {
+                        continue;
+                    }
+                    var preview = await ScheduledTicketCharges.PreviewAsync(unitOfWork, ticket, schedule, ct);
+                    string? blocker = ScheduledTicketCharges.GetBlocker(preview.Ticket, schedule, entry, preview.Tariff, preview.Baf);
+                    if (blocker == null && !ScheduledTicketCharges.HasChanges(ticket, preview.Ticket))
+                    {
+                        continue;
+                    }
+                    progress.CalculationBlockers[ticket.DispatchTicketId] = $"{ticket.DispatchNumber}: {blocker ?? "Applicable rates changed. Review and recalculate the saved ticket charges."}";
+                    if (progress.Stage >= TariffStage && !progress.Stopped)
+                    {
+                        progress.Stage = TariffStage;
+                        progress.Guidance = "Saved unbilled charges need review against applicable service-date rates. Review and recalculate before preparing billing.";
+                        SetAction(progress, "Review ticket charges", "CustomerOrderSlip", "Details", job!.CustomerOrderSlipId,
+                            ProcedureEnum.EditDispatchTicket, "charge review");
+                    }
+                }
+                foreach (var ticket in tickets.Where(t => t.Status is not (MsapConstants.DispatchTicketStatus.ForBilling or MsapConstants.DispatchTicketStatus.Billed or MsapConstants.DispatchTicketStatus.Deleted)))
+                {
+                    var entry = schedule.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
+                    if (entry == null)
+                    {
+                        continue;
+                    }
+                    var rate = ticket.DateLeft.HasValue
+                        ? await unitOfWork.TariffTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
+                        : null;
+                    var bafRate = ticket.DateLeft.HasValue
+                        ? await unitOfWork.BafTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
+                        : null;
+                    var reason = ScheduledTicketCharges.GetBlocker(ticket, schedule, entry, rate, bafRate)
+                        ?? "Rates and terms are available. Recalculate charges to complete this ticket.";
+                    progress.CalculationBlockers[ticket.DispatchTicketId] = $"{entry.Tugboat.TugboatName} / {entry.Service.ServiceName} ({ticket.DispatchNumber}): {reason}";
+                }
+            }
+            return progress;
+        }
+
+        public static async Task<List<JobProgressViewModel>> LoadForBillingsAsync(IUnitOfWork unitOfWork, IEnumerable<int> billingIds, CancellationToken ct)
+        {
+            List<int> ids = billingIds.Distinct().ToList();
+            IEnumerable<Billing> billings = await unitOfWork.Billing.GetAllAsync(b => ids.Contains(b.MsapBillingId), ct);
+            IEnumerable<DispatchTicket> tickets = await unitOfWork.DispatchTicket.GetAllAsync(t => t.BillingId.HasValue && ids.Contains(t.BillingId.Value), ct);
+            List<int> jobIds = billings.Select(b => b.CustomerOrderSlipId).Concat(tickets.Select(t => t.CustomerOrderSlipId))
+                .Where(id => id.HasValue).Select(id => id!.Value).Distinct().OrderBy(id => id).ToList();
+            if (jobIds.Count == 0 && billings.Any())
+            {
+                List<int> collectionIds = billings.Where(b => b.CollectionId.HasValue).Select(b => b.CollectionId!.Value).Distinct().ToList();
+                IEnumerable<Collection> collections = collectionIds.Count == 0 ? []
+                    : await unitOfWork.Collection.GetAllAsync(c => collectionIds.Contains(c.MsapCollectionId), ct);
+                var progress = Calculate(new CustomerOrderSlip { Status = MsapConstants.CustomerOrderSlipStatus.Closed }, null, [], billings, collections);
+                progress.CustomerOrderSlipId = null;
+                return [progress];
+            }
+            return await LoadForJobsAsync(unitOfWork, jobIds, ct);
+        }
+
+        public static async Task<List<JobProgressViewModel>> LoadForJobsAsync(IUnitOfWork unitOfWork, IEnumerable<int> jobIds, CancellationToken ct)
+        {
+            var result = new List<JobProgressViewModel>();
+            foreach (int jobId in jobIds.Distinct().OrderBy(id => id))
+            {
+                CustomerOrderSlip? job = await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == jobId, ct);
+                VesselSchedule? schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == jobId, ct);
+                result.Add(await LoadAsync(unitOfWork, job, schedule, ct));
+            }
+            return result;
+        }
+
+        public static async Task<string?> GetBlockerAsync(IUnitOfWork unitOfWork, int? customerOrderSlipId, int requiredStage, CancellationToken ct)
+        {
+            if (!customerOrderSlipId.HasValue)
+            {
+                return null;
+            }
+            CustomerOrderSlip? job = await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == customerOrderSlipId.Value, ct);
+            if (job == null)
+            {
+                return "Linked COS not found.";
+            }
+            VesselSchedule? schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId.Value, ct);
+            JobProgressViewModel progress = await LoadAsync(unitOfWork, job, schedule, ct);
+            return progress.Stopped || progress.Stage < requiredStage ? progress.Guidance : null;
+        }
+
+        public static async Task<string?> GetBillingBlockerAsync(IUnitOfWork unitOfWork, Billing billing, int requiredStage, CancellationToken ct)
+        {
+            // A posted split component can be collected while its partner still awaits posting.
+            int serviceStage = requiredStage == CollectionStage && (billing.BasicBillingId.HasValue || billing.BafBilling != null)
+                ? BillingStage : requiredStage;
+            IEnumerable<DispatchTicket> tickets = await unitOfWork.DispatchTicket.GetAllAsync(t => t.BillingId == billing.MsapBillingId, ct);
+            IEnumerable<int?> jobIds = tickets.Select(t => t.CustomerOrderSlipId).Append(billing.CustomerOrderSlipId).Where(id => id.HasValue).Distinct();
+            foreach (var jobId in jobIds)
+            {
+                string? blocker = await GetBlockerAsync(unitOfWork, jobId, serviceStage, ct);
+                if (blocker != null)
+                {
+                    return blocker;
+                }
+            }
+            return null;
+        }
+
+        public static JobProgressViewModel Calculate(CustomerOrderSlip? job, VesselSchedule? schedule, IEnumerable<DispatchTicket> tickets, IEnumerable<Billing> billings, IEnumerable<Collection>? collections = null)
+        {
+            var result = new JobProgressViewModel
+            {
+                HasSchedule = schedule != null,
+                VesselScheduleId = schedule?.VesselScheduleId,
+                CustomerOrderSlipId = job?.CustomerOrderSlipId,
+                CustomerOrderSlipNumber = job?.CustomerOrderSlipNumber,
+                ExpectedTicketCount = schedule?.ServiceEntries.Count(e => !e.CancelledAt.HasValue) ?? 0
+            };
+            List<DispatchTicket> active = tickets.Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted).OrderBy(t => t.DispatchTicketId).ToList();
+            List<Billing> bills = billings.OrderBy(b => b.MsapBillingId).ToList();
+            result.RecordedTicketCount = active.Count;
+            result.LinkedBillings = bills;
+            if (schedule?.Status == MsapConstants.VesselScheduleStatus.Cancelled || job?.Status == MsapConstants.CustomerOrderSlipStatus.Cancelled)
+            {
+                result.Stopped = true;
+                result.IsCancelled = true;
+                result.Guidance = "This booking is cancelled. Existing records remain available for reference.";
+                return result;
+            }
+            if (job?.Status == MsapConstants.CustomerOrderSlipStatus.Invalidated)
+            {
+                result.Stopped = true;
+                result.IsInvalidated = true;
+                result.Guidance = "This COS was invalidated after a schedule revision and is retained for reference. Continue through the revised schedule.";
+                return result;
+            }
+            if (job == null)
+            {
+                if (schedule == null || schedule.CustomerOrderSlipId.HasValue)
+                {
+                    result.Stopped = true;
+                    result.Guidance = "The linked COS is unavailable. Ask an authorized user to review the booking.";
+                    return result;
+                }
+                var assigned = new List<int>();
+                try
+                {
+                    assigned = JsonSerializer.Deserialize<List<int>>(schedule.AssignedTugboatIds ?? "[]") ?? [];
+                }
+                catch (JsonException)
+                {
+                    // Invalid legacy assignments must be corrected before confirmation.
+                }
+                bool ready = schedule.CustomerId > 0 && schedule.VesselId > 0 && schedule.PortId > 0
+                    && schedule.TerminalId > 0 && schedule.PlannedEnd > schedule.PlannedStart && assigned.Any(id => id > 0);
+                result.Stage = ready ? 1 : 0;
+                result.Guidance = ready ? "Review the booking and assigned tugboats. Confirmation creates its COS." : "Complete booking details and assign at least one tugboat before confirmation.";
+                SetAction(result, ready ? "Review and Confirm" : "Complete Booking", "VesselSchedule", ready ? "Details" : "Edit", schedule.VesselScheduleId,
+                    ready ? ProcedureEnum.ApproveSchedule : ProcedureEnum.EditCustomerOrderSlip, ready ? "schedule confirmation" : "booking preparation");
+                return result;
+            }
+            if (schedule != null && (schedule.ApprovedRevision != schedule.Revision || schedule.Status == MsapConstants.VesselScheduleStatus.Tentative))
+            {
+                result.Stage = 1;
+                result.Guidance = "Actual service tickets may be recorded while approval is pending. Billing remains blocked until the current schedule is approved.";
+                SetAction(result, schedule.ApprovedRevision.HasValue ? "Review and Reapprove" : "Review and Approve", "VesselSchedule", "Details", schedule.VesselScheduleId,
+                    ProcedureEnum.ApproveSchedule, "schedule approval");
+                return result;
+            }
+            List<DispatchTicket> unknown = active.Where(t => !MsapConstants.DispatchTicketStatus.All.Contains(t.Status)).ToList();
+            List<DispatchTicket> missingBills = active.Where(t => (t.Status == MsapConstants.DispatchTicketStatus.Billed || t.BillingId.HasValue) && !bills.Any(b => b.MsapBillingId == t.BillingId)).ToList();
+            if (unknown.Count > 0 || missingBills.Count > 0
+                || job.Status is not (MsapConstants.CustomerOrderSlipStatus.Open or MsapConstants.CustomerOrderSlipStatus.Closed)
+                || (job.Status == MsapConstants.CustomerOrderSlipStatus.Closed && active.Any(t => t.Status != MsapConstants.DispatchTicketStatus.Billed))
+                || bills.Any(b => b.Status is not (MsapConstants.BillingStatus.ForPosting or MsapConstants.BillingStatus.ForCollection or MsapConstants.BillingStatus.Collected)
+                    || (b.Status == MsapConstants.BillingStatus.Collected && b.Balance > 0)))
+            {
+                result.Stage = 2;
+                result.Stopped = true;
+                result.Tickets = unknown.Concat(missingBills).Distinct().ToList();
+                result.Billings = bills;
+                result.Guidance = "Linked records have an unresolved status or billing reference. Ask an authorized user to review them before proceeding.";
+                return result;
+            }
+            if (schedule?.ServiceEntries.Where(entry => !entry.CancelledAt.HasValue).Any(entry => active.Count(t => t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId
+                && t.TugBoatId == entry.TugboatId && t.ServiceId == entry.ServiceId) != 1) == true)
+            {
+                result.Stage = 2;
+                result.Guidance = "Record the actual ticket details for every expected service before continuing.";
+                SetAction(result, "Record expected service", "CustomerOrderSlip", "Details", job.CustomerOrderSlipId,
+                    ProcedureEnum.CreateDispatchTicket, "service recording");
+                return result;
+            }
+            List<DispatchTicket> incomplete = active.Where(t => !HasActualTimes(t)).ToList();
+            if ((active.Count == 0 && bills.Count == 0) || incomplete.Count > 0)
+            {
+                result.Stage = 2;
+                result.Tickets = incomplete;
+                result.Guidance = active.Count == 0 ? "Record a Dispatch Ticket to continue. No active tickets have been recorded." : $"{incomplete.Count} Dispatch Ticket(s) need valid actual start and end times.";
+                if (incomplete.Count > 0)
+                {
+                    if (job.Status != MsapConstants.CustomerOrderSlipStatus.Open || active.Any(t => t.Status == MsapConstants.DispatchTicketStatus.Billed))
+                    {
+                        result.Stopped = true;
+                        result.Billings = bills;
+                        result.Guidance += " Resolve linked billing through its existing correction or reversal controls before editing service details.";
+                    }
+                    else
+                    {
+                        SetAction(result, "Complete Dispatch Details", "DispatchTicket", "EditTicket", incomplete[0].DispatchTicketId, ProcedureEnum.EditDispatchTicket, "service details");
+                    }
+                }
+                else if (job.Status == MsapConstants.CustomerOrderSlipStatus.Open && schedule?.Status != MsapConstants.VesselScheduleStatus.Completed && bills.Count == 0)
+                {
+                    SetAction(result, "Record Dispatch Ticket", "DispatchTicket", "Create", null, ProcedureEnum.CreateDispatchTicket, "service recording");
+                }
+                else
+                {
+                    result.Stopped = true;
+                    result.Billings = bills;
+                    result.Guidance = "No active Dispatch Tickets remain, and this booking cannot accept new tickets. Review its booking status and linked billing before continuing.";
+                }
+                return result;
+            }
+            if (schedule?.ServiceEntries.Count > 0 && active.Any(t => t.Status is not (MsapConstants.DispatchTicketStatus.ForBilling or MsapConstants.DispatchTicketStatus.Billed)))
+            {
+                result.Stage = 2;
+                result.Stopped = true;
+                result.Guidance = "Recorded service tickets still need charge calculation. Review the affected tickets and their calculation details before billing.";
+                return result;
+            }
+            if (active.Any(t => t.Status is MsapConstants.DispatchTicketStatus.ForTariff or MsapConstants.DispatchTicketStatus.Disapproved or MsapConstants.DispatchTicketStatus.ForApproval))
+            {
+                result.Stage = 2;
+                result.Stopped = true;
+                result.Guidance = "These tickets use a retired tariff workflow. Review the actual service records and applicable rates before preparing billing.";
+                return result;
+            }
+            List<DispatchTicket> unbilled = active.Where(t => t.Status == MsapConstants.DispatchTicketStatus.ForBilling && !t.BillingId.HasValue).ToList();
+            if (unbilled.Count > 0)
+            {
+                result.Stage = BillingStage;
+                result.Tickets = unbilled;
+                result.Guidance = $"{unbilled.Count} approved Dispatch Ticket(s) still need billing. Include every eligible ticket before posting.";
+                SetAction(result, "Create Billing", "Billing", "Create", null, ProcedureEnum.CreateBilling, "billing preparation");
+                return result;
+            }
+            List<Billing> posting = bills.Where(b => b.Status == MsapConstants.BillingStatus.ForPosting).ToList();
+            if (posting.Count > 0)
+            {
+                result.Stage = PostingStage;
+                result.Billings = posting;
+                result.Guidance = $"{posting.Count} billing(s) await final approval.";
+                SetAction(result, "Review final bill", "Billing", "Review", posting[0].MsapBillingId, ProcedureEnum.ApproveFinalBilling, "final bill approval");
+                return result;
+            }
+            if (bills.Count == 0 || active.Any(t => t.Status != MsapConstants.DispatchTicketStatus.Billed || !t.BillingId.HasValue))
+            {
+                result.Stage = BillingStage;
+                result.Stopped = true;
+                result.Guidance = "Review the linked billing references before proceeding. Every active ticket must have a billing record.";
+                result.Tickets = active;
+                return result;
+            }
+            List<Billing> outstanding = bills.Where(b => b.Balance > 0).ToList();
+            if (outstanding.Count > 0)
+            {
+                result.Stage = CollectionStage;
+                result.Billings = outstanding;
+                result.Guidance = $"{outstanding.Count} billing(s) await collection. Outstanding balance: ₱{outstanding.Sum(b => Math.Max(0, b.Balance)):N2}.";
+                SetAction(result, "Record Collection", "Collection", "Create", null, ProcedureEnum.CreateCollection, "collection recording");
+                return result;
+            }
+            result.Billings = bills;
+            List<Collection> receipts = (collections ?? bills.Where(b => b.Collection != null).Select(b => b.Collection!))
+                .Where(c => bills.Any(b => b.CollectionId == c.MsapCollectionId))
+                .DistinctBy(c => c.MsapCollectionId).OrderBy(c => c.MsapCollectionId).ToList();
+            if (bills.Any(b => b.CollectionId.HasValue && receipts.All(c => c.MsapCollectionId != b.CollectionId)))
+            {
+                result.Stage = DepositStage;
+                result.Stopped = true;
+                result.Guidance = "A linked collection receipt is unavailable. Review the collection references before depositing.";
+                return result;
+            }
+            Collection? deposit = receipts.FirstOrDefault(c => !c.DepositDate.HasValue && !c.ClearedDate.HasValue);
+            Collection? clearing = receipts.FirstOrDefault(c => !c.ClearedDate.HasValue);
+            result.BankingCollection = deposit ?? clearing;
+            if (result.BankingCollection != null)
+            {
+                result.Stage = deposit != null ? DepositStage : ClearingStage;
+                string action = deposit != null ? (deposit.ReturnedDate.HasValue ? "Redeposit" : "Record Deposit") : "Apply Clearing Date";
+                result.Guidance = $"Receipt #{result.BankingCollection.MsapCollectionNumber}: {result.BankingCollection.PaymentStatus}. Complete banking for every linked receipt before finishing the job.";
+                SetAction(result, action, "Collection", "Banking", result.BankingCollection.MsapCollectionId,
+                    ProcedureEnum.AccessTreasury, deposit != null ? "collection deposit" : "collection clearing");
+                return result;
+            }
+            result.Stage = CompletedStage;
+            result.Guidance = "All active tickets are billed, every linked billing has no outstanding balance, and all collection receipts have cleared.";
+            return result;
+        }
+
+        private static bool HasActualTimes(DispatchTicket ticket)
+        {
+            return ticket is { DateLeft: not null, TimeLeft: not null, DateArrived: not null, TimeArrived: not null }
+                && ticket.DateArrived.Value.ToDateTime(ticket.TimeArrived.Value) > ticket.DateLeft.Value.ToDateTime(ticket.TimeLeft.Value);
+        }
+
+        private static void SetAction(JobProgressViewModel result, string label, string controller, string action, int? id, ProcedureEnum permission, string waitingFor)
+        {
+            result.ActionLabel = label;
+            result.ActionController = controller;
+            result.ActionName = action;
+            result.TargetId = id;
+            result.Permission = permission;
+            result.WaitingFor = waitingFor;
+        }
+    }
+}

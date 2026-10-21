@@ -1,0 +1,74 @@
+@model UserAccess
+<form method="post" novalidate class="ui-stack">
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="ModelOnly" class="text-error"></div>
+    @if (Model.Id != 0)
+    {
+        <input type="hidden" asp-for="Id" />
+        <input type="hidden" asp-for="UserId" />
+        <p class="ui-body">Permissions for <strong>@Model.DisplayName</strong></p>
+    }
+    else
+    {
+        <div class="ui-field">
+            <label asp-for="UserId" class="ui-label">User</label>
+            <select asp-for="UserId" asp-items="Model.Users" class="modern-input js-modern-select ui-input" data-placeholder="Select user" required>
+                <option value="">Select user</option>
+            </select>
+            <span asp-validation-for="UserId" class="text-error"></span>
+        </div>
+    }
+    <p class="ui-caption ui-muted">Permissions apply to active Users. Admin and SuperAdmin can perform all supported workflow actions. Read access to related records follows the assigned work; it does not allow changes. Unchecked actions are denied.</p>
+    <div class="ui-card-grid">
+        <fieldset class="ui-panel ui-stack">
+            <legend class="ui-section-title">Schedule and COS</legend>
+            <p class="ui-caption ui-muted">Booking changes and service cancellation require the edit permission. Approval remains a separate action.</p>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanCreateCustomerOrderSlip" class="form-check-input" /> <span>Create schedules</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanEditCustomerOrderSlip" class="form-check-input" /> <span>Edit bookings / cancel unperformed services</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanApproveSchedule" class="form-check-input" /> <span>Approve schedule / COS</span></label>
+        </fieldset>
+        <fieldset class="ui-panel ui-stack">
+            <legend class="ui-section-title">Actual service tickets</legend>
+            <p class="ui-caption ui-muted">Rates are resolved automatically. Editing includes explicit charge recalculation; it does not grant rate maintenance.</p>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanCreateDispatchTicket" class="form-check-input" /> <span>Record actual tickets</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanEditDispatchTicket" class="form-check-input" /> <span>Edit tickets / review and recalculate charges</span></label>
+        </fieldset>
+        <fieldset class="ui-panel ui-stack">
+            <legend class="ui-section-title">Rates</legend>
+            <p class="ui-caption ui-muted">Prepare and approve independently. Either permission also allows viewing rates and their history.</p>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanViewRates" class="form-check-input" /> <span>View / export rates</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageRates" class="form-check-input" /> <span>Prepare rate changes</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanApproveRateUpload" class="form-check-input" /> <span>Approve selected rate changes</span></label>
+        </fieldset>
+        <fieldset class="ui-panel ui-stack">
+            <legend class="ui-section-title">Billing</legend>
+            <p class="ui-caption ui-muted">Only eligible draft preparations can be edited or discarded. Final approval does not bypass completeness and revision checks.</p>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanCreateBilling" class="form-check-input" /> <span>Prepare billing</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanEditBilling" class="form-check-input" /> <span>Edit draft billing</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanDeleteBilling" class="form-check-input" /> <span>Discard draft preparation</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanApproveFinalBilling" class="form-check-input" /> <span>Approve final billing</span></label>
+        </fieldset>
+        <fieldset class="ui-panel ui-stack">
+            <legend class="ui-section-title">Collections and banking</legend>
+            <p class="ui-caption ui-muted">Receipt preparation and banking are independent. Grant both only when the user handles both responsibilities.</p>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanCreateCollection" class="form-check-input" /> <span>Prepare / edit collection receipts</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanAccessTreasury" class="form-check-input" /> <span>Record deposits, clearing and returned checks</span></label>
+        </fieldset>
+        <fieldset class="ui-panel ui-stack">
+            <legend class="ui-section-title">Other Tug Charges</legend>
+            <p class="ui-caption ui-muted">Provider cost capture and confirmation are separate from customer billing and future IBS payments.</p>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageOtherTugCharges" class="form-check-input" /> <span>Prepare provider charges</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanConfirmOtherTugCharges" class="form-check-input" /> <span>Confirm provider charges</span></label>
+        </fieldset>
+        <fieldset class="ui-panel ui-stack">
+            <legend class="ui-section-title">References and reports</legend>
+            <p class="ui-caption ui-muted">Reports allow reading linked workflow records without changing them.</p>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageMaritimeMasterFile" class="form-check-input" /> <span>Maintain maritime master files</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanViewMaritimeReport" class="form-check-input" /> <span>View / export maritime reports</span></label>
+        </fieldset>
+    </div>
+    <div class="ui-actions">
+        <button type="submit" class="ui-button ui-button--primary">Save permissions</button>
+        <a asp-action="Index" class="ui-button">Cancel</a>
+    </div>
+</form>
