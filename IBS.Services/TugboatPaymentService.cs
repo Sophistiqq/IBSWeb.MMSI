@@ -54,12 +54,17 @@ namespace IBS.Services
             {
                 throw new InvalidOperationException(error);
             }
+            return CalculateAmounts(owner.VatType!, owner.TaxType!, owner.WithholdingTaxPercent ?? 0m, charge);
+        }
+
+        private static (decimal Gross, decimal Withholding) CalculateAmounts(string vatType, string taxType, decimal withholdingRate, OtherTugCharge charge)
+        {
             decimal amount = charge.Lines.Sum(l => l.Amount);
-            bool vatable = owner.VatType == "Vatable";
+            bool vatable = vatType == "Vatable";
             decimal gross = Math.Round(vatable && !charge.IncludesVat ? amount * 1.12m : amount, 2, MidpointRounding.AwayFromZero);
             decimal basis = vatable ? gross / 1.12m : gross;
-            decimal withholding = owner.TaxType == "Withholding Tax"
-                ? Math.Round(basis * owner.WithholdingTaxPercent!.Value, 2, MidpointRounding.AwayFromZero) : 0m;
+            decimal withholding = taxType == "Withholding Tax"
+                ? Math.Round(basis * withholdingRate, 2, MidpointRounding.AwayFromZero) : 0m;
             if (gross <= 0 || gross > 99999999999999.99m || withholding >= gross)
             {
                 throw new InvalidOperationException("The provider bill must have a positive, valid payable amount. Confirmed zero costs need no payment.");
@@ -70,31 +75,74 @@ namespace IBS.Services
         public async Task PrepareAsync(TugboatPaymentViewModel model, CancellationToken ct)
         {
             RequireCompanyWorkspace();
-            model.Owners = (await _sources.OwnersAsync(ct)).Select(o => new SelectListItem(o.TugboatOwnerName, o.TugboatOwnerId.ToString())).ToList();
-            model.Charges = (await _sources.ChargesAsync(model.OwnerId, ct))
-                .Select(c => new SelectListItem($"{c.ProviderReference} · {c.DocumentDate:dd MMM yyyy}", c.OtherTugChargeId.ToString())).ToList();
+            List<TugboatOwner> owners = await _sources.OwnersAsync(ct);
+            model.Owners = owners.Select(o => new SelectListItem(o.TugboatOwnerName, o.TugboatOwnerId.ToString())).ToList();
+            model.Owner = owners.FirstOrDefault(o => o.TugboatOwnerId == model.OwnerId);
+            model.OwnerProfileError = model.Owner == null ? null : MSAP.TugboatOwnerService.ValidatePaymentProfile(model.Owner, required: true);
+            model.WithholdingAccountNumber = model.OwnerProfileError == null && model.Owner?.TaxType == "Withholding Tax"
+                ? WithholdingTaxHelper.GetAccountNumberByPercent(model.Owner.WithholdingTaxPercent!.Value) : null;
+            List<int> reserved = await _sources.ReservedAllocationIdsAsync(ct);
+            model.Bills = (await _sources.ChargesAsync(model.OwnerId, ct)).Select(charge =>
+            {
+                List<TugboatPaymentLine> lines = PaymentLines(charge);
+                if (model.Owner != null && model.OwnerProfileError == null && charge.Lines.Sum(l => l.Amount) > 0)
+                {
+                    Dictionary<int, (decimal Gross, decimal Withholding)> amounts = AllocationAmounts(charge, Calculate(model.Owner, charge));
+                    foreach (TugboatPaymentLine line in lines)
+                    {
+                        (line.Gross, line.Withholding) = amounts[line.AllocationId];
+                    }
+                }
+                lines = lines.Where(line => !reserved.Contains(line.AllocationId)).ToList();
+                return new TugboatPaymentBillViewModel
+                {
+                    ChargeId = charge.OtherTugChargeId,
+                    ProviderReference = charge.ProviderReference,
+                    IncludesVat = charge.IncludesVat,
+                    Gross = lines.Sum(line => line.Gross ?? 0m),
+                    Withholding = lines.Sum(line => line.Withholding ?? 0m),
+                    Lines = lines
+                };
+            }).ToList();
+            model.CustomerOrderSlips = model.Bills.SelectMany(b => b.Lines).Where(l => l.CosId.HasValue)
+                .DistinctBy(l => l.CosId).Select(l => new SelectListItem(l.CosNumber, l.CosId!.Value.ToString())).ToList();
+            if (model.ChargeId > 0 && model.AllocationIds.Length == 0)
+            {
+                model.AllocationIds = model.Bills.Where(b => b.ChargeId == model.ChargeId).SelectMany(b => b.Lines)
+                    .Where(line => line.Gross > 0).Select(line => line.AllocationId).ToArray();
+            }
+            List<TugboatPaymentLine> selected = model.Bills.SelectMany(b => b.Lines)
+                .Where(line => model.AllocationIds.Contains(line.AllocationId)).ToList();
+            if (model.CosIds.Length == 0)
+            {
+                model.CosIds = selected.Where(l => l.CosId.HasValue).Select(l => l.CosId!.Value).Distinct().ToArray();
+            }
+            model.Gross = selected.Sum(line => line.Gross ?? 0m);
+            model.Withholding = selected.Sum(line => line.Withholding ?? 0m);
             model.Banks = await _db.FilprideBankAccounts.AsNoTracking().Where(b => b.IsActive)
                 .OrderBy(b => b.AccountName).Select(b => new SelectListItem(b.AccountName + " · " + b.AccountNo, b.BankAccountId.ToString())).ToListAsync(ct);
-            if (model.ChargeId > 0)
-            {
-                var source = await _sources.SourceAsync(model.ChargeId, false, ct);
-                if (source.Owner.TugboatOwnerId != model.OwnerId)
-                {
-                    throw new InvalidOperationException("Select a provider bill belonging to this owner.");
-                }
-                model.Owner = source.Owner;
-                model.Charge = source.Charge;
-                (model.Gross, model.Withholding) = Calculate(source.Owner, source.Charge);
-                List<int> reserved = await _db.FilprideTugboatPayments.Where(p => p.ReleasedAt == null).Select(p => p.LiabilityJournalVoucherId).ToListAsync(ct);
-                model.Journals = await _db.FilprideJournalVoucherHeaders.AsNoTracking()
-                    .Where(j => j.WorkspaceTugboatId == null && !j.AutoReverseNextMonth && j.CVId == null && j.PostedBy != null && j.ApprovedBy != null
-                        && j.CanceledBy == null && j.VoidedBy == null && j.Payee == source.Owner.TugboatOwnerName
-                        && j.References == source.Charge.ProviderReference && !reserved.Contains(j.JournalVoucherHeaderId)
-                        && _db.FilprideGeneralLedgerBooks.Any(g => g.Reference == j.JournalVoucherHeaderNo
-                            && g.AccountNo == ApAccount && g.Credit > g.Debit))
-                    .OrderBy(j => j.Date).Select(j => new SelectListItem(j.JournalVoucherHeaderNo, j.JournalVoucherHeaderId.ToString())).ToListAsync(ct);
-            }
             await _documentation.PrepareAsync(model.Documentation, model.Type, null, ct);
+        }
+
+        private static Dictionary<int, (decimal Gross, decimal Withholding)> AllocationAmounts(OtherTugCharge charge, (decimal Gross, decimal Withholding) totals)
+        {
+            (decimal gross, decimal withholding) = totals;
+            decimal total = charge.Lines.Sum(line => line.Amount);
+            decimal cumulative = 0m;
+            decimal allocatedGross = 0m;
+            decimal allocatedWithholding = 0m;
+            var amounts = new Dictionary<int, (decimal Gross, decimal Withholding)>();
+            foreach (OtherTugChargeLine line in charge.Lines.OrderBy(line => line.OtherTugChargeLineId))
+            {
+                // Cumulative rounding keeps separate ticket payments equal to the complete bill's tax totals.
+                cumulative += line.Amount;
+                decimal nextGross = Math.Round(gross * cumulative / total, 2, MidpointRounding.AwayFromZero);
+                decimal nextWithholding = Math.Round(withholding * cumulative / total, 2, MidpointRounding.AwayFromZero);
+                amounts.Add(line.OtherTugChargeLineId, (nextGross - allocatedGross, nextWithholding - allocatedWithholding));
+                allocatedGross = nextGross;
+                allocatedWithholding = nextWithholding;
+            }
+            return amounts;
         }
 
         public static string Snapshot(OtherTugCharge charge)
@@ -110,24 +158,31 @@ namespace IBS.Services
                 charge.Revision,
                 charge.ConfirmedAt,
                 charge.ConfirmedByUserId,
-                Lines = charge.Lines.OrderBy(l => l.OtherTugChargeLineId).Select(l => new TugboatPaymentLine
-                {
-                    AllocationId = l.OtherTugChargeLineId,
-                    TicketId = l.DispatchTicketId,
-                    TugboatId = l.Ticket.TugBoatId,
-                    CosId = l.Ticket.CustomerOrderSlipId,
-                    CosNumber = l.Ticket.CustomerOrderSlip?.CustomerOrderSlipNumber,
-                    TicketNumber = l.Ticket.DispatchNumber,
-                    TugboatName = l.Ticket.Tugboat.TugboatName,
-                    Amount = l.Amount
-                })
+                Lines = PaymentLines(charge)
             });
+        }
+
+        private static List<TugboatPaymentLine> PaymentLines(OtherTugCharge charge)
+        {
+            return charge.Lines.OrderBy(l => l.OtherTugChargeLineId).Select(l => new TugboatPaymentLine
+            {
+                AllocationId = l.OtherTugChargeLineId,
+                TicketId = l.DispatchTicketId,
+                TugboatId = l.Ticket.TugBoatId,
+                CosId = l.Ticket.CustomerOrderSlipId,
+                CosNumber = l.Ticket.CustomerOrderSlip?.CustomerOrderSlipNumber,
+                TicketNumber = l.Ticket.DispatchNumber,
+                TugboatName = l.Ticket.Tugboat.TugboatName,
+                Amount = l.Amount
+            }).ToList();
         }
 
         public static List<TugboatPaymentLine> Lines(FilprideTugboatPayment payment)
         {
             using var json = JsonDocument.Parse(payment.SourceSnapshot);
-            return json.RootElement.GetProperty("Lines").Deserialize<List<TugboatPaymentLine>>()!;
+            HashSet<int> selected = payment.Allocations.Select(a => a.OtherTugChargeLineId).ToHashSet();
+            return json.RootElement.GetProperty("Lines").Deserialize<List<TugboatPaymentLine>>()!
+                .Where(line => selected.Contains(line.AllocationId)).ToList();
         }
 
         private async Task<string> ValidateLiabilityAsync(int id, string payee, string reference, decimal gross, DateOnly paymentDate, CancellationToken ct)
@@ -192,6 +247,11 @@ namespace IBS.Services
             {
                 throw new InvalidOperationException("Attach a valid PDF/JPEG/PNG document up to 10 MB.");
             }
+            if (form.AllocationIds.Length == 0 || form.AllocationIds.Any(id => id <= 0)
+                || form.AllocationIds.Distinct().Count() != form.AllocationIds.Length)
+            {
+                throw new InvalidOperationException("Select valid, distinct tickets for payment.");
+            }
             string? uploaded = null;
             await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             try
@@ -202,13 +262,46 @@ namespace IBS.Services
                 {
                     throw new InvalidOperationException(error);
                 }
-                var source = await _sources.SourceAsync(form.ChargeId, true, ct);
-                if (source.Owner.TugboatOwnerId != form.OwnerId || await _db.FilprideTugboatPayments.AnyAsync(p => p.OtherTugChargeId == form.ChargeId && p.ReleasedAt == null, ct))
+                List<int> chargeIds = await _sources.ChargeIdsAsync(form.AllocationIds, ct);
+                var payments = new List<FilprideTugboatPayment>();
+                TugboatOwner? owner = null;
+                foreach (int chargeId in chargeIds)
                 {
-                    throw new InvalidOperationException("The bill is unavailable for this owner or already reserved by another voucher.");
+                    var source = await _sources.SourceAsync(chargeId, true, ct);
+                    if (source.Owner.TugboatOwnerId != form.OwnerId)
+                    {
+                        throw new InvalidOperationException("Select tickets belonging to the same tugboat owner.");
+                    }
+                    owner = source.Owner;
+                    List<OtherTugChargeLine> selected = source.Charge.Lines.Where(line => form.AllocationIds.Contains(line.OtherTugChargeLineId)).ToList();
+                    Dictionary<int, (decimal Gross, decimal Withholding)> amounts = AllocationAmounts(source.Charge, Calculate(owner, source.Charge));
+                    if (selected.Any(line => line.Amount <= 0 || amounts[line.OtherTugChargeLineId].Gross <= 0)
+                        || await _db.FilprideTugboatPaymentAllocations.AnyAsync(a => form.AllocationIds.Contains(a.OtherTugChargeLineId) && a.ReleasedAt == null, ct))
+                    {
+                        throw new InvalidOperationException("A selected ticket has no payable amount or is already reserved by another voucher.");
+                    }
+                    payments.Add(new FilprideTugboatPayment
+                    {
+                        OtherTugChargeId = chargeId,
+                        TugboatOwnerId = form.OwnerId,
+                        ChargeRevision = source.Charge.Revision,
+                        ProviderReference = source.Charge.ProviderReference,
+                        SourceSnapshot = Snapshot(source.Charge),
+                        GrossAmount = selected.Sum(line => amounts[line.OtherTugChargeLineId].Gross),
+                        WithholdingAmount = selected.Sum(line => amounts[line.OtherTugChargeLineId].Withholding),
+                        Allocations = selected.Select(line => new FilprideTugboatPaymentAllocation { OtherTugChargeLineId = line.OtherTugChargeLineId }).ToList()
+                    });
                 }
-                var amounts = Calculate(source.Owner, source.Charge);
-                string liability = await ValidateLiabilityAsync(form.LiabilityJournalId, source.Owner.TugboatOwnerName, source.Charge.ProviderReference, amounts.Gross, form.Date, ct);
+                if (owner == null || payments.Sum(payment => payment.Allocations.Count) != form.AllocationIds.Length)
+                {
+                    throw new InvalidOperationException("Some selected tickets are no longer available. Reload the owner and select the tickets again.");
+                }
+                decimal gross = payments.Sum(payment => payment.GrossAmount);
+                decimal withholding = payments.Sum(payment => payment.WithholdingAmount);
+                if (gross > 99999999999999.99m || withholding >= gross)
+                {
+                    throw new InvalidOperationException("The selected tickets exceed the valid payment amount.");
+                }
                 await _db.FilprideBankAccounts.FromSqlInterpolated($"SELECT * FROM filpride_bank_accounts WHERE bank_account_id={form.BankId} FOR UPDATE").LoadAsync(ct);
                 if (await _db.FilprideCheckVoucherHeaders.AnyAsync(v => v.BankId == form.BankId && v.CheckNo == form.CheckNo.Trim()
                     && v.CanceledBy == null && v.VoidedBy == null, ct))
@@ -225,48 +318,38 @@ namespace IBS.Services
                     Category = "Trade",
                     Type = form.Type,
                     CheckVoucherHeaderNo = number,
+                    OldCvNo = form.OldCVNo,
                     Date = form.Date,
                     CheckDate = form.CheckDate,
                     CheckNo = form.CheckNo.Trim(),
                     Particulars = form.Particulars.Trim(),
-                    Payee = source.Owner.TugboatOwnerName,
-                    SupplierName = source.Owner.TugboatOwnerName,
-                    Address = source.Owner.Address!,
-                    Tin = source.Owner.Tin!,
-                    VatType = source.Owner.VatType!,
-                    TaxType = source.Owner.TaxType!,
-                    TaxPercent = source.Owner.TaxType == "Withholding Tax" ? source.Owner.WithholdingTaxPercent!.Value : 0m,
+                    Payee = owner.TugboatOwnerName,
+                    SupplierName = owner.TugboatOwnerName,
+                    Address = owner.Address!,
+                    Tin = owner.Tin!,
+                    VatType = owner.VatType!,
+                    TaxType = owner.TaxType!,
+                    TaxPercent = owner.TaxType == "Withholding Tax" ? owner.WithholdingTaxPercent!.Value : 0m,
                     BankId = bank.BankAccountId,
                     BankAccountName = bank.AccountName,
                     BankAccountNumber = bank.AccountNo,
-                    Total = amounts.Gross - amounts.Withholding,
-                    CheckAmount = amounts.Gross - amounts.Withholding,
-                    InvoiceAmount = amounts.Gross,
-                    SINo = [source.Charge.ProviderReference],
+                    Total = gross - withholding,
+                    CheckAmount = gross - withholding,
+                    InvoiceAmount = gross,
+                    SINo = payments.Select(payment => payment.ProviderReference).Distinct().ToArray(),
                     CreatedBy = actor,
-                    Details = []
+                    Details = [],
+                    TugboatPayments = payments
                 };
                 CheckVoucherDocumentationService.Apply(voucher, form.Documentation);
-                await AddDetailAsync(voucher, ApAccount, amounts.Gross, 0, ct);
+                // shortcut: initial AP recognition is deferred by user decision until Finance resolves IBS-8.
+                await AddDetailAsync(voucher, ApAccount, gross, 0, ct);
                 await AddDetailAsync(voucher, CashAccount, 0, voucher.CheckAmount, ct);
-                if (amounts.Withholding > 0)
+                if (withholding > 0)
                 {
-                    await AddDetailAsync(voucher, WithholdingTaxHelper.GetAccountNumberByPercent(voucher.TaxPercent)!, 0, amounts.Withholding, ct);
+                    await AddDetailAsync(voucher, WithholdingTaxHelper.GetAccountNumberByPercent(voucher.TaxPercent)!, 0, withholding, ct);
                 }
-                var payment = new FilprideTugboatPayment
-                {
-                    Voucher = voucher,
-                    OtherTugChargeId = source.Charge.OtherTugChargeId,
-                    TugboatOwnerId = form.OwnerId,
-                    LiabilityJournalVoucherId = form.LiabilityJournalId,
-                    ChargeRevision = source.Charge.Revision,
-                    ProviderReference = source.Charge.ProviderReference,
-                    SourceSnapshot = Snapshot(source.Charge),
-                    LiabilitySnapshot = liability,
-                    GrossAmount = amounts.Gross,
-                    WithholdingAmount = amounts.Withholding
-                };
-                _db.FilprideTugboatPayments.Add(payment);
+                _db.FilprideCheckVoucherHeaders.Add(voucher);
                 if (file != null)
                 {
                     uploaded = "OtherTugPayments/" + Guid.NewGuid().ToString("N") + Path.GetExtension(file.FileName).ToLowerInvariant();
@@ -274,7 +357,7 @@ namespace IBS.Services
                     voucher.SupportingFileSavedUrl = await _storage.UploadFileAsync(file, uploaded);
                 }
                 await _db.SaveChangesAsync(ct);
-                await _db.FilprideAuditTrails.AddAsync(new FilprideAuditTrail(actor, $"Created AP Other Tugs voucher {number}; provider bill {payment.OtherTugChargeId}; liability journal {form.LiabilityJournalId}", "Check Voucher"), ct);
+                await _db.FilprideAuditTrails.AddAsync(new FilprideAuditTrail(actor, $"Created AP Other Tugs voucher {number}; tickets {string.Join(",", form.AllocationIds.Order())}; direct payment; initial recognition deferred", "Check Voucher"), ct);
                 await _db.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
                 return voucher.CheckVoucherHeaderId;
@@ -295,11 +378,11 @@ namespace IBS.Services
 
         public async Task<FilprideCheckVoucherHeader?> GetAsync(int id, CancellationToken ct)
         {
-            return await _db.FilprideCheckVoucherHeaders.Include(v => v.TugboatPayment).Include(v => v.Details)
+            return await _db.FilprideCheckVoucherHeaders.Include(v => v.TugboatPayments).ThenInclude(p => p.Allocations).Include(v => v.Details)
                 .SingleOrDefaultAsync(v => v.CheckVoucherHeaderId == id && v.CvType == nameof(CVType.OtherTugs), ct);
         }
 
-        public async Task ChangeStatusAsync(int id, string action, string actor, string? reason, CancellationToken ct)
+        public async Task<bool> ChangeStatusAsync(int id, string action, string actor, string? reason, CancellationToken ct)
         {
             RequireCompanyWorkspace();
             if (string.IsNullOrWhiteSpace(actor))
@@ -313,8 +396,14 @@ namespace IBS.Services
                     .SingleOrDefaultAsync(ct) ?? throw new InvalidOperationException("Voucher not found.");
                 await _db.Entry(locked).ReloadAsync(ct);
                 var voucher = await GetAsync(id, ct) ?? throw new InvalidOperationException("AP Other Tugs voucher not found.");
-                var payment = voucher.TugboatPayment ?? throw new InvalidOperationException("Payment source link is missing.");
-                if (payment.ReleasedAt != null || voucher.CanceledBy != null || voucher.VoidedBy != null)
+                bool wasPrinted = voucher.IsPrinted;
+                List<FilprideTugboatPayment> payments = voucher.TugboatPayments;
+                if (payments.Count == 0 || payments.Any(payment => payment.Allocations.Count == 0))
+                {
+                    throw new InvalidOperationException("Payment source links are missing.");
+                }
+                if (payments.Any(payment => payment.ReleasedAt != null || payment.Allocations.Any(a => a.ReleasedAt != null))
+                    || voucher.CanceledBy != null || voucher.VoidedBy != null)
                 {
                     throw new InvalidOperationException("This voucher has already been cancelled or voided. Create a new payment.");
                 }
@@ -329,7 +418,7 @@ namespace IBS.Services
                     voucher.IsPrinted = true;
                     await _db.SaveChangesAsync(ct);
                     await transaction.CommitAsync(ct);
-                    return;
+                    return wasPrinted;
                 }
                 await GuardPeriodAsync(voucher.Date, ct);
                 if (voucher.DcrDate != null || voucher.IsPaid || voucher.AmountPaid != 0)
@@ -341,26 +430,39 @@ namespace IBS.Services
                 {
                     if (posted)
                     { throw new InvalidOperationException("Voucher is already posted."); }
-                    var source = await _sources.SourceAsync(payment.OtherTugChargeId, true, ct);
-                    if (source.Owner.TugboatOwnerId != payment.TugboatOwnerId || Snapshot(source.Charge) != payment.SourceSnapshot)
+                    foreach (FilprideTugboatPayment payment in payments.OrderBy(payment => payment.OtherTugChargeId))
                     {
-                        throw new InvalidOperationException("Provider source changed. Cancel and recreate this voucher.");
+                        var source = await _sources.SourceAsync(payment.OtherTugChargeId, true, ct);
+                        Dictionary<int, (decimal Gross, decimal Withholding)> amounts = AllocationAmounts(source.Charge, CalculateAmounts(voucher.VatType, voucher.TaxType, voucher.TaxPercent, source.Charge));
+                        if (source.Owner.TugboatOwnerId != payment.TugboatOwnerId || payment.TugboatOwnerId != payments[0].TugboatOwnerId
+                            || Snapshot(source.Charge) != payment.SourceSnapshot
+                            || payment.Allocations.Any(a => !amounts.ContainsKey(a.OtherTugChargeLineId))
+                            || payment.Allocations.Sum(a => amounts[a.OtherTugChargeLineId].Gross) != payment.GrossAmount
+                            || payment.Allocations.Sum(a => amounts[a.OtherTugChargeLineId].Withholding) != payment.WithholdingAmount)
+                        {
+                            throw new InvalidOperationException("Provider source changed. Cancel and recreate this voucher.");
+                        }
+                        if (payment.LiabilityJournalVoucherId.HasValue)
+                        {
+                            string liability = await ValidateLiabilityAsync(payment.LiabilityJournalVoucherId.Value, voucher.Payee!, payment.ProviderReference, payment.GrossAmount, voucher.Date, ct);
+                            if (liability != payment.LiabilitySnapshot)
+                            { throw new InvalidOperationException("The linked AP journal changed. Cancel and recreate this voucher."); }
+                        }
                     }
-                    string liability = await ValidateLiabilityAsync(payment.LiabilityJournalVoucherId, voucher.Payee!, payment.ProviderReference, payment.GrossAmount, voucher.Date, ct);
-                    if (liability != payment.LiabilitySnapshot)
-                    { throw new InvalidOperationException("The linked AP journal changed. Cancel and recreate this voucher."); }
+                    decimal gross = payments.Sum(payment => payment.GrossAmount);
+                    decimal withholding = payments.Sum(payment => payment.WithholdingAmount);
                     var bank = await _db.FilprideBankAccounts.SingleOrDefaultAsync(b => b.BankAccountId == voucher.BankId && b.IsActive, ct);
                     if (bank == null || bank.AccountNo != voucher.BankAccountNumber)
                     { throw new InvalidOperationException("The bank account changed or is inactive."); }
                     var expected = new Dictionary<string, (decimal Debit, decimal Credit)>
                     {
-                        [ApAccount] = (payment.GrossAmount, 0),
-                        [CashAccount] = (0, payment.GrossAmount - payment.WithholdingAmount)
+                        [ApAccount] = (gross, 0),
+                        [CashAccount] = (0, gross - withholding)
                     };
-                    if (payment.WithholdingAmount > 0)
-                    { expected.Add(WithholdingTaxHelper.GetAccountNumberByPercent(voucher.TaxPercent)!, (0, payment.WithholdingAmount)); }
-                    if (voucher.Details!.Count != expected.Count || voucher.Details.Select(d => d.AccountNo).Distinct().Count() != expected.Count || voucher.Total != payment.GrossAmount - payment.WithholdingAmount
-                        || voucher.CheckAmount != voucher.Total || voucher.InvoiceAmount != payment.GrossAmount
+                    if (withholding > 0)
+                    { expected.Add(WithholdingTaxHelper.GetAccountNumberByPercent(voucher.TaxPercent)!, (0, withholding)); }
+                    if (voucher.Details!.Count != expected.Count || voucher.Details.Select(d => d.AccountNo).Distinct().Count() != expected.Count || voucher.Total != gross - withholding
+                        || voucher.CheckAmount != voucher.Total || voucher.InvoiceAmount != gross
                         || voucher.Details.Any(d => d.AccountNo == CashAccount
                             ? d.SubAccountType != SubAccountType.BankAccount || d.SubAccountId != voucher.BankId
                             : d.SubAccountType != null || d.SubAccountId != null)
@@ -387,21 +489,29 @@ namespace IBS.Services
                     { throw new InvalidOperationException("Cancel an unposted draft, or void a posted voucher."); }
                     if (string.IsNullOrWhiteSpace(reason))
                     { throw new InvalidOperationException("Enter a correction reason."); }
-                    payment.ReleasedAt = DateTimeHelper.GetCurrentPhilippineTime();
+                    DateTime releasedAt = DateTimeHelper.GetCurrentPhilippineTime();
+                    foreach (FilprideTugboatPayment payment in payments)
+                    {
+                        payment.ReleasedAt = releasedAt;
+                        foreach (FilprideTugboatPaymentAllocation allocation in payment.Allocations)
+                        {
+                            allocation.ReleasedAt = releasedAt;
+                        }
+                    }
                     if (posted)
                     {
-                        if (await _work.IsPeriodPostedAsync(Module.CheckVoucher, DateOnly.FromDateTime(payment.ReleasedAt.Value), ct))
+                        if (await _work.IsPeriodPostedAsync(Module.CheckVoucher, DateOnly.FromDateTime(releasedAt), ct))
                         { throw new InvalidOperationException("The reversal date falls in a closed period."); }
                         await _work.GeneralLedger.ReverseEntries(voucher.CheckVoucherHeaderNo, ct);
                         voucher.VoidedBy = actor;
-                        voucher.VoidedDate = payment.ReleasedAt;
+                        voucher.VoidedDate = releasedAt;
                         voucher.PostedBy = null;
                         voucher.Status = nameof(Status.Voided);
                     }
                     else
                     {
                         voucher.CanceledBy = actor;
-                        voucher.CanceledDate = payment.ReleasedAt;
+                        voucher.CanceledDate = releasedAt;
                         voucher.Status = nameof(Status.Canceled);
                     }
                     voucher.CancellationRemarks = reason.Trim();
@@ -411,6 +521,7 @@ namespace IBS.Services
                 _db.FilprideAuditTrails.Add(new FilprideAuditTrail(actor, $"{action} AP Other Tugs voucher {voucher.CheckVoucherHeaderNo}: {reason}", "Check Voucher"));
                 await _db.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
+                return wasPrinted;
             }
             catch
             {

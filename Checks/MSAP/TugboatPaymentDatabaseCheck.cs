@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using IBS.DataAccess.Data;
 using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.Repository;
@@ -16,6 +17,8 @@ using IBSWeb.Areas.Filpride.Controllers;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 
@@ -36,7 +39,7 @@ namespace Checks.MSAP
             await db.Database.MigrateAsync();
             Check(!db.Database.HasPendingModelChanges(), "Payment migration differs from the model.");
             var ticket = await source.MsapDispatchTickets.Include(t => t.ExpectedServiceEntry)
-                .Where(t => t.BillingId != null && t.VesselScheduleServiceEntryId != null)
+                .Where(t => t.BillingId != null && t.VesselScheduleServiceEntryId != null && t.OtherTugChargeLine == null)
                 .OrderBy(t => t.DispatchTicketId).FirstAsync();
             var tug = await source.MsapTugboats.FirstAsync(t => !t.IsCompanyOwned && t.TugboatOwnerId != null);
             var owner = await source.MsapTugboatOwners.SingleAsync(o => o.TugboatOwnerId == tug.TugboatOwnerId);
@@ -95,70 +98,26 @@ namespace Checks.MSAP
                 && payableAccount.AccountType == "Liabilities" && payableAccount.NormalBalance == "Credit"
                 && payableAccount.FinancialStatementType == "BalanceSheet",
                 "AP Other Tugs must use the dedicated 201020500 payable, not the generic trade control or a P&L account.");
-            // Clone-only COGS classification; production mapping remains a Finance decision.
-            var costRoot = await db.FilprideChartOfAccounts.SingleAsync(a => a.AccountNumber == "500000000");
-            List<string> costBranches = await db.FilprideChartOfAccounts.IgnoreQueryFilters(["MasterVisibility"])
-                .Where(a => a.ParentAccountId == costRoot.AccountId).Select(a => a.AccountNumber).ToListAsync();
-            long lastCostBranch = costBranches.Select(long.Parse).Max();
-            var serviceCosts = CostAccount("MMSI service costs (test)", (lastCostBranch + 1000000).ToString(), costRoot);
-            var externalTugs = CostAccount("External tug services (test)", (lastCostBranch + 1010000).ToString(), serviceCosts);
-            var expense = CostAccount("Services by Other Tugs (test)", (lastCostBranch + 1010100).ToString(), externalTugs);
-            db.Add(serviceCosts);
-            db.Add(externalTugs);
-            db.Add(expense);
-            await db.SaveChangesAsync();
-            var journal = new FilprideJournalVoucherHeader
-            {
-                JournalVoucherHeaderNo = "J" + Guid.NewGuid().ToString("N")[..12],
-                Date = charge.DocumentDate,
-                Payee = owner.TugboatOwnerName,
-                References = reference,
-                Particulars = "Fixture gross AP recognition",
-                JVReason = "Isolated database check",
-                Type = "Documented",
-                CreatedBy = "Payment check",
-                ApprovedBy = "Payment approver",
-                PostedBy = "Payment poster",
-                Details = []
-            };
-            journal.Details.Add(new FilprideJournalVoucherDetail { AccountNo = expense.AccountNumber, Debit = 1000m });
-            journal.Details.Add(new FilprideJournalVoucherDetail { AccountNo = "101060200", Debit = 120m });
-            journal.Details.Add(new FilprideJournalVoucherDetail { AccountNo = TugboatPaymentService.ApAccount, Credit = 1120m });
-            db.Add(journal);
-            await db.SaveChangesAsync();
-            await new UnitOfWork(db).FilprideJournalVoucher.PostAsync(journal, journal.Details);
             var storage = new Storage();
             var service = Service(db, storage);
             var form = Form();
             var prepared = Form();
             await service.PrepareAsync(prepared, default);
-            Check(prepared.Owner?.TugboatOwnerId == owner.TugboatOwnerId && prepared.Journals.Any(j => j.Value == journal.JournalVoucherHeaderId.ToString()),
-                "Payment selection did not load its owner, bill and matching posted AP journal.");
-            form.LiabilityJournalId = int.MaxValue;
-            await RejectAsync(() => service.CreateAsync(form, null, "Payment check", default), "Missing liability was accepted.");
-            form = Form();
-            var genericTrade = await db.FilprideChartOfAccounts.SingleAsync(a => a.AccountNumber == "201010100");
-            var wrongControl = await db.FilprideGeneralLedgerBooks.SingleAsync(g => g.Reference == journal.JournalVoucherHeaderNo && g.Credit == 1120m);
-            wrongControl.AccountNo = genericTrade.AccountNumber;
-            wrongControl.AccountId = genericTrade.AccountId;
-            wrongControl.AccountTitle = genericTrade.AccountName;
-            await db.SaveChangesAsync();
-            var wrongSelection = Form();
-            await service.PrepareAsync(wrongSelection, default);
-            Check(!wrongSelection.Journals.Any(j => j.Value == journal.JournalVoucherHeaderId.ToString()),
-                "A journal credited to generic AP Trade was offered for an Other Tugs payment.");
-            await RejectAsync(() => service.CreateAsync(form, null, "Payment check", default), "Generic AP Trade was accepted instead of 201020500.");
-            await db.FilprideGeneralLedgerBooks.Where(g => g.Reference == journal.JournalVoucherHeaderNo && g.Credit == 1120m)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(g => g.AccountNo, payableAccount.AccountNumber)
-                    .SetProperty(g => g.AccountId, payableAccount.AccountId).SetProperty(g => g.AccountTitle, payableAccount.AccountName));
-            var originalName = journal.Payee;
-            journal.Payee = "Wrong owner";
-            db.Update(journal);
-            await db.SaveChangesAsync();
-            await RejectAsync(() => service.CreateAsync(form, null, "Payment check", default), "Wrong-payee liability was accepted.");
-            journal.Payee = originalName;
-            db.Update(journal);
-            await db.SaveChangesAsync();
+            Check(prepared.Owner?.TugboatOwnerId == owner.TugboatOwnerId && prepared.AllocationIds.SequenceEqual(form.AllocationIds),
+                "Direct payment selection did not load its owner and confirmed provider bill.");
+            Check(prepared.WithholdingAccountNumber == "201030220", "Payment preview did not use the owner's withholding account.");
+            Check(!await db.FilprideJournalVoucherHeaders.AnyAsync(j => j.References == reference),
+                "The direct-payment fixture must not have an initial payable journal.");
+            var ownerSelection = new TugboatPaymentViewModel { OwnerId = owner.TugboatOwnerId };
+            await service.PrepareAsync(ownerSelection, default);
+            Check(ownerSelection.Owner?.TugboatOwnerId == owner.TugboatOwnerId && ownerSelection.OwnerProfileError == null
+                && ownerSelection.Charge == null && ownerSelection.Bills.Single(b => b.ChargeId == charge.OtherTugChargeId)
+                    .Lines.Any(l => l.TicketId == ticket.DispatchTicketId && l.CosId == ticket.CustomerOrderSlipId
+                        && !string.IsNullOrWhiteSpace(l.CosNumber) && !string.IsNullOrWhiteSpace(l.TicketNumber)),
+                "Owner selection did not load its profile and confirmed COS/tickets before choosing a bill.");
+            var billAmounts = ownerSelection.Bills.Single(b => b.ChargeId == charge.OtherTugChargeId);
+            Check(billAmounts.Gross == 1120m && billAmounts.Withholding == 20m && billAmounts.Net == 1100m,
+                "Available bill totals did not use the authoritative VAT/withholding calculation.");
             storage.Fail = true;
             byte[] document = System.Text.Encoding.ASCII.GetBytes("%PDF-1.4\nfixture document");
             await using (var stream = new MemoryStream(document))
@@ -170,15 +129,30 @@ namespace Checks.MSAP
                 "Failed upload did not compensate and release the reservation.");
             storage.Fail = false;
             int id = await service.CreateAsync(form, null, "Payment check", default);
+            var reservedSelection = new TugboatPaymentViewModel { OwnerId = owner.TugboatOwnerId };
+            await service.PrepareAsync(reservedSelection, default);
+            Check(reservedSelection.Bills.All(b => b.ChargeId != charge.OtherTugChargeId), "Reserved bill remained selectable in the COS/ticket list.");
             var saved = (await service.GetAsync(id, default))!;
+            Check(saved.OldCvNo == form.OldCVNo, "The copied form's old CV reference was not saved.");
             Check(saved.SupplierId == null && saved.Payee == owner.TugboatOwnerName && saved.CheckAmount == 1100m
-                && saved.TugboatPayment!.GrossAmount == 1120m && saved.Details!.Count == 3
+                && saved.TugboatPayments.Single().GrossAmount == 1120m && saved.TugboatPayments.Single().LiabilityJournalVoucherId == null
+                && saved.TugboatPayments.Single().LiabilitySnapshot == "" && saved.Details!.Count == 3
                 && saved.Details.All(d => !d.IsDisplayEntry), "Payment snapshot or real accounting entries are incorrect.");
+            try
+            {
+                await db.GetService<IMigrator>().MigrateAsync("20261020144653_LinkOtherTugPayments");
+                throw new InvalidOperationException("Rollback accepted a direct payment without an AP journal.");
+            }
+            catch (PostgresException ex) when (ex.SqlState == "P0001" && (ex.MessageText.Contains("direct tugboat payments", StringComparison.Ordinal)
+                || ex.MessageText.Contains("selected-ticket vouchers", StringComparison.Ordinal)))
+            {
+                Check((await db.Database.GetAppliedMigrationsAsync()).Contains("20261021032054_AllowDirectTugboatPayments"), "Rejected rollback removed the direct-payment migration.");
+                await db.Database.MigrateAsync();
+                db.ChangeTracker.Clear();
+            }
             await RejectAsync(() => service.CreateAsync(Form(), null, "Payment check", default), "Duplicate bill reservation was accepted.");
             await RejectSqlAsync($"UPDATE msap.mmsi_other_tug_charges SET provider_reference='changed' WHERE other_tug_charge_id={charge.OtherTugChargeId}");
             await RejectSqlAsync($"UPDATE msap.mmsi_other_tug_charge_lines SET amount=1 WHERE other_tug_charge_id={charge.OtherTugChargeId}");
-            await RejectSqlAsync($"UPDATE filpride_journal_voucher_headers SET posted_by=NULL WHERE journal_voucher_header_id={journal.JournalVoucherHeaderId}");
-            await RejectSqlAsync($"UPDATE filpride_journal_voucher_details SET debit=1 WHERE journal_voucher_header_id={journal.JournalVoucherHeaderId}");
             // Owner maintenance must not recalculate a saved voucher.
             var updatedOwner = await source.MsapTugboatOwners.SingleAsync(o => o.TugboatOwnerId == owner.TugboatOwnerId);
             updatedOwner.WithholdingTaxPercent = 0.01m;
@@ -208,13 +182,36 @@ namespace Checks.MSAP
             await CheckLedgerAsync(saved.CheckVoucherHeaderNo!, 3, 1120m);
             await new UnitOfWork(db).FilprideCheckVoucher.RebuildGeneralLedgerAsync(form.Date, form.Date.AddDays(1));
             await CheckLedgerAsync(saved.CheckVoucherHeaderNo!, 3, 1120m);
-            await service.ChangeStatusAsync(id, "Print", "Payment check", null, default);
-            Check((await service.GetAsync(id, default))!.IsPrinted, "Printing did not preserve its audit state.");
+            var trade = new CheckVoucherTradeController(new UnitOfWork(db), null!, db, storage,
+                NullLogger<CheckVoucherTradeController>.Instance, null!, new CheckVoucherDocumentationService(db), service)
+            {
+                ControllerContext = new ControllerContext
+                {
+                    HttpContext = new DefaultHttpContext
+                    {
+                        User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "Payment check")], "check"))
+                    }
+                }
+            };
+            var preview = await trade.Print(id, null, default) as ViewResult;
+            Check(preview?.ViewName == "Print" && preview.Model is CheckVoucherVM { Supplier: null, Header: not null } previewModel
+                && previewModel.Header.CheckVoucherHeaderId == id && previewModel.Details?.Count == 3
+                && preview.ViewData["TugboatCosNumbers"] is string[] { Length: > 0 }
+                && !(await service.GetAsync(id, default))!.IsPrinted,
+                "Owner payment preview failed to reuse the existing voucher model or marked the voucher printed.");
+            var original = await trade.PrintTugboatPayment(id, default) as ViewResult;
+            Check(original?.ViewName == "Print" && original.Model is CheckVoucherVM
+                && original.ViewData["WasPrinted"] is false && original.ViewData["PrintPayment"] is true
+                && (await service.GetAsync(id, default))!.IsPrinted,
+                "Original owner voucher failed to reuse the shared print view or lost its original-copy state.");
+            var reprint = await trade.PrintTugboatPayment(id, default) as ViewResult;
+            Check(reprint?.ViewName == "Print" && reprint.ViewData["WasPrinted"] is true,
+                "Owner voucher reprint did not retain its recorded print state.");
             await RejectAsync(() => service.ChangeStatusAsync(id, "Post", "Payment check", null, default), "Repeated posting was accepted.");
             await RejectAsync(() => service.ChangeStatusAsync(id, "Cancel", "Payment check", "Correction", default), "A posted voucher could be cancelled without reversal.");
             await service.ChangeStatusAsync(id, "Unpost", "Payment check", null, default);
             Check(!await db.FilprideGeneralLedgerBooks.AnyAsync(g => g.Reference == saved.CheckVoucherHeaderNo)
-                && (await service.GetAsync(id, default))!.TugboatPayment!.ReleasedAt == null, "Unposting released a bill or retained entries.");
+                && (await service.GetAsync(id, default))!.TugboatPayments.Single().ReleasedAt == null, "Unposting released a bill or retained entries.");
             await RejectAsync(() => service.CreateAsync(Form(), null, "Payment check", default), "Unposting allowed a duplicate reservation.");
             await service.ChangeStatusAsync(id, "Post", "Payment check", null, default);
             await service.ChangeStatusAsync(id, "Void", "Payment check", "Correction fixture", default);
@@ -247,6 +244,7 @@ namespace Checks.MSAP
             Check(await db.FilprideTugboatPayments.AnyAsync(p => p.CheckVoucherHeaderId == active && p.ReleasedAt == null)
                 && (await service.GetAsync(active, default))!.CanceledBy == null,
                 "A rejected non-trade request changed the provider reservation.");
+            await CheckMultipleTicketsAsync();
             var workspace = new TugboatWorkspace();
             workspace.Select(await source.MsapTugboats.Where(t => t.IsCompanyOwned).Select(t => t.TugboatId).FirstAsync(), "Check tugboat");
             await using (var scoped = new ApplicationDbContext(options, workspace))
@@ -254,17 +252,109 @@ namespace Checks.MSAP
                 Check(!await scoped.FilprideTugboatPayments.AnyAsync(p => p.CheckVoucherHeaderId == active), "Company payment leaked into a tugboat workspace.");
                 await RejectAsync(() => Service(scoped, storage).CreateAsync(Form(), null, "Payment check", default), "Company-level provider AP entered a tugboat workspace.");
             }
-            Console.WriteLine($"PASS: AP Other Tugs gross/VAT/EWT, posted liability validation, upload rollback, source locks, duplicate/concurrent reservations, immutable snapshots, post/unpost/void/cancel, dedicated 201020500 selection and generic AP rejection, named service-cost/input-VAT recognition without duplicate P&L expense, AP reconciliation and workspace isolation. Clone fixture charge={charge.OtherTugChargeId}, draft CV={active}.");
+            Console.WriteLine($"PASS: AP Other Tugs gross/VAT/EWT, creation/posting without an initial AP journal, upload rollback, source locks, duplicate/concurrent reservations, immutable snapshots, post/unpost/void/cancel, dedicated 201020500 entries, deferred expense/AP recognition, AP reversal and workspace isolation. Clone fixture charge={charge.OtherTugChargeId}, draft CV={active}.");
 
-            static FilprideChartOfAccount CostAccount(string name, string number, FilprideChartOfAccount parent)
+            async Task CheckMultipleTicketsAsync()
             {
-                parent.HasChildren = true;
-                return new FilprideChartOfAccount
+                var tickets = new List<DispatchTicket>();
+                for (int index = 0; index < 4; index++)
                 {
-                    AccountName = name, AccountNumber = number, ParentAccount = parent, Level = parent.Level + 1,
-                    AccountType = parent.AccountType, NormalBalance = parent.NormalBalance,
-                    FinancialStatementType = parent.FinancialStatementType, CreatedBy = "Payment check"
-                };
+                    var entry = (VesselScheduleServiceEntry)source.Entry(ticket.ExpectedServiceEntry!).CurrentValues.ToObject();
+                    entry.VesselScheduleServiceEntryId = 0;
+                    source.Add(entry);
+                    await source.SaveChangesAsync();
+                    var copy = (DispatchTicket)source.Entry(ticket).CurrentValues.ToObject();
+                    copy.DispatchTicketId = 0;
+                    copy.AccountingSourceId = Guid.NewGuid();
+                    copy.DispatchNumber = "MP" + Guid.NewGuid().ToString("N")[..16];
+                    copy.VesselScheduleServiceEntryId = entry.VesselScheduleServiceEntryId;
+                    source.Add(copy);
+                    tickets.Add(copy);
+                }
+                await source.SaveChangesAsync();
+                OtherTugCharge Bill(string suffix, bool includesVat, params (DispatchTicket Ticket, decimal Amount)[] lines)
+                {
+                    return new OtherTugCharge
+                    {
+                        TugboatOwnerId = owner.TugboatOwnerId, ProviderName = owner.TugboatOwnerName,
+                        ProviderReference = reference + suffix, DocumentDate = form.Date, IncludesVat = includesVat,
+                        PreparedByName = "Payment check", PreparedByUserId = "payment-check", UpdatedAt = DateTime.Today,
+                        ConfirmedAt = DateTime.Today, ConfirmedByName = "Payment check", ConfirmedByUserId = "payment-check",
+                        Lines = lines.Select(line => new OtherTugChargeLine { DispatchTicketId = line.Ticket.DispatchTicketId, Amount = line.Amount }).ToList()
+                    };
+                }
+                var firstBill = Bill("-A", false, (tickets[0], 1000.03m), (tickets[1], 1000.03m));
+                var secondBill = Bill("-B", true, (tickets[2], 1120m));
+                var foreignTug = await source.MsapTugboats.FirstAsync(t => !t.IsCompanyOwned && t.TugboatOwnerId != null && t.TugboatOwnerId != owner.TugboatOwnerId);
+                tickets[3].TugBoatId = foreignTug.TugboatId;
+                var foreignBill = Bill("-FOREIGN", true, (tickets[3], 1120m));
+                foreignBill.TugboatOwnerId = foreignTug.TugboatOwnerId!.Value;
+                source.AddRange(firstBill, secondBill, foreignBill);
+                await source.SaveChangesAsync();
+                int firstLine = firstBill.Lines[0].OtherTugChargeLineId;
+                int remainingLine = firstBill.Lines[1].OtherTugChargeLineId;
+                int secondLine = secondBill.Lines[0].OtherTugChargeLineId;
+                TugboatPaymentViewModel Selection(params int[] ids)
+                {
+                    TugboatPaymentViewModel selected = Form();
+                    selected.AllocationIds = ids;
+                    return selected;
+                }
+                await RejectAsync(() => service.CreateAsync(Selection(), null, "Payment check", default), "Empty ticket selection was accepted.");
+                await RejectAsync(() => service.CreateAsync(Selection(firstLine, firstLine), null, "Payment check", default), "Duplicate selected IDs were accepted.");
+                await RejectAsync(() => service.CreateAsync(Selection(firstLine, int.MaxValue), null, "Payment check", default), "A forged allocation ID was accepted.");
+                await RejectAsync(() => service.CreateAsync(Selection(firstLine, foreignBill.Lines[0].OtherTugChargeLineId), null, "Payment check", default), "Tickets from different owners were combined.");
+                int combined = await service.CreateAsync(Selection(firstLine, secondLine), null, "Payment check", default);
+                FilprideCheckVoucherHeader combinedVoucher = (await service.GetAsync(combined, default))!;
+                Check(combinedVoucher.TugboatPayments.Count == 2 && combinedVoucher.InvoiceAmount == 2240.04m
+                    && combinedVoucher.CheckAmount == 2200.04m && combinedVoucher.TugboatPayments.Sum(p => p.WithholdingAmount) == 40m
+                    && combinedVoucher.SINo!.Length == 2
+                    && combinedVoucher.TugboatPayments.SelectMany(TugboatPaymentService.Lines).Select(l => l.AllocationId).Order()
+                        .SequenceEqual(new[] { firstLine, secondLine }.Order()),
+                    "Multi-bill payment did not save exactly the tagged tickets and their cumulative tax rounding.");
+                var available = new TugboatPaymentViewModel { OwnerId = owner.TugboatOwnerId };
+                await service.PrepareAsync(available, default);
+                Check(available.Bills.Single(b => b.ChargeId == firstBill.OtherTugChargeId).Lines.Select(l => l.AllocationId).SequenceEqual([remainingLine])
+                    && available.Bills.All(b => b.ChargeId != secondBill.OtherTugChargeId),
+                    "Selecting one ticket reserved unchecked tickets or left selected tickets available.");
+                await RejectAsync(() => service.CreateAsync(Selection(secondLine), null, "Payment check", default), "A reserved ticket was paid twice.");
+                int remainder = await service.CreateAsync(Selection(remainingLine), null, "Payment check", default);
+                FilprideCheckVoucherHeader remainderVoucher = (await service.GetAsync(remainder, default))!;
+                Check(remainderVoucher.InvoiceAmount == 1120.03m
+                    && combinedVoucher.TugboatPayments.Where(p => p.OtherTugChargeId == firstBill.OtherTugChargeId).Sum(p => p.GrossAmount)
+                        + remainderVoucher.InvoiceAmount == 2240.07m,
+                    "Separate ticket payments failed to preserve the full bill's rounded VAT total.");
+                try
+                {
+                    await db.GetService<IMigrator>().MigrateAsync("20261021032054_AllowDirectTugboatPayments");
+                    throw new InvalidOperationException("Rollback accepted multi-bill/selected-ticket payments.");
+                }
+                catch (PostgresException ex) when (ex.SqlState == "P0001" && ex.MessageText.Contains("selected-ticket vouchers", StringComparison.Ordinal))
+                { }
+                await service.ChangeStatusAsync(combined, "Post", "Payment check", null, default);
+                await new UnitOfWork(db).FilprideCheckVoucher.RebuildGeneralLedgerAsync(form.Date, form.Date.AddDays(1));
+                var ledger = await db.FilprideGeneralLedgerBooks.Where(g => g.Reference == combinedVoucher.CheckVoucherHeaderNo).ToListAsync();
+                Check(ledger.Count == 3 && ledger.Sum(g => g.Debit) == 2240.04m && ledger.Sum(g => g.Credit) == 2240.04m
+                    && ledger.All(g => g.CounterpartyType == CounterpartyType.TugboatOwner && g.CounterpartyId == owner.TugboatOwnerId),
+                    "Combined payment posting/rebuild lost balanced totals or owner identity.");
+                bool[] printedCopies = await Task.WhenAll(PrintCopyAsync(), PrintCopyAsync());
+                Check(printedCopies.Count(wasPrinted => !wasPrinted) == 1 && printedCopies.Count(wasPrinted => wasPrinted) == 1,
+                    "Concurrent print requests did not produce exactly one original and one reprint.");
+                async Task<bool> PrintCopyAsync()
+                {
+                    await using ApplicationDbContext printing = Open();
+                    return await Service(printing, storage).ChangeStatusAsync(combined, "Print", "Payment check", null, default);
+                }
+                await service.ChangeStatusAsync(combined, "Unpost", "Payment check", null, default);
+                await RejectAsync(() => service.CreateAsync(Selection(firstLine), null, "Payment check", default), "Unposting released a selected ticket.");
+                await service.ChangeStatusAsync(combined, "Post", "Payment check", null, default);
+                await service.ChangeStatusAsync(combined, "Void", "Payment check", "Multi-ticket check", default);
+                Check(await db.FilprideTugboatPaymentAllocations.CountAsync(a => new[] { firstLine, secondLine }.Contains(a.OtherTugChargeLineId) && a.ReleasedAt != null) == 2,
+                    "Voiding did not release every selected ticket.");
+                await service.ChangeStatusAsync(remainder, "Cancel", "Payment check", "Multi-ticket check", default);
+                int replacement = await service.CreateAsync(Selection(firstLine, remainingLine, secondLine), null, "Payment check", default);
+                await service.ChangeStatusAsync(replacement, "Cancel", "Payment check", "Multi-ticket check", default);
+                Console.WriteLine("PASS: individual tickets across provider bills, unchecked remainder payment, mixed VAT, cumulative rounding, wrong-owner/forged/duplicate IDs, multi-ticket posting/rebuild/unpost/void/cancel and safe rollback guard.");
             }
 
             ApplicationDbContext Open()
@@ -276,8 +366,8 @@ namespace Checks.MSAP
                 return new TugboatPaymentViewModel
                 {
                     OwnerId = owner.TugboatOwnerId,
-                    ChargeId = charge.OtherTugChargeId,
-                    LiabilityJournalId = journal.JournalVoucherHeaderId,
+                    OldCVNo = "LEGACY-PAYMENT-CHECK",
+                    AllocationIds = charge.Lines.Select(line => line.OtherTugChargeLineId).ToArray(),
                     BankId = bank.BankAccountId,
                     CheckNo = "T" + Guid.NewGuid().ToString("N"),
                     Date = charge.DocumentDate,
@@ -307,16 +397,11 @@ namespace Checks.MSAP
                 Check(rows.Count == count && rows.Sum(g => g.Debit) == total && rows.Sum(g => g.Credit) == total
                     && rows.All(g => g.CounterpartyType == CounterpartyType.TugboatOwner && g.CounterpartyId == owner.TugboatOwnerId),
                     "Payment ledger is unbalanced, duplicated or lost owner identity.");
-                Check(await db.FilprideGeneralLedgerBooks.Where(g => g.Reference == journal.JournalVoucherHeaderNo && g.AccountId == expense.AccountId)
-                        .SumAsync(g => g.Debit - g.Credit) == 1000m
-                    && await db.FilprideGeneralLedgerBooks.Where(g => g.Reference == journal.JournalVoucherHeaderNo && g.AccountNo == "101060200")
-                        .SumAsync(g => g.Debit - g.Credit) == 120m
+                Check(!await db.FilprideJournalVoucherHeaders.AnyAsync(j => j.References == reference)
                     && !await db.FilprideGeneralLedgerBooks.AnyAsync(g => g.Reference == number && g.Account.FinancialStatementType == "PnL"),
-                    "Settlement/rebuild/reversal duplicated the service cost or treated recoverable input VAT as a P&L charge.");
-                decimal payable = await db.FilprideGeneralLedgerBooks.Where(g => g.AccountNo == TugboatPaymentService.ApAccount
-                        && (g.Reference == journal.JournalVoucherHeaderNo || g.Reference == number))
-                    .SumAsync(g => g.Credit - g.Debit);
-                Check(payable == (count == 3 ? 0m : 1120m), "Payment/reversal did not reconcile to the initially recognized provider liability.");
+                    "Direct payment unexpectedly created initial expense/AP recognition.");
+                decimal payable = rows.Where(g => g.AccountNo == TugboatPaymentService.ApAccount).Sum(g => g.Credit - g.Debit);
+                Check(payable == (count == 3 ? -1120m : 0m), "Direct AP payment/reversal posted the wrong control-account amount.");
             }
         }
 
@@ -331,6 +416,7 @@ namespace Checks.MSAP
             try
             { await action(); }
             catch (InvalidOperationException) { return; }
+            catch (System.ComponentModel.DataAnnotations.ValidationException) { return; }
             throw new InvalidOperationException(message);
         }
 

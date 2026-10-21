@@ -306,7 +306,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 .AsNoTracking()
                 .Include(checkVoucher => checkVoucher.Details)
                 .Include(checkVoucher => checkVoucher.Supplier)
-                .Include(checkVoucher => checkVoucher.TugboatPayment)
+                .Include(checkVoucher => checkVoucher.TugboatPayments)
                 .Where(checkVoucher =>
                     checkVoucher.PostedBy != null &&
                     checkVoucher.Date >= startDate &&
@@ -385,9 +385,9 @@ namespace IBS.DataAccess.Repository.Filpride
                     });
             }
 
-            if (header.TugboatPayment != null)
+            if (header.TugboatPayments.Count > 0)
             {
-                ledgers.SetCounterparty(CounterpartyType.TugboatOwner, header.TugboatPayment.TugboatOwnerId, header.Payee);
+                ledgers.SetCounterparty(CounterpartyType.TugboatOwner, header.TugboatPayments[0].TugboatOwnerId, header.Payee);
             }
             else if (header.SupplierId.HasValue)
             {

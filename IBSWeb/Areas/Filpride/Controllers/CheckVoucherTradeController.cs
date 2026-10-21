@@ -326,7 +326,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 if (ModelState.IsValid)
                 {
                     int id = await _tugboatPayments.CreateAsync(model, file, GetUserFullName(), cancellationToken);
-                    TempData["success"] = "Payment draft created. The complete provider bill is reserved; cancellation or voiding releases it.";
+                    TempData["success"] = "Payment draft created. Selected tickets are reserved; cancellation or voiding releases them.";
                     return RedirectToAction(nameof(Print), new { id });
                 }
             }
@@ -338,6 +338,26 @@ namespace IBSWeb.Areas.Filpride.Controllers
             try { await _tugboatPayments.PrepareAsync(model, cancellationToken); }
             catch (InvalidOperationException ex) { ModelState.AddModelError(string.Empty, ex.Message); }
             return View(model);
+        }
+
+        [HttpGet]
+        [Authorize(Policy = nameof(CheckVoucherTrade.CheckVoucherTradeCreate))]
+        public async Task<IActionResult> GetTugboatPaymentDetails(int ownerId, int chargeId, CancellationToken cancellationToken)
+        {
+            var model = new TugboatPaymentViewModel { OwnerId = ownerId, ChargeId = chargeId };
+            try
+            {
+                await _tugboatPayments.PrepareAsync(model, cancellationToken);
+                return Json(new
+                {
+                    model.Owner, model.OwnerProfileError, model.Bills,
+                    model.Gross, model.Withholding, model.Net, model.WithholdingAccountNumber
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
         private async Task<IActionResult> ChangeTugboatPaymentAsync(int id, string operation, string? reason, bool json, CancellationToken ct)
@@ -364,11 +384,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
         {
             try
             {
-                await _tugboatPayments.ChangeStatusAsync(id, "Print", GetUserFullName(), null, cancellationToken);
                 var voucher = await _tugboatPayments.GetAsync(id, cancellationToken);
-                ViewData["PaymentLines"] = TugboatPaymentService.Lines(voucher!.TugboatPayment!);
+                if (voucher == null) { return NotFound(); }
+                ViewData["WasPrinted"] = await _tugboatPayments.ChangeStatusAsync(id, "Print", GetUserFullName(), null, cancellationToken);
                 ViewData["PrintPayment"] = true;
-                return View("TugboatPayment", voucher);
+                return TugboatVoucherView(voucher);
             }
             catch (Exception ex)
             {
@@ -376,6 +396,14 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 TempData["error"] = ex is InvalidOperationException ? ex.Message : "The voucher could not be printed.";
                 return RedirectToAction(nameof(Print), new { id });
             }
+        }
+
+        private ViewResult TugboatVoucherView(FilprideCheckVoucherHeader voucher)
+        {
+            ViewBag.SINoArray = voucher.SINo ?? [];
+            ViewData["TugboatCosNumbers"] = voucher.TugboatPayments.SelectMany(TugboatPaymentService.Lines)
+                .Select(line => line.CosNumber).Where(number => !string.IsNullOrWhiteSpace(number)).Distinct().ToArray();
+            return View("Print", new CheckVoucherVM { Header = voucher, Details = voucher.Details!.ToList() });
         }
 
         [HttpPost, ValidateAntiForgeryToken]
@@ -1789,10 +1817,10 @@ namespace IBSWeb.Areas.Filpride.Controllers
             if (header.CvType == nameof(CVType.OtherTugs))
             {
                 var paymentVoucher = await _tugboatPayments.GetAsync(id.Value, cancellationToken);
-                ViewData["PaymentLines"] = TugboatPaymentService.Lines(paymentVoucher!.TugboatPayment!);
+                if (paymentVoucher == null) { return NotFound(); }
                 await _unitOfWork.FilprideAuditTrail.AddAsync(new FilprideAuditTrail(GetUserFullName(), $"Preview AP Other Tugs voucher {header.CheckVoucherHeaderNo}", "Check Voucher"), cancellationToken);
                 await _unitOfWork.SaveAsync(cancellationToken);
-                return View("TugboatPayment", paymentVoucher);
+                return TugboatVoucherView(paymentVoucher);
             }
 
             var details = await _dbContext.FilprideCheckVoucherDetails

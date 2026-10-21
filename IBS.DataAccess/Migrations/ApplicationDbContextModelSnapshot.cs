@@ -1258,7 +1258,7 @@ namespace IBS.DataAccess.Migrations
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("gross_amount");
 
-                    b.Property<int>("LiabilityJournalVoucherId")
+                    b.Property<int?>("LiabilityJournalVoucherId")
                         .HasColumnType("integer")
                         .HasColumnName("liability_journal_voucher_id");
 
@@ -1298,7 +1298,6 @@ namespace IBS.DataAccess.Migrations
                         .HasName("pk_filpride_tugboat_payments");
 
                     b.HasIndex("CheckVoucherHeaderId")
-                        .IsUnique()
                         .HasDatabaseName("ix_filpride_tugboat_payments_check_voucher_header_id");
 
                     b.HasIndex("LiabilityJournalVoucherId")
@@ -1307,14 +1306,47 @@ namespace IBS.DataAccess.Migrations
                         .HasFilter("released_at IS NULL");
 
                     b.HasIndex("OtherTugChargeId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_filpride_tugboat_payments_other_tug_charge_id")
-                        .HasFilter("released_at IS NULL");
+                        .HasDatabaseName("ix_filpride_tugboat_payments_other_tug_charge_id");
 
                     b.ToTable("filpride_tugboat_payments", null, t =>
                         {
                             t.HasCheckConstraint("ck_tugboat_payment_amounts", "gross_amount > 0 AND withholding_amount >= 0 AND withholding_amount < gross_amount");
                         });
+                });
+
+            modelBuilder.Entity("IBS.Models.Filpride.AccountsPayable.FilprideTugboatPaymentAllocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("OtherTugChargeLineId")
+                        .HasColumnType("integer")
+                        .HasColumnName("other_tug_charge_line_id");
+
+                    b.Property<DateTime?>("ReleasedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("released_at");
+
+                    b.Property<int>("TugboatPaymentId")
+                        .HasColumnType("integer")
+                        .HasColumnName("tugboat_payment_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_filpride_tugboat_payment_allocations");
+
+                    b.HasIndex("OtherTugChargeLineId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_filpride_tugboat_payment_allocations_other_tug_charge_line_")
+                        .HasFilter("released_at IS NULL");
+
+                    b.HasIndex("TugboatPaymentId")
+                        .HasDatabaseName("ix_filpride_tugboat_payment_allocations_tugboat_payment_id");
+
+                    b.ToTable("filpride_tugboat_payment_allocations", (string)null);
                 });
 
             modelBuilder.Entity("IBS.Models.Filpride.AccountsReceivable.FilprideCollectionReceipt", b =>
@@ -5785,8 +5817,8 @@ namespace IBS.DataAccess.Migrations
             modelBuilder.Entity("IBS.Models.Filpride.AccountsPayable.FilprideTugboatPayment", b =>
                 {
                     b.HasOne("IBS.Models.Filpride.AccountsPayable.FilprideCheckVoucherHeader", "Voucher")
-                        .WithOne("TugboatPayment")
-                        .HasForeignKey("IBS.Models.Filpride.AccountsPayable.FilprideTugboatPayment", "CheckVoucherHeaderId")
+                        .WithMany("TugboatPayments")
+                        .HasForeignKey("CheckVoucherHeaderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_filpride_tugboat_payments_filpride_check_voucher_headers_ch");
@@ -5795,12 +5827,23 @@ namespace IBS.DataAccess.Migrations
                         .WithMany()
                         .HasForeignKey("LiabilityJournalVoucherId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
                         .HasConstraintName("fk_filpride_tugboat_payments_filpride_journal_voucher_headers_");
 
                     b.Navigation("LiabilityJournalVoucher");
 
                     b.Navigation("Voucher");
+                });
+
+            modelBuilder.Entity("IBS.Models.Filpride.AccountsPayable.FilprideTugboatPaymentAllocation", b =>
+                {
+                    b.HasOne("IBS.Models.Filpride.AccountsPayable.FilprideTugboatPayment", "Payment")
+                        .WithMany("Allocations")
+                        .HasForeignKey("TugboatPaymentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_filpride_tugboat_payment_allocations_filpride_tugboat_payme");
+
+                    b.Navigation("Payment");
                 });
 
             modelBuilder.Entity("IBS.Models.Filpride.AccountsReceivable.FilprideCollectionReceipt", b =>
@@ -6484,7 +6527,7 @@ namespace IBS.DataAccess.Migrations
                 {
                     b.Navigation("Details");
 
-                    b.Navigation("TugboatPayment");
+                    b.Navigation("TugboatPayments");
                 });
 
             modelBuilder.Entity("IBS.Models.Filpride.AccountsPayable.FilprideJournalVoucherHeader", b =>
@@ -6497,6 +6540,11 @@ namespace IBS.DataAccess.Migrations
                     b.Navigation("ActualPrices");
 
                     b.Navigation("ReceivingReports");
+                });
+
+            modelBuilder.Entity("IBS.Models.Filpride.AccountsPayable.FilprideTugboatPayment", b =>
+                {
+                    b.Navigation("Allocations");
                 });
 
             modelBuilder.Entity("IBS.Models.Filpride.AccountsReceivable.FilprideCollectionReceipt", b =>

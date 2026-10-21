@@ -115,6 +115,7 @@ namespace IBS.DataAccess.Data
         #region Accounts Payable
 
         public DbSet<FilprideTugboatPayment> FilprideTugboatPayments { get; set; }
+        public DbSet<FilprideTugboatPaymentAllocation> FilprideTugboatPaymentAllocations { get; set; }
 
         public DbSet<FilprideCheckVoucherHeader> FilprideCheckVoucherHeaders { get; set; }
         public DbSet<FilprideCheckVoucherDetail> FilprideCheckVoucherDetails { get; set; }
@@ -602,14 +603,21 @@ namespace IBS.DataAccess.Data
 
             builder.Entity<FilprideTugboatPayment>(payment =>
             {
-                payment.HasOne(p => p.Voucher).WithOne(v => v.TugboatPayment)
-                    .HasForeignKey<FilprideTugboatPayment>(p => p.CheckVoucherHeaderId).OnDelete(DeleteBehavior.Restrict);
+                payment.HasOne(p => p.Voucher).WithMany(v => v.TugboatPayments)
+                    .HasForeignKey(p => p.CheckVoucherHeaderId).OnDelete(DeleteBehavior.Restrict);
                 payment.HasOne(p => p.LiabilityJournalVoucher).WithMany()
                     .HasForeignKey(p => p.LiabilityJournalVoucherId).OnDelete(DeleteBehavior.Restrict);
-                payment.HasIndex(p => p.OtherTugChargeId).IsUnique().HasFilter("released_at IS NULL");
+                payment.HasIndex(p => p.OtherTugChargeId);
                 payment.HasIndex(p => p.LiabilityJournalVoucherId).IsUnique().HasFilter("released_at IS NULL");
                 payment.ToTable("filpride_tugboat_payments", table => table.HasCheckConstraint("ck_tugboat_payment_amounts",
                     "gross_amount > 0 AND withholding_amount >= 0 AND withholding_amount < gross_amount"));
+            });
+
+            builder.Entity<FilprideTugboatPaymentAllocation>(allocation =>
+            {
+                allocation.HasOne(a => a.Payment).WithMany(p => p.Allocations)
+                    .HasForeignKey(a => a.TugboatPaymentId).OnDelete(DeleteBehavior.Restrict);
+                allocation.HasIndex(a => a.OtherTugChargeLineId).IsUnique().HasFilter("released_at IS NULL");
             });
 
             #region -- Check Voucher Header --

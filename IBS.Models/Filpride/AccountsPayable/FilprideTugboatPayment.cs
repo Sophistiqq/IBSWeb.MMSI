@@ -10,8 +10,8 @@ namespace IBS.Models.Filpride.AccountsPayable
         public FilprideCheckVoucherHeader Voucher { get; set; } = null!;
         public int OtherTugChargeId { get; set; }
         public int TugboatOwnerId { get; set; }
-        public int LiabilityJournalVoucherId { get; set; }
-        public FilprideJournalVoucherHeader LiabilityJournalVoucher { get; set; } = null!;
+        public int? LiabilityJournalVoucherId { get; set; }
+        public FilprideJournalVoucherHeader? LiabilityJournalVoucher { get; set; }
         public int ChargeRevision { get; set; }
         [MaxLength(100)]
         public string ProviderReference { get; set; } = "";
@@ -23,5 +23,6 @@ namespace IBS.Models.Filpride.AccountsPayable
         public decimal WithholdingAmount { get; set; }
         [Column(TypeName = "timestamp without time zone")]
         public DateTime? ReleasedAt { get; set; }
+        public List<FilprideTugboatPaymentAllocation> Allocations { get; set; } = [];
     }
 }

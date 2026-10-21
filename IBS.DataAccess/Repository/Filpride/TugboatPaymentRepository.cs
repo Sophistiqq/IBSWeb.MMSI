@@ -36,13 +36,27 @@ namespace IBS.DataAccess.Repository.Filpride
 
         public async Task<List<OtherTugCharge>> ChargesAsync(int ownerId, CancellationToken ct)
         {
-            List<int> reserved = await _db.FilprideTugboatPayments.Where(p => p.ReleasedAt == null)
-                .Select(p => p.OtherTugChargeId).ToListAsync(ct);
+            List<int> reserved = await ReservedAllocationIdsAsync(ct);
             await using var source = await SourceAsync(ct);
-            return await source.MsapOtherTugCharges.AsNoTracking().Where(c => c.TugboatOwnerId == ownerId
-                    && c.ConfirmedAt != null && !reserved.Contains(c.OtherTugChargeId)
-                    && c.Lines.Any() && c.Lines.All(l => l.Ticket.Customer.Company == "MMSI"))
+            return await source.MsapOtherTugCharges.AsNoTracking()
+                .Include(c => c.Lines).ThenInclude(l => l.Ticket).ThenInclude(t => t.Tugboat)
+                .Include(c => c.Lines).ThenInclude(l => l.Ticket).ThenInclude(t => t.CustomerOrderSlip)
+                .Where(c => c.TugboatOwnerId == ownerId
+                    && c.ConfirmedAt != null && c.Lines.Any(l => !reserved.Contains(l.OtherTugChargeLineId)) && c.Lines.All(l => l.Ticket.Customer.Company == "MMSI"))
                 .OrderBy(c => c.DocumentDate).ThenBy(c => c.OtherTugChargeId).ToListAsync(ct);
+        }
+
+        public async Task<List<int>> ReservedAllocationIdsAsync(CancellationToken ct)
+        {
+            return await _db.FilprideTugboatPaymentAllocations.Where(a => a.ReleasedAt == null)
+                .Select(a => a.OtherTugChargeLineId).ToListAsync(ct);
+        }
+
+        public async Task<List<int>> ChargeIdsAsync(int[] allocationIds, CancellationToken ct)
+        {
+            await using var source = await SourceAsync(ct);
+            return await source.MsapOtherTugChargeLines.Where(l => allocationIds.Contains(l.OtherTugChargeLineId))
+                .Select(l => l.OtherTugChargeId).Distinct().OrderBy(id => id).ToListAsync(ct);
         }
 
         public async Task<(TugboatOwner Owner, OtherTugCharge Charge)> SourceAsync(int chargeId, bool forUpdate, CancellationToken ct)

@@ -68,7 +68,15 @@ namespace Checks.MSAP
             await db.Database.MigrateAsync();
             WorkspaceAssertions.Check(!db.Database.HasPendingModelChanges(), "Migrated workspace schema does not match the model.");
             string[] migrations = db.Database.GetMigrations().ToArray();
-            await db.GetService<IMigrator>().MigrateAsync(migrations[^2]);
+            try
+            {
+                await db.GetService<IMigrator>().MigrateAsync(migrations[^2]);
+            }
+            catch (PostgresException ex) when (ex.SqlState == "P0001" && ex.MessageText.Contains("selected-ticket vouchers", StringComparison.Ordinal))
+            {
+                WorkspaceAssertions.Check((await db.Database.GetAppliedMigrationsAsync()).Contains(migrations[^1]),
+                    "Rejected selected-ticket rollback removed the migration history.");
+            }
             await db.Database.MigrateAsync();
             WorkspaceAssertions.Check(!db.Database.HasPendingModelChanges(), "Rollback/reapply changed the model.");
             await using var msap = new MsapDbContext(new DbContextOptionsBuilder<MsapDbContext>()

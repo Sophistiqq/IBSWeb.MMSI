@@ -70,16 +70,6 @@
     }
 
     <div class="container">
-        @if (User.Identity?.IsAuthenticated == true)
-        {
-            @if (ViewContext.RouteData.Values["area"] as string is "Filpride" or "User")
-            {
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 my-2">
-                    <span>@(Workspace.TugboatId.HasValue ? $"Accounting workspace: {Workspace.Name}" : "Consolidated MMSI · New transactions: company level")</span>
-                    <partial name="_TugboatWorkspace" />
-                </div>
-            }
-        }
         <partial name="_Notification" />
         <main role="main">
             <input type="hidden" id="hfUsername" value="@userName" />

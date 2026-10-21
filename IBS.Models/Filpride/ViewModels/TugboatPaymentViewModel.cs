@@ -13,12 +13,9 @@ namespace IBS.Models.Filpride.ViewModels
         [Range(1, int.MaxValue)]
         [Display(Name = "Tugboat owner")]
         public int OwnerId { get; set; }
-        [Range(1, int.MaxValue)]
-        [Display(Name = "Confirmed provider bill")]
         public int ChargeId { get; set; }
-        [Range(1, int.MaxValue)]
-        [Display(Name = "Posted AP journal")]
-        public int LiabilityJournalId { get; set; }
+        [Required, MinLength(1, ErrorMessage = "Select at least one ticket for payment.")]
+        public int[] AllocationIds { get; set; } = [];
         [Required]
         public DateOnly Date { get; set; } = DateOnly.FromDateTime(DateTime.Today);
         [Required, StringLength(13)]
@@ -34,23 +31,35 @@ namespace IBS.Models.Filpride.ViewModels
         public DateOnly CheckDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
         [Required, StringLength(1000)]
         public string Particulars { get; set; } = "";
+        [StringLength(100)]
+        public string? OldCVNo { get; set; }
+        public int[] CosIds { get; set; } = [];
+        [BindNever, ValidateNever]
+        public List<SelectListItem> CustomerOrderSlips { get; set; } = [];
+        public string? Payee => Owner?.TugboatOwnerName;
+        public string? Address => Owner?.Address;
+        public string? Tin => Owner?.Tin;
+        [Display(Name = "Payment Amount")]
+        public decimal DefaultPayableAmount => Net;
         public CheckVoucherDocumentationViewModel Documentation { get; set; } = new();
         [BindNever, ValidateNever]
         public List<SelectListItem> Owners { get; set; } = [];
         [BindNever, ValidateNever]
-        public List<SelectListItem> Charges { get; set; } = [];
-        [BindNever, ValidateNever]
-        public List<SelectListItem> Journals { get; set; } = [];
+        public List<TugboatPaymentBillViewModel> Bills { get; set; } = [];
         [BindNever, ValidateNever]
         public List<SelectListItem> Banks { get; set; } = [];
         [BindNever, ValidateNever]
         public TugboatOwner? Owner { get; set; }
+        [BindNever, ValidateNever]
+        public string? OwnerProfileError { get; set; }
         [BindNever, ValidateNever]
         public OtherTugCharge? Charge { get; set; }
         [BindNever, ValidateNever]
         public decimal Gross { get; set; }
         [BindNever, ValidateNever]
         public decimal Withholding { get; set; }
+        [BindNever, ValidateNever]
+        public string? WithholdingAccountNumber { get; set; }
         public decimal Net => Gross - Withholding;
     }
 }

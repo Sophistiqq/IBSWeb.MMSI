@@ -64,8 +64,8 @@ namespace Checks.MSAP
 
             Check(!db.Database.HasPendingModelChanges(), "Workspace migration does not match the model.");
             IMigrator migrator = db.GetService<IMigrator>();
-            string latest = db.Database.GetMigrations().Last();
-            string previous = db.Database.GetMigrations().Reverse().Skip(1).First();
+            string latest = db.Database.GetMigrations().Single(migration => migration.EndsWith("_AddTugboatWorkspaceOwnership", StringComparison.Ordinal));
+            string previous = db.Database.GetMigrations().TakeWhile(migration => migration != latest).Last();
             string upgrade = migrator.GenerateScript(previous, latest);
             string rollback = migrator.GenerateScript(latest, previous);
             Check(upgrade.Contains("workspace_tugboat_id") && !upgrade.Contains("DROP TABLE")

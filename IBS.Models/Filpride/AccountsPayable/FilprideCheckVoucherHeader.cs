@@ -14,7 +14,7 @@ namespace IBS.Models.Filpride.AccountsPayable
 
         [System.Text.Json.Serialization.JsonIgnore]
         [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
-        public FilprideTugboatPayment? TugboatPayment { get; set; }
+        public List<FilprideTugboatPayment> TugboatPayments { get; set; } = [];
 
         [StringLength(13)]
         public string? CheckVoucherHeaderNo { get; set; }

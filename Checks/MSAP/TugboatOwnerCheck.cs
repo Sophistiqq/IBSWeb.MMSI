@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using IBS.DataAccess.Data;
 using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository;
@@ -75,8 +76,33 @@ namespace Checks.MSAP
             Check(saved.WithholdingTaxPercent == 0m, "An exempt owner retained a withholding rate.");
             Check(await db.AuditTrails.CountAsync(x => x.Username == "Check" && x.Activity.Contains("ZQ1")) == 2,
                 "Owner maintenance did not record its create/update audit entries.");
+            var expectedTugboats = await db.MsapTugboats.AsNoTracking()
+                .Select(x => new
+                {
+                    x.TugboatId,
+                    OwnerName = x.TugboatOwner == null ? null : x.TugboatOwner.TugboatOwnerName,
+                    x.Port.PortName
+                }).ToDictionaryAsync(x => x.TugboatId);
+            Check(expectedTugboats.Values.Any(x => x.OwnerName != null), "Tugboat list check requires an assigned owner.");
+            db.ChangeTracker.Clear();
+            var tugboatService = new TugboatService(work, NullLogger<TugboatService>.Instance);
+            IEnumerable<Tugboat> tugboats = await tugboatService.GetAllAsync(default);
+            using JsonDocument list = JsonSerializer.SerializeToDocument(new { data = tugboats }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            JsonElement rows = list.RootElement.GetProperty("data");
+            Check(rows.GetArrayLength() == expectedTugboats.Count, "Tugboat list lost records.");
+            foreach (JsonElement row in rows.EnumerateArray())
+            {
+                var expected = expectedTugboats[row.GetProperty("tugboatId").GetInt32()];
+                JsonElement ownerJson = row.GetProperty("tugboatOwner");
+                string? ownerName = ownerJson.ValueKind == JsonValueKind.Null ? null : ownerJson.GetProperty("tugboatOwnerName").GetString();
+                Check(ownerName == expected.OwnerName, "Tugboat list did not return its assigned owner's name.");
+                JsonElement portJson = row.GetProperty("port");
+                Check(portJson.ValueKind != JsonValueKind.Null && portJson.GetProperty("portName").GetString() == expected.PortName,
+                    "Tugboat list did not return its port name.");
+            }
             await transaction.RollbackAsync();
             Console.WriteLine("PASS: owner migration preserves imported identities; incomplete/invalid payment profiles fail; valid/exempt profiles persist and audit correctly (isolated database).");
+            Console.WriteLine("PASS: tugboat list JSON returns every tugboat with its assigned owner and port from a fresh change tracker.");
         }
 
         private static void Check(bool passed, string message)
