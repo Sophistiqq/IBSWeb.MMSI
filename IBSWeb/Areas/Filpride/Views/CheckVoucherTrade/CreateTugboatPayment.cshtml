@@ -27,7 +27,7 @@
             <input asp-for="OwnerId" type="hidden" /><input asp-for="ChargeId" type="hidden" />
             <div class="mb-3">
                 <label asp-for="LiabilityJournalId"></label><select asp-for="LiabilityJournalId" asp-items="Model.Journals" class="form-select"><option value="0">Select posted AP journal</option></select>
-                <p class="text-muted">Accounting must approve and post the gross AP liability first. Its payee must match the owner and its reference must match this provider bill. Withholding is applied on payment. An unavailable or mismatched liability blocks payment.</p>
+                <p class="text-muted">Accounting must approve and post the gross liability to @IBS.Services.TugboatPaymentService.ApAccount — AP - Trade - Other Tugs first. Its payee must match the owner and its reference must match this provider bill. Withholding is applied on payment. An unavailable or mismatched liability blocks payment.</p>
             </div>
             <div class="row g-3 mb-3">
                 <div class="col-md-4"><label asp-for="Date"></label><input asp-for="Date" type="date" class="form-control" /></div>

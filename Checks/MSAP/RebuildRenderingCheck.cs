@@ -85,6 +85,7 @@ namespace Checks.MSAP
             string paymentHtml = await RenderAsync("/Areas/Filpride/Views/CheckVoucherTrade/CreateTugboatPayment.cshtml", paymentForm);
             Check(paymentHtml.Contains("Owner &lt;check&gt;", StringComparison.Ordinal)
                 && paymentHtml.Contains("name=\"Documentation.IsDocumentedByOtherCompany\"", StringComparison.Ordinal)
+                && paymentHtml.Contains("201020500", StringComparison.Ordinal)
                 && paymentHtml.Contains("__RequestVerificationToken", StringComparison.Ordinal)
                 && paymentHtml.Contains("name=\"__Workspace\"", StringComparison.Ordinal)
                 && !paymentHtml.Contains("name=\"SupplierId\"", StringComparison.Ordinal),

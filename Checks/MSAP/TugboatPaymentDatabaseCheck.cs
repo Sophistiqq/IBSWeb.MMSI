@@ -73,6 +73,28 @@ namespace Checks.MSAP
             charge.Lines[0].Amount = 1120m;
             source.ChangeTracker.Clear();
             var bank = await db.FilprideBankAccounts.FirstAsync(b => b.IsActive);
+            var baseline = new Dictionary<string, string>
+            {
+                ["201020500"] = "AP - Trade - Other Tugs",
+                ["201020600"] = "AP - Trade - SBMA",
+                ["201020700"] = "AP - Trade - Commission",
+                ["201020800"] = "AP - Trade - Incentive",
+                ["201020900"] = "AP - Trade - Fuel",
+                ["201021000"] = "AP - Trade - Freight",
+                ["201021100"] = "AP - Trade - Trading Fee",
+                ["201021200"] = "AP - Trade - Lubes"
+            };
+            var accounts = await db.FilprideChartOfAccounts.AsNoTracking()
+                .Where(a => baseline.Keys.Contains(a.AccountNumber)).ToListAsync();
+            Check(accounts.Count == baseline.Count && accounts.All(a => a.AccountName == baseline[a.AccountNumber]
+                && !a.IsMain && !a.HasChildren && !a.IsHidden && a.AccountType == "Liabilities"
+                && a.NormalBalance == "Credit" && a.FinancialStatementType == "BalanceSheet"),
+                "The screenshot baseline requires the eight dedicated AP Trade liability accounts created in the dev chart.");
+            var payableAccount = accounts.Single(a => a.AccountNumber == "201020500");
+            Check(TugboatPaymentService.ApAccount == payableAccount.AccountNumber && !payableAccount.IsMain && !payableAccount.HasChildren
+                && payableAccount.AccountType == "Liabilities" && payableAccount.NormalBalance == "Credit"
+                && payableAccount.FinancialStatementType == "BalanceSheet",
+                "AP Other Tugs must use the dedicated 201020500 payable, not the generic trade control or a P&L account.");
             // Clone-only COGS classification; production mapping remains a Finance decision.
             var costRoot = await db.FilprideChartOfAccounts.SingleAsync(a => a.AccountNumber == "500000000");
             List<string> costBranches = await db.FilprideChartOfAccounts.IgnoreQueryFilters(["MasterVisibility"])
@@ -115,6 +137,20 @@ namespace Checks.MSAP
             form.LiabilityJournalId = int.MaxValue;
             await RejectAsync(() => service.CreateAsync(form, null, "Payment check", default), "Missing liability was accepted.");
             form = Form();
+            var genericTrade = await db.FilprideChartOfAccounts.SingleAsync(a => a.AccountNumber == "201010100");
+            var wrongControl = await db.FilprideGeneralLedgerBooks.SingleAsync(g => g.Reference == journal.JournalVoucherHeaderNo && g.Credit == 1120m);
+            wrongControl.AccountNo = genericTrade.AccountNumber;
+            wrongControl.AccountId = genericTrade.AccountId;
+            wrongControl.AccountTitle = genericTrade.AccountName;
+            await db.SaveChangesAsync();
+            var wrongSelection = Form();
+            await service.PrepareAsync(wrongSelection, default);
+            Check(!wrongSelection.Journals.Any(j => j.Value == journal.JournalVoucherHeaderId.ToString()),
+                "A journal credited to generic AP Trade was offered for an Other Tugs payment.");
+            await RejectAsync(() => service.CreateAsync(form, null, "Payment check", default), "Generic AP Trade was accepted instead of 201020500.");
+            await db.FilprideGeneralLedgerBooks.Where(g => g.Reference == journal.JournalVoucherHeaderNo && g.Credit == 1120m)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(g => g.AccountNo, payableAccount.AccountNumber)
+                    .SetProperty(g => g.AccountId, payableAccount.AccountId).SetProperty(g => g.AccountTitle, payableAccount.AccountName));
             var originalName = journal.Payee;
             journal.Payee = "Wrong owner";
             db.Update(journal);
@@ -218,7 +254,7 @@ namespace Checks.MSAP
                 Check(!await scoped.FilprideTugboatPayments.AnyAsync(p => p.CheckVoucherHeaderId == active), "Company payment leaked into a tugboat workspace.");
                 await RejectAsync(() => Service(scoped, storage).CreateAsync(Form(), null, "Payment check", default), "Company-level provider AP entered a tugboat workspace.");
             }
-            Console.WriteLine($"PASS: AP Other Tugs gross/VAT/EWT, posted liability validation, upload rollback, source locks, duplicate/concurrent reservations, immutable snapshots, post/unpost/void/cancel, named service-cost/input-VAT recognition without duplicate P&L expense, AP reconciliation and workspace isolation. Clone fixture charge={charge.OtherTugChargeId}, draft CV={active}.");
+            Console.WriteLine($"PASS: AP Other Tugs gross/VAT/EWT, posted liability validation, upload rollback, source locks, duplicate/concurrent reservations, immutable snapshots, post/unpost/void/cancel, dedicated 201020500 selection and generic AP rejection, named service-cost/input-VAT recognition without duplicate P&L expense, AP reconciliation and workspace isolation. Clone fixture charge={charge.OtherTugChargeId}, draft CV={active}.");
 
             static FilprideChartOfAccount CostAccount(string name, string number, FilprideChartOfAccount parent)
             {

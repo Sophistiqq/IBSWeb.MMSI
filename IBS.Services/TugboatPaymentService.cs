@@ -19,7 +19,7 @@ namespace IBS.Services
 {
     public class TugboatPaymentService
     {
-        public const string ApAccount = "201010100";
+        public const string ApAccount = "201020500";
         public const string CashAccount = "101010100";
         private readonly ApplicationDbContext _db;
         private readonly IUnitOfWork _work;
@@ -89,7 +89,9 @@ namespace IBS.Services
                 model.Journals = await _db.FilprideJournalVoucherHeaders.AsNoTracking()
                     .Where(j => j.WorkspaceTugboatId == null && !j.AutoReverseNextMonth && j.CVId == null && j.PostedBy != null && j.ApprovedBy != null
                         && j.CanceledBy == null && j.VoidedBy == null && j.Payee == source.Owner.TugboatOwnerName
-                        && j.References == source.Charge.ProviderReference && !reserved.Contains(j.JournalVoucherHeaderId))
+                        && j.References == source.Charge.ProviderReference && !reserved.Contains(j.JournalVoucherHeaderId)
+                        && _db.FilprideGeneralLedgerBooks.Any(g => g.Reference == j.JournalVoucherHeaderNo
+                            && g.AccountNo == ApAccount && g.Credit > g.Debit))
                     .OrderBy(j => j.Date).Select(j => new SelectListItem(j.JournalVoucherHeaderNo, j.JournalVoucherHeaderId.ToString())).ToListAsync(ct);
             }
             await _documentation.PrepareAsync(model.Documentation, model.Type, null, ct);
@@ -148,7 +150,7 @@ namespace IBS.Services
                 || entries.Where(g => g.AccountNo == ApAccount).Sum(g => g.Credit - g.Debit) != gross
                 || entries.Any(g => g.AccountNo != ApAccount && g.Credit != 0))
             {
-                throw new InvalidOperationException("The posted journal must recognize exactly this bill's gross AP liability. Withholding is applied by the payment voucher.");
+                throw new InvalidOperationException($"The posted journal must recognize exactly this bill's gross liability in AP - Trade - Other Tugs ({ApAccount}). Withholding is applied by the payment voucher.");
             }
             return JsonSerializer.Serialize(new { journal.Date, journal.Payee, journal.References, Entries = entries });
         }
