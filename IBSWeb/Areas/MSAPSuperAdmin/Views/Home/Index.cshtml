@@ -1,0 +1,99 @@
+@{
+    ViewData["Title"] = "SuperAdmin Dashboard";
+}
+
+<div class="modern-layout">
+    <main class="modern-container">
+        <div class="mb-4">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="modern-label" style="color: var(--on-surface-variant)">SUPERADMIN</span>
+                <span class="material-symbols-outlined text-xs">chevron_right</span>
+                <span class="modern-label" style="color: var(--on-surface)">Dashboard</span>
+            </div>
+            <h1 class="modern-headline-lg">SuperAdmin Dashboard</h1>
+            <p class="modern-body" style="color: var(--on-surface-variant)">
+                Direct table access with guardrails and audit trail. Changes are logged per field.
+            </p>
+        </div>
+
+        <div class="modern-grid">
+            <div class="modern-col-4">
+                <a asp-action="Index" asp-controller="Data" asp-route-table="CustomerOrderSlip" class="text-decoration-none">
+                    <div class="modern-card modern-card-hover p-4">
+                        <div class="flex items-center gap-3 mb-3">
+                            <span class="material-symbols-outlined text-primary" style="font-size: 2rem;">assignment</span>
+                            <div>
+                                <h3 class="modern-headline-md mb-0">COS records</h3>
+                                <small class="modern-label" style="color: var(--on-surface-variant)">View / Edit records</small>
+                            </div>
+                        </div>
+                        <span class="modern-badge-sm status-closed">Core Workflow</span>
+                    </div>
+                </a>
+            </div>
+
+            <div class="modern-col-4">
+                <a asp-action="Index" asp-controller="Data" asp-route-table="DispatchTicket" class="text-decoration-none">
+                    <div class="modern-card modern-card-hover p-4">
+                        <div class="flex items-center gap-3 mb-3">
+                            <span class="material-symbols-outlined text-primary" style="font-size: 2rem;">local_shipping</span>
+                            <div>
+                                <h3 class="modern-headline-md mb-0">Dispatch Tickets</h3>
+                                <small class="modern-label" style="color: var(--on-surface-variant)">View / Edit records</small>
+                            </div>
+                        </div>
+                        <span class="modern-badge-sm status-closed">Core Workflow</span>
+                    </div>
+                </a>
+            </div>
+
+            <div class="modern-col-4">
+                <a asp-action="Index" asp-controller="Data" asp-route-table="Billing" class="text-decoration-none">
+                    <div class="modern-card modern-card-hover p-4">
+                        <div class="flex items-center gap-3 mb-3">
+                            <span class="material-symbols-outlined text-primary" style="font-size: 2rem;">receipt_long</span>
+                            <div>
+                                <h3 class="modern-headline-md mb-0">Billings</h3>
+                                <small class="modern-label" style="color: var(--on-surface-variant)">View / Edit records</small>
+                            </div>
+                        </div>
+                        <span class="modern-badge-sm status-closed">Core Workflow</span>
+                    </div>
+                </a>
+            </div>
+
+            <div class="modern-col-4">
+                <a asp-action="Index" asp-controller="Data" asp-route-table="Collection" class="text-decoration-none">
+                    <div class="modern-card modern-card-hover p-4">
+                        <div class="flex items-center gap-3 mb-3">
+                            <span class="material-symbols-outlined text-primary" style="font-size: 2rem;">payments</span>
+                            <div>
+                                <h3 class="modern-headline-md mb-0">Collections</h3>
+                                <small class="modern-label" style="color: var(--on-surface-variant)">View / Edit records</small>
+                            </div>
+                        </div>
+                        <span class="modern-badge-sm status-closed">Core Workflow</span>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="modern-card mt-4">
+            <div class="modern-card-header-action">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-error">warning</span>
+                    <h2 class="modern-headline-md mb-0">Red Zone — Proceed with Caution</h2>
+                </div>
+            </div>
+            <div class="modern-card-body">
+                <ul class="mb-0" style="color: var(--on-surface-variant);">
+                    <li>Every change is logged with field-level audit trail</li>
+                    <li>Remarks / reason is required for every edit (min 10 characters)</li>
+                    <li>No hard deletes — only status changes</li>
+                    <li>Immutable fields (CreatedBy, CreatedDate, MsapRecId) are read-only</li>
+                    <li>Consider the downstream impact before changing status or amounts</li>
+                </ul>
+            </div>
+        </div>
+    </main>
+</div>

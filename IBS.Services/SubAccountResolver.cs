@@ -79,7 +79,7 @@ namespace IBS.Services
                     return company;
 
                 case SubAccountType.Tugboat:
-                    var tugboat = await _context.MsapTugboats
+                    var tugboat = await _context.MmsiTugboats
                         .Where(t => t.TugboatId == subAccountId && t.IsCompanyOwned)
                         .Select(t => new SubAccountInfoDto
                         {
@@ -109,7 +109,7 @@ namespace IBS.Services
                     .AnyAsync(b => b.BankAccountId == subAccountId, cancellationToken),
                 SubAccountType.Company => await _context.Companies
                     .AnyAsync(c => c.CompanyId == subAccountId, cancellationToken),
-                SubAccountType.Tugboat => await _context.MsapTugboats
+                SubAccountType.Tugboat => await _context.MmsiTugboats
                     .AnyAsync(t => t.TugboatId == subAccountId && t.IsCompanyOwned, cancellationToken),
                 _ => false
             };

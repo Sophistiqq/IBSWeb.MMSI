@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>ModernSelect security check</title>
+<body>
+<pre id="result">RUNNING</pre>
+<script src="../../IBSWeb/wwwroot/msap/lib/jquery/dist/jquery.js"></script>
+<script src="../../IBSWeb/wwwroot/msap/js/modern-select.js"></script>
+<script>
+    try {
+        const check = (passed, message) => {
+            if (!passed) throw new Error(message);
+        };
+        const payload = '<img src=x onerror="window.injected=true">';
+        const value = 'value" data-injected="true';
+        const testId = 'test" onclick="window.injected=true';
+        const $select = $('<select></select>')
+            .attr('data-placeholder', payload)
+            .attr('data-testid', testId)
+            .append($('<option></option>').val('').text(''))
+            .append($('<option></option>').val(value).text(payload))
+            .appendTo('body');
+        ModernSelect.create($select);
+        const $trigger = $select.data('modern-select-trigger');
+        const $options = $select.data('modern-select-options');
+        check($trigger.find('.selected-text').text() === payload, 'Placeholder changed.');
+        check($trigger.attr('data-testid') === testId + '-trigger', 'Test ID changed.');
+        check(!$trigger.attr('onclick'), 'Test ID created an event handler.');
+        check($options.children().length === 1, 'Unexpected options.');
+        check($options.children().first().text() === payload, 'Option text changed.');
+        check($options.children().first().attr('data-value') === value, 'Option value changed.');
+        check(!$options.find('[data-injected]').length, 'Value created an attribute.');
+        $select.val(value).trigger('change');
+        check($trigger.find('.selected-text').text() === payload, 'Selection failed.');
+        check($options.find('.selected').length === 1, 'Selected class missing.');
+        $select.append($('<option></option>').val('2').text('Updated & <label>'));
+        window.refreshModernSelect($select);
+        check($options.children().length === 2, 'Refresh failed.');
+        check(!document.querySelector('img') && !window.injected, 'HTML injection occurred.');
+        document.getElementById('result').textContent = 'PASS: labels, attributes, selection and refresh preserve untrusted text.';
+    } catch (error) {
+        document.getElementById('result').textContent = 'FAIL: ' + error.message;
+    }
+</script>
+</body>
+</html>

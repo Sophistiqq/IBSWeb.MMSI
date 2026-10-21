@@ -12,10 +12,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace IBS.DataAccess.Data
 {
-    public class ApplicationDbContext: IdentityDbContext<ApplicationUser>
+    public partial class ApplicationDbContext: IdentityDbContext<ApplicationUser>
     {
-        public ApplicationDbContext(DbContextOptions options) : base(options)
+        public ApplicationDbContext(DbContextOptions options, IBS.Utility.TugboatWorkspace? workspace = null) : base(options)
         {
+            _workspace = workspace ?? new IBS.Utility.TugboatWorkspace();
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -90,9 +91,11 @@ namespace IBS.DataAccess.Data
         public DbSet<FilprideChartOfAccount> FilprideChartOfAccounts { get; set; }
         public DbSet<Product> Products { get; set; }
 
-        public DbSet<Tugboat> MsapTugboats { get; set; }
+        public DbSet<Tugboat> MmsiTugboats { get; set; }
 
-        public DbSet<TugboatOwner> MsapTugboatOwners { get; set; }
+        public DbSet<TugboatOwner> MmsiTugboatOwners { get; set; }
+
+        public DbSet<TugMaster> MmsiTugMasters { get; set; }
 
         #endregion --Master File Entities
 
@@ -110,6 +113,9 @@ namespace IBS.DataAccess.Data
         #endregion
 
         #region Accounts Payable
+
+        public DbSet<FilprideTugboatPayment> FilprideTugboatPayments { get; set; }
+        public DbSet<FilprideTugboatPaymentAllocation> FilprideTugboatPaymentAllocations { get; set; }
 
         public DbSet<FilprideCheckVoucherHeader> FilprideCheckVoucherHeaders { get; set; }
         public DbSet<FilprideCheckVoucherDetail> FilprideCheckVoucherDetails { get; set; }
@@ -141,6 +147,7 @@ namespace IBS.DataAccess.Data
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+            ConfigureWorkspaces(builder);
 
             #region-- Master File
 
@@ -170,7 +177,7 @@ namespace IBS.DataAccess.Data
             {
                 coa.HasIndex(coa => coa.AccountNumber).IsUnique();
                 coa.HasIndex(coa => coa.AccountName);
-                coa.HasQueryFilter(coa => !coa.IsHidden);
+                coa.HasQueryFilter("MasterVisibility", coa => !coa.IsHidden);
             });
             #endregion
 
@@ -328,7 +335,7 @@ namespace IBS.DataAccess.Data
 
             builder.Entity<FilprideMonthlyNibit>(n =>
             {
-                n.HasQueryFilter(x => x.IsValid);
+                n.HasQueryFilter("BalanceValidity", x => x.IsValid);
                 n.HasIndex(n => n.Month);
                 n.HasIndex(n => n.Year);
             });
@@ -360,7 +367,7 @@ namespace IBS.DataAccess.Data
 
             builder.Entity<FilprideGLPeriodBalance>(b =>
             {
-                b.HasQueryFilter(x => x.IsValid);
+                b.HasQueryFilter("BalanceValidity", x => x.IsValid);
 
                 b.HasOne(a => a.Account)
                     .WithMany(c => c.Balances)
@@ -370,7 +377,7 @@ namespace IBS.DataAccess.Data
 
             builder.Entity<FilprideGLSubAccountBalance>(b =>
             {
-                b.HasQueryFilter(x => x.IsValid);
+                b.HasQueryFilter("BalanceValidity", x => x.IsValid);
 
                 b.HasOne(a => a.Account)
                     .WithMany(c => c.SubAccountBalances)
@@ -593,6 +600,25 @@ namespace IBS.DataAccess.Data
             });
 
             #endregion -- Receving Report --
+
+            builder.Entity<FilprideTugboatPayment>(payment =>
+            {
+                payment.HasOne(p => p.Voucher).WithMany(v => v.TugboatPayments)
+                    .HasForeignKey(p => p.CheckVoucherHeaderId).OnDelete(DeleteBehavior.Restrict);
+                payment.HasOne(p => p.LiabilityJournalVoucher).WithMany()
+                    .HasForeignKey(p => p.LiabilityJournalVoucherId).OnDelete(DeleteBehavior.Restrict);
+                payment.HasIndex(p => p.OtherTugChargeId);
+                payment.HasIndex(p => p.LiabilityJournalVoucherId).IsUnique().HasFilter("released_at IS NULL");
+                payment.ToTable("filpride_tugboat_payments", table => table.HasCheckConstraint("ck_tugboat_payment_amounts",
+                    "gross_amount > 0 AND withholding_amount >= 0 AND withholding_amount < gross_amount"));
+            });
+
+            builder.Entity<FilprideTugboatPaymentAllocation>(allocation =>
+            {
+                allocation.HasOne(a => a.Payment).WithMany(p => p.Allocations)
+                    .HasForeignKey(a => a.TugboatPaymentId).OnDelete(DeleteBehavior.Restrict);
+                allocation.HasIndex(a => a.OtherTugChargeLineId).IsUnique().HasFilter("released_at IS NULL");
+            });
 
             #region -- Check Voucher Header --
 

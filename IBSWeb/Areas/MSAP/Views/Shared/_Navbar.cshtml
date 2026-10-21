@@ -1,0 +1,449 @@
+@* _Navbar.cshtml
+   Mega-menu navbar partial — sole navbar for the app.
+*@
+@using IBS.Models.MSAP.Enums
+@using IBS.Services.MSAP.AccessControl
+@using Microsoft.AspNetCore.Identity
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject IAccessControlService AccessControl
+@inject IBS.Services.MSAP.IRoleService MsapRoleService
+
+@{
+    string? userName = (await UserManager.GetUserAsync(User))?.Name;
+    var userId     = UserManager.GetUserId(User);
+    string? msapRole = userId is not null ? await MsapRoleService.GetUserRoleAsync(userId) : null;
+    var company    = User.Claims.FirstOrDefault(c => c.Type == "Company")?.Value ?? string.Empty;
+    var stationCode = User.Claims.FirstOrDefault(c => c.Type == "StationCode")?.Value ?? string.Empty;
+
+    async Task<bool> ModernHasAnyAccess(params ProcedureEnum[] procedures)
+    {
+        if (string.IsNullOrEmpty(userId)) return false;
+        return await AccessControl.HasAnyAccessAsync(userId, procedures);
+    }
+
+    bool canViewOperations = await ModernHasAnyAccess(ProcedureEnum.ViewOperations);
+    bool canViewBillings = await ModernHasAnyAccess(ProcedureEnum.ViewBillings);
+    bool canViewCollections = await ModernHasAnyAccess(ProcedureEnum.ViewCollections);
+    bool canViewReports = await ModernHasAnyAccess(ProcedureEnum.ViewMaritimeReport);
+    bool showOperations = canViewOperations || canViewBillings;
+    bool showFinance = canViewCollections || canViewReports;
+
+    bool canManageReferences = await ModernHasAnyAccess(ProcedureEnum.ManageMaritimeMasterFile);
+    bool canAccessRates = await ModernHasAnyAccess(ProcedureEnum.ViewRates, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload);
+
+}
+
+<!-- Always-on modern navbar -->
+<div id="mnav-overlay"></div>
+<header id="modern-navbar" role="banner" aria-label="Modern navigation">
+
+    <!-- ── Hamburger (mobile) ── -->
+    <button class="mnav-hamburger" id="mnav-hamburger" aria-label="Toggle navigation menu">
+        <span class="material-symbols-outlined">menu</span>
+    </button>
+
+    <!-- ── Brand ── -->
+    <a class="mnav-brand" asp-area="MSAP" asp-controller="Home" asp-action="Index">
+        <img src="~/msap/svg/ibs-logo-white.svg" alt="IBS" />
+    </a>
+
+    @if (SignInManager.IsSignedIn(User))
+    {
+        <!-- ── Mobile drawer overlay ── -->
+        <div class="mnav-drawer-overlay" id="mnav-drawer-overlay"></div>
+
+        <!-- ── Mobile drawer ── -->
+        <nav class="mnav-drawer" id="mnav-drawer" aria-label="Mobile navigation">
+            <div class="mnav-list"></div>
+        </nav>
+
+        <!-- ── Desktop navigation ── -->
+        <nav class="mnav-nav-area" aria-label="Main menu">
+            <ul class="mnav-list" role="menubar">
+                <li class="mnav-item" role="none">
+                    <a class="mnav-trigger" asp-area="User" asp-controller="Home" asp-action="Index" role="menuitem">IBSWeb</a>
+                </li>
+
+                <!-- Home -->
+                <li class="mnav-item" role="none">
+                    <a class="mnav-trigger"
+                       asp-area="MSAP" asp-controller="Home" asp-action="Index"
+                       role="menuitem">
+                        Home
+                    </a>
+                </li>
+
+                @if (showOperations || showFinance)
+                {
+                    <!-- MSAP mega menu -->
+                    <li class="mnav-item" data-mega role="none">
+                        <button class="mnav-trigger" role="menuitem" aria-haspopup="true" aria-expanded="false">
+                            MSAP
+                            <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+                        </button>
+                        <div class="mnav-mega" style="--mnav-cols:@(showOperations && showFinance ? 2 : 1); min-width:@(showOperations && showFinance ? "640px" : "320px");" role="menu">
+                            <div class="mnav-mega-grid">
+                                <!-- Col 1 -->
+                                @if (showOperations)
+                                {
+                                    <div>
+                                        <div class="mnav-section-label">Operations</div>
+                                        <div class="mnav-link-list">
+                                            @if (canViewOperations)
+                                            {
+                                                <a class="mnav-mega-link"
+                                                   asp-area="MSAP" asp-controller="VesselSchedule" asp-action="Index"
+                                                   role="menuitem">
+                                                    <span class="material-symbols-outlined">calendar_month</span>
+                                                    <div>
+                                                        <div class="mnav-link-title">Vessel Schedule</div>
+                                                        <div class="mnav-link-sub">Calendar &amp; daily planning</div>
+                                                    </div>
+                                                </a>
+                                            }
+                                            @if (canViewOperations)
+                                            {
+                                                <a class="mnav-mega-link"
+                                                   asp-area="MSAP" asp-controller="CustomerOrderSlip" asp-action="Index"
+                                                   role="menuitem">
+                                                    <span class="material-symbols-outlined">assignment</span>
+                                                    <div>
+                                                        <div class="mnav-link-title">COS records</div>
+                                                        <div class="mnav-link-sub">Review &amp; track service records</div>
+                                                    </div>
+                                                </a>
+                                            }
+                                            @if (canViewOperations)
+                                            {
+                                                <a class="mnav-mega-link"
+                                                   asp-area="MSAP" asp-controller="DispatchTicket" asp-action="Index"
+                                                   role="menuitem">
+                                                    <span class="material-symbols-outlined">confirmation_number</span>
+                                                    <div>
+                                                        <div class="mnav-link-title">Dispatch Tickets</div>
+                                                        <div class="mnav-link-sub">Actual service records</div>
+                                                    </div>
+                                                </a>
+                                            }
+                                            @if (canViewBillings)
+                                            {
+                                                <a class="mnav-mega-link"
+                                                   asp-area="MSAP" asp-controller="Billing" asp-action="Index"
+                                                   role="menuitem">
+                                                    <span class="material-symbols-outlined">receipt_long</span>
+                                                    <div>
+                                                        <div class="mnav-link-title">Billing</div>
+                                                        <div class="mnav-link-sub">Dispatch ticket invoices</div>
+                                                    </div>
+                                                </a>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                                <!-- Col 2 -->
+                                @if (showFinance)
+                                {
+                                    <div>
+                                        <div class="mnav-section-label">Finance &amp; Reports</div>
+                                        <div class="mnav-link-list">
+                                            @if (canViewCollections)
+                                            {
+                                                <a class="mnav-mega-link"
+                                                   asp-area="MSAP" asp-controller="Collection" asp-action="Index"
+                                                   role="menuitem">
+                                                    <span class="material-symbols-outlined">payments</span>
+                                                    <div>
+                                                        <div class="mnav-link-title">Collection</div>
+                                                        <div class="mnav-link-sub">Billing payments</div>
+                                                    </div>
+                                                </a>
+                                            }
+                                            @if (canViewReports)
+                                            {
+                                                <a class="mnav-mega-link"
+                                                   asp-area="MSAP" asp-controller="MaritimeReport" asp-action="Index"
+                                                   role="menuitem">
+                                                    <span class="material-symbols-outlined">analytics</span>
+                                                    <div>
+                                                        <div class="mnav-link-title">MMSI Reports</div>
+                                                        <div class="mnav-link-sub">Analytics &amp; exports</div>
+                                                    </div>
+                                                </a>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </li>
+                }
+
+                @if (msapRole is MsapRoles.Admin or MsapRoles.SuperAdmin)
+                {
+                    <!-- Master File mega menu -->
+                    <li class="mnav-item" data-mega role="none">
+                        <button class="mnav-trigger" role="menuitem" aria-haspopup="true" aria-expanded="false">
+                            Master File
+                            <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+                        </button>
+                        <div class="mnav-mega" style="--mnav-cols:2; min-width:480px;" role="menu">
+                            <div class="mnav-mega-grid">
+                                <div>
+                                    <div class="mnav-section-label">Roles &amp; Access</div>
+                                    <div class="mnav-link-list">
+                                        <a class="mnav-mega-link"
+                                           asp-area="MSAPAdmin" asp-controller="AppRole" asp-action="Index"
+                                           role="menuitem">
+                                            <span class="material-symbols-outlined">security</span>
+                                            <div>
+                                                <div class="mnav-link-title">Role</div>
+                                                <div class="mnav-link-sub">Define permissions</div>
+                                            </div>
+                                        </a>
+                                        <a class="mnav-mega-link"
+                                           asp-area="MSAP" asp-controller="UserAccess" asp-action="Index"
+                                           role="menuitem">
+                                            <span class="material-symbols-outlined">key</span>
+                                            <div>
+                                                <div class="mnav-link-title">User Access</div>
+                                                <div class="mnav-link-sub">Module restrictions</div>
+                                            </div>
+                                        </a>
+                                        <a class="mnav-mega-link"
+                                           asp-area="MSAP" asp-controller="Employee" asp-action="Index"
+                                           role="menuitem">
+                                            <span class="material-symbols-outlined">badge</span>
+                                            <div>
+                                                <div class="mnav-link-title">Employee</div>
+                                                <div class="mnav-link-sub">Staff records</div>
+                                            </div>
+                                        </a>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="mnav-section-label">Accounting</div>
+                                    <div class="mnav-link-list">
+                                        <a class="mnav-mega-link"
+                                           asp-area="MSAP" asp-controller="PaymentTerms" asp-action="Index"
+                                           role="menuitem">
+                                            <span class="material-symbols-outlined">schedule</span>
+                                            <div>
+                                                <div class="mnav-link-title">Payment Terms</div>
+                                                <div class="mnav-link-sub">Terms &amp; conditions</div>
+                                            </div>
+                                        </a>
+                                        <a class="mnav-mega-link"
+                                           asp-area="MSAP" asp-controller="BankAccount" asp-action="Index"
+                                           role="menuitem">
+                                            <span class="material-symbols-outlined">account_balance_wallet</span>
+                                            <div>
+                                                <div class="mnav-link-title">Bank Account</div>
+                                                <div class="mnav-link-sub">Bank &amp; payment profiles</div>
+                                            </div>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                }
+
+                @if (canManageReferences || canAccessRates)
+                {
+                    <!-- MSAP References mega menu -->
+                    <li class="mnav-item" data-mega role="none">
+                        <button class="mnav-trigger" role="menuitem" aria-haspopup="true" aria-expanded="false">
+                            MSAP References
+                            <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+                        </button>
+                        <div class="mnav-mega" style="--mnav-cols:@(canManageReferences ? 2 : 1); min-width:@(canManageReferences ? "560px" : "320px");" role="menu">
+                            <div class="mnav-mega-grid">
+                                <div>
+                                    <div class="mnav-section-label">Maritime &amp; MSAP</div>
+                                    <div class="mnav-link-list">
+                                        @if (msapRole is IBS.Utility.MSAP.Constants.MsapRoles.Admin or IBS.Utility.MSAP.Constants.MsapRoles.SuperAdmin)
+                                        {
+                                            <a class="mnav-mega-link" asp-area="MSAP" asp-controller="MsapImport" asp-action="Index" role="menuitem">
+                                                <span class="material-symbols-outlined">upload_file</span>
+                                                <div><div class="mnav-link-title">Master File Import</div><div class="mnav-link-sub">Validate and import reference CSVs</div></div>
+                                            </a>
+                                        }
+                                        @if (canManageReferences)
+                                        {
+                                            <a class="mnav-mega-link"
+                                               asp-area="MSAP" asp-controller="MaritimeService" asp-action="Index"
+                                               role="menuitem">
+                                                <span class="material-symbols-outlined">anchor</span>
+                                                <div><div class="mnav-link-title">Activities / Services</div></div>
+                                            </a>
+                                        }
+                                        @if (canManageReferences)
+                                        {
+                                            <a class="mnav-mega-link"
+                                               asp-area="MSAP" asp-controller="Port" asp-action="Index"
+                                               role="menuitem">
+                                                <span class="material-symbols-outlined">location_city</span>
+                                                <div><div class="mnav-link-title">Ports</div></div>
+                                            </a>
+                                        }
+                                        @if (canManageReferences)
+                                        {
+                                            <a class="mnav-mega-link"
+                                               asp-area="MSAP" asp-controller="Principal" asp-action="Index"
+                                               role="menuitem">
+                                                <span class="material-symbols-outlined">corporate_fare</span>
+                                                <div><div class="mnav-link-title">Principals</div></div>
+                                            </a>
+                                        }
+                                        @if (canAccessRates)
+                                        {
+                                            <a class="mnav-mega-link"
+                                               asp-area="MSAP" asp-controller="RateUpload" asp-action="Editor"
+                                               role="menuitem">
+                                                <span class="material-symbols-outlined">price_change</span>
+                                                <div><div class="mnav-link-title">Rates</div></div>
+                                            </a>
+                                        }
+                                        @if (canManageReferences)
+                                        {
+                                            <a class="mnav-mega-link"
+                                               asp-area="MSAP" asp-controller="Terminal" asp-action="Index"
+                                               role="menuitem">
+                                                <span class="material-symbols-outlined">dock</span>
+                                                <div><div class="mnav-link-title">Terminals</div></div>
+                                            </a>
+                                        }
+                                        @if (canManageReferences)
+                                        {
+                                            <a class="mnav-mega-link"
+                                               asp-area="MSAP" asp-controller="TugMaster" asp-action="Index"
+                                               role="menuitem">
+                                                <span class="material-symbols-outlined">engineering</span>
+                                                <div><div class="mnav-link-title">Tug Masters</div></div>
+                                            </a>
+                                        }
+                                        @if (canManageReferences)
+                                        {
+                                            <a class="mnav-mega-link"
+                                               asp-area="MSAP" asp-controller="TugboatOwner" asp-action="Index"
+                                               role="menuitem">
+                                                <span class="material-symbols-outlined">business</span>
+                                                <div><div class="mnav-link-title">Tugboat Company / Owner</div></div>
+                                            </a>
+                                        }
+                                        @if (canManageReferences)
+                                        {
+                                            <a class="mnav-mega-link"
+                                               asp-area="MSAP" asp-controller="Tugboat" asp-action="Index"
+                                               role="menuitem">
+                                                <span class="material-symbols-outlined">directions_boat</span>
+                                                <div><div class="mnav-link-title">Tugboats</div></div>
+                                            </a>
+                                        }
+                                        @if (canManageReferences)
+                                        {
+                                            <a class="mnav-mega-link"
+                                               asp-area="MSAP" asp-controller="Vessel" asp-action="Index"
+                                               role="menuitem">
+                                                <span class="material-symbols-outlined">sailing</span>
+                                                <div><div class="mnav-link-title">Vessels</div></div>
+                                            </a>
+                                        }
+                                    </div>
+                                </div>
+                                @if (canManageReferences)
+                                {
+                                    <div>
+                                        <div class="mnav-section-label">Sales &amp; MSAP</div>
+                                        <div class="mnav-link-list">
+                                            @if (canManageReferences)
+                                            {
+                                                <a class="mnav-mega-link"
+                                                   asp-area="MSAP" asp-controller="Customer" asp-action="Index"
+                                                   role="menuitem">
+                                                    <span class="material-symbols-outlined">person</span>
+                                                    <div><div class="mnav-link-title">Customer</div></div>
+                                                </a>
+                                            }
+                                            @if (canManageReferences)
+                                            {
+                                                <a class="mnav-mega-link"
+                                                   asp-area="MSAP" asp-controller="Supplier" asp-action="Index"
+                                                   role="menuitem">
+                                                    <span class="material-symbols-outlined">local_shipping</span>
+                                                    <div><div class="mnav-link-title">Supplier</div></div>
+                                                </a>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </li>
+                }
+
+            </ul>
+        </nav>
+
+        <!-- ── Right zone ── -->
+        <div class="mnav-right">
+            <!-- Search -->
+            <div class="mnav-search-wrap">
+                <span class="material-symbols-outlined mnav-search-icon" aria-hidden="true">search</span>
+                <input class="mnav-search" type="search" placeholder="Press / to search..." aria-label="Search IBS" />
+            </div>
+
+            <!-- User dropdown -->
+            <div class="mnav-user-dropdown">
+                <button class="mnav-user-trigger" id="mnav-user-trigger" type="button" aria-haspopup="true" aria-expanded="false" title="User menu">
+                    <span class="material-symbols-outlined mnav-avatar-icon">account_circle</span>
+                    <span class="mnav-user-name">@(userName ?? "User")</span>
+                    <span class="material-symbols-outlined mnav-chevron">arrow_drop_down</span>
+                </button>
+                <div class="mnav-dropdown-menu" id="mnav-dropdown-menu">
+                    <div class="mnav-dropdown-header">
+                        <span class="material-symbols-outlined" style="font-size:40px;">account_circle</span>
+                        <div>
+                            <div class="mnav-dropdown-name">@(userName ?? "User")</div>
+                            @if (!string.IsNullOrEmpty(company))
+                            {
+                                <div class="mnav-dropdown-role">@company.ToUpper() @stationCode?.ToUpper()</div>
+                            }
+                        </div>
+                    </div>
+                    <div class="mnav-dropdown-divider"></div>
+
+                    <button class="mnav-dropdown-item" id="mnav-theme-toggle" type="button">
+                        <span class="material-symbols-outlined" id="mnav-theme-icon">dark_mode</span>
+                        <span>Dark mode</span>
+                        <span class="mnav-dropdown-check" id="mnav-theme-check" style="display:none">check</span>
+                    </button>
+
+                    <button class="mnav-dropdown-item" id="mnav-tour-btn" type="button">
+                        <span class="material-symbols-outlined">school</span>
+                        <span>Guided Tour</span>
+                    </button>
+
+                    <a class="mnav-dropdown-item" asp-area="MSAP" asp-controller="Docs" asp-action="Index">
+                        <span class="material-symbols-outlined">help</span>
+                        <span>User Manual</span>
+                    </a>
+
+                    <div class="mnav-dropdown-divider"></div>
+
+                    <form id="mnav-logout-form"
+                          asp-area="Identity"
+                          asp-page="/Account/Logout"
+                          asp-route-returnUrl="@Url.Action("Index", "Home", new { area = "MSAP" })"
+                          style="margin:0">
+                        <button type="submit" class="mnav-dropdown-item mnav-dropdown-danger">
+                            <span class="material-symbols-outlined">logout</span>
+                            <span>Sign out</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    }
+</header>

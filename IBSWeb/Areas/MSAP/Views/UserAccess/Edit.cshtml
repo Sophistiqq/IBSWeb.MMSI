@@ -1,0 +1,17 @@
+@model UserAccess
+@{
+    ViewData["IsFullWidth"] = true;
+    ViewData["Title"] = "Edit user access";
+}
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page ui-stack">
+        <header class="ui-page-header">
+            <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>Master files</li><li><a asp-action="Index">User access</a></li><li aria-current="page">Edit</li></ol></nav>
+            <h1 class="ui-page-title">@ViewData["Title"]</h1>
+            <a asp-action="Index" class="ui-button ui-page-action" data-ui-back>Back</a>
+        </header>
+        <section class="ui-panel">
+            <partial name="_Form" model="Model" />
+        </section>
+    </main>
+</div>

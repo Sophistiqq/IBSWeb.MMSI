@@ -1,0 +1,11 @@
+@model IEnumerable<JobProgressViewModel>
+<div class="financial-job-progress no-print">
+    @foreach (var progress in Model)
+    {
+        @if (progress.CustomerOrderSlipId.HasValue)
+        {
+            <a asp-area="MSAP" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@progress.CustomerOrderSlipId" class="modern-label">COS @progress.CustomerOrderSlipNumber</a>
+        }
+        <partial name="_JobProgress" model="progress" />
+    }
+</div>

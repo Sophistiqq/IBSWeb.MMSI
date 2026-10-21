@@ -1,0 +1,155 @@
+@model IBS.Models.MSAP.Billing
+
+@{
+    ViewData["Title"] = "Billing - Preview";
+    ViewData["IsFullWidth"] = true;
+
+    bool isDraft = ViewData["IsDraft"] is true;
+    bool canPrint = !isDraft && ViewData["CanPrint"] is true;
+    var progressItems = (ViewBag.JobProgressItems as IEnumerable<JobProgressViewModel>)?.ToList() ?? [];
+
+}
+
+@if (!canPrint)
+{
+    <style media="print">
+        body { display: none !important; }
+    </style>
+}
+
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/billing-preview.css" asp-append-version="true" />
+
+<style>
+    .billing-statement {
+        background-color: white;
+        color: black;
+        padding: 1.25rem;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .billing-statement b { font-weight: 700; }
+
+    .statement-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .statement-table th, .statement-table td {
+        padding: 2px 6px;
+    }
+
+    .border-bottom-dark { border-bottom: 1px solid black; }
+    .border-top-dark { border-top: 1px solid black; }
+    .border-dark { border: 1px solid black; }
+
+        @@media print {
+            @@page {
+                margin: 0 0.3in;
+            }
+            .modern-layout { background: white !important; }
+            .modern-container { padding: 0 !important; margin: 0 !important; gap: 0 !important; }
+            .flex-stack, .buttons-row { display: none !important; }
+            .modern-card { border: none !important; box-shadow: none !important; border-radius: 0 !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+            .billing-statement { padding: 0 !important; margin: 0 !important; }
+            .billing-statement * { margin-top: 0; }
+            body { margin: 0; padding: 0 !important; }
+            .no-print { display: none !important; }
+            body.mnav-enabled { padding-top: 0.3in !important; }
+
+        }
+        @@media print {
+            .billing-statement-page + .billing-statement-page {
+                break-before: page;
+                page-break-before: always;
+            }
+        }
+        .ticket-image-page {
+            border-top: 1px dashed var(--bs-border-color, #ccc);
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+        }
+        @@media print {
+            .ticket-image-page:not(.no-print) {
+                page-break-before: always;
+                break-before: page;
+                margin-top: 0.5in !important;
+                border-top: none;
+            }
+        }
+
+</style>
+
+<div class="modern-layout billing-preview">
+    <div class="billing-preview-layout @(progressItems.Count == 0 ? "billing-preview-layout--standalone" : "")">
+        @if (progressItems.Count > 0)
+        {
+            <div class="billing-preview-progress app-ui ui-stack no-print">
+                @foreach (var progress in progressItems)
+                {
+                    <partial name="_WorkflowProgress" model="progress" />
+                }
+            </div>
+        }
+        <main class="modern-container billing-preview-content">
+            <!-- Header Section (No Print) -->
+            <div class="flex-stack no-print">
+                <div>
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li><a asp-action="Index">Billing</a></li><li>@Model.MsapBillingNumber</li><li aria-current="page">Preview</li></ol></nav>
+                    <h1 class="modern-headline-lg" data-page-header>@(isDraft ? "Draft statement preview · Not saved" : "Billing Statement Preview")</h1>
+                </div>
+                <div class="billing-preview-navigation app-ui">
+                    <button type="button" id="closePreview" class="modern-btn-secondary">Close</button>
+                </div>
+            </div>
+
+            @if (canPrint)
+            {
+                <section class="billing-preview-toolbar app-ui no-print" aria-label="Statement print controls">
+                    <label class="billing-preview-option" for="combineMatchingBafRates">
+                        <input type="checkbox" id="combineMatchingBafRates" checked="@(ViewData["CombineMatchingBafRates"] is true)" aria-describedby="bafGroupingHint" />
+                        <span><span class="ui-label">Combine matching BAF rates</span><span id="bafGroupingHint" class="ui-caption ui-muted">Different rates remain separate.</span></span>
+                    </label>
+                    <div class="billing-preview-print-actions">
+                        <button type="button" data-print-with-tickets="false" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">print</span> Print statement</button>
+                        <button type="button" data-print-with-tickets="true" class="modern-btn-secondary">Print with tickets</button>
+                        <div class="billing-preview-alternate-print">
+                            <a asp-action="Print" asp-route-id="@(ViewData["ReviewBillingId"] ?? Model.MsapBillingId)" class="modern-btn-secondary">Dot matrix</a>
+                        </div>
+                    </div>
+                </section>
+            }
+
+            @foreach (var statement in (ViewData["Statements"] as IReadOnlyList<Billing> ?? new[] { Model }))
+            {
+                <div class="billing-statement-page">
+                    <partial name="_Statement" model="statement" />
+                </div>
+            }
+
+            <partial name="_TicketImages" model="Model" />
+
+        </main>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            const includeImages = @((ViewData["IncludeTicketImages"] is true).ToString().ToLowerInvariant());
+            const combineBaf = @((ViewData["CombineMatchingBafRates"] is true).ToString().ToLowerInvariant());
+            $('.ticket-image-page').toggleClass('no-print', !includeImages);
+            $('.baf-row, .baf-header').toggle(!combineBaf);
+            $('.combined-baf-row').toggle(combineBaf);
+            $('#combineMatchingBafRates').on('change', function () {
+                $('.baf-row, .baf-header').toggle(!this.checked);
+                $('.combined-baf-row').toggle(this.checked);
+            });
+            $('[data-print-with-tickets]').on('click', function () {
+                $('.ticket-image-page').toggleClass('no-print', this.dataset.printWithTickets !== 'true');
+                window.print();
+            });
+            $('#closePreview').on('click', function () { window.close(); });
+        });
+    </script>
+}

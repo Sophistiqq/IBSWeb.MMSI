@@ -1,0 +1,18 @@
+@inject IBS.Services.TugboatWorkspaceService WorkspaceService
+@inject TugboatWorkspace Workspace
+@{
+    var tugboats = await WorkspaceService.GetOptionsAsync(Context.RequestAborted);
+}
+<form asp-area="User" asp-controller="TugboatWorkspace" asp-action="Select" method="post" class="mnav-workspace">
+    <label for="tugboatWorkspace" class="visually-hidden">Accounting workspace</label>
+    <select id="tugboatWorkspace" name="tugboatId" aria-label="Accounting workspace">
+        <option value="" selected="@(!Workspace.TugboatId.HasValue)">MMSI / All tugboats</option>
+        @foreach (var tugboat in tugboats)
+        {
+            <option value="@tugboat.Value" selected="@(Workspace.TugboatId?.ToString(System.Globalization.CultureInfo.InvariantCulture) == tugboat.Value)">@tugboat.Text</option>
+        }
+    </select>
+    <button type="submit" class="mnav-icon-btn" aria-label="Switch accounting workspace" title="Switch accounting workspace">
+        <span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>
+    </button>
+</form>

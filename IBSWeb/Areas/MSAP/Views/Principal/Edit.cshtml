@@ -1,0 +1,145 @@
+@model IBS.Models.MSAP.ViewModels.PrincipalViewModel
+
+@{
+    ViewData["Title"] = "Edit Principal";
+    ViewData["IsFullWidth"] = true;
+}
+
+<div class="modern-layout app-ui">
+    <form asp-action="Edit" method="post" id="mainForm">
+        <input type="hidden" asp-for="PrincipalId" />
+        <main class="modern-container ui-page">
+            <!-- Header Section -->
+            <div class="flex-stack ui-page-toolbar">
+                <div>
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li><a asp-action="Index">Principals</a></li><li aria-current="page">Edit Principal</li></ol></nav>
+                    <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
+                </div>
+                <div class="flex gap-2 ui-actions">
+                    <button type="submit" class="modern-btn-primary">
+                        <span class="material-symbols-outlined">save</span> Save Changes
+                    </button>
+                    <a asp-action="Index" class="modern-btn-secondary">
+                        <span class="material-symbols-outlined">cancel</span> Cancel
+                    </a>
+                </div>
+            </div>
+
+            <div class="modern-grid">
+                <!-- Left Column: Primary Info -->
+                <section class="modern-col-8">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
+                            <span class="material-symbols-outlined">edit</span>
+                            <h2 class="modern-headline-md ui-section-title">Primary Information</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
+
+                            <div class="modern-grid">
+                                <div class="modern-col-8">
+                                    <label asp-for="PrincipalName" class="modern-label ui-label">Principal Name <span class="text-error">*</span></label>
+                                    <input asp-for="PrincipalName" class="form-control ui-input" placeholder="Enter full name" />
+                                    <span asp-validation-for="PrincipalName" class="text-error text-xs"></span>
+                                </div>
+                                <div class="modern-col-4">
+                                    <label asp-for="PrincipalNumber" class="modern-label ui-label">Principal # <span class="text-error">*</span></label>
+                                    <input asp-for="PrincipalNumber" class="form-control ui-input" placeholder="4-digit code" maxlength="4" />
+                                    <span asp-validation-for="PrincipalNumber" class="text-error text-xs"></span>
+                                </div>
+                            </div>
+
+                            <div class="mt-4">
+                                <label asp-for="CustomerId" class="modern-label ui-label">Linked Customer <span class="text-error">*</span></label>
+                                <select asp-for="CustomerId" asp-items="@Model.CustomerSelectList" class="js-modern-select" data-placeholder="-- Select Customer --">
+                                    <option value="">-- Select Customer --</option>
+                                </select>
+                                <span asp-validation-for="CustomerId" class="text-error text-xs"></span>
+                            </div>
+
+                            <div class="mt-4">
+                                <label asp-for="Address1" class="modern-label ui-label">Address <span class="text-error">*</span></label>
+                                <textarea asp-for="Address1" class="form-control ui-input" style="border: 1px solid var(--outline-variant); border-radius: var(--radius-xl); min-height: 80px;" placeholder="Full business address"></textarea>
+                                <span asp-validation-for="Address1" class="text-error text-xs"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modern-card mt-4 ui-card">
+                        <div class="modern-card-header-info ui-card-header" style="background-color: var(--surface-container-low); color: var(--on-surface);">
+                            <span class="material-symbols-outlined">contact_phone</span>
+                            <h2 class="modern-headline-md ui-section-title">Contact Details</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <div class="modern-grid">
+                                <div class="modern-col-6">
+                                    <label asp-for="Mobile1" class="modern-label ui-label">Mobile 1</label>
+                                    <input asp-for="Mobile1" class="form-control ui-input" />
+                                    <span asp-validation-for="Mobile1" class="text-error text-xs"></span>
+                                </div>
+                                <div class="modern-col-6">
+                                    <label asp-for="Mobile2" class="modern-label ui-label">Mobile 2</label>
+                                    <input asp-for="Mobile2" class="form-control ui-input" />
+                                    <span asp-validation-for="Mobile2" class="text-error text-xs"></span>
+                                </div>
+                            </div>
+                            <div class="modern-grid mt-3">
+                                <div class="modern-col-6">
+                                    <label asp-for="Landline1" class="modern-label ui-label">Landline 1</label>
+                                    <input asp-for="Landline1" class="form-control ui-input" />
+                                    <span asp-validation-for="Landline1" class="text-error text-xs"></span>
+                                </div>
+                                <div class="modern-col-6">
+                                    <label asp-for="Landline2" class="modern-label ui-label">Landline 2</label>
+                                    <input asp-for="Landline2" class="form-control ui-input" />
+                                    <span asp-validation-for="Landline2" class="text-error text-xs"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Right Column: Business Info -->
+                <section class="modern-col-4">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header" style="background-color: var(--surface-container-high); color: var(--on-surface);">
+                            <span class="material-symbols-outlined">business</span>
+                            <h2 class="modern-headline-md ui-section-title">Business Info</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <div>
+                                <label asp-for="TIN" class="modern-label ui-label">TIN</label>
+                                <input asp-for="TIN" class="form-control ui-input" placeholder="000-000-000-000" />
+                                <span asp-validation-for="TIN" class="text-error text-xs"></span>
+                            </div>
+                            <div class="mt-3">
+                                <label asp-for="BusinessType" class="modern-label ui-label">Business Type</label>
+                                <input asp-for="BusinessType" class="form-control ui-input" />
+                                <span asp-validation-for="BusinessType" class="text-error text-xs"></span>
+                            </div>
+                            <div class="mt-3">
+                                <label asp-for="Terms" class="modern-label ui-label">Terms</label>
+                                <input asp-for="Terms" class="form-control ui-input" />
+                                <span asp-validation-for="Terms" class="text-error text-xs"></span>
+                            </div>
+
+                            <div class="flex flex-column gap-2 mt-4 pt-4 border-t border-outline-variant">
+                                <div class="flex items-center gap-2">
+                                    <input asp-for="IsVatable" class="form-check-input" type="checkbox" style="width:1.25rem; height:1.25rem; border: 1px solid var(--outline-variant);">
+                                    <label asp-for="IsVatable" class="modern-label mb-0 ui-label" style="text-transform: none; font-size: 14px; font-weight: 500;">Is Vatable</label>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <input asp-for="IsActive" class="form-check-input" type="checkbox" style="width:1.25rem; height:1.25rem; border: 1px solid var(--outline-variant);">
+                                    <label asp-for="IsActive" class="modern-label mb-0 ui-label" style="text-transform: none; font-size: 14px; font-weight: 500;">Is Active</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </form>
+</div>
+
+@section Scripts {
+    }

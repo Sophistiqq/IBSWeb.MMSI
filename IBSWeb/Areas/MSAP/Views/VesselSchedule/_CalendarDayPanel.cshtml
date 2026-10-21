@@ -1,0 +1,95 @@
+@using System.Security.Claims
+@using IBS.Services.MSAP.AccessControl
+@inject IAccessControlService AccessControl
+@using System.Text.Json
+@model VesselScheduleBoardViewModel
+@{
+    var accessUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    bool canCreateSchedule = accessUserId != null && await AccessControl.HasAccessAsync(accessUserId, ProcedureEnum.CreateCustomerOrderSlip);
+    var day = Model.SelectedDate!.Value;
+    var schedules = Model.Schedules.Where(s => s.PlannedStart < day.AddDays(1) && s.PlannedEnd > day).ToList();
+    var bookings = Model.TugBookings.Where(s => s.PlannedStart < day.AddDays(1) && s.PlannedEnd > day).ToList();
+    var assignments = bookings.Concat(schedules).DistinctBy(s => s.VesselScheduleId).ToDictionary(s => s.VesselScheduleId,
+        s => (JsonSerializer.Deserialize<List<int>>(s.AssignedTugboatIds ?? "[]") ?? new List<int>()).Distinct().ToList());
+    var names = Model.Tugboats.ToDictionary(t => t.TugboatId, t => t.TugboatName);
+    var conflicts = Model.ConflictsByDay.GetValueOrDefault(day) ?? new HashSet<int>();
+    var filters = new Dictionary<string, string>
+    {
+        ["month"] = Model.Date.ToString("yyyy-MM"),
+        ["portId"] = Model.PortId?.ToString() ?? "",
+        ["terminalId"] = Model.TerminalId?.ToString() ?? "",
+        ["search"] = Model.Search ?? "",
+        ["status"] = Model.Status ?? ""
+    };
+}
+<aside class="schedule-day-panel" aria-labelledby="selectedDayHeading">
+    <div class="schedule-panel-heading">
+        <div><h2 id="selectedDayHeading">@day.ToString("dddd, d MMMM")</h2><p class="schedule-muted">@Model.LocationHeading · @schedules.Count matching schedules</p></div>
+        <a asp-action="Index" asp-all-route-data="@(new Dictionary<string, string>(filters))" class="schedule-icon-button" aria-label="Close selected day">×</a>
+    </div>
+    <div class="schedule-panel-tabs" role="tablist" aria-label="Day views">
+        <button type="button" id="agendaTab" role="tab" aria-controls="dayAgenda" aria-selected="true" data-panel-tab>Schedules (@schedules.Count)</button>
+        <button type="button" id="tugTab" role="tab" aria-controls="dayTugs" aria-selected="false" tabindex="-1" data-panel-tab>Tug bookings</button>
+    </div>
+    <section id="dayAgenda" role="tabpanel" aria-labelledby="agendaTab">
+        @if (schedules.Any(s => s.Status != MsapConstants.VesselScheduleStatus.Cancelled && assignments[s.VesselScheduleId].Count < s.RequiredTugCount))
+        {
+            <p class="schedule-panel-warning">Some bookings still need tug assignments.</p>
+        }
+        @if (schedules.Any(s => conflicts.Contains(s.VesselScheduleId)))
+        {
+            <p class="schedule-panel-warning">Overlaps need review; conflicting bookings may be outside these filters.</p>
+        }
+        @foreach (var schedule in schedules)
+        {
+            var ids = assignments[schedule.VesselScheduleId];
+            <article class="schedule-panel-record">
+                <div class="schedule-panel-heading"><strong>@schedule.Vessel.VesselName</strong><span class="schedule-status" data-status="@schedule.Status">@MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status)</span></div>
+                <p>@schedule.PlannedStart.ToString("MMM d HH:mm") – @schedule.PlannedEnd.ToString("MMM d HH:mm") · @schedule.Terminal.TerminalName</p>
+                <div class="schedule-panel-tugs">
+                    <span class="schedule-muted">Assigned tugboats</span>
+                    <strong>@(ids.Count == 0 ? "No tugs assigned" : string.Join(", ", ids.Select(id => names.GetValueOrDefault(id, $"Unknown tug #{id}"))))</strong>
+                    <small class="schedule-muted">@ids.Count of @schedule.RequiredTugCount assigned</small>
+                </div>
+                @if (conflicts.Contains(schedule.VesselScheduleId))
+                {
+                    <p class="schedule-panel-warning">Overlap needs review</p>
+                }
+                <a asp-action="Details" asp-route-id="@schedule.VesselScheduleId">Open booking / COS →</a>
+            </article>
+        }
+        @if (schedules.Count == 0)
+        {
+            <p class="schedule-empty">No schedules match these filters for this day.</p>
+        }
+    </section>
+    <section id="dayTugs" role="tabpanel" aria-labelledby="tugTab" hidden>
+        <p class="schedule-muted">Active bookings across all locations and statuses. Calendar filters do not imply tug availability.</p>
+        <div class="schedule-tug-filters">
+            <label for="tugSearch">Find tugboat<input type="search" id="tugSearch" class="modern-input" placeholder="Tug name or number" /></label>
+            <label for="tugScope">Show<select id="tugScope" class="js-modern-select" data-searchable="false"><option value="booked">Booked</option><option value="all">All tugs</option><option value="unbooked">Unbooked</option></select></label>
+        </div>
+        @foreach (var tug in Model.Tugboats)
+        {
+            var tugBookings = bookings.Where(s => assignments[s.VesselScheduleId].Contains(tug.TugboatId)).ToList();
+            <article class="schedule-panel-record" data-calendar-tug data-booked="@(tugBookings.Count > 0 ? "true" : "false")" data-search="@tug.TugboatName @tug.TugboatNumber" hidden="@(tugBookings.Count == 0)">
+                <div class="schedule-panel-heading"><strong>@tug.TugboatName</strong><small>@(tugBookings.Count == 0 ? "Unbooked" : $"{tugBookings.Count} booking(s)")</small></div>
+                @foreach (var booking in tugBookings)
+                {
+                    <a class="schedule-tug-booking" asp-action="Details" asp-route-id="@booking.VesselScheduleId">
+                        <strong>@booking.Vessel.VesselName</strong><span>@booking.PlannedStart.ToString("MMM d HH:mm") – @booking.PlannedEnd.ToString("MMM d HH:mm")</span><span>@booking.Port.PortName / @booking.Terminal.TerminalName</span>
+                    </a>
+                }
+            </article>
+        }
+        <p id="noCalendarTugs" class="schedule-empty" hidden>No tugboats match this view.</p>
+        <p class="schedule-muted">Unbooked means no active planned booking that day. Confirm operational availability before assigning.</p>
+    </section>
+    <footer class="schedule-panel-footer">
+        <p class="schedule-muted">Filters and selected date stay in the calendar.</p>
+        @if (canCreateSchedule)
+        {
+            <a asp-action="Create" asp-route-date="@day.ToString("yyyy-MM-dd")" class="modern-btn-primary schedule-panel-create">+ Create schedule for @day.ToString("d MMMM")</a>
+        }
+    </footer>
+</aside>

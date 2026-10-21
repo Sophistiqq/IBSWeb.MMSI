@@ -1,0 +1,18 @@
+@model Billing
+
+@if (Model.PaidDispatchTickets != null && Model.PaidDispatchTickets.Any(dt => !string.IsNullOrEmpty(dt.ImageSignedUrl)))
+{
+    @foreach (var dt in Model.PaidDispatchTickets.Where(dt => !string.IsNullOrEmpty(dt.ImageSignedUrl)))
+    {
+        <div class="ui-panel modern-card ticket-image-page">
+            <div class="billing-statement text-center">
+                <h4 class="font-bold text-sm mb-3">
+                    Dispatch Ticket #@(dt.DispatchNumber) &mdash; Billing @Model.MsapBillingNumber
+                </h4>
+                <div class="flex justify-center items-center" style="max-height: 90vh;">
+                    <img src="@dt.ImageSignedUrl" alt="Dispatch Ticket @dt.DispatchNumber" style="max-width: 100%; max-height: 85vh; object-fit: contain;" />
+                </div>
+            </div>
+        </div>
+    }
+}

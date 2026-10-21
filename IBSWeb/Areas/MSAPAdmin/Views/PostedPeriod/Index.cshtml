@@ -1,0 +1,183 @@
+@model IEnumerable<IBS.Models.MSAP.MasterFile.MsapPostedPeriod>
+
+@{
+    ViewData["Title"] = "Posting Periods";
+    ViewData["IsFullWidth"] = true;
+}
+
+<div class="modern-layout">
+    <main class="modern-container">
+        <!-- Header Section -->
+        <div class="flex-stack">
+            <div>
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="modern-label" style="color: var(--on-surface-variant)">ADMIN</span>
+                    <span class="material-symbols-outlined text-xs">chevron_right</span>
+                    <span class="modern-label" style="color: var(--on-surface)">Posting Periods</span>
+                </div>
+                <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
+                <p class="modern-body-md" style="color: var(--on-surface-variant)">MSAP month restrictions are suspended while the late-ticket policy is reviewed. Stored period history is retained; shared IBS/Filpride controls are unchanged.</p>
+            </div>
+            <div class="flex gap-2">
+                <form style="@(IBS.Utility.MSAP.Constants.MsapConstants.EnforceClosedPeriods ? null : "display:none")" asp-action="Close" method="post" class="flex items-center gap-2" onsubmit="return confirmPostPeriod(event)">
+                    @Html.AntiForgeryToken()
+                    <select name="month" class="modern-input" style="width:140px;height:32px;padding:0 8px;font-size:0.875rem" required>
+                        @for (var m = 1; m <= 12; m++)
+                        {
+                            <option value="@m" selected="@(m == DateTime.Now.Month ? true : null)">@(new DateOnly(2000, m, 1).ToString("MMMM"))</option>
+                        }
+                    </select>
+                    <select name="year" class="modern-input" style="width:90px;height:32px;padding:0 8px;font-size:0.875rem" required>
+                        @for (var y = DateTime.Now.Year - 5; y <= DateTime.Now.Year + 1; y++)
+                        {
+                            <option value="@y" selected="@(y == DateTime.Now.Year ? true : null)">@y</option>
+                        }
+                    </select>
+                    <button type="submit" class="modern-btn-primary" style="height:32px;padding:0 16px;font-size:0.875rem">
+                        <span class="material-symbols-outlined" style="font-size:16px">lock</span> POST PERIOD
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Table Card -->
+        <div class="modern-card">
+            <div class="modern-card-header-action flex justify-between items-center w-full">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">calendar_month</span>
+                    <h2 class="modern-headline-md">Period Registry</h2>
+                </div>
+            </div>
+            <div class="modern-card-body">
+                <div class="modern-table-container">
+                    <table class="modern-table" id="periodsTable">
+                        <thead>
+                            <tr>
+                                <th>Year</th>
+                                <th>Month</th>
+                                <th class="text-center">Status</th>
+                                <th>Closed By</th>
+                                <th>Closed Date</th>
+                                <th>Opened By</th>
+                                <th>Opened Date</th>
+                                <th class="text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var period in Model.OrderByDescending(p => p.Year).ThenByDescending(p => p.Month))
+                            {
+                                <tr>
+                                    <td>@period.Year</td>
+                                    <td>@(new DateOnly(period.Year, period.Month, 1).ToString("MMMM"))</td>
+                                    <td class="text-center">
+                                        @if (period.IsClosed)
+                                        {
+                                            <span class="modern-badge-sm status-closed">CLOSED</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="modern-badge-sm status-open">OPEN</span>
+                                        }
+                                    </td>
+                                    <td>@period.ClosedBy</td>
+                                    <td>@(period.ClosedDate?.ToString("MMM dd, yyyy h:mm tt") ?? "-")</td>
+                                    <td>@period.OpenedBy</td>
+                                    <td>@(period.OpenedDate?.ToString("MMM dd, yyyy h:mm tt") ?? "-")</td>
+                                    <td class="text-center">
+                                        @if (period.IsClosed)
+                                        {
+                                            <form asp-action="Open" method="post" style="display:inline" onsubmit="return confirmOpen(event, '@(new DateOnly(period.Year, period.Month, 1).ToString("MMMM yyyy"))')">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="year" value="@period.Year" />
+                                                <input type="hidden" name="month" value="@period.Month" />
+                                                <button type="submit" class="modern-btn-secondary" style="padding: 4px 12px; font-size: 11px; color: var(--success); border-color: var(--success);">
+                                                    <span class="material-symbols-outlined" style="font-size: 16px;">lock_open</span> OPEN
+                                                </button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <form asp-action="Close" method="post" style="@(IBS.Utility.MSAP.Constants.MsapConstants.EnforceClosedPeriods ? "display:inline" : "display:none")" onsubmit="return confirmClose(event, '@(new DateOnly(period.Year, period.Month, 1).ToString("MMMM yyyy"))')">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="year" value="@period.Year" />
+                                                <input type="hidden" name="month" value="@period.Month" />
+                                                <button type="submit" class="modern-btn-secondary" style="padding: 4px 12px; font-size: 11px; color: var(--error); border-color: var(--error);">
+                                                    <span class="material-symbols-outlined" style="font-size: 16px;">lock</span> CLOSE
+                                                </button>
+                                            </form>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                            @if (!Model.Any())
+                            {
+                                <tr>
+                                    <td colspan="8" class="text-center" style="padding: 40px; color: var(--on-surface-variant);">
+                                        <span class="material-symbols-outlined" style="font-size: 40px; display: block; margin-bottom: 8px;">calendar_month</span>
+                                        No stored posting periods. Month closing is currently suspended.
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+@section Scripts {
+    <script>
+        function confirmPostPeriod(event) {
+            event.preventDefault();
+            const form = event.target;
+            const monthName = form.querySelector('select[name="month"] option:checked').text;
+            const year = form.querySelector('select[name="year"]').value;
+            ModernAlert.confirm({
+                title: 'Post Period?',
+                text: `Closing ${monthName} ${year} will lock all transactions. No edits, creates, or deletes will be allowed for this month. Continue?`,
+                icon: 'warning',
+                confirmText: 'Yes, post it!',
+                confirmButtonColor: '#d33'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    ModernAlert.showLoading(`Posting ${monthName} ${year}...`);
+                    form.submit();
+                }
+            });
+        }
+
+        function confirmClose(event, month) {
+            event.preventDefault();
+            const form = event.target;
+            ModernAlert.confirm({
+                title: 'Close Period?',
+                text: `Closing ${month} will lock all transactions. No edits, creates, or deletes will be allowed for this month. Continue?`,
+                icon: 'warning',
+                confirmText: 'Yes, close it!',
+                confirmButtonColor: '#d33'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    ModernAlert.showLoading(`Closing ${month}...`);
+                    form.submit();
+                }
+            });
+        }
+
+        function confirmOpen(event, month) {
+            event.preventDefault();
+            const form = event.target;
+            ModernAlert.confirm({
+                title: 'Open Period?',
+                text: `Opening ${month} will allow modifications again. Continue?`,
+                icon: 'question',
+                confirmText: 'Yes, open it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    ModernAlert.showLoading(`Opening ${month}...`);
+                    form.submit();
+                }
+            });
+        }
+    </script>
+}

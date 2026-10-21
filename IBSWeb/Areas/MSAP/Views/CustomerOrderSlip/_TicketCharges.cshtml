@@ -1,0 +1,72 @@
+@model DispatchTicket
+@{
+    var booking = ViewBag.VesselSchedule as VesselSchedule;
+    var cos = ViewData["Cos"] as CustomerOrderSlip;
+    var progress = (JobProgressViewModel)ViewBag.JobProgress;
+    var entry = booking?.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == Model.VesselScheduleServiceEntryId);
+    var blocker = progress.CalculationBlockers.GetValueOrDefault(Model.DispatchTicketId);
+    var approvalPending = booking != null && (booking.ApprovedRevision != booking.Revision || booking.Status == MsapConstants.VesselScheduleStatus.Tentative);
+    var calculated = Model.Status is MsapConstants.DispatchTicketStatus.ForBilling or MsapConstants.DispatchTicketStatus.Billed;
+    var editing = ViewData["EditActualTicket"] is true;
+    var cosDiscount = booking == null ? Model.DispatchDiscount : booking.SkipCosDiscount ? 0m : booking.CosDiscountPercent.GetValueOrDefault();
+    var tariffMethod = calculated ? Model.DispatchChargeType : entry?.TariffBasis switch
+    {
+        TariffChargeBasis.PerHour => "Per hour",
+        TariffChargeBasis.PerMove => "Per Move",
+        _ => "Not specified"
+    };
+    var bafMethod = calculated ? Model.BAFChargeType : entry?.BafMethod switch
+    {
+        BafCalculationMethod.PerHour => "Per hour",
+        BafCalculationMethod.PerMove => "Per Move",
+        BafCalculationMethod.Lumpsum => "Lumpsum",
+        BafCalculationMethod.Industry => "Industry",
+        _ => "Not specified"
+    };
+    var canRecalculate = !editing && Model.VesselScheduleServiceEntryId.HasValue
+        && ViewData["CanEditTicket"] is true && ViewData["HasBilling"] is not true
+        && cos != null && cos.Status == MsapConstants.CustomerOrderSlipStatus.Open
+        && !cos.DispatchTickets.Any(t => t.BillingId.HasValue || t.Status == MsapConstants.DispatchTicketStatus.Billed)
+        && booking != null && booking.ApprovedRevision == booking.Revision
+        && booking.Status is MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress or MsapConstants.VesselScheduleStatus.Completed;
+}
+<section class="cos-ticket-charges ui-stack" aria-labelledby="ticketChargesTitle">
+    <div class="cos-section-heading">
+        <h3 class="ui-section-title" id="ticketChargesTitle">Ticket charges</h3>
+        @if (canRecalculate)
+        {
+            <button type="button" class="modern-btn-secondary" data-recalculate-ticket="@Model.DispatchTicketId"
+                    data-cos-id="@Model.CustomerOrderSlipId" data-preview-url="@Url.Action("PreviewCharges", "DispatchTicket")" data-url="@Url.Action("RecalculateCharges", "DispatchTicket")">Recalculate charges</button>
+        }
+    </div>
+    <p class="ui-caption ui-muted">Service date: @(Model.DateLeft?.ToString("dd MMM yyyy") ?? "Not entered") · @(approvalPending ? "Proposed COS discount" : "Approved COS discount"): @(booking?.SkipCosDiscount == true ? "0% · Skipped" : $"{cosDiscount:0.##}%")</p>
+    @if (blocker != null)
+    {
+        <p class="ui-notice ui-critical" role="status">@blocker</p>
+    }
+    <div class="schedule-services-table" role="region" aria-label="Saved ticket charge breakdown" tabindex="0">
+        <table class="schedule-review-table">
+            <thead><tr><th>Charge</th><th>Method</th><th>Rate</th><th>Source</th><th>Gross</th><th>Discount</th><th>Net</th></tr></thead>
+            <tbody>
+                <tr>
+                    <th scope="row">Basic tariff</th><td>@tariffMethod</td>
+                    <td>@(calculated ? Model.DispatchRate.ToString("N2") : entry?.ManualTariffRate?.ToString("N2") ?? "Pending")</td>
+                    <td>@(Model.IsManualTariffRate || entry?.ManualTariffRate.HasValue == true ? approvalPending ? "Proposed manual" : "Approved manual" : "Rate table")</td>
+                    <td>@(calculated ? Model.DispatchBillingAmount.ToString("N2") : "Pending")</td>
+                    <td>@(calculated ? $"{Model.DispatchDiscount:0.##}%" : "—")</td>
+                    <td>@(calculated ? Model.DispatchNetRevenue.ToString("N2") : "Pending")</td>
+                </tr>
+                <tr>
+                    <th scope="row">BAF</th><td>@bafMethod</td>
+                    <td>@(calculated ? Model.BAFRate.ToString("N2") : entry?.ManualBafRate?.ToString("N2") ?? "Pending")</td>
+                    <td>@(Model.IsManualBafRate || entry?.ManualBafRate.HasValue == true ? approvalPending ? "Proposed manual" : "Approved manual" : "Rate table")</td>
+                    <td>@(calculated ? Model.BAFBillingAmount.ToString("N2") : "Pending")</td>
+                    <td>@(calculated ? $"{Model.BAFDiscount:0.##}%" : "—")</td>
+                    <td>@(calculated ? Model.BAFNetRevenue.ToString("N2") : "Pending")</td>
+                </tr>
+            </tbody>
+            <tfoot><tr><th scope="row" colspan="4">Total</th><td>@(calculated ? Model.TotalBilling.ToString("N2") : "Pending")</td><td></td><td>@(calculated ? Model.TotalNetRevenue.ToString("N2") : "Pending")</td></tr></tfoot>
+        </table>
+    </div>
+    <p class="ui-caption ui-muted">Amounts are in PHP. @(editing ? "These are the saved charges. Saving changes recalculates charges when actual service times change." : "Recalculation uses recorded service times, approved manual terms and applicable service-date table rates.")</p>
+</section>

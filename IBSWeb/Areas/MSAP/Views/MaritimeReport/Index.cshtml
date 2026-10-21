@@ -1,0 +1,112 @@
+@using IBS.Utility.MSAP.Helpers
+@{
+    ViewData["Title"] = "Reports";
+    ViewData["IsFullWidth"] = true;
+    var philippineToday = DateTimeHelper.GetCurrentPhilippineTime();
+    var monthStart = new DateOnly(philippineToday.Year, philippineToday.Month, 1);
+}
+
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
+        <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Reports</li></ol></nav>
+        <h1 class="modern-headline-lg ui-page-title">MMSI Reports</h1>
+
+        <div class="modern-grid">
+            <div class="modern-col-12">
+                <div class="ui-card-grid">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header"><span class="material-symbols-outlined">menu_book</span><h2 class="modern-headline-md ui-section-title">Sales Book</h2></div>
+                        <div class="modern-card-body ui-card-body">
+                            <p class="text-sm">Approved numbered bills by final approval date. Reversed entries are excluded; billing dates are retained separately.</p>
+                            <form asp-action="SalesBook" method="post" data-download class="ui-stack">
+                                <div class="ui-field-grid">
+                                    <div><label for="bookFrom" class="modern-label ui-label">Approval from</label><input id="bookFrom" name="dateFrom" type="date" value="@monthStart.ToString("yyyy-MM-dd")" class="modern-input ui-input" required /></div>
+                                    <div><label for="bookTo" class="modern-label ui-label">Approval to</label><input id="bookTo" name="dateTo" type="date" value="@philippineToday.ToString("yyyy-MM-dd")" class="modern-input ui-input" required /></div>
+                                </div>
+                                <button type="submit" class="modern-btn-primary w-100">Download Sales Book</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
+                            <span class="material-symbols-outlined">receipt_long</span>
+                            <h2 class="modern-headline-md ui-section-title">Dispatch for Billing</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <p class="text-sm" style="color: var(--on-surface-variant);">Dispatch tickets ready for billing with tariff and BAF amounts.</p>
+                            <form method="post" data-download action="@Url.Action("DispatchForBilling", "MaritimeReport", new { area = "MSAP" })" class="ui-stack">
+                                @Html.AntiForgeryToken()
+                                <div class="ui-field-grid">
+                                    <div>
+                                        <label class="modern-label ui-label">From</label>
+                                        <input type="date" name="dateFrom" value="@monthStart.ToString("yyyy-MM-dd")" class="modern-input w-100 ui-input" required>
+                                    </div>
+                                    <div>
+                                        <label class="modern-label ui-label">To</label>
+                                        <input type="date" name="dateTo" value="@philippineToday.ToString("yyyy-MM-dd")" class="modern-input w-100 ui-input" required>
+                                    </div>
+                                </div>
+                                <button type="submit" class="modern-btn-primary w-100">
+                                    <span class="material-symbols-outlined" style="font-size: 18px;">download</span> Download Excel
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
+                            <span class="material-symbols-outlined">summarize</span>
+                            <h2 class="modern-headline-md ui-section-title">Dispatch Ticket Summary</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <p class="text-sm" style="color: var(--on-surface-variant);">Detailed dispatch summary with billing and collection info.</p>
+                            <form method="post" data-download action="@Url.Action("DispatchTicketSummary", "MaritimeReport", new { area = "MSAP" })" class="ui-stack">
+                                @Html.AntiForgeryToken()
+                                <div class="ui-field-grid">
+                                    <div>
+                                        <label class="modern-label ui-label">From</label>
+                                        <input type="date" name="dateFrom" value="@monthStart.ToString("yyyy-MM-dd")" class="modern-input w-100 ui-input" required>
+                                    </div>
+                                    <div>
+                                        <label class="modern-label ui-label">To</label>
+                                        <input type="date" name="dateTo" value="@philippineToday.ToString("yyyy-MM-dd")" class="modern-input w-100 ui-input" required>
+                                    </div>
+                                </div>
+                                <button type="submit" class="modern-btn-primary w-100">
+                                    <span class="material-symbols-outlined" style="font-size: 18px;">download</span> Download Excel
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
+                            <span class="material-symbols-outlined">monitoring</span>
+                            <h2 class="modern-headline-md ui-section-title">Sales Summary (AR Monitoring)</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <p class="text-sm" style="color: var(--on-surface-variant);">AR monitoring report with trip details for the selected date range.</p>
+                            <form method="post" data-download action="@Url.Action("SalesSummary", "MaritimeReport", new { area = "MSAP" })" class="ui-stack">
+                                @Html.AntiForgeryToken()
+                                <div class="ui-field-grid">
+                                    <div>
+                                        <label for="salesDateFrom" class="modern-label ui-label">From</label>
+                                        <input id="salesDateFrom" type="date" name="dateFrom" value="@monthStart.ToString("yyyy-MM-dd")" class="modern-input w-100 ui-input" required>
+                                    </div>
+                                    <div>
+                                        <label for="salesDateTo" class="modern-label ui-label">To</label>
+                                        <input id="salesDateTo" type="date" name="dateTo" value="@philippineToday.ToString("yyyy-MM-dd")" class="modern-input w-100 ui-input" required>
+                                    </div>
+                                </div>
+                                <button type="submit" class="modern-btn-primary w-100">
+                                    <span class="material-symbols-outlined" style="font-size: 18px;">download</span> Download Excel
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>

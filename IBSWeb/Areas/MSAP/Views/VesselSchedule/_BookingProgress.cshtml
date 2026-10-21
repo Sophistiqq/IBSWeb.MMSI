@@ -1,0 +1,12 @@
+@model int
+@{
+    var reviewing = ViewData["BookingProgressReview"] is true;
+    var progress = new JobProgressViewModel
+    {
+        HasSchedule = true,
+        VesselScheduleId = Model > 0 ? Model : null,
+        Stage = reviewing ? 1 : 0,
+        Guidance = reviewing ? "Review booking and rates. Approve when ready." : "Complete booking details. Save for reviewing."
+    };
+}
+<partial name="_WorkflowProgress" model="progress" />

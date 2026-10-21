@@ -188,7 +188,11 @@ namespace IBSWeb.Areas.Filpride.Controllers
                         x.CanceledBy,
                         x.PostedBy,
                         x.IsPaid,
-                        x.CheckVoucherHeaderId
+                        x.CheckVoucherHeaderId,
+
+                        DocumentType = string.IsNullOrWhiteSpace(x.DocumentedByCompanyName)
+                            ? x.Type
+                            : x.Type + " - " + x.DocumentedByCompanyName
                     })
                     .ToListAsync(cancellationToken);
 
@@ -699,7 +703,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         public async Task<IActionResult> Approve(int id, int? supplierId, CancellationToken cancellationToken)
         {
             FilprideCheckVoucherHeader? model = await _unitOfWork.FilprideCheckVoucher
-                .GetAsync(cv => cv.CheckVoucherHeaderId == id, cancellationToken);
+                .GetAsync(cv => cv.CheckVoucherHeaderId == id && cv.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (model == null)
             {
@@ -750,7 +754,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             {
 
                 FilprideCheckVoucherHeader? existingModel = await _unitOfWork.FilprideCheckVoucher
-                    .GetAsync(cv => cv.CheckVoucherHeaderId == id, cancellationToken);
+                    .GetAsync(cv => cv.CheckVoucherHeaderId == id && cv.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
                 if (existingModel == null)
                 {
@@ -897,7 +901,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 #region --Saving the default entries
 
                 FilprideCheckVoucherHeader? existingModel = await _unitOfWork.FilprideCheckVoucher
-                    .GetAsync(cv => cv.CheckVoucherHeaderId == viewModel.CVId, cancellationToken);
+                    .GetAsync(cv => cv.CheckVoucherHeaderId == viewModel.CVId && cv.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
                 if (existingModel == null)
                 {
@@ -1325,7 +1329,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             }
 
             FilprideCheckVoucherHeader? header = await _unitOfWork.FilprideCheckVoucher
-                .GetAsync(cvh => cvh.CheckVoucherHeaderId == id.Value, cancellationToken);
+                .GetAsync(cvh => cvh.CheckVoucherHeaderId == id.Value && cvh.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (header == null)
             {
@@ -1370,7 +1374,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [Authorize(Policy = nameof(CheckVoucherNonTradeInvoice.CheckVoucherNonTradeInvoicePost))]
         public async Task<IActionResult> Post(int id, int? supplierId, CancellationToken cancellationToken)
         {
-            FilprideCheckVoucherHeader? modelHeader = await _unitOfWork.FilprideCheckVoucher.GetAsync(cv => cv.CheckVoucherHeaderId == id, cancellationToken);
+            FilprideCheckVoucherHeader? modelHeader = await _unitOfWork.FilprideCheckVoucher.GetAsync(cv => cv.CheckVoucherHeaderId == id && cv.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (modelHeader == null)
             {
@@ -1437,7 +1441,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         public async Task<IActionResult> Cancel(int id, string? cancellationRemarks, CancellationToken cancellationToken)
         {
             FilprideCheckVoucherHeader? model = await _unitOfWork.FilprideCheckVoucher
-                .GetAsync(cv => cv.CheckVoucherHeaderId == id, cancellationToken);
+                .GetAsync(cv => cv.CheckVoucherHeaderId == id && cv.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (model == null)
             {
@@ -1479,7 +1483,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Void(int id, CancellationToken cancellationToken)
         {
-            FilprideCheckVoucherHeader? model = await _unitOfWork.FilprideCheckVoucher.GetAsync(cv => cv.CheckVoucherHeaderId == id, cancellationToken);
+            FilprideCheckVoucherHeader? model = await _unitOfWork.FilprideCheckVoucher.GetAsync(cv => cv.CheckVoucherHeaderId == id && cv.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (model == null)
             {
@@ -1526,7 +1530,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             {
                 FilprideCheckVoucherHeader cvHeader = await _dbContext.FilprideCheckVoucherHeaders
                                                           .Include(cv => cv.Details)
-                                                          .FirstOrDefaultAsync(cv => cv.CheckVoucherHeaderId == id, cancellationToken)
+                                                          .FirstOrDefaultAsync(cv => cv.CheckVoucherHeaderId == id && cv.CvType != nameof(CVType.OtherTugs), cancellationToken)
                                                       ?? throw new NullReferenceException("CV Header not found.");
 
                 if (await _unitOfWork.IsPeriodPostedAsync(Module.CheckVoucher, cvHeader.Date, cancellationToken))
@@ -1573,7 +1577,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         public async Task<IActionResult> Printed(int id, int? supplierId, CancellationToken cancellationToken)
         {
             FilprideCheckVoucherHeader? cv = await _unitOfWork.FilprideCheckVoucher
-                .GetAsync(x => x.CheckVoucherHeaderId == id, cancellationToken);
+                .GetAsync(x => x.CheckVoucherHeaderId == id && x.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (cv == null)
             {
@@ -1691,7 +1695,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                         supplier => $"{supplier.SupplierCode} - {supplier.SupplierName}", cancellationToken);
             Dictionary<int, string> tugboats = tugboatIds.Length == 0
                 ? []
-                : await _dbContext.MsapTugboats
+                : await _dbContext.MmsiTugboats
                     .AsNoTracking()
                     .Where(tugboat => tugboatIds.Contains(tugboat.TugboatId) && tugboat.IsCompanyOwned)
                     .ToDictionaryAsync(tugboat => tugboat.TugboatId,
@@ -1803,7 +1807,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [HttpGet]
         public async Task<IActionResult> GetTugboat(CancellationToken cancellationToken)
         {
-            return Json(await _dbContext.MsapTugboats
+            return Json(await _dbContext.MmsiTugboats
                 .AsNoTracking()
                 .Where(t => t.IsCompanyOwned)
                 .OrderBy(t => t.TugboatNumber)

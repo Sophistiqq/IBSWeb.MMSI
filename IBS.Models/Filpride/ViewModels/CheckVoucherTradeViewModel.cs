@@ -73,6 +73,8 @@ namespace IBS.Models.Filpride.ViewModels
 
         public List<CheckVoucherTradeAccountingEntryViewModel> AdditionalAccountingEntries { get; set; } = [];
 
+        [Display(Name = "Payment Amount")]
+        [Range(typeof(decimal), "0", "79228162514264337593543950335")]
         public decimal DefaultPayableAmount { get; set; }
 
         public decimal CashInBankAmount { get; set; }
@@ -80,7 +82,7 @@ namespace IBS.Models.Filpride.ViewModels
         //others
         public string? CreatedBy { get; set; }
 
-        public List<ReceivingReportList> RRs { get; set; } = null!;
+        public List<ReceivingReportList> RRs { get; set; } = [];
 
         public string? AdvancesCVNo { get; set; }
 

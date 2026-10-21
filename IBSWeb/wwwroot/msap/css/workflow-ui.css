@@ -1,0 +1,119 @@
+/* MSAP Job Progress layout. Portable components are in css/ui-system.css. */
+/* Shared vertical progress for schedule and COS workspaces. */
+.app-ui .schedule-details-progress .job-progress {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+    background: transparent;
+}
+
+.app-ui .schedule-details-progress .modern-headline-md {
+    font: var(--ui-weight-semibold) var(--ui-text-section) / var(--ui-leading-body) var(--ui-font-family);
+}
+
+.app-ui .schedule-details-progress :is(.job-progress-heading, .job-progress-next) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--ui-space-3);
+}
+
+.app-ui .schedule-details-progress .job-progress-heading {
+    padding-bottom: var(--ui-space-3);
+    border-bottom: 1px solid var(--outline-variant);
+}
+
+.app-ui .schedule-details-progress .job-progress-heading .modern-badge-sm {
+    align-self: flex-start;
+    background: var(--surface-container-low);
+    color: var(--on-surface);
+    border: 0;
+}
+
+.app-ui .schedule-details-progress .job-progress-timeline {
+    flex-direction: column;
+    gap: var(--ui-space-1);
+    padding: var(--ui-space-3) 0;
+    overflow: visible;
+}
+
+.app-ui .schedule-details-progress .job-progress-timeline li {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--ui-space-3);
+    padding: var(--ui-space-2) var(--ui-space-3);
+    border-radius: var(--ui-radius);
+    min-width: 0;
+    white-space: normal;
+    font-size: var(--ui-text-body);
+    font-weight: var(--ui-weight-medium);
+    line-height: 22px;
+    color: var(--on-surface-variant);
+}
+
+.app-ui .schedule-details-progress .job-progress-timeline li:not(:last-child)::after {
+    display: block;
+    left: calc(var(--ui-space-3) + 10px);
+    right: auto;
+    top: calc(var(--ui-space-2) + 22px);
+    bottom: calc(-1 * (var(--ui-space-2) + var(--ui-space-1)));
+    width: 2px;
+    height: auto;
+    background: var(--outline-variant);
+}
+
+.app-ui .schedule-details-progress .job-progress-timeline .is-current {
+    background: color-mix(in srgb, var(--on-surface) 6%, transparent);
+    color: var(--on-surface);
+    font-weight: var(--ui-weight-semibold);
+}
+
+.app-ui .schedule-details-progress .job-progress-dot {
+    position: relative;
+    z-index: 1;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    background: var(--surface-container-lowest);
+    color: var(--on-surface-variant);
+    font-size: var(--ui-text-caption);
+}
+
+.app-ui .schedule-details-progress :is(.is-current, .is-done) .job-progress-dot {
+    background: var(--on-surface);
+    border-color: var(--on-surface);
+    color: var(--surface-container-lowest);
+}
+
+.app-ui .schedule-details-progress .job-progress-next {
+    border-top: 1px solid var(--outline-variant);
+    padding-top: var(--ui-space-4);
+}
+
+.app-ui .schedule-details-progress .job-progress-next .modern-label {
+    font-size: var(--ui-text-caption);
+}
+
+.app-ui .schedule-details-progress .job-progress-next :is(.modern-btn-primary, .modern-btn-secondary) {
+    width: 100%;
+    white-space: normal;
+}
+
+.app-ui .schedule-details-progress .job-progress-next .modern-btn-primary {
+    background: var(--on-surface);
+    border-color: var(--on-surface);
+    color: var(--surface-container-lowest);
+}
+
+/* Match the shared state badge inside the more specific vertical progress header. */
+.app-ui .schedule-details-progress .job-progress-heading .ui-status {
+    background: color-mix(in srgb, var(--ui-state-accent) 15%, var(--surface-container-lowest));
+    color: var(--ui-state-ink);
+}
+
+.app-ui .job-progress-next:is(.ui-attention, .ui-critical) {
+    border-inline-start: 3px solid var(--ui-state-accent);
+    background: color-mix(in srgb, var(--ui-state-accent) 7%, var(--surface-container-lowest));
+    padding: var(--ui-space-3);
+    border-radius: var(--ui-radius);
+}

@@ -34,6 +34,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastDm = await _db
                 .FilprideDebitMemos
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.DebitMemoNo!.Length)
                 .ThenByDescending(x => x.DebitMemoNo)
@@ -58,6 +59,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastDm = await _db
                 .FilprideDebitMemos
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.DebitMemoNo!.Length)
                 .ThenByDescending(x => x.DebitMemoNo)
@@ -124,6 +126,7 @@ namespace IBS.DataAccess.Repository.Filpride
                     new()
                     {
                         Date = model.TransactionDate,
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Reference = model.DebitMemoNo!,
                         Description = product.ProductName,
                         AccountId = arTradeReceivableTitle.AccountId,
@@ -144,6 +147,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.DebitMemoNo!,
                         Description = product.ProductName,
@@ -162,6 +166,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.DebitMemoNo!,
                         Description = product.ProductName,
@@ -178,6 +183,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = model.WorkspaceTugboatId,
                     Date = model.TransactionDate,
                     Reference = model.DebitMemoNo!,
                     Description = product.ProductName,
@@ -195,6 +201,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.DebitMemoNo!,
                         Description = product.ProductName,
@@ -250,6 +257,7 @@ namespace IBS.DataAccess.Repository.Filpride
                     new()
                     {
                         Date = model.TransactionDate,
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Reference = model.DebitMemoNo!,
                         Description = serviceInvoice.ServiceName,
                         AccountId = arNonTradeTitle.AccountId,
@@ -270,6 +278,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.DebitMemoNo!,
                         Description = serviceInvoice.ServiceName,
@@ -288,6 +297,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.DebitMemoNo!,
                         Description = serviceInvoice.ServiceName,
@@ -306,6 +316,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.DebitMemoNo!,
                         Description = serviceInvoice.ServiceName,
@@ -324,6 +335,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.DebitMemoNo!,
                         Description = serviceInvoice.ServiceName,

@@ -1,7 +1,14 @@
-﻿// Please see documentation at https://learn.microsoft.com/aspnet/core/client-side/bundling-and-minification
+// Please see documentation at https://learn.microsoft.com/aspnet/core/client-side/bundling-and-minification
 // for details on configuring this project to bundle and minify static web assets.
 
 // Write your JavaScript code.
+$.ajaxPrefilter(function (options, originalOptions, request) {
+    const token = document.querySelector('meta[name="ibs-workspace"]')?.content;
+    if (token && !options.crossDomain) {
+        request.setRequestHeader('X-IBS-Workspace', token);
+    }
+});
+
 $(document).ready(function () {
     $('.js-select2').select2({
         placeholder: "Select an option...",

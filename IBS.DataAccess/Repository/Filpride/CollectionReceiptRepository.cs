@@ -37,6 +37,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCr = await _db
                 .FilprideCollectionReceipts
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CollectionReceiptNo!.Length)
                 .ThenByDescending(x => x.CollectionReceiptNo)
@@ -61,6 +62,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastCr = await _db
                 .FilprideCollectionReceipts
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.CollectionReceiptNo!.Length)
                 .ThenByDescending(x => x.CollectionReceiptNo)
@@ -110,6 +112,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                         Date = postedDate,
                         Reference = collectionReceipt.CollectionReceiptNo!,
                         Description = $"Collection of Receivable, Manual CR No. {collectionReceipt.ReferenceNo}",
@@ -130,6 +133,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                         Date = postedDate,
                         Reference = collectionReceipt.CollectionReceiptNo!,
                         Description = $"Collection of Receivable, Manual CR No. {collectionReceipt.ReferenceNo}",
@@ -150,6 +154,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                         Date = postedDate,
                         Reference = collectionReceipt.CollectionReceiptNo!,
                         Description = $"Collection of Receivable, Manual CR No. {collectionReceipt.ReferenceNo}",
@@ -170,6 +175,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                         Date = postedDate,
                         Reference = collectionReceipt.CollectionReceiptNo!,
                         Description = $"Collection of Receivable, Manual CR No. {collectionReceipt.ReferenceNo}",
@@ -193,6 +199,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                         Date = postedDate,
                         Reference = collectionReceipt.CollectionReceiptNo!,
                         Description = $"Collection of Receivable, Manual CR No. {collectionReceipt.ReferenceNo}",
@@ -213,6 +220,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                         Date = postedDate,
                         Reference = collectionReceipt.CollectionReceiptNo!,
                         Description = $"Collection of Receivable, Manual CR No. {collectionReceipt.ReferenceNo}",
@@ -289,6 +297,7 @@ namespace IBS.DataAccess.Repository.Filpride
             ledgers.Add(
                 new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                     Date = collectionReceipt.ClearedDate!.Value,
                     Reference = collectionReceipt.CollectionReceiptNo!,
                     Description = description,
@@ -311,6 +320,7 @@ namespace IBS.DataAccess.Repository.Filpride
             ledgers.Add(
                 new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                     Date = collectionReceipt.ClearedDate!.Value,
                     Reference = collectionReceipt.CollectionReceiptNo!,
                     Description = description,
@@ -684,6 +694,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 new()
                 {
                     Date = depositedDate,
+                    WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                     Reference = deliveryReceipt.DeliveryReceiptNo,
                     Description = description,
                     AccountId = apCommissionPayableTitle.AccountId,
@@ -704,6 +715,7 @@ namespace IBS.DataAccess.Repository.Filpride
             {
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                     Date = depositedDate,
                     Reference = deliveryReceipt.DeliveryReceiptNo,
                     Description = description,
@@ -720,6 +732,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
             ledgers.Add(new FilprideGeneralLedgerBook
             {
+                WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                 Date = depositedDate,
                 Reference = deliveryReceipt.DeliveryReceiptNo,
                 Description = description,
@@ -769,6 +782,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                         Date = collectionReceipt.TransactionDate,
                         Reference = collectionReceipt.CollectionReceiptNo!,
                         Description = "Collection for Receivable",
@@ -794,6 +808,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                         Date = collectionReceipt.TransactionDate,
                         Reference = collectionReceipt.CollectionReceiptNo!,
                         Description = "Collection for Receivable",
@@ -814,6 +829,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                         Date = collectionReceipt.TransactionDate,
                         Reference = collectionReceipt.CollectionReceiptNo!,
                         Description = "Collection for Receivable",
@@ -834,6 +850,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                         Date = collectionReceipt.TransactionDate,
                         Reference = collectionReceipt.CollectionReceiptNo!,
                         Description = "Collection for Receivable",
@@ -857,6 +874,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                         Date = collectionReceipt.TransactionDate,
                         Reference = collectionReceipt.CollectionReceiptNo!,
                         Description = "Collection for Receivable",
@@ -877,6 +895,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                         Date = collectionReceipt.TransactionDate,
                         Reference = collectionReceipt.CollectionReceiptNo!,
                         Description = "Collection for Receivable",
@@ -945,6 +964,7 @@ namespace IBS.DataAccess.Repository.Filpride
             ledgers.Add(
                 new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                     Date = collectionReceipt.TransactionDate,
                     Reference = collectionReceipt.CollectionReceiptNo!,
                     Description = description,
@@ -967,6 +987,7 @@ namespace IBS.DataAccess.Repository.Filpride
             ledgers.Add(
                 new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = collectionReceipt.WorkspaceTugboatId,
                     Date = collectionReceipt.TransactionDate,
                     Reference = collectionReceipt.CollectionReceiptNo!,
                     Description = description,

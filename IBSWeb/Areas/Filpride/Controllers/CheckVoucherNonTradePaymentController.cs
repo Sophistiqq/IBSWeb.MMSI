@@ -229,7 +229,10 @@ namespace IBSWeb.Areas.Filpride.Controllers
                         x.PostedBy,
                         x.IsAdvances,
                         x.SupplierId,
-                        x.IsEmployeeAdvance
+                        x.IsEmployeeAdvance,
+                        DocumentType = string.IsNullOrWhiteSpace(x.DocumentedByCompanyName)
+                            ? x.Type
+                            : x.Type + " - " + x.DocumentedByCompanyName
                     })
                     .ToListAsync(cancellationToken);
 
@@ -261,7 +264,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             }
 
             var header = await _unitOfWork.FilprideCheckVoucher
-                .GetAsync(cvh => cvh.CheckVoucherHeaderId == id.Value, cancellationToken);
+                .GetAsync(cvh => cvh.CheckVoucherHeaderId == id.Value && cvh.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (header == null)
             {
@@ -292,7 +295,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         public async Task<IActionResult> Printed(int id, CancellationToken cancellationToken)
         {
             var cv = await _unitOfWork.FilprideCheckVoucher
-                .GetAsync(x => x.CheckVoucherHeaderId == id, cancellationToken);
+                .GetAsync(x => x.CheckVoucherHeaderId == id && x.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (cv == null)
             {
@@ -327,7 +330,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [Authorize(Policy = nameof(CheckVoucherNonTradePayment.CheckVoucherNonTradePaymentPost))]
         public async Task<IActionResult> Post(int id, CancellationToken cancellationToken)
         {
-            var modelHeader = await _unitOfWork.FilprideCheckVoucher.GetAsync(cv => cv.CheckVoucherHeaderId == id, cancellationToken);
+            var modelHeader = await _unitOfWork.FilprideCheckVoucher.GetAsync(cv => cv.CheckVoucherHeaderId == id && cv.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (modelHeader == null)
             {
@@ -419,7 +422,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         {
             var existingHeaderModel = await _dbContext.FilprideCheckVoucherHeaders
                 .Include(x => x.Details)
-                .FirstOrDefaultAsync(x => x.CheckVoucherHeaderId == id, cancellationToken);
+                .FirstOrDefaultAsync(x => x.CheckVoucherHeaderId == id && x.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (existingHeaderModel == null)
             {
@@ -485,7 +488,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         {
             var existingHeaderModel = await _dbContext.FilprideCheckVoucherHeaders
                 .Include(x => x.Details)
-                .FirstOrDefaultAsync(x => x.CheckVoucherHeaderId == id, cancellationToken);
+                .FirstOrDefaultAsync(x => x.CheckVoucherHeaderId == id && x.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (existingHeaderModel == null)
             {
@@ -560,7 +563,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         [Authorize(Policy = nameof(CheckVoucherNonTradePayment.CheckVoucherNonTradePaymentUnpost))]
         public async Task<IActionResult> Unpost(int id, CancellationToken cancellationToken)
         {
-            var cvHeader = await _unitOfWork.FilprideCheckVoucher.GetAsync(cv => cv.CheckVoucherHeaderId == id, cancellationToken);
+            var cvHeader = await _unitOfWork.FilprideCheckVoucher.GetAsync(cv => cv.CheckVoucherHeaderId == id && cv.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (cvHeader == null)
             {
@@ -636,7 +639,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             try
             {
                 var existingHeaderModel = await _unitOfWork.FilprideCheckVoucher
-                    .GetAsync(cvh => cvh.CheckVoucherHeaderId == id, cancellationToken);
+                    .GetAsync(cvh => cvh.CheckVoucherHeaderId == id && cvh.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
                 if (existingHeaderModel == null)
                 {
@@ -807,7 +810,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 var existingHeaderModel = await _dbContext.FilprideCheckVoucherHeaders
                     .Include(cv => cv.Supplier)
                     .Include(x => x.Details)
-                    .FirstOrDefaultAsync(cv => cv.CheckVoucherHeaderId == viewModel.CvId, cancellationToken);
+                    .FirstOrDefaultAsync(cv => cv.CheckVoucherHeaderId == viewModel.CvId && cv.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
                 if (existingHeaderModel == null)
                 {
@@ -1132,7 +1135,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         {
 
             var cv = await _unitOfWork.FilprideCheckVoucher
-                .GetAsync(c => c.CheckVoucherHeaderId == cvId, cancellationToken);
+                .GetAsync(c => c.CheckVoucherHeaderId == cvId && c.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             // Ensure that cv is not null before proceeding
             if (cv == null)
@@ -1190,7 +1193,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             }
 
             var invoice = await _unitOfWork.FilprideCheckVoucher
-                .GetAsync(i => i.CheckVoucherHeaderId == invoiceId, cancellationToken);
+                .GetAsync(i => i.CheckVoucherHeaderId == invoiceId && i.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (invoice == null)
             {
@@ -1964,7 +1967,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             try
             {
                 var existingHeaderModel = await _unitOfWork.FilprideCheckVoucher
-                    .GetAsync(cvh => cvh.CheckVoucherHeaderId == id, cancellationToken);
+                    .GetAsync(cvh => cvh.CheckVoucherHeaderId == id && cvh.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
                 if (existingHeaderModel == null)
                 {
@@ -2026,7 +2029,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         public async Task<IActionResult> EditAdvancesToEmployee(AdvancesToEmployeeViewModel viewModel, CancellationToken cancellationToken)
         {
             var existingHeaderModel = await _unitOfWork.FilprideCheckVoucher
-                .GetAsync(cv => cv.CheckVoucherHeaderId == viewModel.CvId, cancellationToken);
+                .GetAsync(cv => cv.CheckVoucherHeaderId == viewModel.CvId && cv.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (existingHeaderModel == null)
             {
@@ -2453,7 +2456,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             try
             {
                 var existingHeaderModel = await _unitOfWork.FilprideCheckVoucher
-                    .GetAsync(cvh => cvh.CheckVoucherHeaderId == id, cancellationToken);
+                    .GetAsync(cvh => cvh.CheckVoucherHeaderId == id && cvh.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
                 if (existingHeaderModel == null)
                 {
@@ -2515,7 +2518,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         public async Task<IActionResult> EditAdvancesToSupplier(AdvancesToSupplierViewModel viewModel, CancellationToken cancellationToken)
         {
             var existingHeaderModel = await _unitOfWork.FilprideCheckVoucher
-                .GetAsync(cv => cv.CheckVoucherHeaderId == viewModel.CvId, cancellationToken);
+                .GetAsync(cv => cv.CheckVoucherHeaderId == viewModel.CvId && cv.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (existingHeaderModel == null)
             {
@@ -2743,7 +2746,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         public async Task<IActionResult> LiquidateAdvances(int id, DateOnly? liquidateDate, CancellationToken cancellationToken)
         {
             var existingHeaderModel = await _unitOfWork.FilprideCheckVoucher
-                .GetAsync(x => x.CheckVoucherHeaderId == id, cancellationToken);
+                .GetAsync(x => x.CheckVoucherHeaderId == id && x.CvType != nameof(CVType.OtherTugs), cancellationToken);
 
             if (existingHeaderModel == null)
             {

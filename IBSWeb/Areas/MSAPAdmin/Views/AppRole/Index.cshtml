@@ -1,0 +1,61 @@
+@{
+    ViewData["Title"] = "Role Management";
+    ViewData["IsFullWidth"] = true;
+}
+
+<div class="modern-layout">
+    <main class="modern-container">
+        <!-- Header Section -->
+        <div class="flex-stack">
+            <div>
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="modern-label" style="color: var(--on-surface-variant)">GENERAL</span>
+                    <span class="material-symbols-outlined text-xs">chevron_right</span>
+                    <span class="modern-label" style="color: var(--on-surface)">Role</span>
+                </div>
+                <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
+            </div>
+        </div>
+
+        <!-- Table Card -->
+        <div class="modern-card">
+            <div class="modern-card-header-action flex justify-between items-center w-full">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">manage_accounts</span>
+                    <h2 class="modern-headline-md">Role List</h2>
+                </div>
+            </div>
+            <div class="modern-card-body">
+                <table class="modern-table" id="paginatedTable">
+                    <thead>
+                    <tr>
+                        <th class="text-start">Name</th>
+                    </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+@section Scripts{
+    <script>
+        let roleTable;
+
+        $(document).ready(function () {
+            roleTable = $('#paginatedTable').DataTable(ModernTable.config({
+                serverSide: true,
+                ajax: ModernTable.ajax("@Url.Action("GetRolesList", "AppRole", new { area = "MSAPAdmin" })"),
+                columns: [
+                    {
+                        data: "name",
+                        name : "Name",
+                        render: (data) => `<span class="font-bold">${data}</span>`
+                    }
+                ],
+                order: [[0, 'asc']]
+            }));
+        });
+
+    </script>
+}

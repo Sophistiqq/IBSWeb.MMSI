@@ -1,0 +1,10 @@
+@model VesselScheduleViewModel
+@{
+    ViewData["Title"] = "Edit schedule";
+    ViewData["IsFullWidth"] = true;
+}
+<partial name="_ScheduleForm" model="Model" />
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/msap/js/vessel-schedule-form.js" asp-append-version="true"></script>
+}

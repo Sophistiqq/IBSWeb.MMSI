@@ -1,0 +1,281 @@
+@model IBS.Models.MSAP.DispatchTicket
+
+@{
+    ViewData["Title"] = $"Dispatch Ticket - {Model.DispatchNumber}";
+    ViewData["IsFullWidth"] = true;
+    var filterType = ViewBag.FilterType as string;
+}
+
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
+            @Html.AntiForgeryToken()
+        <!-- Header -->
+        <div class="flex-stack ui-page-toolbar">
+            <div>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li><a asp-action="Index">Dispatch Tickets</a></li><li aria-current="page">@Model.DispatchNumber</li></ol></nav>
+                <div class="flex items-center gap-3">
+                    <h1 class="modern-headline-lg ui-page-title" data-page-header>@Model.DispatchNumber</h1>
+                    <span class="modern-badge @(Model.Status == MsapConstants.DispatchTicketStatus.ForBilling ?"status-billing" : (Model.Status == MsapConstants.DispatchTicketStatus.Disapproved ? "status-error" : "status-tariff"))">@Model.Status</span>
+                </div>
+            </div>
+            <div class="flex gap-2 ui-actions">
+                @if (Model.CustomerOrderSlipId.HasValue)
+                {
+                    <a class="modern-btn-secondary" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value" data-ui-back>
+                        <span class="material-symbols-outlined">arrow_back</span> Back
+                    </a>
+                }
+                else
+                {
+                    <a class="modern-btn-secondary" asp-controller="DispatchTicket" asp-action="Index" asp-area="MSAP" asp-route-filterType="@filterType" data-ui-back>
+                        <span class="material-symbols-outlined">arrow_back</span> Back
+                    </a>
+                }
+            </div>
+        </div>
+
+        <div class="modern-grid">
+            <!-- Left Column: Dispatch Details -->
+            <div class="modern-col-4">
+                <div class="modern-card sticky top-24 ui-card">
+                    <div class="modern-card-header-info ui-card-header">
+                        <span class="material-symbols-outlined">info</span>
+                        <h2 class="modern-headline-md ui-section-title">Dispatch Details</h2>
+                    </div>
+                    <div class="modern-card-body ui-card-body" style="gap: 0.6rem;">
+                        <!-- Customer & Vessel -->
+                        <div>
+                            <p class="modern-label ui-label">Customer</p>
+                            <p class="modern-value-lg text-primary" style="font-size: 18px;">@Model.Customer?.CustomerName</p>
+
+                            <div class="mt-2">
+                                <p class="modern-label ui-label">Vessel</p>
+                                <p class="modern-value-md font-bold uppercase">@Model.Vessel?.VesselName <span class="modern-badge-sm" style="background-color: var(--surface-container-high); text-transform: none; font-weight: 500; margin-left: 4px;">@Model.Vessel?.VesselType</span></p>
+                            </div>
+                        </div>
+
+                        <!-- Logistics Row -->
+                        <div class="modern-grid-compact border-t border-outline-variant pt-2">
+                            <div class="modern-col-6">
+                                <p class="modern-label ui-label">COS #</p>
+                                <p class="modern-value-md font-bold">@(Model.COSNumber ?? "-")</p>
+                            </div>
+                            <div class="modern-col-6">
+                                <p class="modern-label ui-label">Voyage #</p>
+                                <p class="modern-value-md font-bold">@(Model.VoyageNumber ?? "-")</p>
+                            </div>
+                        </div>
+
+                        <!-- Location -->
+                        <div class="border-t border-outline-variant pt-2">
+                            <p class="modern-label ui-label">Location</p>
+                            <div class="flex items-start gap-2">
+                                <span class="material-symbols-outlined text-primary" style="font-size: 18px; margin-top: 2px;">location_on</span>
+                                <p class="modern-value-md">
+                                    @if (Model.Terminal?.Port != null)
+                                    {
+                                        <span class="font-bold">@Model.Terminal.Port.PortName</span><br/>
+                                        <span class="text-xs opacity-60">@Model.Terminal.TerminalName</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="italic opacity-50">-</span>
+                                    }
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Type of Service -->
+                        <div class="border-t border-outline-variant pt-2">
+                            <p class="modern-label ui-label">Type of Service</p>
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-primary" style="font-size: 18px;">build</span>
+                                <div>
+                                    <p class="modern-value-md font-bold">@(Model.Service?.ServiceName ?? "-")</p>
+                                </div>
+                                </div>
+                                </div>
+
+                        <!-- Timeline -->
+                        <div class="border-t border-outline-variant pt-2">
+                            <p class="modern-label mb-2 ui-label">Service Timeline</p>
+                            <div class="dispatch-timeline">
+                                <div class="timeline-item">
+                                    <div class="timeline-marker start"></div>
+                                    <div class="timeline-content">
+                                        <p class="text-xs font-bold uppercase opacity-50">Departure</p>
+                                        <p class="modern-value-md font-bold">@Model.DateLeft?.ToString("MMM dd, yyyy")</p>
+                                        <p class="text-xs opacity-60">@Model.TimeLeft?.ToString("HH:mm")</p>
+                                    </div>
+                                </div>
+                                <div class="timeline-item">
+                                    <div class="timeline-marker end"></div>
+                                    <div class="timeline-content">
+                                        <p class="text-xs font-bold uppercase opacity-50">Arrival</p>
+                                        <p class="modern-value-md font-bold">@Model.DateArrived?.ToString("MMM dd, yyyy")</p>
+                                        <p class="text-xs opacity-60">@Model.TimeArrived?.ToString("HH:mm")</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="timeline-duration">
+                                <div class="duration-box">
+                                    <span class="material-symbols-outlined">schedule</span>
+                                    <div>
+                                        <p class="modern-label ui-label" style="margin-bottom: 0;">Net Duration</p>
+                                        <p class="modern-headline-md text-primary ui-section-title" style="font-size: 20px;">@Model.TotalHours.ToString("N2")&nbsp;<span class="text-xs opacity-60">HRS</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Provider -->
+                        <div class="border-t border-outline-variant pt-2">
+                            <p class="modern-label ui-label">Provider Details</p>
+                            <div class="flex items-start gap-2">
+                                <span class="material-symbols-outlined text-primary" style="font-size: 18px; margin-top: 2px;">directions_boat</span>
+                                <div>
+                                    <p class="modern-value-md font-bold">@Model.Tugboat?.TugboatName</p>
+                                    <p class="text-xs italic opacity-60">Master: @Model.TugMaster?.TugMasterName</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(Model.Remarks))
+                        {
+                            <div class="border-t border-outline-variant pt-2">
+                                <p class="modern-label ui-label">Remarks</p>
+                                <p class="modern-value-md italic opacity-70" style="font-size: 13px;">@Model.Remarks</p>
+                            </div>
+                        }
+
+                        <!-- Attachments -->
+                        <div class="border-t border-outline-variant pt-2">
+                            <p class="modern-label mb-2 ui-label">Media Attachments</p>
+                            <div class="modern-grid-compact">
+                                @if (!string.IsNullOrEmpty(Model.ImageSignedUrl))
+                                {
+                                    <div class="modern-col-12 mb-2">
+                                        <div class="modern-card ui-card" style="background-color: var(--surface-container-low); cursor: pointer;" id="viewUpload">
+                                            <div class="modern-card-body items-center p-2 ui-card-body" style="gap: 4px;">
+                                                <img src="@Model.ImageSignedUrl" class="rounded" alt="Ticket" style="height: 120px; width: 100%; object-fit: cover;" />
+                                                <span class="text-xs text-primary font-bold">View Image</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(Model.VideoSignedUrl))
+                                {
+                                    <div class="modern-col-12">
+                                        <div class="modern-card view-video ui-card" style="background-color: var(--surface-container-low); cursor: pointer;" data-videolink="@Model.VideoSignedUrl">
+                                            <div class="modern-card-body items-center p-2 ui-card-body" style="gap: 4px;">
+                                                <span class="material-symbols-outlined text-primary" style="font-size: 48px">play_circle</span>
+                                                <span class="text-xs text-primary font-bold">Play Video</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                                @if (string.IsNullOrEmpty(Model.ImageSignedUrl) && string.IsNullOrEmpty(Model.VideoSignedUrl))
+                                {
+                                    <p class="text-sm italic opacity-50 modern-col-12 text-center">No attachments</p>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Tariff Details -->
+            <div class="modern-col-8">
+                <div class="modern-card ui-card">
+                    <div class="modern-card-header-info ui-card-header">
+                        <span class="material-symbols-outlined">receipt_long</span>
+                        <h2 class="modern-headline-md ui-section-title">Tariff Summary</h2>
+                    </div>
+                    <div class="modern-card-body ui-card-body">
+                        <div class="modern-table-container" style="border: 1px solid var(--outline-variant);">
+                            <table class="modern-table ui-table">
+                                <thead>
+                                    <tr>
+                                        <th>Service Description</th>
+                                        <th class="text-right">Rate</th>
+                                        <th class="text-right">Disc. (%)</th>
+                                        <th class="text-right">Billing Amount</th>
+                                        <th class="text-right">Net Revenue</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="font-bold">Dispatch Service</td>
+                                        <td class="text-right">@Model.DispatchRate.ToString("N2")</td>
+                                        <td class="text-right text-error font-bold">@Model.DispatchDiscount.ToString("N2")%</td>
+                                        <td class="text-right font-bold">@Model.DispatchBillingAmount.ToString("N2")</td>
+                                        <td class="text-right font-bold text-success">@Model.DispatchNetRevenue.ToString("N2")</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="font-bold">BAF (Bunker Adjustment)</td>
+                                        <td class="text-right">@Model.BAFRate.ToString("N2")</td>
+                                        <td class="text-right text-error font-bold">@Model.BAFDiscount.ToString("N2")%</td>
+                                        <td class="text-right font-bold">@Model.BAFBillingAmount.ToString("N2")</td>
+                                        <td class="text-right font-bold text-success">@Model.BAFNetRevenue.ToString("N2")</td>
+                                    </tr>
+                                    @if (Model.Tugboat is { IsCompanyOwned: false })
+                                    {
+                                        <tr style="background-color: var(--surface-container-low)">
+                                            <td colspan="3" class="italic">
+                                                Outsourced Provider: <span class="font-bold">@Model.Tugboat.TugboatOwner?.TugboatOwnerName</span>
+                                            </td>
+                                            <td class="text-right modern-label ui-label" style="vertical-align: middle">AP Other Tugs:</td>
+                                            <td class="text-right font-bold text-error">(@Model.ApOtherTugs.ToString("N2"))</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Financial Summary Card -->
+                        <div class="financial-summary-card mt-4">
+                            <div class="financial-item">
+                                <span class="financial-label">Grand Total Billing</span>
+                                <span class="financial-value primary">₱ @Model.TotalBilling.ToString("N2")</span>
+                            </div>
+                            <div class="financial-divider"></div>
+                            <div class="financial-item">
+                                <span class="financial-label">Net Revenue Realized</span>
+                                <span class="financial-value secondary">₱ @Model.TotalNetRevenue.ToString("N2")</span>
+                            </div>
+                        </div>
+
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+@section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '.modern-grid > .modern-col-4 > .modern-card', title: 'Service details', text: 'Review the customer, vessel, location, service, tugboat, and any supporting media attached to this ticket.', interactive: false },
+            { selector: '.dispatch-timeline', title: 'Actual service times', text: 'Departure and arrival are the recorded service times. Check the net duration before reviewing tariff amounts.', interactive: false },
+            { selector: '.modern-grid > .modern-col-8 .modern-table-container', title: 'Tariff summary', text: 'Review dispatch and bunker adjustment rates, discounts, billing amounts, and net revenue. Outsourced tug costs appear when applicable.', interactive: false },
+            { selector: '.financial-summary-card', title: 'Financial totals', text: 'See the ticket’s grand total billing and net revenue. Ticket changes are performed from the linked COS.', interactive: false }
+        ];
+    </script>
+    <script>
+        $(document).ready(function () {
+            // Image Preview
+            $('#viewUpload').on('click', function () {
+                const src = $(this).find('img').attr('src');
+                if (src) ModernAlert.image(src, "Dispatch Ticket");
+            });
+
+            // Video Player
+            $(document).on("click", ".view-video", function () {
+                const videoLink = $(this).data("videolink");
+                if (videoLink) ModernAlert.video(videoLink, "Dispatch Ticket Video");
+            });
+
+        });
+    </script>
+}

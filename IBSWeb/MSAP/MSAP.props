@@ -1,0 +1,6 @@
+<Project>
+  <ItemGroup>
+    <PackageReference Include="Markdig" Version="1.3.2" />
+    <Content Include="../Docs/MSAP/manual/*.md" Link="MSAP/Manual/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

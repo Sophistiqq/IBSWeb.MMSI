@@ -61,7 +61,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
         public IEnumerable<ChartOfAccountDto> GetSummaryReportView(CancellationToken cancellationToken = default)
         {
-            var query = from c in _db.FilprideChartOfAccounts.IgnoreQueryFilters()
+            var query = from c in _db.FilprideChartOfAccounts.IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                         join gl in _db.FilprideGeneralLedgerBooks on c.AccountNumber equals gl.AccountNo into glGroup
                         from gl in glGroup.DefaultIfEmpty()
                         group new { c, gl } by new { c.Level, c.AccountNumber, c.AccountName, c.AccountType, } into g
@@ -177,7 +177,7 @@ namespace IBS.DataAccess.Repository.Filpride
         public async Task<FilprideChartOfAccount?> GetAsyncIgnoreQueryFilters(Expression<Func<FilprideChartOfAccount, bool>> filter, CancellationToken cancellationToken = default)
         {
             return await dbSet
-                .IgnoreQueryFilters()
+                .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                 .Where(filter)
                 .Include(c => c.Children)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -186,7 +186,7 @@ namespace IBS.DataAccess.Repository.Filpride
         public async Task<IEnumerable<FilprideChartOfAccount>> GetAllAsyncIgnoreQueryFilters(Expression<Func<FilprideChartOfAccount, bool>>? filter = null, CancellationToken cancellationToken = default)
         {
             IQueryable<FilprideChartOfAccount> query = dbSet
-                .IgnoreQueryFilters()
+                .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                 .Include(c => c.ParentAccount)
                 .Include(c => c.Children);
 
@@ -201,7 +201,7 @@ namespace IBS.DataAccess.Repository.Filpride
         public IQueryable<FilprideChartOfAccount> GetAllQueryIgnoreQueryFilters(Expression<Func<FilprideChartOfAccount, bool>>? filter = null)
         {
             IQueryable<FilprideChartOfAccount> query = dbSet
-                .IgnoreQueryFilters()
+                .IgnoreQueryFilters(["MasterVisibility", "BalanceValidity"])
                 .Include(c => c.Children)
                 .AsSplitQuery()
                 .AsNoTracking();

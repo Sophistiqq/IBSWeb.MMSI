@@ -1,0 +1,437 @@
+@{
+    ViewData["Title"] = ViewBag.DisplayName + " — SuperAdmin";
+    ViewData["IsFullWidth"] = true;
+    var columnsJson = ViewBag.ColumnsJson as string ?? "[]";
+    var fieldsJson = ViewBag.FieldsJson as string ?? "[]";
+    var tableName = ViewBag.TableName as string;
+    var idColumn = ViewBag.IdColumn as string ?? "Id";
+    var refColumn = ViewBag.ReferenceColumn as string ?? "Id";
+}
+
+<div class="modern-layout">
+    <main class="modern-container">
+        <div class="flex-stack">
+            <div>
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="modern-label" style="color: var(--on-surface-variant)">SUPERADMIN</span>
+                    <span class="material-symbols-outlined text-xs">chevron_right</span>
+                    <span class="modern-label" style="color: var(--on-surface)">@ViewBag.DisplayName</span>
+                </div>
+                <h1 class="modern-headline-lg">@ViewBag.DisplayName</h1>
+            </div>
+            <div>
+                <a asp-action="Index" asp-controller="Home" class="modern-btn-secondary">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                    Back to Dashboard
+                </a>
+            </div>
+        </div>
+
+        <div class="modern-card mt-3">
+            <div class="modern-card-body">
+                <table class="modern-table" id="superAdminTable" style="width:100%">
+                    <thead></thead>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content modern-card border-0">
+            <div class="modern-card-header-info">
+                <span class="material-symbols-outlined">edit</span>
+                <h2 class="modern-headline-md" id="editModalTitle">Edit Record</h2>
+                <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modern-card-body">
+                <form id="editForm">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="editRecordId" />
+                    <input type="hidden" id="editTableName" value="@tableName" />
+
+                    <div id="terminalStateWarning" class="d-none" style="display:flex; gap:0.5rem; align-items:flex-start; padding:0.75rem 1rem; border-radius:var(--radius-xl); background-color:var(--error-container); color:var(--on-error-container); font-size:0.85rem;">
+                        <span class="material-symbols-outlined" style="flex-shrink:0;">warning</span>
+                        <span><strong>Terminal State</strong> — This record is in a terminal state. Changes may have downstream impact.</span>
+                    </div>
+
+                    <div class="modern-grid" id="editFormFields">
+                        <!-- Fields rendered dynamically by JS -->
+                    </div>
+
+                    <hr class="my-3" />
+                    <div class="modern-grid">
+                        <div class="modern-col-12">
+                            <label for="editRemarks" class="modern-label">Remarks / Reason for Change <span class="text-error">*</span></label>
+                            <textarea class="modern-input" id="editRemarks" rows="2" required minlength="10"
+                                      placeholder="Explain why this change is needed (min 10 characters)"></textarea>
+                            <small class="text-xs" style="color: var(--on-surface-variant)" id="remarksCounter">0 / 10 min</small>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-2 mt-3">
+                        <button type="button" class="modern-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="modern-btn-primary" id="saveBtn">
+                            <span class="material-symbols-outlined">save</span>
+                            Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // ── Parse server-side configuration ──
+        const tableName = '@tableName';
+        const idColumn = '@idColumn';
+        const refColumn = '@refColumn';
+        const columnsDef = @Html.Raw(columnsJson);
+        const fieldsDef = @Html.Raw(fieldsJson);
+
+        // ── Status badge colors ──
+        function getStatusClass(status) {
+            const map = {
+                'Open': 'status-open',
+                'Closed': 'status-closed',
+                'Draft': 'status-closed',
+                'Requested': 'status-approval',
+                'For Tariff': 'status-tariff',
+                'For Approval': 'status-approval',
+                'Disapproved': 'status-error',
+                'For Billing': 'status-billing',
+                'Billed': 'status-confirmed',
+                'Deleted': 'status-error',
+                'For Posting': 'status-tariff',
+                'For Collection': 'status-approval',
+                'Collected': 'status-confirmed',
+            };
+            return map[status] || 'status-closed';
+        }
+
+        function errorNotice(msg) {
+            return '<div style="padding:0.75rem 1rem; border-radius:var(--radius-xl); background-color:var(--error-container); color:var(--on-error-container); font-size:0.85rem;">' + msg + '</div>';
+        }
+
+        // ── DataTable columns ──
+        function buildColumns() {
+            const cols = columnsDef.map(c => {
+                const col = {
+                    data: c.data,
+                    title: c.title,
+                    orderable: true,
+                    defaultContent: ''
+                };
+
+                if (c.data === 'Status') {
+                    col.render = (data, type) => type === 'display'
+                        ? `<span class="modern-badge-sm ${getStatusClass(data)}">${$.fn.dataTable.render.text().display(data || '')}</span>`
+                        : data;
+                } else {
+                    col.render = $.fn.dataTable.render.text();
+                }
+
+                return col;
+            });
+
+            // Add actions column
+            cols.push({
+                data: null,
+                title: 'Actions',
+                orderable: false,
+                width: '80px',
+                render: (data, type, row) => {
+                    const id = row[idColumn];
+                    return ModernTable.render.dropdown([
+                        { label: 'Edit', icon: 'edit', onclick: `openEditModal(${id})` }
+                    ]);
+                }
+            });
+
+            return cols;
+        }
+
+        // ── Initialize DataTable ──
+        const table = $('#superAdminTable').DataTable(
+            ModernTable.config({
+                ajax: ModernTable.ajax('@Url.Action("GetData", "Data", new { area = "MSAPSuperAdmin" })', (d) => {
+                    d.table = tableName;
+                    return d;
+                }),
+                columns: buildColumns(),
+                order: [[0, 'desc']],
+                pageLength: 25,
+                lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+                placeholder: 'Search @ViewBag.DisplayName...'
+            })
+        );
+
+        // ── Edit Modal Logic ──
+        let lookupCache = {};
+
+        async function getLookup(key) {
+            if (lookupCache[key]) return lookupCache[key];
+            const resp = await fetch('@Url.Action("GetLookup", "Data", new { area = "MSAPSuperAdmin" })?key=' + key);
+            const data = await resp.json();
+            lookupCache[key] = data;
+            return data;
+        }
+
+        function renderField(field, value) {
+            const col = document.createElement('div');
+            col.className = 'modern-col-6';
+
+            const label = document.createElement('label');
+            label.className = 'modern-label';
+            label.htmlFor = 'field_' + field.name;
+            label.textContent = field.label + (field.isRequired ? ' *' : '');
+            col.appendChild(label);
+
+            switch (field.type) {
+                case 'string': {
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'modern-input';
+                    input.id = 'field_' + field.name;
+                    input.name = field.name;
+                    input.value = value || '';
+                    if (field.isRequired) input.required = true;
+                    col.appendChild(input);
+                    break;
+                }
+                case 'textarea': {
+                    const textarea = document.createElement('textarea');
+                    textarea.className = 'modern-input';
+                    textarea.id = 'field_' + field.name;
+                    textarea.name = field.name;
+                    textarea.rows = 3;
+                    textarea.value = value || '';
+                    if (field.isRequired) textarea.required = true;
+                    col.appendChild(textarea);
+                    break;
+                }
+                case 'number': {
+                    const input = document.createElement('input');
+                    input.type = 'number';
+                    input.className = 'modern-input';
+                    input.id = 'field_' + field.name;
+                    input.name = field.name;
+                    input.value = value ?? '';
+                    input.step = '0.01';
+                    if (field.isRequired) input.required = true;
+                    col.appendChild(input);
+                    break;
+                }
+                case 'date': {
+                    const input = document.createElement('input');
+                    input.type = 'date';
+                    input.className = 'modern-input';
+                    input.id = 'field_' + field.name;
+                    input.name = field.name;
+                    input.value = value ? value.substring(0, 10) : '';
+                    if (field.isRequired) input.required = true;
+                    col.appendChild(input);
+                    break;
+                }
+                case 'datetime': {
+                    const input = document.createElement('input');
+                    input.type = 'datetime-local';
+                    input.className = 'modern-input';
+                    input.id = 'field_' + field.name;
+                    input.name = field.name;
+                    input.value = value ? value.substring(0, 16) : '';
+                    if (field.isRequired) input.required = true;
+                    col.appendChild(input);
+                    break;
+                }
+                case 'time': {
+                    const input = document.createElement('input');
+                    input.type = 'time';
+                    input.className = 'modern-input';
+                    input.id = 'field_' + field.name;
+                    input.name = field.name;
+                    input.value = value || '';
+                    if (field.isRequired) input.required = true;
+                    col.appendChild(input);
+                    break;
+                }
+                case 'boolean': {
+                    const div = document.createElement('div');
+                    div.className = 'form-check mt-2';
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'form-check-input';
+                    checkbox.id = 'field_' + field.name;
+                    checkbox.name = field.name;
+                    checkbox.checked = value === true || value === 'true' || value === 'Yes';
+                    checkbox.value = 'true';
+                    div.appendChild(checkbox);
+                    col.appendChild(div);
+                    break;
+                }
+                case 'select': {
+                    const select = document.createElement('select');
+                    select.className = 'modern-input';
+                    select.id = 'field_' + field.name;
+                    select.name = field.name;
+                    if (field.isRequired) select.required = true;
+                    if (field.options) {
+                        field.options.forEach(opt => {
+                            const option = document.createElement('option');
+                            option.value = opt.value || opt.text;
+                            option.textContent = opt.text;
+                            if (option.value === (value || '')) option.selected = true;
+                            select.appendChild(option);
+                        });
+                    }
+                    col.appendChild(select);
+                    break;
+                }
+                case 'select_lookup': {
+                    const select = document.createElement('select');
+                    select.className = 'modern-input';
+                    select.id = 'field_' + field.name;
+                    select.name = field.name;
+                    if (field.isRequired) select.required = true;
+                    select.innerHTML = '<option value="">-- Select --</option>';
+                    col.appendChild(select);
+
+                    // Load options async
+                    getLookup(field.lookupKey).then(options => {
+                        options.forEach(opt => {
+                            const option = document.createElement('option');
+                            option.value = opt.value;
+                            option.textContent = opt.text;
+                            if (option.value === (value != null ? String(value) : '')) option.selected = true;
+                            select.appendChild(option);
+                        });
+                    });
+                    break;
+                }
+                default: {
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'modern-input';
+                    input.id = 'field_' + field.name;
+                    input.name = field.name;
+                    input.value = value || '';
+                    col.appendChild(input);
+                }
+            }
+
+            return col;
+        }
+
+        async function openEditModal(id) {
+            document.getElementById('editRecordId').value = id;
+            document.getElementById('editModalTitle').textContent = 'Edit Record #' + id;
+            document.getElementById('editForm').reset();
+            document.getElementById('editRemarks').value = '';
+            document.getElementById('terminalStateWarning').classList.add('d-none');
+            updateRemarksCounter();
+
+            const fieldsContainer = document.getElementById('editFormFields');
+            fieldsContainer.innerHTML = '<div class="modern-col-12 text-center py-4"><div class="modern-loader-inline"></div> Loading...</div>';
+
+            const modal = new bootstrap.Modal(document.getElementById('editModal'));
+            modal.show();
+
+            try {
+                const resp = await fetch('@Url.Action("GetRecord", "Data", new { area = "MSAPSuperAdmin" })?table=' + tableName + '&id=' + id);
+                const result = await resp.json();
+
+                if (!result.success) {
+                    fieldsContainer.innerHTML = '<div class="modern-col-12">' + errorNotice(result.message) + '</div>';
+                    return;
+                }
+
+                const record = result.data;
+
+                // Check terminal state
+                const status = record['Status'] || '';
+                const terminalStates = ['Billed', 'Collected', 'Deleted'];
+                if (terminalStates.includes(status)) {
+                    document.getElementById('terminalStateWarning').classList.remove('d-none');
+                }
+
+                fieldsContainer.innerHTML = '';
+                fieldsDef.forEach(field => {
+                    const value = record[field.name] != null ? record[field.name] : '';
+                    const el = renderField(field, value);
+                    fieldsContainer.appendChild(el);
+                });
+
+            } catch (err) {
+                fieldsContainer.innerHTML = '<div class="modern-col-12">' + errorNotice('Failed to load record.') + '</div>';
+            }
+        }
+
+        // ── Save handler ──
+        document.getElementById('editForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const remarks = document.getElementById('editRemarks').value.trim();
+            if (remarks.length < 10) {
+                ModernAlert.error('Please provide a reason (min 10 characters).');
+                return;
+            }
+
+            const id = document.getElementById('editRecordId').value;
+            const formData = new FormData();
+            formData.append('table', tableName);
+            formData.append('id', id);
+            formData.append('remarks', remarks);
+            formData.append('__RequestVerificationToken',
+                document.querySelector('input[name="__RequestVerificationToken"]').value);
+
+            // Collect changed fields
+            fieldsDef.forEach(field => {
+                const el = document.getElementById('field_' + field.name);
+                if (!el) return;
+
+                let value;
+                if (field.type === 'boolean') {
+                    value = el.checked ? 'true' : 'false';
+                } else {
+                    value = el.value;
+                }
+                formData.append('changes[' + field.name + ']', value);
+            });
+
+            document.getElementById('saveBtn').disabled = true;
+            document.getElementById('saveBtn').innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+
+            try {
+                const resp = await fetch('@Url.Action("Save", "Data", new { area = "MSAPSuperAdmin" })?table=' + tableName + '&id=' + id, {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await resp.json();
+
+                if (result.success) {
+                    ModernAlert.success(result.message || 'Saved successfully.');
+                    bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+                    table.ajax.reload();
+                } else {
+                    ModernAlert.error(result.message || 'Save failed.');
+                }
+            } catch (err) {
+                ModernAlert.error('An error occurred while saving.');
+            } finally {
+                document.getElementById('saveBtn').disabled = false;
+                document.getElementById('saveBtn').innerHTML = '<span class="material-symbols-outlined">save</span> Save Changes';
+            }
+        });
+
+        // ── Remarks character counter ──
+        function updateRemarksCounter() {
+            const val = document.getElementById('editRemarks').value.length;
+            document.getElementById('remarksCounter').textContent = val + ' / 10 min';
+        }
+        document.getElementById('editRemarks').addEventListener('input', updateRemarksCounter);
+    </script>
+}

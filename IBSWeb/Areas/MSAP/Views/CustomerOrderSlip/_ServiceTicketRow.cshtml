@@ -1,0 +1,80 @@
+@model Tuple<VesselScheduleServiceEntry?, DispatchTicket?>
+@{
+    var entry = Model.Item1;
+    var ticket = Model.Item2;
+    var cos = ViewData["Cos"] as CustomerOrderSlip ?? throw new InvalidOperationException("COS context is required.");
+    var selected = ViewBag.ActualTicketEntry as DispatchTicketViewModel;
+    var progress = (JobProgressViewModel)ViewBag.JobProgress;
+    var booking = ViewBag.VesselSchedule as VesselSchedule;
+    var approvalPending = booking != null && (booking.ApprovedRevision != booking.Revision || booking.Status == MsapConstants.VesselScheduleStatus.Tentative);
+    var calculationBlocker = ticket == null ? null : progress.CalculationBlockers.GetValueOrDefault(ticket.DispatchTicketId);
+    var service = entry?.Service ?? ticket?.Service ?? throw new InvalidOperationException("A service row requires an expected service or ticket.");
+    var isSelected = selected != null && (ticket != null
+        ? selected.DispatchTicketId == ticket.DispatchTicketId
+        : entry != null && selected.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId);
+    var rowState = isSelected ? "ui-active" : calculationBlocker != null || ticket?.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "ui-critical"
+        : entry?.CancelledAt.HasValue != true && (ticket == null || approvalPending) ? "ui-attention" : "";
+}
+<tr class="@rowState">
+    <td>@service.ServiceName</td>
+    @if (entry?.CancelledAt.HasValue == true)
+    {
+        <td colspan="4"><span class="schedule-status-pill">Service cancelled</span><small class="ui-caption ui-muted">@entry.CancellationReason · @entry.CancelledAt.Value.ToString("dd MMM yyyy, HH:mm")</small></td><td>—</td>
+    }
+    else if (ticket == null && entry != null)
+    {
+        <td>Not entered</td><td>Pending</td><td>Pending</td><td><span class="ui-status ui-attention">Awaiting ticket</span></td>
+        <td>
+            <div class="cos-service-actions">
+                @if (ViewData["CanRecordExpectedService"] is true)
+                {
+                    @if (selected?.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId)
+                    {
+                        <span class="ui-status ui-active" aria-current="true">Entering ticket</span>
+                    }
+                    else
+                    {
+                        <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@cos.CustomerOrderSlipId"
+                           asp-route-expectedServiceEntryId="@entry.VesselScheduleServiceEntryId" asp-fragment="actualTicketEntry" class="cos-ticket-link">Record ticket</a>
+                    }
+                }
+                @if (ViewData["CanCancelExpectedService"] is true)
+                {
+                    <button type="button" class="cos-ticket-link cos-service-cancel ui-critical" data-cancel-service="@entry.VesselScheduleServiceEntryId" data-cos-id="@cos.CustomerOrderSlipId" data-url="@Url.Action("CancelService", "CustomerOrderSlip")">Cancel service</button>
+                }
+            </div>
+        </td>
+    }
+    else if (ticket != null)
+    {
+        <td>
+            @if (ViewData["CanViewActualTicket"] is true)
+            {
+                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@cos.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-fragment="actualTicketEntry" class="cos-ticket-link">@ticket.DispatchNumber</a>
+            }
+            else
+            {
+                @ticket.DispatchNumber
+            }
+            @if (ticket.DateLeft.HasValue && ticket.TimeLeft.HasValue && ticket.DateArrived.HasValue && ticket.TimeArrived.HasValue)
+            {
+                <small class="ui-caption ui-muted">@ticket.DateLeft.Value.ToString("dd MMM") @ticket.TimeLeft.Value.ToString("HH:mm") – @ticket.DateArrived.Value.ToString("dd MMM") @ticket.TimeArrived.Value.ToString("HH:mm")</small>
+            }
+        </td>
+        <td>@(ticket.RawDurationHours?.ToString("0.00") ?? "—")</td>
+        <td>@ticket.TotalHours.ToString("0.00")</td>
+        <td>
+            <span class="schedule-status-pill ui-status @(approvalPending ? "ui-attention" : calculationBlocker != null || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "ui-critical" : "ui-complete")">@(approvalPending ? "Awaiting approval" : calculationBlocker != null || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "Calculation pending" : "Recorded")</span>
+            @if (calculationBlocker != null)
+            {
+                <small class="cos-ticket-blocker ui-caption ui-muted">@calculationBlocker</small>
+            }
+        </td>
+        <td>
+            @if (ViewData["CanViewActualTicket"] is true)
+            {
+                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@cos.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-fragment="actualTicketEntry" class="cos-ticket-link">View ticket</a>
+            }
+        </td>
+    }
+</tr>

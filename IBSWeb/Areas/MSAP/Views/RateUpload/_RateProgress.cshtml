@@ -1,0 +1,12 @@
+@model int
+<aside class="ui-panel ui-stack rate-progress" aria-label="Rate Progress">
+    <h2 class="ui-section-title">Rate Progress</h2>
+    <p class="ui-caption ui-muted">MMSI / Tariff and BAF</p>
+    <ol>
+        @foreach (var stage in new[] { (Number: 1, Label: "Edit draft"), (Number: 2, Label: "Compare rates"), (Number: 3, Label: "Review update"), (Number: 4, Label: "Activate rates") })
+        {
+            <li class="@(stage.Number <= Model ? "is-current" : "")" aria-current="@(stage.Number == Model ? "step" : null)"><span>@stage.Number</span><div>@stage.Label<small>@(stage.Number < Model ? "Prepared" : stage.Number == Model ? Model == 3 ? "Awaiting review" : Model == 4 ? "Approved" : "In progress" : "Pending")</small></div></li>
+        }
+    </ol>
+    <p class="ui-caption ui-muted">Drafts and submissions leave live rates unchanged. Approval activates only the selected changes.</p>
+</aside>

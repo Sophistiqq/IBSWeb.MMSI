@@ -1,0 +1,71 @@
+@using IBS.Models.MSAP.Enums
+@model VesselSchedule
+@{
+    var tugs = (List<string>)ViewBag.AssignedTugboats;
+    var isReapproval = Model.ApprovedRevision.HasValue;
+}
+<div class="schedule-confirm-review">
+    <dl id="bookingReview">
+        <dt>Customer</dt><dd>@(Model.Customer?.CustomerName ?? "Not selected")</dd>
+        <dt>Vessel</dt><dd>@Model.Vessel.VesselName</dd>
+        <dt>Location</dt><dd>@Model.Port.PortName / @Model.Terminal.TerminalName</dd>
+        <dt>Voyage</dt><dd>@(Model.VoyageNumber ?? "—")</dd>
+        <dt>Planned start / COS date</dt><dd>@Model.PlannedStart.ToString("MMM d, yyyy · HH:mm")</dd>
+        <dt>Planned end</dt><dd>@Model.PlannedEnd.ToString("MMM d, yyyy · HH:mm")</dd>
+        <dt>Assigned tugs</dt><dd>@(tugs.Count == 0 ? "Not assigned" : string.Join(", ", tugs))</dd>
+        <dt>Schedule revision</dt><dd>Revision @Model.Revision @(isReapproval ? "(Reapproval)" : "")</dd>
+        <dt>COS Discount</dt><dd>@(Model.SkipCosDiscount ? "Skipped (0%)" : (Model.CosDiscountPercent.HasValue ? $"{Model.CosDiscountPercent.Value:0.##}%" : "0% (Default)"))</dd>
+        <dt>SBMA Assessment</dt><dd>@(Model.SbmaEnabled ? "Enabled" : "Disabled")</dd>
+    </dl>
+    <div class="schedule-confirm-services">
+        <h4 class="modern-headline-sm">Expected services</h4>
+        @if (Model.ServiceEntries != null && Model.ServiceEntries.Count > 0)
+        {
+            <div class="schedule-confirm-table-wrapper">
+                <table class="schedule-confirm-table">
+                    <thead>
+                        <tr>
+                            <th>Tugboat</th>
+                            <th>Service</th>
+                            <th>Tariff Basis</th>
+                            <th>BAF Method</th>
+                            <th>Manual Rates</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in Model.ServiceEntries)
+                        {
+                            <tr>
+                                <td><strong>@(entry.Tugboat?.TugboatName ?? $"Tug #{entry.TugboatId}")</strong></td>
+                                <td>@(entry.Service?.ServiceName ?? $"Service #{entry.ServiceId}")</td>
+                                <td>@(entry.TariffBasis.HasValue ? entry.TariffBasis.Value.ToString() : "PerHour")</td>
+                                <td>
+                                    @(entry.BafMethod.HasValue ? entry.BafMethod.Value.ToString() : "PerHour")
+                                    @if (entry.BafMethod is BafCalculationMethod.Lumpsum or BafCalculationMethod.Industry)
+                                    {
+                                        <span class="schedule-pending-notice text-xs">Approved amount applied once per service</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (entry.ManualTariffRate.HasValue) { <span>Tariff: @entry.ManualTariffRate.Value.ToString("N2")</span> }
+                                    @if (entry.ManualBafRate.HasValue) { <span>BAF: @entry.ManualBafRate.Value.ToString("N2")</span> }
+                                    @if (!entry.ManualTariffRate.HasValue && !entry.ManualBafRate.HasValue) { <span class="schedule-muted">Standard</span> }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <p class="schedule-muted">No specific services defined.</p>
+        }
+    </div>
+    <p class="schedule-confirm-guidance">@(isReapproval ? $"Reapproval approves Revision {Model.Revision} and confirms the schedule, preserving COS {Model.CustomerOrderSlip?.CustomerOrderSlipNumber}." : $"Confirmation creates or retains the linked COS and urgent tickets, and approves Revision {Model.Revision}.") All times are Philippine time.</p>
+    <form asp-action="Confirm" asp-controller="VesselSchedule" asp-area="MSAP" method="post" id="confirmSchedule" data-reapproval="@(isReapproval ? "true" : "false")" data-customer-order-slip="@(Model.CustomerOrderSlip?.CustomerOrderSlipNumber ?? "")">
+        <input type="hidden" name="id" value="@Model.VesselScheduleId" />
+        <input type="hidden" name="reviewedAt" value="@((Model.EditedDate ?? Model.CreatedDate).ToString("O"))" />
+        <input type="hidden" name="allowConflicts" value="false" />
+    </form>
+</div>
