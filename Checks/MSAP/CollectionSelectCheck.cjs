@@ -31,7 +31,7 @@ let closed = 0;
 const trigger = { toggleClass(name, value) { attributes[name] = value; return this; }, attr(name, value) { attributes[name] = value; return this; }, removeClass() {} };
 const syncBody = component.split('        const syncDisabled = () => {')[1].split('        syncDisabled();')[0];
 const sync = vm.runInNewContext(`(function () {${syncBody.slice(0, syncBody.lastIndexOf('};'))}})`, {
-    $select: { prop: () => disabled }, $trigger: trigger, $dropdown: { removeClass() { closed++; } }
+    $select: { is(selector) { assert.equal(selector, ':disabled'); return disabled; } }, $trigger: trigger, $dropdown: { removeClass() { closed++; } }
 });
 sync(); assert.equal(attributes['aria-disabled'], 'true'); assert.equal(attributes.tabindex, '-1'); assert.equal(closed, 1);
 disabled = false; sync(); assert.equal(attributes['aria-disabled'], 'false'); assert.equal(attributes.tabindex, '0');

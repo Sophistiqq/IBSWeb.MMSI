@@ -32,6 +32,7 @@ namespace Checks.MSAP
             await db.SaveChangesAsync();
             var schedule = new VesselSchedule
             {
+                VoyageNumber = "COS-CHECK",
                 CustomerId = customer.CustomerId, VesselId = vessel.VesselId,
                 PortId = terminal.PortId, TerminalId = terminal.TerminalId,
                 PlannedStart = new DateTime(2025, 6, 1, 8, 0, 0), PlannedEnd = new DateTime(2025, 6, 1, 10, 0, 0),
@@ -100,8 +101,8 @@ namespace Checks.MSAP
             second.TimeLeft = actual.TimeLeft; second.TimeArrived = actual.TimeArrived; second.TugMasterId = master.TugMasterId;
             var secondSaved = await dispatch.CreateDispatchTicketAsync(second, null, null, "check", default);
             Check(secondSaved.IsSuccess, secondSaved.Message!);
-            Check((await JobProgressCalculator.LoadAsync(work, job, schedule, default)).Stage == JobProgressCalculator.TariffStage,
-                "Recording all required services did not advance service progress.");
+            Check((await JobProgressCalculator.LoadAsync(work, job, schedule, default)).Stage == JobProgressCalculator.BillingStage,
+                "Recording all required services with calculated charges did not advance to billing.");
             var changed = new DispatchTicketViewModel();
             changed.FromEntity(ticket);
             changed.ServiceId = int.MaxValue;

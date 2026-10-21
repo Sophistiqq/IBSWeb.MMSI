@@ -1,4 +1,4 @@
-﻿using IBS.DataAccess.MSAP.Data;
+using IBS.DataAccess.MSAP.Data;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.MasterFile;
 using IBS.Utility.MSAP.Constants;
@@ -22,7 +22,7 @@ namespace Checks.MSAP
             var vessel = new Vessel { VesselNumber = "TL01", VesselName = "Linkage Vessel", VesselType = "LOCAL" };
             var port = new Port { PortNumber = "TL1", PortName = "Linkage Port" };
             var terminal = new Terminal { TerminalNumber = "TL1", TerminalName = "Linkage Terminal", Port = port };
-            var tug = new Tugboat { TugboatNumber = "TLT1", TugboatName = "Linkage Tug", Port = port };
+            var tug = new Tugboat { TugboatNumber = "TL1", TugboatName = "Linkage Tug", Port = port };
             var service = new Service { ServiceNumber = "999", ServiceName = "Linkage Service" };
             var schedule = new VesselSchedule
             {
@@ -69,7 +69,7 @@ namespace Checks.MSAP
                 ($"UPDATE msap.mmsi_dispatch_tickets SET raw_duration_hours = -1 WHERE \"RECID\" = {ticket.DispatchTicketId}", PostgresErrorCodes.CheckViolation),
                 ($"UPDATE msap.mmsi_dispatch_tickets SET raw_duration_minutes = -5 WHERE \"RECID\" = {ticket.DispatchTicketId}", PostgresErrorCodes.CheckViolation),
                 ($"UPDATE msap.mmsi_dispatch_tickets SET vessel_schedule_service_entry_id = 999999 WHERE \"RECID\" = {ticket.DispatchTicketId}", PostgresErrorCodes.ForeignKeyViolation),
-                ($"DELETE FROM msap.mmsi_vessel_schedule_service_entries WHERE vessel_schedule_service_entry_id = {entry.VesselScheduleServiceEntryId}", PostgresErrorCodes.ForeignKeyViolation)
+                ($"DELETE FROM msap.mmsi_vessel_schedule_service_entries WHERE vessel_schedule_service_entry_id = {entry.VesselScheduleServiceEntryId}", PostgresErrorCodes.RestrictViolation)
             })
             {
                 await using IDbContextTransaction transaction = await db.Database.BeginTransactionAsync();

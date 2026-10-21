@@ -79,8 +79,8 @@ namespace Checks.MSAP
             };
             var masterExport = (FileStreamResult)await masterController.GenerateExcel("customer", default, null!);
             using var masterPackage = new ExcelPackage(masterExport.FileStream);
-            Check(masterPackage.Workbook.Worksheets[0].Cells[6, 13].Text == "DEFAULT COS DISCOUNT (%)"
-                && masterPackage.Workbook.Worksheets[0].Cells[7, 13].GetValue<decimal>() == 12.5m,
+            Check(masterPackage.Workbook.Worksheets[0].Cells[6, 12].Text == "DEFAULT COS DISCOUNT (%)"
+                && masterPackage.Workbook.Worksheets[0].Cells[7, 12].GetValue<decimal>() == 12.5m,
                 "Customer master export lost the default discount.");
 
             await using Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction = await db.Database.BeginTransactionAsync();

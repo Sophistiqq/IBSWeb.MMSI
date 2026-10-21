@@ -68,8 +68,8 @@ namespace Checks.MSAP
             foreach (ProcedureEnum procedure in new[] { ProcedureEnum.ApproveSchedule, ProcedureEnum.ApproveRateUpload, ProcedureEnum.ApproveFinalBilling })
             {
                 var recipients = (await work.UserAccess.GetUserIdsWithAccessAsync(procedure)).ToHashSet();
-                Check(recipients.SetEquals(procedure == ProcedureEnum.ApproveSchedule ? new[] { user.Id, unrelatedAdmin.Id } : new[] { user.Id }),
-                    "Schedule recipients must include active administrators; other approvals must remain explicitly assigned.");
+                Check(recipients.SetEquals(new[] { user.Id, unrelatedAdmin.Id }),
+                    "Approval recipients must include active administrators and explicitly assigned users.");
             }
             update.CanApproveRateUpload = false;
             Check((await accessService.UpdateAsync(update, "approval-check", default)).IsSuccess, "Cannot revoke rate approval.");
