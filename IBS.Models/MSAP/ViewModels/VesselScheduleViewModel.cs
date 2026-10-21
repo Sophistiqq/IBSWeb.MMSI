@@ -38,6 +38,10 @@ namespace IBS.Models.MSAP.ViewModels
         [Display(Name = "Assigned Tugboats")]
         public List<int>? SelectedTugboatIds { get; set; }
 
+        [Display(Name = "IOC / Non-IOC")]
+        public bool? IsIoc { get; set; }
+
+        [Required(ErrorMessage = "Please enter a voyage number")]
         [Display(Name = "Voyage Number")]
         [StringLength(50)]
         public string? VoyageNumber { get; set; }

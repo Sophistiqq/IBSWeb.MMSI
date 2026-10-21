@@ -35,6 +35,7 @@ namespace Checks.MSAP
             var model = new VesselScheduleViewModel
             {
                 VesselScheduleId = 5, CustomerId = 1, VesselId = 1, PortId = 1, TerminalId = 1,
+                IsIoc = true, Terminals = [new SelectListItem("Terminal", "1")],
                 Revision = 2, ApprovedRevision = 1, SkipCosDiscount = true, CosDiscountPercent = 12.5m, SbmaEnabled = true,
                 PlannedStart = new DateTime(2026, 10, 16, 23, 0, 0), PlannedEnd = new DateTime(2026, 10, 17, 1, 0, 0),
                 SelectedTugboatIds = [1, 2], Tugboats = [new SelectListItem("Tug <A>", "1"), new SelectListItem("Tug B", "2")],
@@ -46,6 +47,7 @@ namespace Checks.MSAP
                 }]
             };
             var data = new ViewDataDictionary<VesselScheduleViewModel>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = model };
+            data["TerminalIocMap"] = new Dictionary<int, bool> { [1] = false };
             data.ModelState.AddModelError("", "Save <failed>");
             var engine = services.GetRequiredService<IRazorViewEngine>();
             var view = engine.GetView(null, "/Areas/MSAP/Views/VesselSchedule/_ScheduleForm.cshtml", false);
@@ -53,6 +55,23 @@ namespace Checks.MSAP
             await view.View!.RenderAsync(new ViewContext(context, view.View, data,
                 services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), output, new HtmlHelperOptions()));
             string html = output.ToString();
+            Check(Regex.IsMatch(html, "<input[^>]*id=\"VoyageNumber\"[^>]*required"), "Voyage number is not required in the form.");
+            Check(Regex.IsMatch(html, "<option(?=[^>]*value=\"true\")(?=[^>]*selected=\"selected\")[^>]*>IOC</option>"), "Schedule IOC selection was not retained.");
+            Check(Regex.IsMatch(html, "<option(?=[^>]*data-is-ioc=\"false\")(?=[^>]*selected=\"selected\")[^>]*>Terminal</option>"), "Selected terminal lost its IOC default.");
+            Check(html.Contains("id=\"RateMode\"", StringComparison.Ordinal), "Rate mode selection is missing from the form.");
+            Check(Regex.IsMatch(html, "<option(?=[^>]*value=\"non-recurring\")(?=[^>]*selected=\"selected\")"), "Saved manual rates must default the form to non-recurring mode.");
+            foreach (string? voyage in new string?[] { null, "", "   ", new string('V', 51) })
+            {
+                var errors = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+                Check(!System.ComponentModel.DataAnnotations.Validator.TryValidateProperty(voyage,
+                    new System.ComponentModel.DataAnnotations.ValidationContext(model) { MemberName = nameof(model.VoyageNumber) }, errors),
+                    "Voyage validation accepted an empty value.");
+                var scheduleService = new VesselScheduleService(null!, null!, Microsoft.Extensions.Logging.Abstractions.NullLogger<VesselScheduleService>.Instance);
+                var invalidSchedule = new VesselSchedule { VoyageNumber = voyage };
+                string expectedMessage = voyage?.Length > 50 ? "Voyage number must be at most 50 characters." : "Please enter a voyage number.";
+                Check((await scheduleService.CreateAsync(invalidSchedule, "check")).Message == expectedMessage,
+                    "The service must reject a missing voyage before accessing storage.");
+            }
             Check(html.Contains("Save for reviewing", StringComparison.Ordinal) && html.Contains("__RequestVerificationToken", StringComparison.Ordinal), "Schedule save action or anti-forgery token is missing.");
             Check(Regex.Matches(html, "name=\"ServiceEntries.Index\"").Count == 2, "Saved service rows and the new-row template must retain collection binding indices.");
             Check(Regex.IsMatch(html, "name=\"ServiceEntries\\[[^\\]]+\\].ManualTariffRate\" value=\"0.00\""), "A zero manual rate was lost when rendering.");

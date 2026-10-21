@@ -2,6 +2,8 @@
 @model VesselScheduleViewModel
 @{
     var tugOwnerMap = ViewBag.TugboatOwnerMap as Dictionary<int, bool> ?? new Dictionary<int, bool>();
+    var terminalIocMap = ViewBag.TerminalIocMap as Dictionary<int, bool> ?? new Dictionary<int, bool>();
+    var hasManualRates = Model.ServiceEntries?.Any(e => e.ManualTariffRate != null || e.ManualBafRate != null) == true;
     var isNew = Model.VesselScheduleId == 0;
     var selectedTugs = Model.SelectedTugboatIds?.Distinct().ToList() ?? new List<int>();
 }
@@ -77,16 +79,30 @@
                         </div>
                         <div class="schedule-field ui-field" data-tour-step="6">
                             <label asp-for="TerminalId" class="schedule-field-label ui-label">Terminal *</label>
-                            <select asp-for="TerminalId" asp-items="Model.Terminals" class="js-modern-select" id="TerminalId" required>
+                            <select asp-for="TerminalId" class="js-modern-select" id="TerminalId" required>
                                 <option value="">Select terminal</option>
+                                @foreach (var terminal in Model.Terminals)
+                                {
+                                    <option value="@terminal.Value" data-is-ioc="@(terminalIocMap.GetValueOrDefault(int.Parse(terminal.Value)).ToString().ToLowerInvariant())">@terminal.Text</option>
+                                }
                             </select>
                             <span asp-validation-for="TerminalId" class="text-error ui-caption"></span>
                         </div>
                         <div class="schedule-field ui-field" data-tour-step="4">
-                            <label asp-for="VoyageNumber" class="schedule-field-label ui-label">Voyage number</label>
-                            <input asp-for="VoyageNumber" class="modern-input" id="VoyageNumber" maxlength="50" placeholder="VOY-001" />
+                            <label asp-for="VoyageNumber" class="schedule-field-label ui-label">Voyage number *</label>
+                            <input asp-for="VoyageNumber" class="modern-input" id="VoyageNumber" maxlength="50" placeholder="VOY-001" required />
                             <span asp-validation-for="VoyageNumber" class="text-error ui-caption"></span>
                         </div>
+                    </div>
+                    <div class="schedule-field ui-field">
+                        <label asp-for="IsIoc" class="schedule-field-label ui-label">IOC / Non-IOC</label>
+                        <select asp-for="IsIoc" class="js-modern-select" id="IsIoc">
+                            <option value="">Use terminal default</option>
+                            <option value="true">IOC</option>
+                            <option value="false">Non-IOC</option>
+                        </select>
+                        <span asp-validation-for="IsIoc" class="text-error ui-caption"></span>
+                        <p class="ui-caption ui-muted" id="iocDefault" role="status"></p>
                     </div>
                     <p id="terminalMessage" class="schedule-muted schedule-field-wide" role="status"></p>
                     <div class="schedule-grid-2">
@@ -141,6 +157,15 @@
                     <button type="button" class="modern-btn-secondary js-add-tugboat-btn" id="addTugboatBtn" data-tour-step="12">
                         <span class="material-symbols-outlined" aria-hidden="true">add</span> Add tugboat
                     </button>
+                </div>
+
+                <div class="schedule-field ui-field">
+                    <label class="schedule-field-label ui-label" for="RateMode">Rate mode</label>
+                    <select id="RateMode" class="js-modern-select">
+                        <option value="recurring">Recurring — use table rates</option>
+                        <option value="non-recurring" selected="@hasManualRates">Non-recurring — enter manual rates</option>
+                    </select>
+                    <p class="ui-caption ui-muted">Non-recurring keeps every tariff and BAF input editable even when a table rate is found.</p>
                 </div>
 
                 <div id="tugServicesContainer" class="schedule-tug-services-list">

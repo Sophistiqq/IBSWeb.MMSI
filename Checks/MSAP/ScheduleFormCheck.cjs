@@ -9,14 +9,14 @@ for (const role of ['js-service-select', 'js-tariff-basis', 'js-baf-method']) {
 }
 const addRow = source.slice(source.indexOf('    function addServiceRow('), source.indexOf('    if (addTugboatBtn'));
 {
-    const newRow = {};
+    const newRow = {querySelectorAll: () => []};
     let initialized;
     vm.runInNewContext(addRow + '\naddServiceRow(1, target);', {
         serviceRowTemplate: {innerHTML: '<div></div>'},
         document: {createElement: () => ({firstElementChild: newRow})},
         target: {appendChild: row => assert.equal(row, newRow)},
         $: row => ({find: selector => { assert.equal(row, newRow); return selector; }}),
-        ModernSelect: {init: selects => initialized = selects}, updateSummary() {}
+        ModernSelect: {init: selects => initialized = selects}, updateSummary() {}, manualRates: () => false
     });
     assert.equal(initialized, '.js-modern-select', 'Adding a service must initialize its modern selects.');
 }
@@ -50,21 +50,26 @@ for (const valid of [true, false]) {
 }
 const rates = source.slice(source.indexOf('    function updateRateProvenance('), source.indexOf('    function refreshAllRates('));
 const pending = [];
+let recurring = true;
+let currentRow = null;
 const context = vm.createContext({
     AbortController, URLSearchParams,
     form: {dataset: {rateUrl: '/rates'}},
     getScheduleContext: () => ({customerId: 1, terminalId: 2, date: '2026-10-16T08:00'}),
-    updateSummary() {},
+    updateSummary() {}, manualRates: () => !recurring,
+    servicesContainer: {querySelectorAll: () => currentRow ? [currentRow] : []},
     fetch: () => new Promise(resolve => pending.push(resolve))
 });
-vm.runInContext(rates + '\nthis.lookup = fetchTariffAndBaf; this.provenance = updateRateProvenance;', context);
+vm.runInContext(rates + '\nthis.lookup = fetchTariffAndBaf; this.provenance = updateRateProvenance; this.applyLock = applyRateLock;', context);
 function row() {
     const elements = Object.fromEntries(['tariff-rate', 'baf-rate', 'tariff-provenance', 'baf-provenance'].map(key => ['.js-' + key, {value: '', dataset: {}}]));
-    return {isConnected: true, querySelector: selector => elements[selector]};
+    return {isConnected: true, querySelector: selector => elements[selector],
+        querySelectorAll: () => [elements['.js-tariff-rate'], elements['.js-baf-rate']]};
 }
 function respond(data) { pending.shift()({ok: true, json: async () => data}); }
 (async () => {
     const entry = row();
+    currentRow = entry;
     const first = context.lookup(entry, 1);
     assert.equal(entry.querySelector('.js-tariff-rate').dataset.lookup, 'loading');
     respond({exists: true, tariffRate: 10000, bafRate: 29000});
@@ -103,6 +108,51 @@ function respond(data) { pending.shift()({ok: true, json: async () => data}); }
     await unavailable;
     assert.equal(entry.querySelector('.js-tariff-provenance').textContent, 'Lookup unavailable');
     assert.equal(entry.querySelector('.js-tariff-rate').readOnly, true, 'A failed lookup is not proof of a missing table rate.');
+    entry.querySelector('.js-baf-rate').value = '999';
+    recurring = false;
+    const override = context.lookup(entry, 4);
+    respond({exists: true, tariffRate: 7000, bafRate: 1200});
+    await override;
+    assert.equal(entry.querySelector('.js-baf-rate').readOnly, false, 'Non-recurring keeps a detected table rate editable.');
+    assert.equal(entry.querySelector('.js-baf-rate').value, '999', 'A detected rate must not wipe a manual entry in non-recurring mode.');
+    assert.equal(entry.querySelector('.js-baf-rate').placeholder, '1,200.00', 'The table estimate stays visible as the placeholder.');
+    assert.equal(entry.querySelector('.js-baf-provenance').textContent, 'Manual rate', 'A typed override reports as a manual rate in non-recurring mode.');
+    recurring = true;
+    context.applyLock();
+    assert.equal(entry.querySelector('.js-baf-rate').readOnly, true, 'Recurring locks detected table rates again.');
+    assert.equal(entry.querySelector('.js-baf-rate').value, '', 'Switching back to recurring lets the detected rate supersede the manual entry.');
+    recurring = false;
+    for (const state of ['found', 'unchecked', 'loading', 'missing', 'error']) {
+        for (const selector of ['.js-tariff-rate', '.js-baf-rate']) {
+            entry.querySelector(selector).dataset.lookup = state;
+        }
+        context.applyLock();
+        for (const selector of ['.js-tariff-rate', '.js-baf-rate']) {
+            assert.equal(entry.querySelector(selector).readOnly, false, 'Non-recurring must allow both rates regardless of lookup state.');
+        }
+    }
     assert(source.includes("$(servicesContainer).on('change'"), 'ModernSelect emits jQuery change events; tug assignments must receive them.');
-    console.log('PASS: detected rates are read-only and stay out of manual fields; missing matches allow zero/manual entry; stale responses are ignored and failed lookups stay locked.');
+    console.log('PASS: recurring mode keeps detected rates read-only and out of manual fields; missing matches allow zero/manual entry; stale responses are ignored; failed lookups stay locked; non-recurring keeps every rate editable even when a table rate is found.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
+const iocLogic = source.slice(source.indexOf('    const ioc ='), source.indexOf('    const customer ='));
+{
+    const ioc = {value: 'true', options: [{text: ''}]};
+    const note = {};
+    const terminal = {selectedOptions: [{dataset: {isIoc: 'false'}}]};
+    let changed;
+    vm.runInNewContext(iocLogic, {
+        document: {getElementById: id => id === 'IsIoc' ? ioc : note}, terminal,
+        $: () => ({on: (event, callback) => changed = callback}),
+        window: {refreshModernSelect() {}}, updateSummary() {}
+    });
+    assert.equal(ioc.value, 'true', 'Loading a saved form must preserve the IOC override.');
+    assert.match(ioc.options[0].text, /Non-IOC/);
+    terminal.selectedOptions[0].dataset.isIoc = 'true';
+    changed();
+    assert.equal(ioc.value, '', 'Changing terminal must return to its default.');
+    assert.match(note.textContent, /Terminal default: IOC/);
+    terminal.selectedOptions = [];
+    changed();
+    assert.match(note.textContent, /Select a terminal/);
+}
+console.log('PASS: IOC defaults follow the terminal and saved overrides survive form initialization.');

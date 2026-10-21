@@ -44,6 +44,10 @@
 
     const port = document.getElementById('PortId');
     const terminal = document.getElementById('TerminalId');
+    const rateMode = document.getElementById('RateMode');
+    function manualRates() {
+        return rateMode?.value === 'non-recurring';
+    }
     const message = document.getElementById('terminalMessage');
     let terminalRequest;
 
@@ -61,7 +65,11 @@
             if (!response.ok) throw new Error('Unable to load terminals.');
             const items = await response.json();
             if (request.signal.aborted) return;
-            items.forEach(item => terminal.add(new Option(item.text, item.value)));
+            items.forEach(item => {
+                const option = new Option(item.text, item.value);
+                option.dataset.isIoc = String(item.isIoc);
+                terminal.add(option);
+            });
             window.refreshModernSelect($(terminal));
             $(terminal).trigger('change');
             if (message) message.textContent = items.length ? '' : 'No terminals registered for this port.';
@@ -73,9 +81,20 @@
         }
     });
 
+    const ioc = document.getElementById('IsIoc');
+    function updateIocDefault() {
+        const defaultValue = terminal.selectedOptions[0]?.dataset.isIoc;
+        const defaultLabel = defaultValue === 'true' ? 'IOC' : 'Non-IOC';
+        ioc.options[0].text = defaultValue ? 'Use terminal default (' + defaultLabel + ')' : 'Use terminal default';
+        document.getElementById('iocDefault').textContent = defaultValue ? 'Terminal default: ' + defaultLabel : 'Select a terminal to see its default.';
+        window.refreshModernSelect($(ioc));
+    }
     $(terminal).on('change', () => {
+        ioc.value = '';
+        updateIocDefault();
         updateSummary();
     });
+    updateIocDefault();
 
     const customer = document.getElementById('CustomerId');
     const discountInput = document.getElementById('CosDiscountPercent');
@@ -206,7 +225,7 @@
         }
         document.getElementById('summaryTariffRates').textContent = rateSummary('.js-tariff-rate');
         document.getElementById('summaryBafRates').textContent = rateSummary('.js-baf-rate');
-        document.getElementById('summaryRecurringBadge').textContent = manualCount ? 'Non-recurring' : 'Recurring';
+        document.getElementById('summaryRecurringBadge').textContent = manualRates() || manualCount ? 'Non-recurring' : 'Recurring';
         const summaryNotice = document.getElementById('summaryRatesNotice');
         summaryNotice.textContent = manualCount
             ? 'Manual rates need review. Table estimates use the planned date; final rates use actual service start.'
@@ -330,7 +349,7 @@
         inputs.forEach(input => {
             input.dataset.lookup = canLookup ? 'loading' : 'unchecked';
             input.placeholder = 'From table';
-            input.readOnly = true;
+            input.readOnly = !manualRates();
         });
         updateRateProvenance(row);
         updateSummary();
@@ -344,7 +363,7 @@
             inputs.forEach((input, index) => {
                 const rate = index === 0 ? data.tariffRate : data.bafRate;
                 input.dataset.lookup = data.exists && rate != null ? 'found' : 'missing';
-                input.readOnly = input.dataset.lookup === 'found';
+                input.readOnly = !manualRates() && input.dataset.lookup === 'found';
                 if (input.readOnly) input.value = '';
                 // Estimates stay out of Manual* fields so saving cannot turn a table rate into a manual override.
                 input.placeholder = input.dataset.lookup === 'found' ? Number(rate).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : 'Enter manual rate';
@@ -354,6 +373,18 @@
             inputs.forEach(input => input.dataset.lookup = 'error');
         }
         updateRateProvenance(row);
+        updateSummary();
+    }
+
+    function applyRateLock() {
+        if (!servicesContainer) return;
+        servicesContainer.querySelectorAll('[data-service-row]').forEach(row => {
+            row.querySelectorAll('.js-tariff-rate, .js-baf-rate').forEach(input => {
+                input.readOnly = !manualRates() && input.dataset.lookup !== 'missing';
+                if (input.readOnly && input.dataset.lookup === 'found') input.value = '';
+            });
+            updateRateProvenance(row);
+        });
         updateSummary();
     }
 
@@ -373,6 +404,7 @@
         temp.innerHTML = html.trim();
         const newRow = temp.firstElementChild;
         targetContainer.appendChild(newRow);
+        newRow.querySelectorAll('.js-tariff-rate, .js-baf-rate').forEach(input => input.readOnly = !manualRates());
         ModernSelect.init($(newRow).find('.js-modern-select'));
         updateSummary();
         // No auto-fetch on new row: service not yet selected
@@ -487,6 +519,9 @@
         updateSummary();
         refreshAllRates();
     });
+
+    $(rateMode).on('change', applyRateLock);
+    window.refreshModernSelect($(rateMode));
 
     start.addEventListener('input', () => {
         validateTime();

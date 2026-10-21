@@ -52,6 +52,7 @@
                     <div><dt class="ui-caption ui-muted">Vessel</dt><dd class="ui-value">@Model.Vessel.VesselName</dd></div>
                     <div><dt class="ui-caption ui-muted">Port</dt><dd class="ui-value">@Model.Port.PortName</dd></div>
                     <div><dt class="ui-caption ui-muted">Terminal</dt><dd class="ui-value">@Model.Terminal.TerminalName</dd></div>
+                    <div><dt class="ui-caption ui-muted">IOC / Non-IOC</dt><dd class="ui-value">@((Model.IsIoc ?? Model.Terminal.IsIoc) ? "IOC" : "Non-IOC")</dd></div>
                     <div><dt class="ui-caption ui-muted">Voyage number</dt><dd class="ui-value">@(Model.VoyageNumber ?? "—")</dd></div>
                     <div><dt class="ui-caption ui-muted">Planned start · Philippine time</dt><dd class="ui-value">@Model.PlannedStart.ToString("dd MMM yyyy, HH:mm")</dd></div>
                     <div><dt class="ui-caption ui-muted">Planned end · Philippine time</dt><dd class="ui-value">@Model.PlannedEnd.ToString("dd MMM yyyy, HH:mm")</dd></div>
