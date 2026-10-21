@@ -876,6 +876,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             {
                 var reversalEntry = new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = originalEntry.WorkspaceTugboatId,
                     Date = new DateOnly(
                         originalEntry.Date.Year,
                         originalEntry.Date.Month,

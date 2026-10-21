@@ -22,7 +22,8 @@
     <input asp-for="CustomerId" type="hidden" /><input asp-for="VesselId" type="hidden" />
     <input asp-for="PortId" type="hidden" /><input asp-for="TerminalId" type="hidden" />
     <input asp-for="TugBoatId" type="hidden" /><input asp-for="ServiceId" type="hidden" />
-    <input asp-for="VoyageNumber" type="hidden" /><input asp-for="COSNumber" type="hidden" />
+    <input asp-for="VoyageNumber" type="hidden" />
+    <p class="ui-caption">COS: @Model.COSNumber · Complete the actual ticket and approve the COS, tariff and BAF before saving.</p>
     <fieldset class="cos-entry-fields" disabled="@readOnly">
         <div class="ui-field"><label asp-for="DispatchNumber" class="ui-label">Actual ticket number *</label><input asp-for="DispatchNumber" class="modern-input ui-input" maxlength="20" required /></div>
         <div class="ui-field"><label asp-for="Date" class="ui-label">Ticket date *</label><input asp-for="Date" type="date" class="modern-input ui-input" required /></div>

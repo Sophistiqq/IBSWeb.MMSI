@@ -20,8 +20,7 @@ $(document).ready(function () {
 
     $(document).on('submit', 'form', function (event) {
         if (event.isDefaultPrevented()) return;
-        $(this).validate();
-        if (!$(this).valid()) {
+        if ($.fn.validate && $.fn.valid && !$(this).valid()) {
             return false; // Stop execution if invalid
         }
         // Show the spinner wrapper when submitting

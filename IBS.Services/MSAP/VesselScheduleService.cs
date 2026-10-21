@@ -463,18 +463,26 @@ namespace IBS.Services.MSAP
                     {
                         schedule.Status = MsapConstants.VesselScheduleStatus.Confirmed;
                     }
-                    foreach (var ticket in await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct))
+                    List<DispatchTicket> tickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct)).ToList();
+                    foreach (var ticket in tickets.Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted))
                     {
-                        if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(ticket.Date.Year, ticket.Date.Month, ct)
-                            || ticket.DateLeft.HasValue && await unitOfWork.PostedPeriod.IsMonthClosedAsync(ticket.DateLeft.Value.Year, ticket.DateLeft.Value.Month, ct))
+                        if (ticket.Status == MsapConstants.DispatchTicketStatus.Billed
+                            || (await unitOfWork.PostedPeriod.GetByYearMonthAsync(ticket.Date.Year, ticket.Date.Month, ct))?.IsClosed == true
+                            || ticket.DateLeft.HasValue && (await unitOfWork.PostedPeriod.GetByYearMonthAsync(ticket.DateLeft.Value.Year, ticket.DateLeft.Value.Month, ct))?.IsClosed == true
+                            || ticket.DateArrived.HasValue && (await unitOfWork.PostedPeriod.GetByYearMonthAsync(ticket.DateArrived.Value.Year, ticket.DateArrived.Value.Month, ct))?.IsClosed == true)
                         {
-                            throw new InvalidOperationException("An urgent ticket belongs to a closed period. Approval cannot calculate its charges.");
+                            throw new InvalidOperationException("A ticket is billed or belongs to a closed period. Approval cannot change its charges.");
                         }
                         var blocker = await ScheduledTicketCharges.ApplyAsync(unitOfWork, ticket, schedule, username, ct);
+                        if (blocker != null)
+                        {
+                            throw new InvalidOperationException(blocker);
+                        }
                         await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
                             $"Applied approved COS terms to urgent ticket #{ticket.DispatchNumber}: {blocker ?? "Charges calculated"}",
                             "Dispatch Ticket", ticket.DispatchTicketId, ticket.DispatchNumber), ct);
                     }
+                    SbmaShareCalculator.Apply(tickets, schedule.SbmaEnabled);
                     schedule.EditedBy = username;
                     schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 

@@ -4,14 +4,23 @@
 @using IBS.Models.Enums
 @using IBS.Utility.Constants
 @using IBS.Utility.Helpers
+@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Identity
 @model CheckVoucherVM
 @inject UserManager<ApplicationUser> UserManager
+@inject IAuthorizationService Authorization
 
 @{
     ViewData["Title"] = "Check Voucher Trade - Preview";
 
     int supplierId = Model.Supplier?.SupplierId ?? 0;
+    bool isTugboatPayment = Model.Header?.CvType == nameof(CVType.OtherTugs);
+    bool wasPrinted = ViewData["WasPrinted"] is bool printed ? printed : Model.Header!.IsPrinted;
+    bool activePayment = !isTugboatPayment || (Model.Header!.TugboatPayments.All(payment => payment.ReleasedAt == null) && Model.Header.CanceledBy == null && Model.Header.VoidedBy == null);
+    bool canPost = !isTugboatPayment || (await Authorization.AuthorizeAsync(User, nameof(CheckVoucherTrade.CheckVoucherTradePost))).Succeeded;
+    bool canUnpost = !isTugboatPayment || (await Authorization.AuthorizeAsync(User, nameof(CheckVoucherTrade.CheckVoucherTradeUnpost))).Succeeded;
+    var displayEntries = Model.Details?.Where(entry => isTugboatPayment ? !entry.IsDisplayEntry : entry.IsDisplayEntry)
+        .OrderBy(entry => entry.CheckVoucherDetailId).ToList() ?? [];
 
 
 
@@ -145,7 +154,7 @@
         <tbody>
             <tr>
                 <td style="width:10%; padding-left:20px;">Name :</td>
-                @if (Model.Header.SupplierId != null)
+                @if (Model.Header.SupplierId != null || isTugboatPayment)
                 {
                     <td class="text-clamp-2 break-word">@Model.Header!.SupplierName!.ToUpper()</td>
                 }
@@ -158,9 +167,13 @@
             <tr>
                 <td style="padding-left:20px;">Address :</td>
                 <td class="text-clamp-2 break-word">@Model.Header!.Address.ToUpper()</td>
-                <td style="width:5%;">PO # :</td>
+                <td style="width:5%;">@(isTugboatPayment ? "COS # :" : "PO # :")</td>
                 <td class="text-clamp-2 break-word">
-                    @if (Model.Header.PONo != null && Model.Header.PONo.Any())
+                    @if (isTugboatPayment && ViewData["TugboatCosNumbers"] is string[] cosNumbers)
+                    {
+                        @string.Join(", ", cosNumbers)
+                    }
+                    else if (Model.Header.PONo != null && Model.Header.PONo.Any())
                     {
                         @string.Join(", ", Model.Header.PONo.Where(x => !string.IsNullOrWhiteSpace(x)))
                     }
@@ -169,7 +182,7 @@
             <tr>
                 <td style="padding-left:20px;">TIN # :</td>
                 <td>@Html.DisplayFor(model => model.Header!.Tin)</td>
-                <td>SI # :</td>
+                <td>@(isTugboatPayment ? "Bill # :" : "SI # :")</td>
                 <td class="text-clamp-2 break-word">
                     @if (ViewBag.SINoArray is string[] siArray && siArray.Any())
                     {
@@ -197,7 +210,7 @@
         <tbody>
             <tr>
                 <td style="width:20%; padding-left:20px;">Payee :</td>
-                @if (Model.Header.SupplierId != null)
+                @if (Model.Header.SupplierId != null || isTugboatPayment)
                 {
                     <td class="text-clamp-2 break-word">@Model.Header!.Payee!.ToUpper()</td>
                 }
@@ -294,9 +307,7 @@
                 <th class="text-end">CREDIT</th>
             </tr>
 
-            @foreach (var cv in Model.Details!
-                          .Where(x => x.IsDisplayEntry)
-                          .OrderBy(x => x.CheckVoucherDetailId))
+            @foreach (var cv in displayEntries)
             {
                 <tr>
                     <td style="width:60%; padding-left:20px;" class="break-word small-if-long">
@@ -310,14 +321,10 @@
             <tr style="border-bottom:double;"></tr>
             <tr>
                 <td></td>
-                <td class="text-end">@(Model.Details?
-                    .Where(x => x.IsDisplayEntry)
-                    .Sum(x => x.Debit)
+                <td class="text-end">@(displayEntries.Sum(x => x.Debit)
                     .ToString(SD.Two_Decimal_Format))
                 </td>
-                <td class="text-end">@(Model.Details?
-                    .Where(x => x.IsDisplayEntry)
-                    .Sum(x => x.Credit)
+                <td class="text-end">@(displayEntries.Sum(x => x.Credit)
                     .ToString(SD.Two_Decimal_Format))
                 </td>
             </tr>
@@ -382,7 +389,7 @@
         </p>
     </div>
 
-    @if (!Model.Header.IsPrinted)
+    @if (!wasPrinted)
     {
         <div class="text-end">
             ORIGINAL COPY
@@ -398,20 +405,23 @@
 
 <div class="row pt-2">
     @{
-        if (Model.Header?.PostedBy == null)
+        if (Model.Header?.PostedBy == null && activePayment && canPost)
         {
             <div class="col-6 col-md-3">
                 <a id="approveButton" class="btn btn-primary form-control buttons" onclick="confirmPost(@Model.Header?.CheckVoucherHeaderId)">Post</a>
             </div>
         }
-        else
+        else if (Model.Header?.PostedBy != null && activePayment)
         {
             <div class="col-6 col-md-3">
                 <a onclick="confirmPrint(@Model.Header.CheckVoucherHeaderId, @supplierId)" class="btn btn-primary form-control buttons">Print</a>
             </div>
-            <div class="col-6 col-md-3">
-                <a id="approveButton" style="@(Model?.Header?.DcrDate != null ? "display: none;" : "")" class="btn btn-primary form-control buttons" onclick="confirmUnpost(@Model?.Header?.CheckVoucherHeaderId)">Unpost</a>
-            </div>
+            @if (canUnpost)
+            {
+                <div class="col-6 col-md-3">
+                    <a id="approveButton" style="@(Model?.Header?.DcrDate != null ? "display: none;" : "")" class="btn btn-primary form-control buttons" onclick="confirmUnpost(@Model?.Header?.CheckVoucherHeaderId)">Unpost</a>
+                </div>
+            }
         }
     }
 
@@ -420,8 +430,26 @@
     </div>
 </div>
 
+@if (isTugboatPayment)
+{
+    <form id="tugboatTransition" method="post" class="d-none">
+        @Html.AntiForgeryToken()
+        <input name="id" value="@Model!.Header!.CheckVoucherHeaderId" type="hidden" />
+    </form>
+}
+
 @section Scripts {
     <script>
+        function navigateVoucher(url) {
+            const form = document.getElementById('tugboatTransition');
+            if (form) {
+                form.action = url;
+                form.submit();
+            } else {
+                window.location.href = url;
+            }
+        }
+
         function confirmPost(id) {
             Swal.fire({
                 title: 'Are you sure?',
@@ -433,8 +461,8 @@
                 confirmButtonText: 'Post'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    var url = `@Url.Action("Post", "CheckVoucherTrade", new { area = "Filpride" })?id=${encodeURIComponent(id)}&supplierId=${encodeURIComponent(@supplierId)}`;
-                    window.location.href = url;
+                    var url = `@Url.Action(isTugboatPayment ? "PostTugboatPayment" : "Post", "CheckVoucherTrade", new { area = "Filpride" })?id=${encodeURIComponent(id)}&supplierId=${encodeURIComponent(@supplierId)}`;
+                    navigateVoucher(url);
                 }
             })
         }
@@ -451,14 +479,31 @@
                 confirmButtonText: 'Yes'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    var url = `@Url.Action("Unpost", "CheckVoucherTrade", new { area = "Filpride" })/${id}`;
-                    window.location.href = url;
+                    var url = `@Url.Action(isTugboatPayment ? "UnpostTugboatPayment" : "Unpost", "CheckVoucherTrade", new { area = "Filpride" })/${id}`;
+                    navigateVoucher(url);
                 }
             })
         }
     </script>
 
-    @if (Model?.Header?.Type == nameof(DocumentType.Documented) && !Model.Header.IsPrinted)
+    @if (isTugboatPayment)
+    {
+        <script>
+            function confirmPrint(id, supplierId) {
+                const form = document.getElementById('tugboatTransition');
+                form.action = '@Url.Action("PrintTugboatPayment", "CheckVoucherTrade", new { area = "Filpride" })';
+                form.target = '_blank';
+                form.submit();
+                form.target = '';
+            }
+
+        </script>
+        @if (ViewData["PrintPayment"] is true)
+        {
+            <script>window.addEventListener('load', function () { window.print(); });</script>
+        }
+    }
+    else if (Model?.Header?.Type == nameof(DocumentType.Documented) && !Model.Header.IsPrinted)
     {
         <script>
             function confirmPrint(id, supplierId)

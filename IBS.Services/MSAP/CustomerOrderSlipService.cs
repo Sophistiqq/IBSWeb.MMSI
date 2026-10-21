@@ -349,7 +349,7 @@ namespace IBS.Services.MSAP
                 ticket.CustomerId = customerOrderSlip.CustomerId;
                 ticket.VesselId = customerOrderSlip.VesselId;
                 ticket.VoyageNumber = customerOrderSlip.VoyageNumber;
-                ticket.COSNumber = customerOrderSlip.COSNumber;
+                ticket.COSNumber = customerOrderSlip.CustomerOrderSlipNumber;
                 ticket.PortId = customerOrderSlip.PortId;
                 ticket.TerminalId = customerOrderSlip.TerminalId;
                 ticket.Date = customerOrderSlip.Date;
@@ -491,32 +491,7 @@ namespace IBS.Services.MSAP
                     }
                     else
                     {
-                        // Assign as an additional tugboat by creating a pending DispatchTicket
-                        var services = await unitOfWork.Service.GetAllAsync(cancellationToken: cancellationToken);
-                        var service = services.FirstOrDefault();
-                        if (service == null)
-                        {
-                            throw new InvalidOperationException("Cannot assign tugboat: no service configured.");
-                        }
-                        int serviceId = service.ServiceId;
-
-                        var ticket = new DispatchTicket
-                        {
-                            CustomerOrderSlipId = customerOrderSlip.CustomerOrderSlipId,
-                            TugBoatId = tugboatId,
-                            CustomerId = customerOrderSlip.CustomerId,
-                            VesselId = customerOrderSlip.VesselId,
-                            PortId = customerOrderSlip.PortId,
-                            TerminalId = customerOrderSlip.TerminalId,
-                            ServiceId = serviceId,
-                            Date = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()),
-                            DispatchNumber = $"P{customerOrderSlip.CustomerOrderSlipId:X}T{tugboatId:X}",
-                            Status = MsapConstants.DispatchTicketStatus.ForTariff,
-                            CreatedBy = username,
-                            CreatedDate = DateTimeHelper.GetCurrentPhilippineTime()
-                        };
-
-                        await unitOfWork.DispatchTicket.AddAsync(ticket, cancellationToken);
+                        throw new InvalidOperationException("Plan additional tugboats and services through the vessel schedule. Assignment cannot create an incomplete dispatch ticket.");
                     }
 
                     await RecordAuditAsync($"Assigned tugboat {tugboat.TugboatName} to COS #{customerOrderSlip.CustomerOrderSlipNumber}", username, cancellationToken, customerOrderSlip.CustomerOrderSlipId, customerOrderSlip.CustomerOrderSlipNumber);

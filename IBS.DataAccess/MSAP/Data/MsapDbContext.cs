@@ -294,10 +294,16 @@ namespace IBS.DataAccess.MSAP.Data
             builder.Entity<DispatchTicket>(dt =>
             {
                 dt.Property(x => x.ApOtherTugsIncludesVat).HasDefaultValue(true);
+                dt.Property(x => x.SbmaShareAmount).HasPrecision(18, 2);
                 dt.ToTable(table =>
                 {
                     table.HasCheckConstraint("ck_dispatch_tickets_raw_duration",
                         "(raw_duration_hours IS NULL OR raw_duration_hours >= 0) AND (raw_duration_minutes IS NULL OR raw_duration_minutes >= 0)");
+                    table.HasCheckConstraint("ck_dispatch_tickets_actual_times",
+                        "(date_left IS NULL AND time_left IS NULL AND date_arrived IS NULL AND time_arrived IS NULL) OR "
+                        + "(date_left IS NOT NULL AND time_left IS NOT NULL AND date_arrived IS NOT NULL AND time_arrived IS NOT NULL "
+                        + "AND date_arrived + time_arrived > date_left + time_left)");
+                    table.HasCheckConstraint("ck_dispatch_tickets_sbma_share", "sbma_share_amount >= 0");
                 });
                 dt.HasIndex(x => x.Status);
                 dt.HasIndex(x => x.CustomerId);

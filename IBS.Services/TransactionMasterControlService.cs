@@ -1007,6 +1007,7 @@ namespace IBS.Services
             {
                 reversalEntries.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = originalEntry.WorkspaceTugboatId,
                     Date = new DateOnly(
                         originalEntry.Date.Year,
                         originalEntry.Date.Month,

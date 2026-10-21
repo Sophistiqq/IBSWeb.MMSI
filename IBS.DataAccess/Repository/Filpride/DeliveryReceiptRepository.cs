@@ -37,6 +37,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastDr = await _db
                 .FilprideDeliveryReceipts
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.DeliveryReceiptNo.Length)
                 .ThenByDescending(x => x.DeliveryReceiptNo)
@@ -62,6 +63,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastDr = await _db
                 .FilprideDeliveryReceipts
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.DeliveryReceiptNo.Length)
                 .ThenByDescending(x => x.DeliveryReceiptNo)
@@ -370,6 +372,7 @@ namespace IBS.DataAccess.Repository.Filpride
                     {
                         ledgers.Add(new FilprideGeneralLedgerBook
                         {
+                            WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                             Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                             Reference = deliveryReceipt.DeliveryReceiptNo,
                             Description = description,
@@ -388,6 +391,7 @@ namespace IBS.DataAccess.Repository.Filpride
                     {
                         ledgers.Add(new FilprideGeneralLedgerBook
                         {
+                            WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                             Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                             Reference = deliveryReceipt.DeliveryReceiptNo,
                             Description = description,
@@ -404,6 +408,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                         Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                         Reference = deliveryReceipt.DeliveryReceiptNo,
                         Description = description,
@@ -422,6 +427,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                         Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                         Reference = deliveryReceipt.DeliveryReceiptNo,
                         Description = description,
@@ -437,6 +443,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                         Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                         Reference = deliveryReceipt.DeliveryReceiptNo,
                         Description = description,
@@ -472,6 +479,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                         Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                         Reference = deliveryReceipt.DeliveryReceiptNo,
                         Description = description,
@@ -487,6 +495,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                         Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                         Reference = deliveryReceipt.DeliveryReceiptNo,
                         Description = description,
@@ -511,6 +520,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                         ledgers.Add(new FilprideGeneralLedgerBook
                         {
+                            WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                             Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                             Reference = deliveryReceipt.DeliveryReceiptNo,
                             Description = $"{description} for Freight",
@@ -528,6 +538,7 @@ namespace IBS.DataAccess.Repository.Filpride
                         {
                             ledgers.Add(new FilprideGeneralLedgerBook
                             {
+                                WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                                 Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                                 Reference = deliveryReceipt.DeliveryReceiptNo,
                                 Description = $"{description} for Freight",
@@ -554,6 +565,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                         ledgers.Add(new FilprideGeneralLedgerBook
                         {
+                            WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                             Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                             Reference = deliveryReceipt.DeliveryReceiptNo,
                             Description = $"{description} for ECC",
@@ -571,6 +583,7 @@ namespace IBS.DataAccess.Repository.Filpride
                         {
                             ledgers.Add(new FilprideGeneralLedgerBook
                             {
+                                WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                                 Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                                 Reference = deliveryReceipt.DeliveryReceiptNo,
                                 Description = $"{description} for ECC",
@@ -605,6 +618,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                         ledgers.Add(new FilprideGeneralLedgerBook
                         {
+                            WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                             Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                             Reference = deliveryReceipt.DeliveryReceiptNo,
                             Description = description,
@@ -625,6 +639,7 @@ namespace IBS.DataAccess.Repository.Filpride
                         {
                             ledgers.Add(new FilprideGeneralLedgerBook
                             {
+                                WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                                 Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                                 Reference = deliveryReceipt.DeliveryReceiptNo,
                                 Description = description,
@@ -656,6 +671,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                         ledgers.Add(new FilprideGeneralLedgerBook
                         {
+                            WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                             Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                             Reference = deliveryReceipt.DeliveryReceiptNo,
                             Description = $"{description}.",
@@ -671,6 +687,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                         ledgers.Add(new FilprideGeneralLedgerBook
                         {
+                            WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                             Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                             Reference = deliveryReceipt.DeliveryReceiptNo,
                             Description = $"{description}.",
@@ -691,6 +708,7 @@ namespace IBS.DataAccess.Repository.Filpride
                         {
                             ledgers.Add(new FilprideGeneralLedgerBook
                             {
+                                WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                                 Date = (DateOnly)deliveryReceipt.DeliveredDate!,
                                 Reference = deliveryReceipt.DeliveryReceiptNo,
                                 Description = $"{description}.",
@@ -844,6 +862,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = dr.WorkspaceTugboatId,
                         Date = DateOnly.FromDateTime(endOfPreviousMonth),
                         Reference = dr.DeliveryReceiptNo,
                         Description = $"In-Transit for the month of {endOfPreviousMonth:MMM yyyy}.",
@@ -858,6 +877,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = dr.WorkspaceTugboatId,
                         Date = DateOnly.FromDateTime(endOfPreviousMonth),
                         Reference = dr.DeliveryReceiptNo,
                         Description = $"In-Transit for the month of {endOfPreviousMonth:MMM yyyy}.",
@@ -872,6 +892,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = dr.WorkspaceTugboatId,
                         Date = DateOnly.FromDateTime(endOfPreviousMonth),
                         Reference = dr.DeliveryReceiptNo,
                         Description = $"In-Transit for the month of {endOfPreviousMonth:MMM yyyy}.",
@@ -889,6 +910,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = dr.WorkspaceTugboatId,
                         Date = DateOnly.FromDateTime(endOfPreviousMonth),
                         Reference = dr.DeliveryReceiptNo,
                         Description = $"In-Transit for the month of {endOfPreviousMonth:MMM yyyy}.",
@@ -907,6 +929,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = dr.WorkspaceTugboatId,
                         Date = DateOnly.FromDateTime(startOfMonth),
                         Reference = dr.DeliveryReceiptNo,
                         Description = $"Auto reversal entries for the in-transit of {endOfPreviousMonth:MMM yyyy}.",
@@ -921,6 +944,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = dr.WorkspaceTugboatId,
                         Date = DateOnly.FromDateTime(startOfMonth),
                         Reference = dr.DeliveryReceiptNo,
                         Description = $"Auto reversal entries for the in-transit of {endOfPreviousMonth:MMM yyyy}.",
@@ -935,6 +959,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = dr.WorkspaceTugboatId,
                         Date = DateOnly.FromDateTime(startOfMonth),
                         Reference = dr.DeliveryReceiptNo,
                         Description = $"Auto reversal entries for the in-transit of {endOfPreviousMonth:MMM yyyy}.",
@@ -952,6 +977,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = dr.WorkspaceTugboatId,
                         Date = DateOnly.FromDateTime(startOfMonth),
                         Reference = dr.DeliveryReceiptNo,
                         Description = $"Auto reversal entries for the in-transit of {endOfPreviousMonth:MMM yyyy}.",
@@ -1086,6 +1112,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                         Date = postingDate,
                         Reference = deliveryReceipt.DeliveryReceiptNo,
                         Description = particulars,
@@ -1104,6 +1131,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                         Date = postingDate,
                         Reference = deliveryReceipt.DeliveryReceiptNo,
                         Description = particulars,
@@ -1120,6 +1148,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                     Date = postingDate,
                     Reference = deliveryReceipt.DeliveryReceiptNo,
                     Description = particulars,
@@ -1142,6 +1171,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                     Date = postingDate,
                     Reference = deliveryReceipt.DeliveryReceiptNo,
                     Description = particulars,
@@ -1157,6 +1187,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                     Date = postingDate,
                     Reference = deliveryReceipt.DeliveryReceiptNo,
                     Description = particulars,
@@ -1254,6 +1285,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                     Date = postingDate,
                     Reference = deliveryReceipt.DeliveryReceiptNo,
                     Description = particulars,
@@ -1269,6 +1301,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                     Date = postingDate,
                     Reference = deliveryReceipt.DeliveryReceiptNo,
                     Description = particulars,
@@ -1289,6 +1322,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                         Date = postingDate,
                         Reference = deliveryReceipt.DeliveryReceiptNo,
                         Description = particulars,
@@ -1390,6 +1424,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                     Date = postingDate,
                     Reference = deliveryReceipt.DeliveryReceiptNo,
                     Description = particulars,
@@ -1409,6 +1444,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                     Date = postingDate,
                     Reference = deliveryReceipt.DeliveryReceiptNo,
                     Description = particulars,
@@ -1424,6 +1460,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                     Date = postingDate,
                     Reference = deliveryReceipt.DeliveryReceiptNo,
                     Description = particulars,
@@ -1444,6 +1481,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = deliveryReceipt.WorkspaceTugboatId,
                         Date = postingDate,
                         Reference = deliveryReceipt.DeliveryReceiptNo,
                         Description = particulars,

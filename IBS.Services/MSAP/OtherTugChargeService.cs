@@ -1,5 +1,6 @@
 using System.Text.Json;
 using IBS.DataAccess.MSAP.Data;
+using IBS.DataAccess.MSAP.Repository.Msap;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.ViewModels;
 using IBS.Utility.MSAP.Constants;
@@ -25,18 +26,7 @@ namespace IBS.Services.MSAP
 
         private IQueryable<DispatchTicket> EligibleTickets()
         {
-            DateTime now = DateTimeHelper.GetCurrentPhilippineTime();
-            DateOnly today = DateOnly.FromDateTime(now);
-            TimeOnly currentTime = TimeOnly.FromDateTime(now);
-            return _db.MsapDispatchTickets.Where(t => t.Customer.Company == MsapConstants.Company_MMSI
-                && !t.Tugboat.IsCompanyOwned && t.Tugboat.TugboatOwnerId != null && t.VesselScheduleServiceEntryId != null
-                && t.ExpectedServiceEntry!.CancelledAt == null
-                && t.CustomerOrderSlipId != null && (t.CustomerOrderSlip!.Status == MsapConstants.CustomerOrderSlipStatus.Open
-                    || t.CustomerOrderSlip.Status == MsapConstants.CustomerOrderSlipStatus.Closed)
-                && t.Status != MsapConstants.DispatchTicketStatus.Deleted && t.DispatchNumber != "" && t.DateLeft != null && t.DateArrived != null
-                && t.TimeLeft != null && t.TimeArrived != null
-                && (t.DateArrived < today || t.DateArrived == today && t.TimeArrived <= currentTime)
-                && (t.DateArrived > t.DateLeft || t.DateArrived == t.DateLeft && t.TimeArrived > t.TimeLeft));
+            return DispatchTicketRepository.QueryOtherTugChargeTickets(_db);
         }
 
         public async Task<List<OtherTugCharge>> GetForCosAsync(int cosId, CancellationToken ct)

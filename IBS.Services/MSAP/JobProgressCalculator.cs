@@ -31,6 +31,18 @@ namespace IBS.Services.MSAP
             IEnumerable<Collection> collections = collectionIds.Count == 0 ? []
                 : await unitOfWork.Collection.GetAllAsync(c => collectionIds.Contains(c.MsapCollectionId), ct);
             var progress = Calculate(job, schedule, tickets, billings, collections);
+            if (job != null && !progress.IsCancelled && !progress.IsInvalidated)
+            {
+                List<DispatchTicket> otherTugTickets = await unitOfWork.DispatchTicket.GetOtherTugChargeTicketsAsync(job.CustomerOrderSlipId, ct);
+                progress.OtherTugTicketCount = otherTugTickets.Count;
+                progress.MissingOtherTugTicketCount = otherTugTickets.Count(t => t.OtherTugChargeLine == null);
+                progress.MissingOtherTugTicketId = otherTugTickets.FirstOrDefault(t => t.OtherTugChargeLine == null)?.DispatchTicketId;
+                List<OtherTugCharge> drafts = otherTugTickets.Where(t => t.OtherTugChargeLine?.Charge.ConfirmedAt == null && t.OtherTugChargeLine != null)
+                    .Select(t => t.OtherTugChargeLine!.Charge).DistinctBy(c => c.OtherTugChargeId).OrderBy(c => c.OtherTugChargeId).ToList();
+                progress.OtherTugChargeReviewCount = drafts.Count;
+                progress.OtherTugChargeReviewId = drafts.FirstOrDefault()?.OtherTugChargeId;
+                progress.ConfirmedOtherTugTicketCount = otherTugTickets.Count(t => t.OtherTugChargeLine?.Charge.ConfirmedAt != null);
+            }
             if (schedule != null)
             {
                 foreach (var ticket in tickets.Where(t => t.Status == MsapConstants.DispatchTicketStatus.ForBilling && !t.BillingId.HasValue && billings.Count == 0))

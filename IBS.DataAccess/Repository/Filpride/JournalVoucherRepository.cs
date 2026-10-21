@@ -32,6 +32,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastJv = await _db
                 .FilprideJournalVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.JournalVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.JournalVoucherHeaderNo)
@@ -56,6 +57,7 @@ namespace IBS.DataAccess.Repository.Filpride
         {
             var lastJv = await _db
                 .FilprideJournalVoucherHeaders
+                .IgnoreQueryFilters(["TugboatWorkspace"])
                 .AsNoTracking()
                 .OrderByDescending(x => x.JournalVoucherHeaderNo!.Length)
                 .ThenByDescending(x => x.JournalVoucherHeaderNo)
@@ -132,6 +134,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = header.WorkspaceTugboatId,
                         Date = header.Date,
                         Reference = header.JournalVoucherHeaderNo!,
                         Description = header.Particulars,

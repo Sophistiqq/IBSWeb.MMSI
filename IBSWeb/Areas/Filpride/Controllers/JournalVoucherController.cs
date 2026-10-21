@@ -1973,6 +1973,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 ledgers.Add(
                     new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = existingHeaderModel.WorkspaceTugboatId,
                         Date = firstDayOfNextMonth,
                         Reference = existingHeaderModel.JournalVoucherHeaderNo!,
                         Description = $"Reversal of {existingHeaderModel.Particulars}",

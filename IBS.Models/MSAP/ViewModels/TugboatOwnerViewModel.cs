@@ -12,6 +12,11 @@ namespace IBS.Models.MSAP.ViewModels
             TugboatOwnerNumber = entity.TugboatOwnerNumber;
             TugboatOwnerName = entity.TugboatOwnerName;
             FixedRate = entity.FixedRate;
+            Address = entity.Address;
+            Tin = entity.Tin;
+            VatType = entity.VatType;
+            TaxType = entity.TaxType;
+            WithholdingTaxPercent = entity.WithholdingTaxPercent;
             MsapRecId = entity.MsapRecId;
         }
     }

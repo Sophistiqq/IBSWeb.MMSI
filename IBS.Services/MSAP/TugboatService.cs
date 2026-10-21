@@ -10,7 +10,7 @@ namespace IBS.Services.MSAP
     {
         public async Task<IEnumerable<Tugboat>> GetAllAsync(CancellationToken cancellationToken)
         {
-            return await unitOfWork.Tugboat.GetAllAsync(null, cancellationToken);
+            return await unitOfWork.Tugboat.GetTugboatsWithOwnersAsync(cancellationToken);
         }
 
         public async Task<Tugboat?> GetByIdAsync(int id, CancellationToken cancellationToken)

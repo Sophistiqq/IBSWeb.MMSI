@@ -1246,6 +1246,11 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("varchar(100)")
                         .HasColumnName("remarks");
 
+                    b.Property<decimal>("SbmaShareAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("sbma_share_amount");
+
                     b.Property<int>("ServiceId")
                         .HasColumnType("integer")
                         .HasColumnName("service_id");
@@ -1372,7 +1377,11 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     b.ToTable("mmsi_dispatch_tickets", "msap", t =>
                         {
+                            t.HasCheckConstraint("ck_dispatch_tickets_actual_times", "(date_left IS NULL AND time_left IS NULL AND date_arrived IS NULL AND time_arrived IS NULL) OR (date_left IS NOT NULL AND time_left IS NOT NULL AND date_arrived IS NOT NULL AND time_arrived IS NOT NULL AND date_arrived + time_arrived > date_left + time_left)");
+
                             t.HasCheckConstraint("ck_dispatch_tickets_raw_duration", "(raw_duration_hours IS NULL OR raw_duration_hours >= 0) AND (raw_duration_minutes IS NULL OR raw_duration_minutes >= 0)");
+
+                            t.HasCheckConstraint("ck_dispatch_tickets_sbma_share", "sbma_share_amount >= 0");
                         });
                 });
 
@@ -2329,6 +2338,11 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("TugboatOwnerId"));
 
+                    b.Property<string>("Address")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("address");
+
                     b.Property<decimal>("FixedRate")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
@@ -2338,6 +2352,16 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("varchar(10)")
                         .HasColumnName("msap_recid");
+
+                    b.Property<string>("TaxType")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("tax_type");
+
+                    b.Property<string>("Tin")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("tin");
 
                     b.Property<string>("TugboatOwnerName")
                         .IsRequired()
@@ -2350,6 +2374,16 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("varchar(3)")
                         .HasColumnName("tugboat_owner_number");
+
+                    b.Property<string>("VatType")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("vat_type");
+
+                    b.Property<decimal?>("WithholdingTaxPercent")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("withholding_tax_percent");
 
                     b.HasKey("TugboatOwnerId")
                         .HasName("pk_mmsi_tugboat_owners");

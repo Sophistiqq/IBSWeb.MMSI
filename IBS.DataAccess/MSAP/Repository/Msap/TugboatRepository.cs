@@ -42,6 +42,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
         {
             return await _db.MsapTugboats
                 .Include(t => t.TugboatOwner)
+                .Include(t => t.Port)
                 .ToListAsync(cancellationToken);
         }
     }

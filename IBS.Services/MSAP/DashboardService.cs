@@ -1,5 +1,6 @@
 using System.Text.Json;
 using IBS.DataAccess.MSAP.Data;
+using IBS.DataAccess.MSAP.Repository.Msap;
 using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP.AccessControl;
@@ -177,26 +178,19 @@ namespace IBS.Services.MSAP
                 }
                 if (model.CanManageOtherTugCharges)
                 {
-                    var missingCosts = tickets.Where(t => !t.Tugboat.IsCompanyOwned && t.CustomerOrderSlipId != null
-                        && t.DateLeft != null && t.TimeLeft != null && t.DateArrived != null && t.TimeArrived != null
-                        && (t.DateArrived > t.DateLeft || t.DateArrived == t.DateLeft && t.TimeArrived > t.TimeLeft)
-                        && t.OtherTugChargeLine == null);
+                    var missingCosts = DispatchTicketRepository.QueryOtherTugChargeTickets(_dbContext).AsNoTracking()
+                        .Where(t => t.OtherTugChargeLine == null);
                     model.MissingOtherTugTicketCount = await missingCosts.CountAsync(ct);
                     model.MissingOtherTugTickets = await missingCosts.Include(t => t.Tugboat).Include(t => t.CustomerOrderSlip)
                         .OrderBy(t => t.DateLeft).ThenBy(t => t.DispatchTicketId).Take(6).ToListAsync(ct);
                 }
                 if (model.CanManageOtherTugCharges || model.CanConfirmOtherTugCharges)
                 {
+                    IQueryable<int> eligibleIds = DispatchTicketRepository.QueryOtherTugChargeTickets(_dbContext).Select(t => t.DispatchTicketId);
                     var drafts = _dbContext.MsapOtherTugCharges.AsNoTracking().Where(c => c.ConfirmedAt == null
-                        && c.Lines.Any(l => l.Ticket.Customer.Company == MsapConstants.Company_MMSI
-                            && l.Ticket.CustomerOrderSlipId != null && l.Ticket.Status != MsapConstants.DispatchTicketStatus.Deleted
-                            && l.Ticket.CustomerOrderSlip!.Status != MsapConstants.CustomerOrderSlipStatus.Cancelled
-                            && l.Ticket.CustomerOrderSlip.Status != MsapConstants.CustomerOrderSlipStatus.Invalidated));
+                        && c.Lines.Any(l => eligibleIds.Contains(l.DispatchTicketId)));
                     model.OtherTugChargeReviewCount = await drafts.CountAsync(ct);
-                    model.OtherTugChargeReviews = await drafts.Include(c => c.Lines.Where(l => l.Ticket.Customer.Company == MsapConstants.Company_MMSI
-                            && l.Ticket.CustomerOrderSlipId != null && l.Ticket.Status != MsapConstants.DispatchTicketStatus.Deleted
-                            && l.Ticket.CustomerOrderSlip!.Status != MsapConstants.CustomerOrderSlipStatus.Cancelled
-                            && l.Ticket.CustomerOrderSlip.Status != MsapConstants.CustomerOrderSlipStatus.Invalidated))
+                    model.OtherTugChargeReviews = await drafts.Include(c => c.Lines.Where(l => eligibleIds.Contains(l.DispatchTicketId)))
                         .ThenInclude(l => l.Ticket).OrderBy(c => c.UpdatedAt).ThenBy(c => c.OtherTugChargeId).Take(6).ToListAsync(ct);
                 }
             }

@@ -8,6 +8,10 @@ namespace IBS.Models.Filpride.Integrated
 {
     public class FilprideCustomerOrderSlip
     {
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int? WorkspaceTugboatId { get; set; }
+
         #region Preparation of COS
 
         [Key]

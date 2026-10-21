@@ -77,9 +77,13 @@ if (builder.Environment.IsDevelopment())
 
 // Repositories + DI
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IBS.Utility.TugboatWorkspace>();
+builder.Services.AddScoped<TugboatWorkspaceService>();
+builder.Services.AddControllersWithViews(options => options.Filters.Add<IBSWeb.Workspaces.TugboatWorkspaceFilter>());
 builder.Services.AddMsapModule(builder.Configuration);
 builder.Services.AddScoped<ProvisionalReceiptTaggingService>();
 builder.Services.AddScoped<CheckVoucherDocumentationService>();
+builder.Services.AddScoped<TugboatPaymentService>();
 builder.Services.AddOptions<BrandingOptions>()
     .Bind(builder.Configuration.GetSection(BrandingOptions.SectionName))
     .Validate(BrandingOptions.IsValid, "Branding configuration is incomplete.")
@@ -162,6 +166,7 @@ app.UseStaticFiles();
 await app.UseMsapModuleAsync();
 app.UseRouting();
 app.UseAuthentication();
+app.UseMiddleware<IBSWeb.Workspaces.TugboatWorkspaceMiddleware>();
 app.UseMiddleware<MaintenanceMiddleware>();
 app.UseAuthorization();
 

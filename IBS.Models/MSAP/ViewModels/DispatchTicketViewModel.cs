@@ -7,10 +7,12 @@ namespace IBS.Models.MSAP.ViewModels
 {
     public class DispatchTicketViewModel
     {
+        [Required]
         public int? CustomerOrderSlipId { get; set; }
 
         public int? DispatchTicketId { get; set; }
 
+        [Required]
         public int? VesselScheduleServiceEntryId { get; set; }
 
         public DateOnly Date { get; set; }
@@ -18,6 +20,7 @@ namespace IBS.Models.MSAP.ViewModels
         [StringLength(20, ErrorMessage = "COS Number should not exceed 20 characters")]
         public string? COSNumber { get; set; }
 
+        [Required]
         [StringLength(20, ErrorMessage = "Dispatch Number should not exceed 20 characters")]
         public string DispatchNumber { get; set; } = null!;
 
@@ -29,12 +32,16 @@ namespace IBS.Models.MSAP.ViewModels
 
         public int CustomerId { get; set; }
 
+        [Required]
         public DateOnly? DateLeft { get; set; }
 
+        [Required]
         public TimeOnly? TimeLeft { get; set; }
 
+        [Required]
         public DateOnly? DateArrived { get; set; }
 
+        [Required]
         public TimeOnly? TimeArrived { get; set; }
 
         public int TerminalId { get; set; }

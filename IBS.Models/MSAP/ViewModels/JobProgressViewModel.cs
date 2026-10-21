@@ -9,6 +9,12 @@ namespace IBS.Models.MSAP.ViewModels
         public int? VesselScheduleId { get; set; }
         public int ExpectedTicketCount { get; set; }
         public int RecordedTicketCount { get; set; }
+        public int OtherTugTicketCount { get; set; }
+        public int MissingOtherTugTicketCount { get; set; }
+        public int OtherTugChargeReviewCount { get; set; }
+        public int ConfirmedOtherTugTicketCount { get; set; }
+        public int? MissingOtherTugTicketId { get; set; }
+        public int? OtherTugChargeReviewId { get; set; }
         public List<Billing> LinkedBillings { get; set; } = [];
         public bool Stopped { get; set; }
         public bool IsCancelled { get; set; }

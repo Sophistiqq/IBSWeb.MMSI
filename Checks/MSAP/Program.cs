@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.Razor;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
@@ -27,6 +28,60 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+
+if (args.Contains("--rebuild-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.RebuildDatabaseCheck.RunAsync();
+    return;
+}
+
+if (args.Contains("--source-database-audit", StringComparer.Ordinal))
+{
+    await Checks.MSAP.RebuildDatabaseCheck.AuditSourceAsync();
+    return;
+}
+
+if (args.Contains("--workspace-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TugboatWorkspaceCheck.RunAsync();
+    return;
+}
+
+if (args.Contains("--tugboat-owner-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TugboatOwnerCheck.RunAsync();
+    return;
+}
+
+if (args.Contains("--ticket-integrity-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TicketIntegrityDatabaseCheck.RunAsync();
+    return;
+}
+
+if (args.Contains("--billing-integrity-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TicketIntegrityDatabaseCheck.RunAsync(includeBilling: true);
+    return;
+}
+
+if (args.Contains("--tugboat-payment-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TugboatPaymentDatabaseCheck.RunAsync();
+    return;
+}
+
+if (args.Contains("--other-tug-progress-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.OtherTugProgressDatabaseCheck.RunAsync();
+    return;
+}
+
+if (args.Contains("--workspace-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.TugboatWorkspaceDatabaseCheck.RunAsync();
+    return;
+}
 
 if (args.Contains("--master-import-only", StringComparer.Ordinal))
 {
@@ -105,14 +160,22 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 builder.Logging.SetMinimumLevel(LogLevel.Error);
 builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
 {
-    ["ConnectionStrings:MMSIConnection"] = "Host=localhost;Database=msap_check;Username=postgres"
+    ["ConnectionStrings:MMSIConnection"] = args.Contains("--rebuild-render-only", StringComparer.Ordinal)
+        ? Checks.MSAP.TugboatOwnerCheck.TestConnection()
+        : "Host=localhost;Database=msap_check;Username=postgres"
 });
 builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("MMSIConnection")));
+builder.Services.AddScoped<IBS.Utility.TugboatWorkspace>();
+builder.Services.AddScoped<IBS.Services.TugboatPaymentService>();
+builder.Services.AddScoped<IBS.Services.ICloudStorageService, IBS.Services.CloudStorageService>();
+builder.Services.AddScoped<IBS.Services.CheckVoucherDocumentationService>();
+builder.Services.AddScoped<IBS.Services.TugboatWorkspaceService>();
 builder.Services.AddDefaultIdentity<ApplicationUser>().AddRoles<IdentityRole>().AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddScoped<IBS.DataAccess.Repository.IRepository.IUnitOfWork, IBS.DataAccess.Repository.UnitOfWork>();
 builder.Services.AddMsapModule(builder.Configuration);
 if (args.Contains("--calendar-render-only", StringComparer.Ordinal)
-    || args.Contains("--schedule-render-only", StringComparer.Ordinal))
+    || args.Contains("--schedule-render-only", StringComparer.Ordinal)
+    || args.Contains("--rebuild-render-only", StringComparer.Ordinal))
 {
     builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
 }
@@ -124,6 +187,11 @@ app.UseEndpoints(endpoints => endpoints.MapControllerRoute("default", "{area=Use
 #pragma warning restore ASP0014
 using var scope = app.Services.CreateScope();
 var services = scope.ServiceProvider;
+if (args.Contains("--rebuild-render-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.RebuildRenderingCheck.RunAsync(services);
+    return;
+}
 if (args.Contains("--schedule-render-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.ScheduleFormRenderingCheck.RunAsync(services);
@@ -156,7 +224,10 @@ Check(services.GetRequiredService<IBS.DataAccess.MSAP.Repository.IRepository.IUn
 
 var actions = services.GetRequiredService<IActionDescriptorCollectionProvider>().ActionDescriptors.Items.OfType<ControllerActionDescriptor>().ToList();
 var moduleActions = actions.Where(a => a.ControllerTypeInfo.Namespace?.StartsWith("IBSWeb.Areas.MSAP", StringComparison.Ordinal) == true).ToList();
-Check(moduleActions.Select(a => a.ControllerTypeInfo).Distinct().Count() == 32, "An imported controller is missing.");
+Check(moduleActions.Select(a => a.ControllerTypeInfo).Distinct().Count() == 31,
+    "Expected 31 active MSAP controllers; found " + moduleActions.Select(a => a.ControllerTypeInfo).Distinct().Count()
+    + ": " + string.Join(", ", moduleActions.Select(a => a.ControllerName).Distinct().Order()));
+Check(!moduleActions.Any(a => a.ControllerName == "Data"), "Retired direct data changes are exposed as endpoints.");
 Check(moduleActions.All(a => a.RouteValues["area"] is "MSAP" or "MSAPAdmin" or "MSAPSuperAdmin"), "An MSAP controller collides with a base area.");
 Check(moduleActions.All(action => action.FilterDescriptors.Any(filter =>
     filter.Filter is AuthorizeFilter authorize && authorize.AuthorizeData?.Any(data => data.Policy == MsapRoles.AccessPolicy) == true)),
@@ -289,15 +360,22 @@ foreach (var status in new[] { "For Deposit", "Deposited", "Returned", "Redeposi
     var html = output.ToString();
     if (status is "For Deposit" or "Returned")
     {
-        string expectedBank = status == "Returned" ? "8" : "7";
-        Check(Regex.IsMatch(html, $"<option value=\"{expectedBank}\" selected(?:=\"selected\")?>"), "Select the saved bank when present, otherwise the first available bank.");
+        if (status == "Returned")
+        {
+            Check(Regex.IsMatch(html, "<option value=\"8\" selected(?:=\"selected\")?>"), "Retain the saved receiving bank on redeposit.");
+        }
+        else
+        {
+            Check(!Regex.IsMatch(html, "<option value=\"[78]\" selected(?:=\"selected\")?>"),
+                "A new deposit with multiple accounts must require an explicit bank choice.");
+        }
         Check(html.Contains("id=\"depositBank\"", StringComparison.Ordinal) && html.Contains("Another MMSI Bank", StringComparison.Ordinal), "The bank dropdown must retain all available accounts.");
         Check(!html.Contains("value=\"Clear\"", StringComparison.Ordinal), "An undeposited or returned receipt must not offer clearing.");
     }
     Check(html.Contains("id=\"collectionBankingForm\"", StringComparison.Ordinal), "ModernAlert banking form is missing.");
     Check(!html.Contains("Collection → Deposit → Clear", StringComparison.Ordinal), "Banking inputs must not render another progress section.");
 }
-Console.WriteLine("PASS: collection banking forms render eligible actions and keep the bank dropdown visible and automatically select the first bank.");
+Console.WriteLine("PASS: collection banking forms retain saved accounts and require an explicit choice when multiple receiving banks are available.");
 var jobProgressView = engine.GetView(null, "/Areas/MSAP/Views/Shared/_JobProgress.cshtml", false);
 Check(jobProgressView.Success, "Shared Job Progress partial is missing.");
 foreach (bool allowed in new[] { false, true })
@@ -310,14 +388,23 @@ foreach (bool allowed in new[] { false, true })
         {
             http.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "progress-allowed")], "check"));
         }
-        var actionContext = new ActionContext(http, new RouteData(), moduleActions.First());
+        var progressRoute = new RouteData();
+        progressRoute.Values["area"] = "MSAP";
+        progressRoute.Values["controller"] = "Billing";
+        progressRoute.Values["action"] = "Review";
+        progressRoute.Values["id"] = 123;
+        http.Request.RouteValues = progressRoute.Values;
+        var actionContext = new ActionContext(http, progressRoute, moduleActions.First());
         var model = new IBS.Models.MSAP.ViewModels.JobProgressViewModel
         {
             Stage = stage == JobProgressCalculator.CompletedStage + 1 ? 0 : stage, HasSchedule = stage < 2, Guidance = "Attention check",
             Stopped = stage == JobProgressCalculator.CompletedStage + 1, IsCancelled = stage == JobProgressCalculator.CompletedStage + 1,
             Permission = stage == JobProgressCalculator.CompletedStage ? null : IBS.Models.MSAP.Enums.ProcedureEnum.ApproveTariff,
             WaitingFor = "tariff approval", ActionController = "DispatchTicket", ActionName = "Preview",
-            TargetId = 123, ActionLabel = "Review Charges"
+            TargetId = 123, ActionLabel = "Review Charges", CustomerOrderSlipId = 77,
+            OtherTugTicketCount = stage >= 2 ? 3 : 0, MissingOtherTugTicketCount = 1,
+            OtherTugChargeReviewCount = 1, ConfirmedOtherTugTicketCount = 1,
+            MissingOtherTugTicketId = 91, OtherTugChargeReviewId = 92
         };
         var viewData = new ViewDataDictionary<IBS.Models.MSAP.ViewModels.JobProgressViewModel>(services.GetRequiredService<Microsoft.AspNetCore.Mvc.ModelBinding.IModelMetadataProvider>(), new Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary()) { Model = model };
         if (stage == 1)
@@ -350,6 +437,19 @@ foreach (bool allowed in new[] { false, true })
             services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), output, new HtmlHelperOptions());
         await jobProgressView.View!.RenderAsync(viewContext);
         string html = output.ToString();
+        bool showOtherTugs = stage >= 2 && stage <= JobProgressCalculator.CompletedStage;
+        Check(html.Contains("AP Other Tugs follow-up", StringComparison.Ordinal) == showOtherTugs,
+            "Provider-cost follow-up must remain visible through collection/clearing and be hidden for cancelled bookings.");
+        Check(html.Contains("Record AP Other Tugs", StringComparison.Ordinal) == (showOtherTugs && allowed)
+            && html.Contains("Review AP Other Tugs", StringComparison.Ordinal) == (showOtherTugs && allowed),
+            "Provider input/review links ignored their permissions or disappeared after customer collection.");
+        if (showOtherTugs && allowed)
+        {
+            Check(html.Contains("/OtherTugCharge/Editor?", StringComparison.Ordinal) && html.Contains("ticketId=91", StringComparison.Ordinal)
+                && html.Contains("/OtherTugCharge/Editor/92", StringComparison.Ordinal)
+                && !html.Contains("/OtherTugCharge/Editor/123", StringComparison.Ordinal)
+                && html.Contains("customerOrderSlipId=77", StringComparison.Ordinal), "Provider follow-up lost the selected COS/ticket/document.");
+        }
         Check(Regex.Matches(html, "aria-current=\"step\"").Count == (stage == JobProgressCalculator.CompletedStage + 1 ? 0 : 1), "Job Progress current stage is wrong.");
         Check(html.Contains("Fully cleared", StringComparison.Ordinal) && html.Contains("Job Progress", StringComparison.Ordinal), "Job Progress does not show the entire journey.");
         Check(Regex.Matches(html, "class=\"modern-btn-primary\"").Count == (allowed && stage < JobProgressCalculator.CompletedStage ? 1 : 0), "Job Progress must show exactly one permitted next action.");
@@ -389,6 +489,33 @@ foreach (bool allowed in new[] { false, true })
     }
 }
 Console.WriteLine("PASS: shared Job Progress renders all eleven stages, cancellation, role handoffs and exactly one permitted next action.");
+foreach (var grants in new[] { (Manage: false, Confirm: false), (Manage: true, Confirm: false), (Manage: false, Confirm: true), (Manage: true, Confirm: true) })
+{
+    var dashboardView = engine.GetView(null, "/Areas/MSAP/Views/Home/Index.cshtml", false);
+    Check(dashboardView.Success, "MSAP dashboard view is missing.");
+    var http = new DefaultHttpContext { RequestServices = services };
+    http.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(), "Provider dashboard rendering check"));
+    var action = new ActionContext(http, new RouteData(), moduleActions.First());
+    var model = new IBS.Models.MSAP.ViewModels.DashboardCountViewModel
+    {
+        ShowDashboard = true, UpdatedAt = DateTime.Today,
+        CanManageOtherTugCharges = grants.Manage, CanConfirmOtherTugCharges = grants.Confirm,
+        MissingOtherTugTicketCount = 3, OtherTugChargeReviewCount = 2
+    };
+    var data = new ViewDataDictionary<IBS.Models.MSAP.ViewModels.DashboardCountViewModel>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = model };
+    using var output = new StringWriter();
+    await dashboardView.View!.RenderAsync(new ViewContext(action, dashboardView.View, data,
+        services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), output, new HtmlHelperOptions()));
+    string html = output.ToString();
+    Check(html.Contains("AP Other Tugs · Missing inputs", StringComparison.Ordinal) == grants.Manage
+        && html.Contains("href=\"#missing-provider-costs\"", StringComparison.Ordinal) == grants.Manage,
+        "The dashboard must show missing-cost entry only to the permitted preparer.");
+    Check(html.Contains("AP Other Tugs · For confirmation", StringComparison.Ordinal) == (grants.Manage || grants.Confirm)
+        && html.Contains("id=\"provider-charge-reviews\"", StringComparison.Ordinal) == (grants.Manage || grants.Confirm),
+        "Provider-cost review disappeared for an authorized role or was shown without access.");
+}
+Console.WriteLine("PASS: dashboard AP Other Tugs reminders and entry/review queues render for preparer, confirmer, combined and denied access.");
+
 foreach (var area in new[] { "MSAP", "MSAPAdmin", "MSAPSuperAdmin" })
 {
     foreach (var view in Directory.EnumerateFiles(Path.Combine(webRoot, "Areas", area), "*.cshtml", SearchOption.AllDirectories))

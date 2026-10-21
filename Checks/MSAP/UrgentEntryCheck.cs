@@ -29,21 +29,21 @@ namespace Checks.MSAP
             };
             Check(ScheduledTicketCharges.Apply(ticket, schedule, entry, null, null) != null
                 && ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending && ticket.TotalBilling == 0,
-                "Pending approval must retain factual tickets without calculated charges.");
+                "An unapproved preview must block saving and clear calculated charges.");
             var progress = JobProgressCalculator.Calculate(job, schedule, [ticket], []);
             Check(progress.Stage == 1 && progress.Permission == ProcedureEnum.ApproveSchedule,
-                "Recorded urgent tickets must not skip COS approval or unlock billing.");
+                "An unapproved preview must not skip COS approval or unlock billing.");
             schedule.ApprovedRevision = schedule.Revision;
             schedule.Status = MsapConstants.VesselScheduleStatus.Confirmed;
             Check(ScheduledTicketCharges.Apply(ticket, schedule, entry, null, null) == null
                 && ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling && ticket.TotalBilling == 120,
-                "Approval must calculate the existing urgent ticket using the normal minimum-hour rule.");
+                "An approved preview must calculate charges using the normal minimum-hour rule.");
             Check(JobProgressCalculator.Calculate(job, schedule, [ticket], []).Stage == JobProgressCalculator.BillingStage,
-                "A complete approved urgent job should progress to billing.");
+                "A complete approved job should progress to billing.");
             schedule.Revision++;
             Check(JobProgressCalculator.Calculate(job, schedule, [ticket], []).Stage == 1,
                 "A pending revision must block billing even when ticket charges were previously ready.");
-            Console.WriteLine("Urgent entry approval and charge checks passed (no database).");
+            Console.WriteLine("Approval readiness and charge preview checks passed (no database).");
         }
 
         private static void Check(bool condition, string message)

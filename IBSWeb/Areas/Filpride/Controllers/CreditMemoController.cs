@@ -1520,6 +1520,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                     new()
                     {
                         Date = model.TransactionDate,
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Reference = model.CreditMemoNo!,
                         Description = model.SalesInvoice.CustomerOrderSlip.ProductName,
                         AccountId = arTradeReceivableTitle.AccountId,
@@ -1540,6 +1541,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.CreditMemoNo!,
                         Description = model.SalesInvoice.CustomerOrderSlip.ProductName,
@@ -1558,6 +1560,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.CreditMemoNo!,
                         Description = model.SalesInvoice.CustomerOrderSlip.ProductName,
@@ -1574,6 +1577,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = model.WorkspaceTugboatId,
                     Date = model.TransactionDate,
                     Reference = model.CreditMemoNo!,
                     Description = model.SalesInvoice.CustomerOrderSlip.ProductName,
@@ -1591,6 +1595,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.CreditMemoNo!,
                         Description = model.SalesInvoice.CustomerOrderSlip.ProductName,
@@ -1660,6 +1665,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                     new()
                     {
                         Date = model.TransactionDate,
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Reference = model.CreditMemoNo!,
                         Description = model.ServiceInvoice.ServiceName,
                         AccountId = arNonTradeTitle.AccountId,
@@ -1680,6 +1686,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.CreditMemoNo!,
                         Description = model.ServiceInvoice.ServiceName,
@@ -1698,6 +1705,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.CreditMemoNo!,
                         Description = model.ServiceInvoice.ServiceName,
@@ -1714,6 +1722,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
 
                 ledgers.Add(new FilprideGeneralLedgerBook
                 {
+                    WorkspaceTugboatId = model.WorkspaceTugboatId,
                     Date = model.TransactionDate,
                     Reference = model.CreditMemoNo!,
                     Description = model.ServiceInvoice.ServiceName,
@@ -1731,6 +1740,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 {
                     ledgers.Add(new FilprideGeneralLedgerBook
                     {
+                        WorkspaceTugboatId = model.WorkspaceTugboatId,
                         Date = model.TransactionDate,
                         Reference = model.CreditMemoNo!,
                         Description = model.ServiceInvoice.ServiceName,

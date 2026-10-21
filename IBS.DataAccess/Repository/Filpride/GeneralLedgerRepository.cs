@@ -30,6 +30,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
             var reversingEntries = existingGlEntries.Select(gl => new FilprideGeneralLedgerBook
             {
+                WorkspaceTugboatId = gl.WorkspaceTugboatId,
                 Date = DateOnly.FromDateTime(reversingDate),
                 Reference = gl.Reference,
                 Description = $"Reversal of '{gl.Description}'",

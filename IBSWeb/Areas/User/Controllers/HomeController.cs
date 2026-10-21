@@ -115,6 +115,7 @@ namespace IBSWeb.Areas.User.Controllers
         private async Task<DashboardCountViewModel> RunCountQueriesAsync()
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
+            scope.ServiceProvider.GetRequiredService<IBS.Utility.TugboatWorkspace>().Select(_dbContext.WorkspaceTugboatId, "Selected workspace");
             var ctx = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var counts = new DashboardCountViewModel();
 
@@ -209,6 +210,7 @@ namespace IBSWeb.Areas.User.Controllers
             HashSet<string> terminalStatuses)
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
+            scope.ServiceProvider.GetRequiredService<IBS.Utility.TugboatWorkspace>().Select(_dbContext.WorkspaceTugboatId, "Selected workspace");
             var ctx = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
             var cosList = await ctx.FilprideCustomerOrderSlips
@@ -352,6 +354,7 @@ namespace IBSWeb.Areas.User.Controllers
             DateTime twoMonthsAgo)
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
+            scope.ServiceProvider.GetRequiredService<IBS.Utility.TugboatWorkspace>().Select(_dbContext.WorkspaceTugboatId, "Selected workspace");
             var ctx = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var pendingApproval = new List<PendingApprovalItem>();
 
