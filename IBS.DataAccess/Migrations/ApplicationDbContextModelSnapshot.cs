@@ -17,7 +17,7 @@ namespace IBS.DataAccess.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.6")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1635,6 +1635,14 @@ namespace IBS.DataAccess.Migrations
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("current_and_previous_amount");
 
+                    b.Property<decimal>("CwVatAmount")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("cw_vat_amount");
+
+                    b.Property<decimal>("CwtAmount")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("cwt_amount");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -1782,6 +1790,14 @@ namespace IBS.DataAccess.Migrations
                     b.Property<decimal>("CurrentAndPreviousAmount")
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("current_and_previous_amount");
+
+                    b.Property<decimal>("CwVatAmount")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("cw_vat_amount");
+
+                    b.Property<decimal>("CwtAmount")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("cwt_amount");
 
                     b.Property<decimal>("DebitAmount")
                         .HasColumnType("numeric(18,4)")
