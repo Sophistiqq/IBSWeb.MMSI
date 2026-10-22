@@ -9,7 +9,7 @@ using ApplicationUser = IBS.Models.ApplicationUser;
 namespace IBSWeb.Areas.MSAP.Controllers
 {
     [Area("MSAP")]
-    [RequireAnyAccess("Access denied. You don't have permission to manage maritime master files.", ProcedureEnum.ManageMaritimeMasterFile)]
+    [RequireAnyAccess("Access denied. You don't have permission to manage the Principal master file.", ProcedureEnum.ManagePrincipalMasterFile)]
     public class PrincipalController(
         IPrincipalService principalService,
         UserManager<ApplicationUser> userManager)

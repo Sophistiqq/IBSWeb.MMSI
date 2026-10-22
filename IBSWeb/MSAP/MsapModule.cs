@@ -48,7 +48,6 @@ namespace IBSWeb.MSAP
             services.AddScoped<ITugboatOwnerService, TugboatOwnerService>();
             services.AddScoped<ITugboatService, TugboatService>();
             services.AddScoped<IVesselService, VesselService>();
-            services.AddScoped<IEmployeeService, EmployeeService>();
             services.AddScoped<IRoleService, RoleService>();
             services.AddScoped<IAuthorizationHandler, MsapRoleHandler>();
             services.AddAuthorization(options =>

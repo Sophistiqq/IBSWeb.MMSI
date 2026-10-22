@@ -13,7 +13,7 @@ namespace Checks.MSAP
     {
         public static async Task RunAsync()
         {
-            var access = new UserAccess { UserId = "rate-check", CanManageMaritimeMasterFile = true };
+            var access = new UserAccess { UserId = "rate-check", CanManageCustomerMasterFile = true };
             string? role = MsapRoles.User;
             IRoleService roles = DispatchProxy.Create<IRoleService, CollectionCheck.CheckProxy>();
             ((CollectionCheck.CheckProxy)(object)roles).Handler = (method, args) => Task.FromResult(role);

@@ -4,6 +4,7 @@ using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.MasterFile;
 using IBS.Models.MSAP.Enums;
+using IBS.Services.MSAP.AccessControl;
 using IBS.Services.MSAP.Attributes;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
@@ -17,7 +18,11 @@ using ApplicationUser = IBS.Models.ApplicationUser;
 namespace IBSWeb.Areas.MSAP.Controllers
 {
     [Area("MSAP")]
-    [RequireAccess(ProcedureEnum.ManageMaritimeMasterFile)]
+    [RequireAnyAccess("Access denied. You don't have permission to export master file records.",
+        ProcedureEnum.ManageCustomerMasterFile, ProcedureEnum.ManageServiceMasterFile, ProcedureEnum.ManagePortMasterFile,
+        ProcedureEnum.ManageTerminalMasterFile, ProcedureEnum.ManageVesselMasterFile, ProcedureEnum.ManageTugboatMasterFile,
+        ProcedureEnum.ManageTugboatOwnerMasterFile, ProcedureEnum.ManageTugMasterMasterFile,
+        ProcedureEnum.ManagePrincipalMasterFile, ProcedureEnum.ManageBankAccountMasterFile)]
     public class MasterFileController(
         UserManager<ApplicationUser> userManager,
         IUnitOfWork unitOfWork,
@@ -37,24 +42,29 @@ namespace IBSWeb.Areas.MSAP.Controllers
         #region -- Main Excel Generation Method --
 
         [HttpGet]
-        public async Task<IActionResult> GenerateExcel(string masterFileType, CancellationToken cancellationToken, [FromServices] IAuthorizationService authorization)
+        public async Task<IActionResult> GenerateExcel(string masterFileType, CancellationToken cancellationToken, [FromServices] IAccessControlService accessControl)
         {
             try
             {
-                if (!string.Equals(masterFileType, "customer", StringComparison.OrdinalIgnoreCase)
-                    && !(await authorization.AuthorizeAsync(User, MsapRoles.AdminPolicy)).Succeeded)
+                var procedure = masterFileType.ToLowerInvariant() switch
+                {
+                    "customer" => ProcedureEnum.ManageCustomerMasterFile,
+                    "bankaccount" => ProcedureEnum.ManageBankAccountMasterFile,
+                    _ => throw new ArgumentException($"Invalid master file type: {masterFileType}")
+                };
+
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrWhiteSpace(userId) || !await accessControl.HasAccessAsync(userId, procedure))
                 {
                     return Forbid();
                 }
+
                 var extractedBy = GetUserFullName();
                 // Generate Excel based on master file type
-                var result = masterFileType.ToLower() switch
+                var result = procedure switch
                 {
-                    "customer" => await GenerateCustomerExcel(extractedBy,
-                        cancellationToken),
-                    "supplier" => await GenerateSupplierExcel(extractedBy,cancellationToken),
-                    "bankaccount" => await GenerateBankAccountExcel(extractedBy,  cancellationToken),
-                    "employee" => await GenerateEmployeeExcel(extractedBy,  cancellationToken),
+                    ProcedureEnum.ManageCustomerMasterFile => await GenerateCustomerExcel(extractedBy, cancellationToken),
+                    ProcedureEnum.ManageBankAccountMasterFile => await GenerateBankAccountExcel(extractedBy, cancellationToken),
                     _ => throw new ArgumentException($"Invalid master file type: {masterFileType}")
                 };
 
@@ -158,59 +168,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         #endregion
 
-        #region -- Supplier Master File --
-
-        private async Task<(MemoryStream? stream, string fileName)> GenerateSupplierExcel(
-                   string extractedBy,
-
-                   CancellationToken cancellationToken)
-        {
-            var suppliers = await unitOfWork.Supplier.GetAllAsync(
-                cancellationToken: cancellationToken);
-
-            var suppliersList = suppliers.ToList();
-
-            if (!suppliers.Any())
-            {
-                return (null, string.Empty);
-            }
-
-            var columns = new List<ColumnDefinition>
-            {
-                new() { Header = "SUPPLIER CODE", ValueSelector = s => ((Supplier)s).SupplierCode ?? "" },
-                new() { Header = "SUPPLIER NAME", ValueSelector = s => ((Supplier)s).SupplierName },
-                new() { Header = "SUPPLIER ADDRESS", ValueSelector = s => ((Supplier)s).SupplierAddress },
-                new() { Header = "ZIP CODE", ValueSelector = s => ((Supplier)s).ZipCode },
-                new() { Header = "BRANCH", ValueSelector = s => ((Supplier)s).Branch },
-                new() { Header = "TIN NO", ValueSelector = s => ((Supplier)s).SupplierTin },
-                new() { Header = "CREDIT TERMS", ValueSelector = s => ((Supplier)s).SupplierTerms },
-                new() { Header = "VATABLE", ValueSelector = s => ((Supplier)s).VatType },
-                new() { Header = "TAXABLE", ValueSelector = s => ((Supplier)s).TaxType },
-                new() { Header = "CATEGORY", ValueSelector = s => ((Supplier)s).Category },
-                new() { Header = "EWT RATE", ValueSelector = s => ((Supplier)s).WithholdingTaxPercent * 100 }
-            };
-
-            var customWidths = new Dictionary<string, double>
-            {
-                { "SUPPLIER NAME", 60 },
-                { "SUPPLIER ADDRESS", 120 }
-
-            };
-
-            return await BuildExcelFile(
-                suppliersList,
-                "Suppliers",
-                "Supplier_MasterFile",
-                extractedBy,
-
-                columns,
-                customWidths,
-                2,
-                cancellationToken
-            );
-        }
-        #endregion
-
         #region -- Bank Account Master File --
         private async Task<(MemoryStream? stream, string fileName)> GenerateBankAccountExcel(
             string extractedBy,
@@ -254,64 +211,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
             );
         }
 
-        #endregion
-
-        #region -- Employee Master File --
-        private async Task<(MemoryStream? stream, string fileName)> GenerateEmployeeExcel(
-            string extractedBy,
-
-            CancellationToken cancellationToken)
-        {
-
-            var employees = await unitOfWork.Employee.GetAllAsync(
-                cancellationToken: cancellationToken);
-
-            if (!employees.Any())
-            {
-                return (null, string.Empty);
-            }
-            var employeesList = employees.ToList();
-
-            var columns = new List<ColumnDefinition>
-            {
-                new() { Header = "EMPLOYEE NO", ValueSelector = e => ((Employee)e).EmployeeNumber },
-                new() { Header = "FIRST NAME", ValueSelector = e => ((Employee)e).FirstName },
-                new() { Header = "MIDDLE NAME", ValueSelector = e => ((Employee)e).MiddleName },
-                new() { Header = "LAST NAME", ValueSelector = e => ((Employee)e).LastName },
-                new() { Header = "ADDRESS", ValueSelector = e => ((Employee)e).Address },
-                new() { Header = "BIRTH DATE", ValueSelector = e => ((Employee)e).BirthDate, NumberFormat = "mm/dd/yyyy" },
-                new() { Header = "TEL NO", ValueSelector = e => ((Employee)e).TelNo },
-                new() { Header = "SSS NO", ValueSelector = e => ((Employee)e).SssNo },
-                new() { Header = "TIN NO", ValueSelector = e => ((Employee)e).TinNo },
-                new() { Header = "PHILHEALTH NO", ValueSelector = e => ((Employee)e).PhilhealthNo },
-                new() { Header = "PAGIBIG NO", ValueSelector = e => ((Employee)e).PagibigNo },
-                new() { Header = "COMPANY", ValueSelector = e => ((Employee)e).Company },
-                new() { Header = "DEPARTMENT", ValueSelector = e => ((Employee)e).Department },
-                new() { Header = "DATE HIRED", ValueSelector = e => ((Employee)e).DateHired, NumberFormat = "mm/dd/yyyy" },
-                new() { Header = "DATE RESIGNED", ValueSelector = e => ((Employee)e).DateResigned?.ToDateTime(TimeOnly.MinValue), NumberFormat = "mm/dd/yyyy" },
-                new() { Header = "POSITION", ValueSelector = e => ((Employee)e).Position },
-                new() { Header = "IS MANAGERIAL", ValueSelector = e => ((Employee)e).IsManagerial ? "Yes" : "No" },
-                new() { Header = "SUPERVISOR", ValueSelector = e => ((Employee)e).Supervisor },
-            };
-
-            var customWidths = new Dictionary<string, double>
-            {
-               { "ADDRESS", 100},
-               { "PHILHEALTH NO", 40 },
-            };
-
-            return await BuildExcelFile(
-                employeesList,
-                "Employees",
-                "Employee_MasterFile",
-                extractedBy,
-
-                columns,
-                customWidths,
-                2,
-                cancellationToken
-            );
-        }
         #endregion
 
 

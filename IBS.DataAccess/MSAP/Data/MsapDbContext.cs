@@ -29,10 +29,6 @@ namespace IBS.DataAccess.MSAP.Data
 
         public DbSet<Customer> Customers { get; set; }
 
-        public DbSet<Supplier> Suppliers { get; set; }
-
-        public DbSet<Employee> Employees { get; set; }
-
         public DbSet<Terms> Terms { get; set; }
 
         #endregion
@@ -164,19 +160,6 @@ namespace IBS.DataAccess.MSAP.Data
                 c.Property(x => x.DefaultCosDiscountPercent).HasDefaultValue(0m);
                 c.HasIndex(c => c.CustomerCode);
                 c.HasIndex(c => c.CustomerName);
-            });
-
-            // Supplier
-            builder.Entity<Supplier>(s =>
-            {
-                s.HasIndex(s => s.SupplierCode);
-                s.HasIndex(s => s.SupplierName);
-            });
-
-            // Employee
-            builder.Entity<Employee>(c =>
-            {
-                c.HasIndex(c => c.EmployeeNumber);
             });
 
             #endregion

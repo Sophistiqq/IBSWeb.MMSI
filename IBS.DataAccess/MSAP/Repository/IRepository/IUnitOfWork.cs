@@ -15,31 +15,17 @@ namespace IBS.DataAccess.MSAP.Repository.IRepository
 
         #region--Master Files
 
-        ISupplierRepository Supplier { get; }
         ICustomerRepository Customer { get; }
         IAuditTrailRepository AuditTrail { get; }
-        IEmployeeRepository Employee { get; }
         ITermsRepository Terms { get; }
 
         Task<List<SelectListItem>> GetCustomerListAsyncById(CancellationToken cancellationToken = default);
 
-        Task<List<SelectListItem>> GetSupplierListAsyncById(string company, CancellationToken cancellationToken = default);
-
-        Task<List<SelectListItem>> GetTradeSupplierListAsyncById(string company, CancellationToken cancellationToken = default);
-
-        Task<List<SelectListItem>> GetNonTradeSupplierListAsyncById(string company, CancellationToken cancellationToken = default);
-
-        Task<List<SelectListItem>> GetHaulerListAsyncById(string company, CancellationToken cancellationToken = default);
-
         Task<List<SelectListItem>> GetBankAccountListById(CancellationToken cancellationToken = default);
-
-        Task<List<SelectListItem>> GetEmployeeListById(CancellationToken cancellationToken = default);
 
         Task<List<SelectListItem>> GetCompanyListAsyncByName(CancellationToken cancellationToken = default);
 
         Task<List<SelectListItem>> GetCompanyListAsyncById(CancellationToken cancellationToken = default);
-
-        Task<List<SelectListItem>> GetCashierListAsyncByUsernameAsync(CancellationToken cancellationToken = default);
 
 
         #endregion

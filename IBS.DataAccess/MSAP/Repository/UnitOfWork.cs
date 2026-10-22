@@ -49,10 +49,8 @@ namespace IBS.DataAccess.MSAP.Repository
 
         #region--Master Files
 
-        public ISupplierRepository Supplier { get; }
         public ICustomerRepository Customer { get; }
         public IAuditTrailRepository AuditTrail { get; }
-        public IEmployeeRepository Employee { get; }
         public ITermsRepository Terms { get; }
 
         #endregion
@@ -101,9 +99,7 @@ namespace IBS.DataAccess.MSAP.Repository
             #region--Master Files
 
             Customer = new CustomerRepository(_db);
-            Supplier = new SupplierRepository(_db);
             AuditTrail = new AuditTrailRepository(_db);
-            Employee = new EmployeeRepository(_db);
             Terms = new IBS.DataAccess.Repository.Filpride.TermsRepository(sharedDb);
 
             #endregion
@@ -173,62 +169,6 @@ namespace IBS.DataAccess.MSAP.Repository
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<List<SelectListItem>> GetSupplierListAsyncById(string company, CancellationToken cancellationToken = default)
-        {
-            return await _db.Suppliers
-                .OrderBy(s => s.SupplierCode)
-                .Where(s => s.IsActive)
-                .Where(GetCompanyFilter<Supplier>(company))
-                .Select(s => new SelectListItem
-                {
-                    Value = s.SupplierId.ToString(),
-                    Text = s.SupplierCode + " " + s.SupplierName
-                })
-                .ToListAsync(cancellationToken);
-        }
-
-        public async Task<List<SelectListItem>> GetTradeSupplierListAsyncById(string company, CancellationToken cancellationToken = default)
-        {
-            return await _db.Suppliers
-                .OrderBy(s => s.SupplierCode)
-                .Where(s => s.IsActive && s.Category == "Trade")
-                .Where(GetCompanyFilter<Supplier>(company))
-                .Select(s => new SelectListItem
-                {
-                    Value = s.SupplierId.ToString(),
-                    Text = s.SupplierCode + " " + s.SupplierName
-                })
-                .ToListAsync(cancellationToken);
-        }
-
-        public async Task<List<SelectListItem>> GetNonTradeSupplierListAsyncById(string company, CancellationToken cancellationToken = default)
-        {
-            return await _db.Suppliers
-                .OrderBy(s => s.SupplierCode)
-                .Where(s => s.IsActive && s.Category == "Non-Trade")
-                .Where(GetCompanyFilter<Supplier>(company))
-                .Select(s => new SelectListItem
-                {
-                    Value = s.SupplierId.ToString(),
-                    Text = s.SupplierCode + " " + s.SupplierName
-                })
-                .ToListAsync(cancellationToken);
-        }
-
-        public async Task<List<SelectListItem>> GetHaulerListAsyncById(string company, CancellationToken cancellationToken = default)
-        {
-            return await _db.Suppliers
-                .OrderBy(s => s.SupplierCode)
-                .Where(s => s.IsActive && s.Company == company && s.Category == "Hauler")
-                .Where(GetCompanyFilter<Supplier>(company))
-                .Select(s => new SelectListItem
-                {
-                    Value = s.SupplierId.ToString(),
-                    Text = s.SupplierCode + " " + s.SupplierName
-                })
-                .ToListAsync(cancellationToken);
-        }
-
         public async Task<List<SelectListItem>> GetBankAccountListById(CancellationToken cancellationToken = default)
         {
             return await _db.BankAccounts
@@ -240,32 +180,7 @@ namespace IBS.DataAccess.MSAP.Repository
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<List<SelectListItem>> GetEmployeeListById(CancellationToken cancellationToken = default)
-        {
-            return await _db.Employees
-                .Where(e => e.IsActive)
-                .Select(e => new SelectListItem
-                {
-                    Value = e.EmployeeId.ToString(),
-                    Text = $"{e.EmployeeNumber} - {e.FirstName} {e.LastName}"
-                })
-                .ToListAsync(cancellationToken);
-        }
-
         #endregion
-
-        public async Task<List<SelectListItem>> GetCashierListAsyncByUsernameAsync(CancellationToken cancellationToken = default)
-        {
-            return await _db.ApplicationUsers
-                .OrderBy(p => p.Id)
-                .Where(p => p.Department == MsapConstants.Department_StationCashier)
-                .Select(p => new SelectListItem
-                {
-                    Value = p.UserName!.ToString(),
-                    Text = p.UserName.ToString()
-                })
-                .ToListAsync(cancellationToken);
-        }
 
         public async Task<List<SelectListItem>> GetCompanyListAsyncByName(CancellationToken cancellationToken = default)
         {
