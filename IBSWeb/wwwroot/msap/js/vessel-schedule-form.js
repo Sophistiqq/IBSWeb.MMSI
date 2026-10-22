@@ -46,8 +46,14 @@
     const terminal = document.getElementById('TerminalId');
     const rateMode = document.getElementById('RateMode');
     function manualRates() {
-        return rateMode?.value === 'non-recurring';
+        return rateMode?.checked === false;
     }
+    const sbma = document.getElementById('SbmaEnabled');
+    function applyPortCommercialDefaults() {
+        sbma.checked = /^subic(?:\s|$)/i.test(port.selectedOptions[0]?.textContent.trim() || '');
+    }
+    $(port).on('change', applyPortCommercialDefaults);
+    if (form.dataset.isNew === 'true') applyPortCommercialDefaults();
     const message = document.getElementById('terminalMessage');
     let terminalRequest;
 
@@ -82,13 +88,23 @@
     });
 
     const ioc = document.getElementById('IsIoc');
+    const iocToggle = document.getElementById('iocToggle');
     function updateIocDefault() {
         const defaultValue = terminal.selectedOptions[0]?.dataset.isIoc;
-        const defaultLabel = defaultValue === 'true' ? 'IOC' : 'Non-IOC';
-        ioc.options[0].text = defaultValue ? 'Use terminal default (' + defaultLabel + ')' : 'Use terminal default';
-        document.getElementById('iocDefault').textContent = defaultValue ? 'Terminal default: ' + defaultLabel : 'Select a terminal to see its default.';
-        window.refreshModernSelect($(ioc));
+        iocToggle.checked = (ioc.value.toLowerCase() || defaultValue) === 'true';
+        const overridden = defaultValue != null && iocToggle.checked !== (defaultValue === 'true');
+        document.getElementById('iocCard').classList.toggle('schedule-option-override', overridden);
+        document.getElementById('iocTitle').textContent = iocToggle.checked ? 'IOC' : 'Non-IOC';
+        document.getElementById('iocDefault').textContent = defaultValue == null
+            ? 'Select a terminal to use its default.'
+            : (iocToggle.checked ? 'Insular Oil Corporation rates.' : 'Non-IOC rates.')
+                + (overridden ? ' Overrides terminal default.' : ' Terminal default.');
     }
+    iocToggle.addEventListener('change', () => {
+        const value = String(iocToggle.checked);
+        ioc.value = value === terminal.selectedOptions[0]?.dataset.isIoc ? '' : value;
+        updateIocDefault();
+    });
     $(terminal).on('change', () => {
         ioc.value = '';
         updateIocDefault();
@@ -99,36 +115,75 @@
     const customer = document.getElementById('CustomerId');
     const discountInput = document.getElementById('CosDiscountPercent');
     const skipDiscount = document.getElementById('SkipCosDiscount');
-
+    const discountCard = document.getElementById('discountCard');
+    const discountToggle = document.getElementById('discountToggle');
+    let defaultDiscount = 0;
+    let discountEdited = false;
     let discountRequest;
-    $(customer).on('change', async () => {
+
+    async function loadCustomerDiscount(fill) {
         discountRequest?.abort();
         const request = discountRequest = new AbortController();
-        const customerId = customer.value;
-        discountInput.value = '';
-        updateSummary();
-        if (!customerId || !form.dataset.discountUrl) return;
+        defaultDiscount = 0;
+        if (fill) {
+            discountInput.value = '0';
+            skipDiscount.checked = true;
+        }
+        updateDiscountState();
+        if (!customer.value || !form.dataset.discountUrl) return;
         try {
-            const response = await fetch(form.dataset.discountUrl + '?customerId=' + encodeURIComponent(customerId), { signal: request.signal });
+            const response = await fetch(form.dataset.discountUrl + '?customerId=' + encodeURIComponent(customer.value), { signal: request.signal });
             if (!response.ok) throw new Error('Unable to load customer discount.');
             const data = await response.json();
-            if (request.signal.aborted || discountInput.value !== '') return;
-            discountInput.value = data.defaultDiscount;
-            updateSummary();
+            if (request.signal.aborted) return;
+            defaultDiscount = Number(data.defaultDiscount) || 0;
+            if (fill && !discountEdited) {
+                discountInput.value = defaultDiscount;
+                skipDiscount.checked = defaultDiscount <= 0;
+            }
+            updateDiscountState();
         } catch (error) {
             if (error.name !== 'AbortError') {
                 ModernAlert.error('Could not load the customer discount. Check the discount before saving.', 'Customer discount unavailable');
             }
         }
+    }
+    $(customer).on('change', () => {
+        discountEdited = false;
+        loadCustomerDiscount(true);
     });
 
     function updateDiscountState() {
-        discountInput.readOnly = skipDiscount.checked;
-        discountInput.classList.toggle('schedule-input-disabled', skipDiscount.checked);
+        const enabled = !skipDiscount.checked;
+        discountInput.readOnly = !enabled;
+        discountInput.classList.toggle('schedule-input-disabled', !enabled);
+        discountCard.classList.toggle('is-enabled', enabled);
+        discountToggle.setAttribute('aria-pressed', String(enabled));
+        document.getElementById('discountHelp').textContent = enabled
+            ? 'Applies to tariff and BAF.'
+            : defaultDiscount > 0 ? 'Default ' + defaultDiscount + '% skipped. Click to enable.' : 'No discount. Click to enable.';
         updateSummary();
     }
-    skipDiscount.addEventListener('change', updateDiscountState);
-    discountInput.addEventListener('input', updateSummary);
+    discountCard.addEventListener('click', event => {
+        if (event.target.closest('input') && !discountInput.readOnly) return;
+        if (!skipDiscount.checked && !event.target.closest('button')) return;
+        discountEdited = true;
+        skipDiscount.checked = !skipDiscount.checked;
+        if (skipDiscount.checked) discountInput.value = '0';
+        updateDiscountState();
+        if (!skipDiscount.checked) discountInput.focus();
+    });
+    discountInput.addEventListener('input', () => {
+        discountEdited = true;
+        updateSummary();
+    });
+    discountInput.addEventListener('blur', () => {
+        if (discountInput.value === '' || Number(discountInput.value) === 0) {
+            discountInput.value = '0';
+            skipDiscount.checked = true;
+            updateDiscountState();
+        }
+    });
 
     const start = document.getElementById('PlannedStart');
     const end = document.getElementById('PlannedEnd');
@@ -334,8 +389,10 @@
     function updateRateProvenance(row) {
         for (const kind of ['tariff', 'baf']) {
             const input = row.querySelector(`.js-${kind}-rate`);
+            const overridesTable = input.value !== '' && input.dataset.lookup === 'found';
+            input.classList.toggle('schedule-rate-override', overridesTable);
             row.querySelector(`.js-${kind}-provenance`).textContent = input.value !== ''
-                ? 'Manual rate'
+                ? overridesTable ? 'Overrides table rate' : 'Manual rate'
                 : ({ found: 'Table estimate · planned date', missing: 'No table match', loading: 'Checking table…', error: 'Lookup unavailable' }[input.dataset.lookup] || 'Rate not checked');
         }
     }
@@ -520,8 +577,11 @@
         refreshAllRates();
     });
 
-    $(rateMode).on('change', applyRateLock);
-    window.refreshModernSelect($(rateMode));
+    rateMode.addEventListener('change', () => {
+        document.getElementById('rateModeLabel').textContent = manualRates() ? 'Non-recurring' : 'Recurring';
+        document.getElementById('rateModeHelp').textContent = manualRates() ? 'Enter manual tariff and BAF rates.' : 'Use tariff and BAF table rates.';
+        applyRateLock();
+    });
 
     start.addEventListener('input', () => {
         validateTime();
@@ -564,7 +624,12 @@
     });
 
     // Initialize summary metrics and bookings check
-    updateDiscountState();
+    const fillDiscount = discountInput.value === '' && !skipDiscount.checked;
+    if (!fillDiscount && (skipDiscount.checked || Number(discountInput.value) === 0)) {
+        discountInput.value = '0';
+        skipDiscount.checked = true;
+    }
+    loadCustomerDiscount(fillDiscount);
     refreshTugBookings();
     refreshAllRates();
 })();

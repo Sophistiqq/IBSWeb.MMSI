@@ -8,6 +8,14 @@
     ViewData["IsFullWidth"] = true;
     ViewData["BookingProgressReview"] = pending;
     var tugs = ViewBag.AssignedTugboatModels as List<Tugboat> ?? new List<Tugboat>();
+    var isIoc = Model.IsIoc ?? Model.Terminal.IsIoc;
+    var iocOverride = isIoc != Model.Terminal.IsIoc;
+    var defaultDiscount = Model.Customer?.DefaultCosDiscountPercent ?? 0;
+    var appliedDiscount = Model.SkipCosDiscount ? 0 : Model.CosDiscountPercent.GetValueOrDefault();
+    var discountOverride = appliedDiscount != defaultDiscount;
+    var subicPort = Model.Port.PortName.Trim().Equals("Subic", StringComparison.OrdinalIgnoreCase)
+        || Model.Port.PortName.Trim().StartsWith("Subic ", StringComparison.OrdinalIgnoreCase);
+    var sbmaOverride = Model.SbmaEnabled != subicPort;
     var manualEntries = Model.ServiceEntries.Where(entry => entry.ManualTariffRate.HasValue || entry.ManualBafRate.HasValue).ToList();
 }
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
@@ -52,7 +60,6 @@
                     <div><dt class="ui-caption ui-muted">Vessel</dt><dd class="ui-value">@Model.Vessel.VesselName</dd></div>
                     <div><dt class="ui-caption ui-muted">Port</dt><dd class="ui-value">@Model.Port.PortName</dd></div>
                     <div><dt class="ui-caption ui-muted">Terminal</dt><dd class="ui-value">@Model.Terminal.TerminalName</dd></div>
-                    <div><dt class="ui-caption ui-muted">IOC / Non-IOC</dt><dd class="ui-value">@((Model.IsIoc ?? Model.Terminal.IsIoc) ? "IOC" : "Non-IOC")</dd></div>
                     <div><dt class="ui-caption ui-muted">Voyage number</dt><dd class="ui-value">@(Model.VoyageNumber ?? "—")</dd></div>
                     <div><dt class="ui-caption ui-muted">Planned start · Philippine time</dt><dd class="ui-value">@Model.PlannedStart.ToString("dd MMM yyyy, HH:mm")</dd></div>
                     <div><dt class="ui-caption ui-muted">Planned end · Philippine time</dt><dd class="ui-value">@Model.PlannedEnd.ToString("dd MMM yyyy, HH:mm")</dd></div>
@@ -61,9 +68,21 @@
             <section class="ui-panel ui-panel--compact ui-stack" aria-labelledby="reviewCommercialTitle">
                 <h2 class="ui-section-title" id="reviewCommercialTitle">Commercial settings</h2>
                 <dl class="schedule-review-fields schedule-review-commercial-fields">
-                    <div><dt class="ui-caption ui-muted">Customer discount</dt><dd class="ui-value">@(Model.SkipCosDiscount ? "0% · Skipped" : $"{Model.CosDiscountPercent.GetValueOrDefault():0.##}% · Applied")</dd></div>
-                    <div><dt class="ui-caption ui-muted">Skip discount</dt><dd class="ui-value">@(Model.SkipCosDiscount ? "Yes" : "No")</dd></div>
-                    <div><dt class="ui-caption ui-muted">SBMA share</dt><dd class="ui-value">@(Model.SbmaEnabled ? "Enabled for all tugs" : "Disabled")</dd></div>
+                    <div class="@(discountOverride ? "schedule-review-attention" : "")">
+                        <dt class="ui-caption ui-muted">Customer discount</dt>
+                        <dd class="ui-value">@appliedDiscount.ToString("0.####")%</dd>
+                        <small class="ui-caption">@(discountOverride ? appliedDiscount == 0 ? $"Skipped customer default of {defaultDiscount:0.####}%." : $"Overrides customer default of {defaultDiscount:0.####}%." : "Customer default.")</small>
+                    </div>
+                    <div class="@(iocOverride ? "schedule-review-attention" : "")">
+                        <dt class="ui-caption ui-muted">IOC / Non-IOC</dt>
+                        <dd class="ui-value">@(isIoc ? "IOC · Insular Oil Corporation" : "Non-IOC")</dd>
+                        <small class="ui-caption">@(iocOverride ? $"Overrides terminal default ({(Model.Terminal.IsIoc ? "IOC" : "Non-IOC")})." : "Terminal default.")</small>
+                    </div>
+                    <div class="@(sbmaOverride ? "schedule-review-attention" : "")">
+                        <dt class="ui-caption ui-muted">SBMA share · Subic Bay Metropolitan Authority</dt>
+                        <dd class="ui-value">@(Model.SbmaEnabled ? "Enabled for all tugs" : "Disabled")</dd>
+                        <small class="ui-caption">@(sbmaOverride ? $"Overrides port default ({(subicPort ? "enabled for Subic" : "disabled outside Subic")})." : subicPort ? "Subic port default." : "Port default.")</small>
+                    </div>
                 </dl>
             </section>
             <section class="ui-stack" aria-labelledby="reviewServicesTitle">
@@ -150,17 +169,28 @@
             </section>
             @if (manualEntries.Count > 0)
             {
-                <section class="ui-panel ui-stack">
+                <section class="ui-panel ui-stack schedule-review-attention">
                     <h2 class="ui-section-title">@(pending ? "Manual rates to review" : "Saved manual rates")</h2>
                     @foreach (var entry in manualEntries)
                     {
-                        <div class="ui-field">
-                            <strong class="ui-label">@(entry.Tugboat?.TugboatName ?? $"Tug #{entry.TugboatId}") · @(entry.Service?.ServiceName ?? $"Service #{entry.ServiceId}")</strong>
-                            @if (entry.ManualTariffRate.HasValue) { <span class="ui-body">Tariff: @entry.ManualTariffRate.Value.ToString("N2")</span> }
-                            @if (entry.ManualBafRate.HasValue) { <span class="ui-body">BAF: @entry.ManualBafRate.Value.ToString("N2")</span> }
-                            <span class="ui-caption ui-muted">@(pending ? "Review the saved manual rate and its charging method before approval." : "Saved manual value and charging method.")</span>
+                        <div class="schedule-manual-rate-item">
+                            <div class="ui-field">
+                                <strong class="ui-label">@(entry.Tugboat?.TugboatName ?? $"Tug #{entry.TugboatId}")</strong>
+                                <span class="ui-caption ui-muted">@(entry.Service?.ServiceName ?? $"Service #{entry.ServiceId}")</span>
+                            </div>
+                            <dl class="schedule-manual-rate-values">
+                                @if (entry.ManualTariffRate.HasValue)
+                                {
+                                    <div><dt>Tariff</dt><dd>@entry.ManualTariffRate.Value.ToString("N2")</dd></div>
+                                }
+                                @if (entry.ManualBafRate.HasValue)
+                                {
+                                    <div><dt>BAF</dt><dd>@entry.ManualBafRate.Value.ToString("N2")</dd></div>
+                                }
+                            </dl>
                         </div>
                     }
+                    <p class="ui-caption ui-muted">@(pending ? "Review manual amounts and charging methods before approval." : "Saved manual amounts and charging methods.")</p>
                 </section>
             }
             <section class="ui-panel ui-stack">

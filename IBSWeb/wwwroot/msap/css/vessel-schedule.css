@@ -84,7 +84,7 @@
 
 .schedule-main-workspace {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) var(--ui-summary-width);
+    grid-template-columns: minmax(0, 1fr) calc(var(--ui-summary-width) + 2rem);
     gap: var(--ui-grid-gap);
     min-width: 0;
     align-items: start;
@@ -167,6 +167,64 @@
     top: calc(var(--mnav-height, 0px) + 12px);
 }
 
+.app-ui .schedule-summary-sidebar > .ui-panel {
+    padding: var(--ui-space-5);
+    gap: var(--ui-space-4);
+    min-width: 0;
+}
+
+.schedule-summary-sidebar :is(h2, h3, p) {
+    margin: 0;
+}
+
+.schedule-summary-sidebar .ui-field {
+    gap: var(--ui-space-2);
+}
+
+.schedule-summary-sidebar :is(.ui-value, .ui-label, .schedule-summary-value-lg) {
+    overflow-wrap: anywhere;
+}
+
+.schedule-manual-rate-item {
+    display: grid;
+    gap: var(--ui-space-3);
+}
+
+.schedule-manual-rate-item + .schedule-manual-rate-item {
+    padding-top: var(--ui-space-4);
+    border-top: 1px solid var(--outline-variant);
+}
+
+.schedule-manual-rate-values {
+    display: grid;
+    gap: var(--ui-space-2);
+    margin: 0;
+    padding: var(--ui-space-3);
+    border-radius: var(--ui-radius);
+    background: var(--surface-container-lowest, #fff);
+    font-size: var(--ui-text-body);
+}
+
+.schedule-manual-rate-values > div {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--ui-space-3);
+}
+
+.schedule-manual-rate-values dt {
+    color: var(--on-surface-variant);
+    font-weight: var(--ui-weight-regular);
+}
+
+.schedule-manual-rate-values dd {
+    margin: 0;
+    text-align: right;
+    font-weight: var(--ui-weight-semibold);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
 .schedule-metrics-list {
     display: flex;
     flex-direction: column;
@@ -183,8 +241,16 @@
     line-height: var(--ui-leading-body);
 }
 
+.schedule-metric-row + .schedule-metric-row {
+    padding-top: var(--ui-space-3);
+    border-top: 1px solid var(--outline-variant);
+}
+
 .schedule-metric-row strong {
-    font-weight: var(--ui-weight-medium);
+    flex-shrink: 0;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--ui-weight-semibold);
     color: var(--on-surface, #111827);
     font-size: var(--ui-text-section);
 }
@@ -400,4 +466,20 @@
         grid-column: 1;
         grid-row: auto;
     }
+}
+
+/* Commercial and rate exceptions use the same warning treatment in entry and review. */
+.modern-input.schedule-rate-override,
+.schedule-review-attention {
+    border: 1px solid var(--warning, #d6a100);
+    border-radius: var(--ui-radius);
+    background: color-mix(in srgb, var(--warning, #d6a100) 10%, var(--surface-container-lowest, #fff));
+}
+
+.schedule-review-attention {
+    padding: var(--ui-space-2, .5rem);
+}
+
+.schedule-review-attention small {
+    display: block;
 }

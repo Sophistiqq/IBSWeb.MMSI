@@ -54,7 +54,7 @@
     const review = document.getElementById('scheduleReview');
     if (!review) return;
     review.querySelectorAll('[data-review-service]').forEach(async row => {
-        const cells = [...row.querySelectorAll('[data-review-rate]')].filter(cell => cell.dataset.manual !== 'true');
+        const cells = [...row.querySelectorAll('[data-review-rate]')];
         if (!cells.length) return;
         const params = new URLSearchParams({ customerId: review.dataset.customerId, terminalId: review.dataset.terminalId, serviceId: row.dataset.reviewService, date: review.dataset.plannedStart });
         try {
@@ -63,13 +63,21 @@
             const data = await response.json();
             cells.forEach(cell => {
                 const rate = cell.dataset.reviewRate === 'tariff' ? data.tariffRate : data.bafRate;
-                cell.textContent = data.exists && rate != null ? Number(rate).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 4}) : 'No table match';
-                cell.parentElement.querySelector('[data-rate-source]').textContent = data.exists && rate != null ? 'Table estimate · planned date' : 'Rate needs review';
+                const found = data.exists && rate != null;
+                const manual = cell.dataset.manual === 'true';
+                const formattedRate = found ? Number(rate).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 4}) : '';
+                cell.parentElement.classList.toggle('schedule-review-attention', manual);
+                if (!manual) cell.textContent = found ? formattedRate : 'No table match';
+                cell.parentElement.querySelector('[data-rate-source]').textContent = manual
+                    ? found ? 'Manual override · table estimate: ' + formattedRate : 'Manual rate · no table match'
+                    : found ? 'Table estimate · planned date' : 'Rate needs review';
             });
         } catch (_) {
             cells.forEach(cell => {
-                cell.textContent = 'Unavailable';
-                cell.parentElement.querySelector('[data-rate-source]').textContent = 'Could not check table rate';
+                const manual = cell.dataset.manual === 'true';
+                cell.parentElement.classList.toggle('schedule-review-attention', manual);
+                if (!manual) cell.textContent = 'Unavailable';
+                cell.parentElement.querySelector('[data-rate-source]').textContent = manual ? 'Saved manual rate · table lookup unavailable' : 'Could not check table rate';
             });
         }
     });
