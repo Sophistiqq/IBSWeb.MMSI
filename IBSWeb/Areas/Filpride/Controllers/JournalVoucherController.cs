@@ -1327,24 +1327,26 @@ namespace IBSWeb.Areas.Filpride.Controllers
 
                 #region -- Check Voucher Header Export (Payment) --
 
-                var cvReference = selectedList.Select(item => item.CheckVoucherHeader!.Reference).ToList();
-
+                var cvNosForPayment = selectedList
+                    .Where(item => item.CheckVoucherHeader?.CheckVoucherHeaderNo != null)
+                    .Select(item => item.CheckVoucherHeader!.CheckVoucherHeaderNo!)
+                    .ToList();
                 var checkVoucherInvoice = (await _unitOfWork.FilprideCheckVoucher
-                        .GetAllAsync(cvh => cvh.CheckVoucherHeaderNo != null))
-                    .Where(cvh => cvh.CheckVoucherHeaderNo != null &&
-                        cvh.CheckVoucherHeaderNo
-                            .Split(',', StringSplitOptions.TrimEntries)
-                            .Any(r => cvReference.Contains(r)))
+                        .GetAllAsync(cvh => cvh.Reference != null))
+                    .Where(cvh => cvh.Reference!
+                        .Split(',', StringSplitOptions.TrimEntries)
+                        .Any(reference => cvNosForPayment.Contains(reference)))
                     .ToList();
 
+                var currentCvPayment = "";
                 foreach (var item in checkVoucherInvoice)
                 {
-                    if (item.CheckVoucherHeaderNo == currentCvTradeAndInvoicing)
+                    if (item.CheckVoucherHeaderNo == currentCvPayment)
                     {
                         continue;
                     }
 
-                    currentCvTradeAndInvoicing = item.CheckVoucherHeaderNo;
+                    currentCvPayment = item.CheckVoucherHeaderNo;
                     worksheet5.Cells[cvhRow, 1].Value = item.Date.ToString("yyyy-MM-dd");
                     if (item.RRNo != null && !item.RRNo.Contains(null))
                     {
@@ -1391,22 +1393,6 @@ namespace IBSWeb.Areas.Filpride.Controllers
                     worksheet5.Cells[cvhRow, 39].Value = item.VoidedDate?.ToString("yyyy-MM-dd HH:mm:ss.ffffff") ?? null;
 
                     cvhRow++;
-                }
-
-                var cvPaymentIds = checkVoucherInvoice.Select(cvn => cvn.CheckVoucherHeaderId).ToList();
-                var getCheckVoucherMultiplePayments = await _dbContext.FilprideMultipleCheckVoucherPayments
-                    .Where(cv => cvPaymentIds.Contains(cv.CheckVoucherHeaderPaymentId))
-                    .ToListAsync();
-
-                var cvnumber = 2;
-                foreach (var payment in getCheckVoucherMultiplePayments)
-                {
-                    worksheet6.Cells[cvnumber, 1].Value = payment.Id;
-                    worksheet6.Cells[cvnumber, 2].Value = payment.CheckVoucherHeaderPaymentId;
-                    worksheet6.Cells[cvnumber, 3].Value = payment.CheckVoucherHeaderInvoiceId;
-                    worksheet6.Cells[cvnumber, 4].Value = payment.AmountPaid;
-
-                    cvnumber++;
                 }
 
                 #endregion -- Check Voucher Header Export (Payment) --
@@ -1624,14 +1610,6 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 }
 
                 #endregion -- Purchase Order Export --
-
-                //Set password in Excel
-                foreach (var excelWorkSheet in package.Workbook.Worksheets)
-                {
-                    excelWorkSheet.Protection.SetPassword("mis123");
-                }
-
-                package.Workbook.Protection.SetPassword("mis123");
 
                 // Convert the Excel package to a byte array
                 var excelBytes = await package.GetAsByteArrayAsync();

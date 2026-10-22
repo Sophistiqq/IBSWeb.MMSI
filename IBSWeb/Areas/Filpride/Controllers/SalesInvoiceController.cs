@@ -931,7 +931,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
             foreach (var item in selectedList)
             {
                 var vatableAmount = item.Customer?.VatType == SD.VatType_Vatable ? item.Amount / 1.12m : item.Amount;
-                var vatAmount = item.Customer?.VatType == SD.VatType_Vatable ? item.Amount / 0.12m : 0m;
+                var vatAmount = item.Customer?.VatType == SD.VatType_Vatable ? item.Amount - vatableAmount : 0m;
                 worksheet.Cells[row, 1].Value = item.OtherRefNo;
                 worksheet.Cells[row, 2].Value = item.Quantity;
                 worksheet.Cells[row, 3].Value = item.UnitPrice;
@@ -969,14 +969,10 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 worksheet.Cells[row, 35].Value = item.VoidedBy;
                 worksheet.Cells[row, 36].Value = item.VoidedDate?.ToString("yyyy-MM-dd HH:mm:ss.ffffff") ?? null;
                 worksheet.Cells[row, 37].Value = item.Customer?.CustomerType;
-                worksheet.Cells[row, 38].Value = item.Customer?.CustomerName;
+                worksheet.Cells[row, 38].Value = item.CustomerOrderSlip != null ? item.CustomerOrderSlip.CustomerName : item.Customer?.CustomerName;
 
                 row++;
             }
-
-            //Set password in Excel
-            worksheet.Protection.IsProtected = true;
-            worksheet.Protection.SetPassword("mis123");
 
             // Convert the Excel package to a byte array
             var excelBytes = await package.GetAsByteArrayAsync();

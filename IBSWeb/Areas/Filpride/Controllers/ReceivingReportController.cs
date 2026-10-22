@@ -949,7 +949,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 foreach (var item in selectedList)
                 {
                     var vatableAmount = item.PurchaseOrder?.VatType == SD.VatType_Vatable ? item.Amount / 1.12m : item.Amount;
-                    var vatAmount = item.PurchaseOrder?.VatType == SD.VatType_Vatable ? item.Amount / 0.12m : 0m;
+                    var vatAmount = item.PurchaseOrder?.VatType == SD.VatType_Vatable ? item.Amount - vatableAmount : 0m;
                     var taxAmount = item.PurchaseOrder?.TaxType == SD.TaxType_WithTax ? vatableAmount * item.TaxPercentage : 0m;
                     worksheet.Cells[row, 1].Value = item.Date.ToString("yyyy-MM-dd");
                     worksheet.Cells[row, 2].Value = item.DueDate.ToString("yyyy-MM-dd");
@@ -1040,14 +1040,6 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 }
 
                 #endregion -- Purchase Order Export --
-
-                //Set password in Excel
-                foreach (var excelWorkSheet in package.Workbook.Worksheets)
-                {
-                    excelWorkSheet.Protection.SetPassword("mis123");
-                }
-
-                package.Workbook.Protection.SetPassword("mis123");
 
                 // Convert the Excel package to a byte array
                 var excelBytes = await package.GetAsByteArrayAsync();
