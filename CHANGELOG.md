@@ -6,6 +6,24 @@ and this project adheres to **Semantic Versioning (SemVer)**.
 
 ---
 
+## [v5.1.0] - 2026-10-20
+
+### Added
+- Stored CWT and CWVAT amounts on debit and credit memos, calculated during create/edit and reused for printing, posting, and re-journal processing.
+- Added check amount display and search to trade and non-trade payment check voucher lists, with a check amount footer total on the non-trade payment list.
+
+### Changed
+- Standardized sales invoice, service invoice, debit memo, and credit memo printouts with bordered tables and explicit sales, discount, VAT, withholding tax, withholding VAT, and amount-due rows.
+- Updated sales and service invoice printouts to display stored withholding totals and deduct discounts from the total amount due.
+
+### Fixed
+- Aligned service-invoice debit and credit memo re-journal entries with normal posting so the original invoice discount is not deducted again.
+
+### Deployment
+- Apply the `AddDebitMemoWithholdingAmounts` and `AddCreditMemoWithholdingAmounts` database migrations before using the updated memo workflows.
+
+---
+
 ## [v5.0.0] - 2026-10-15
 
 ### Changed
