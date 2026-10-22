@@ -40,7 +40,9 @@ for (const valid of [true, false]) {
     let nativeChecks = 0;
     let message;
     const result = vm.runInNewContext(validation + '\nvalidateForm();', {
-        form: {querySelectorAll: () => [{checkValidity: () => valid, getAttribute: () => 'Tugboat'}]},
+        form: {querySelectorAll: selector => selector === '[data-service-row]'
+            ? []
+            : [{checkValidity: () => valid, getAttribute: () => 'Tugboat'}]},
         ModernAlert: {error: text => message = text},
         ModernFormValidator: {validate: () => { nativeChecks++; return true; }}
     });
@@ -62,7 +64,7 @@ const context = vm.createContext({
 });
 vm.runInContext(rates + '\nthis.lookup = fetchTariffAndBaf; this.provenance = updateRateProvenance; this.applyLock = applyRateLock;', context);
 function row() {
-    const elements = Object.fromEntries(['tariff-rate', 'baf-rate', 'tariff-provenance', 'baf-provenance'].map(key => ['.js-' + key, {value: '', dataset: {}}]));
+    const elements = Object.fromEntries(['tariff-rate', 'baf-rate', 'tariff-provenance', 'baf-provenance'].map(key => ['.js-' + key, {value: '', dataset: {}, classList: {toggle() {}}}]));
     return {isConnected: true, querySelector: selector => elements[selector],
         querySelectorAll: () => [elements['.js-tariff-rate'], elements['.js-baf-rate']]};
 }
@@ -116,7 +118,7 @@ function respond(data) { pending.shift()({ok: true, json: async () => data}); }
     assert.equal(entry.querySelector('.js-baf-rate').readOnly, false, 'Non-recurring keeps a detected table rate editable.');
     assert.equal(entry.querySelector('.js-baf-rate').value, '999', 'A detected rate must not wipe a manual entry in non-recurring mode.');
     assert.equal(entry.querySelector('.js-baf-rate').placeholder, '1,200.00', 'The table estimate stays visible as the placeholder.');
-    assert.equal(entry.querySelector('.js-baf-provenance').textContent, 'Manual rate', 'A typed override reports as a manual rate in non-recurring mode.');
+    assert.equal(entry.querySelector('.js-baf-provenance').textContent, 'Overrides table rate', 'A typed override over a table estimate is reported as an override in non-recurring mode.');
     recurring = true;
     context.applyLock();
     assert.equal(entry.querySelector('.js-baf-rate').readOnly, true, 'Recurring locks detected table rates again.');
@@ -136,21 +138,27 @@ function respond(data) { pending.shift()({ok: true, json: async () => data}); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
 const iocLogic = source.slice(source.indexOf('    const ioc ='), source.indexOf('    const customer ='));
 {
-    const ioc = {value: 'true', options: [{text: ''}]};
-    const note = {};
+    const ioc = {value: 'true'};
+    const title = {textContent: ''};
+    const note = {textContent: ''};
+    const card = {classes: new Set(), classList: {toggle: (name, on) => on ? card.classes.add(name) : card.classes.delete(name)}};
+    const toggle = {checked: false, addEventListener: () => {}};
+    const elements = {IsIoc: ioc, iocToggle: toggle, iocCard: card, iocTitle: title, iocDefault: note};
     const terminal = {selectedOptions: [{dataset: {isIoc: 'false'}}]};
     let changed;
     vm.runInNewContext(iocLogic, {
-        document: {getElementById: id => id === 'IsIoc' ? ioc : note}, terminal,
-        $: () => ({on: (event, callback) => changed = callback}),
-        window: {refreshModernSelect() {}}, updateSummary() {}
+        document: {getElementById: id => elements[id]}, terminal,
+        $: () => ({on: (event, callback) => changed = callback}), updateSummary() {}
     });
     assert.equal(ioc.value, 'true', 'Loading a saved form must preserve the IOC override.');
-    assert.match(ioc.options[0].text, /Non-IOC/);
+    assert.equal(title.textContent, 'IOC');
+    assert(card.classes.has('schedule-option-override'), 'A saved override must be marked on the IOC card.');
     terminal.selectedOptions[0].dataset.isIoc = 'true';
     changed();
     assert.equal(ioc.value, '', 'Changing terminal must return to its default.');
-    assert.match(note.textContent, /Terminal default: IOC/);
+    assert.equal(title.textContent, 'IOC');
+    assert.match(note.textContent, /Terminal default/);
+    assert(!card.classes.has('schedule-option-override'));
     terminal.selectedOptions = [];
     changed();
     assert.match(note.textContent, /Select a terminal/);

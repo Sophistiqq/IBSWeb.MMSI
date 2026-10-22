@@ -274,15 +274,6 @@
                     <textarea asp-for="Notes" class="modern-input schedule-notes-textarea" id="Notes" rows="2" placeholder="Add coordination notes or service instructions..."></textarea>
                 </div>
             </section>
-
-            <!-- Bottom Action Bar -->
-            <div class="schedule-bottom-bar" data-tour-step="14">
-                <span class="schedule-save-notice ui-body ui-muted">Saving sends this booking for review.</span>
-                <div class="schedule-action-buttons">
-                    <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">Cancel</a>
-                    <button type="submit" class="ui-button ui-button--primary"><span class="material-symbols-outlined">save</span> Save for reviewing</button>
-                </div>
-            </div>
         </form>
         <!-- Right Column: Booking summary & sidebar cards -->
         <aside class="schedule-summary-sidebar" aria-label="Booking summary and review checklist">
@@ -342,6 +333,15 @@
                 </ul>
             </div>
         </aside>
+
+        <!-- Bottom Action Bar -->
+        <div class="schedule-bottom-bar" data-tour-step="14">
+            <span class="schedule-save-notice ui-body ui-muted">Saving sends this booking for review.</span>
+            <div class="schedule-action-buttons">
+                <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">Cancel</a>
+                <button type="submit" form="scheduleForm" class="ui-button ui-button--primary"><span class="material-symbols-outlined">save</span> Save for reviewing</button>
+            </div>
+        </div>
     </div>
 </div>
 

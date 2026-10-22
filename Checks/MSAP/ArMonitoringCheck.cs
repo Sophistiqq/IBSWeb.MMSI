@@ -32,9 +32,11 @@ namespace Checks.MSAP
             var tugs = Proxy<ITugboatRepository>((_, _) => Task.FromResult<IEnumerable<Tugboat>>([]));
             var owners = Proxy<ITugboatOwnerRepository>((_, _) => Task.FromResult<IEnumerable<TugboatOwner>>([]));
             var customers = Proxy<ICustomerRepository>((_, _) => Task.FromResult<IEnumerable<Customer>>([]));
+            var vesselSchedules = Proxy<IVesselScheduleRepository>((_, _) => Task.FromResult<IEnumerable<VesselSchedule>>([]));
             var work = Proxy<IUnitOfWork>((method, _) => method.Name switch
             {
                 "get_Report" => report, "get_Tugboat" => tugs, "get_TugboatOwner" => owners, "get_Customer" => customers,
+                "get_VesselSchedule" => vesselSchedules,
                 _ => throw new InvalidOperationException(method.Name)
             });
             var controller = new MaritimeReportController(work)

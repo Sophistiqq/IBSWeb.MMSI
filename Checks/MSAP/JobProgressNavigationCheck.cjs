@@ -16,6 +16,15 @@ for (const view of ['Billing/Create', 'Collection/Create', 'Collection/Edit']) {
     assert(source.includes('~/msap/js/job-progress.js'), `${view} must load the progress script.`);
 }
 (async () => {
+    const billingEdit = read('IBSWeb/Areas/MSAP/Views/Billing/Edit.cshtml');
+    const billingFormStart = billingEdit.indexOf('<form id="myForm"');
+    const billingTotals = billingEdit.indexOf('id="OverallTotal"');
+    const billingSave = billingEdit.indexOf('id="submitButton"');
+    assert(billingTotals >= 0 && billingSave > billingTotals, 'Billing save must follow the statement totals.');
+    assert(billingEdit.indexOf('data-tour-step="12"') > billingTotals, 'Billing save tour step must follow the totals.');
+    assert(billingFormStart >= 0 && billingSave > billingFormStart && billingSave < billingEdit.indexOf('</form>', billingFormStart),
+        'Billing save must remain inside the form.');
+
     const window = {};
     const pending = [];
     vm.runInNewContext(read('IBSWeb/wwwroot/msap/js/job-progress.js'), {

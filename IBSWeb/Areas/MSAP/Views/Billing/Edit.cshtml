@@ -191,11 +191,6 @@
                                 <span class="material-symbols-outlined">receipt_long</span>
                                 <h2 class="modern-headline-md ui-section-title">3. COS & Tickets Selection</h2>
                             </div>
-                            <div data-tour-step="12">
-                                <button type="submit" class="modern-btn-primary" id="submitButton">
-                                    <span class="material-symbols-outlined">save</span> SAVE CHANGES
-                                </button>
-                            </div>
                         </div>
                         <div class="modern-card-body ui-card-body">
                             <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
@@ -320,6 +315,12 @@
                                     <span class="financial-label">Grand Total</span>
                                     <span class="financial-value secondary">₱<span id="OverallTotal">0.00</span></span>
                                 </div>
+                            </div>
+
+                            <div class="ui-actions mt-4" data-tour-step="12">
+                                <button type="submit" class="modern-btn-primary" id="submitButton">
+                                    <span class="material-symbols-outlined">save</span> SAVE CHANGES
+                                </button>
                             </div>
                         </div>
                     </div>
