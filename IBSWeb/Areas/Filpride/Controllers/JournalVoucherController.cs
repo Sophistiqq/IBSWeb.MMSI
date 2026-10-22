@@ -1327,15 +1327,14 @@ namespace IBSWeb.Areas.Filpride.Controllers
 
                 #region -- Check Voucher Header Export (Payment) --
 
-                var cvNosForPayment = selectedList
-                    .Where(item => item.CheckVoucherHeader?.CheckVoucherHeaderNo != null)
-                    .Select(item => item.CheckVoucherHeader!.CheckVoucherHeaderNo!)
-                    .ToList();
+                var cvReference = selectedList.Select(item => item.CheckVoucherHeader!.Reference).ToList();
+
                 var checkVoucherInvoice = (await _unitOfWork.FilprideCheckVoucher
-                        .GetAllAsync(cvh => cvh.Reference != null))
-                    .Where(cvh => cvh.Reference!
-                        .Split(',', StringSplitOptions.TrimEntries)
-                        .Any(reference => cvNosForPayment.Contains(reference)))
+                        .GetAllAsync(cvh => cvh.CheckVoucherHeaderNo != null))
+                    .Where(cvh => cvh.CheckVoucherHeaderNo != null &&
+                                  cvh.CheckVoucherHeaderNo
+                                      .Split(',', StringSplitOptions.TrimEntries)
+                                      .Any(r => cvReference.Contains(r)))
                     .ToList();
 
                 var currentCvPayment = "";
