@@ -3,6 +3,13 @@
 @{
     var tugs = (List<string>)ViewBag.AssignedTugboats;
     var isReapproval = Model.ApprovedRevision.HasValue;
+    var isIoc = Model.IsIoc ?? Model.Terminal.IsIoc;
+    var defaultDiscount = Model.Customer?.DefaultCosDiscountPercent ?? 0;
+    var appliedDiscount = Model.SkipCosDiscount ? 0 : Model.CosDiscountPercent.GetValueOrDefault();
+    var subicPort = Model.Port.PortName.Trim().Equals("Subic", StringComparison.OrdinalIgnoreCase)
+        || Model.Port.PortName.Trim().StartsWith("Subic ", StringComparison.OrdinalIgnoreCase);
+    var skippedDefaultDiscount = (Model.SkipCosDiscount || Model.CosDiscountPercent == 0)
+        && Model.Customer?.DefaultCosDiscountPercent > 0;
 }
 <div class="schedule-confirm-review">
     <dl id="bookingReview">
@@ -14,8 +21,11 @@
         <dt>Planned end</dt><dd>@Model.PlannedEnd.ToString("MMM d, yyyy · HH:mm")</dd>
         <dt>Assigned tugs</dt><dd>@(tugs.Count == 0 ? "Not assigned" : string.Join(", ", tugs))</dd>
         <dt>Schedule revision</dt><dd>Revision @Model.Revision @(isReapproval ? "(Reapproval)" : "")</dd>
-        <dt>COS Discount</dt><dd>@(Model.SkipCosDiscount ? "Skipped (0%)" : (Model.CosDiscountPercent.HasValue ? $"{Model.CosDiscountPercent.Value:0.##}%" : "0% (Default)"))</dd>
-        <dt>SBMA Assessment</dt><dd>@(Model.SbmaEnabled ? "Enabled" : "Disabled")</dd>
+        <dt>COS Discount</dt><dd class="@(appliedDiscount != defaultDiscount ? "schedule-review-attention" : "")">@(skippedDefaultDiscount ? $"Skipped (default {defaultDiscount:0.##}%)" : Model.SkipCosDiscount ? "0%" : (Model.CosDiscountPercent.HasValue ? $"{Model.CosDiscountPercent.Value:0.##}%" : "0% (Default)"))</dd>
+        <dt>IOC / Non-IOC</dt>
+        <dd class="@(isIoc != Model.Terminal.IsIoc ? "schedule-review-attention" : "")">@(isIoc ? "IOC · Insular Oil Corporation" : "Non-IOC") · @(isIoc != Model.Terminal.IsIoc ? "Overrides terminal default" : "Terminal default")</dd>
+        <dt>SBMA Share · Subic Bay Metropolitan Authority</dt>
+        <dd class="@(Model.SbmaEnabled != subicPort ? "schedule-review-attention" : "")">@(Model.SbmaEnabled ? "Enabled" : "Disabled") · @(Model.SbmaEnabled != subicPort ? "Overrides port default" : "Port default")</dd>
     </dl>
     <div class="schedule-confirm-services">
         <h4 class="modern-headline-sm">Expected services</h4>
@@ -46,9 +56,10 @@
                                         <span class="schedule-pending-notice text-xs">Approved amount applied once per service</span>
                                     }
                                 </td>
-                                <td>
+                                <td class="@(entry.ManualTariffRate.HasValue || entry.ManualBafRate.HasValue ? "schedule-review-attention" : "")">
                                     @if (entry.ManualTariffRate.HasValue) { <span>Tariff: @entry.ManualTariffRate.Value.ToString("N2")</span> }
                                     @if (entry.ManualBafRate.HasValue) { <span>BAF: @entry.ManualBafRate.Value.ToString("N2")</span> }
+                                    @if (entry.ManualTariffRate.HasValue || entry.ManualBafRate.HasValue) { <small>Manual rates · review before approval</small> }
                                     @if (!entry.ManualTariffRate.HasValue && !entry.ManualBafRate.HasValue) { <span class="schedule-muted">Standard</span> }
                                 </td>
                             </tr>

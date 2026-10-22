@@ -24,7 +24,7 @@ namespace IBS.Models.MSAP.ViewModels
         [EnumDataType(typeof(BafCalculationMethod))]
         public BafCalculationMethod? BafMethod { get; set; } = BafCalculationMethod.PerHour;
 
-        [Range(typeof(decimal), "0", "99999999999999.9999", ErrorMessage = "Manual rate must be non-negative")]
+        [Range(typeof(decimal), "0.0001", "99999999999999.9999", ErrorMessage = "Tariff rate must be greater than zero")]
         public decimal? ManualTariffRate { get; set; }
 
         [Range(typeof(decimal), "0", "99999999999999.9999", ErrorMessage = "Manual rate must be non-negative")]

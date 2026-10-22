@@ -2,6 +2,8 @@
 @model VesselScheduleViewModel
 @{
     var tugOwnerMap = ViewBag.TugboatOwnerMap as Dictionary<int, bool> ?? new Dictionary<int, bool>();
+    var terminalIocMap = ViewBag.TerminalIocMap as Dictionary<int, bool> ?? new Dictionary<int, bool>();
+    var hasManualRates = Model.ServiceEntries?.Any(e => e.ManualTariffRate != null || e.ManualBafRate != null) == true;
     var isNew = Model.VesselScheduleId == 0;
     var selectedTugs = Model.SelectedTugboatIds?.Distinct().ToList() ?? new List<int>();
 }
@@ -32,7 +34,7 @@
             </div>
         </header>
 
-        <form method="post" id="scheduleForm" class="ui-stack" data-terminals-url="@Url.Action("GetTerminalsByPort")" data-bookings-url="@Url.Action("GetTugboatBookings")" data-details-url="@Url.Action("Details")" data-discount-url="@Url.Action("GetCustomerDiscount")" data-rate-url="@Url.Action("GetTariffRate")">
+        <form method="post" id="scheduleForm" class="ui-stack" data-is-new="@isNew.ToString().ToLowerInvariant()" data-terminals-url="@Url.Action("GetTerminalsByPort")" data-bookings-url="@Url.Action("GetTugboatBookings")" data-details-url="@Url.Action("Details")" data-discount-url="@Url.Action("GetCustomerDiscount")" data-rate-url="@Url.Action("GetTariffRate")">
             @Html.AntiForgeryToken()
             <input asp-for="VesselScheduleId" type="hidden" />
             <input type="hidden" id="AllowConflicts" name="AllowConflicts" value="false" />
@@ -77,14 +79,18 @@
                         </div>
                         <div class="schedule-field ui-field" data-tour-step="6">
                             <label asp-for="TerminalId" class="schedule-field-label ui-label">Terminal *</label>
-                            <select asp-for="TerminalId" asp-items="Model.Terminals" class="js-modern-select" id="TerminalId" required>
+                            <select asp-for="TerminalId" class="js-modern-select" id="TerminalId" required>
                                 <option value="">Select terminal</option>
+                                @foreach (var terminal in Model.Terminals)
+                                {
+                                    <option value="@terminal.Value" data-is-ioc="@(terminalIocMap.GetValueOrDefault(int.Parse(terminal.Value)).ToString().ToLowerInvariant())">@terminal.Text</option>
+                                }
                             </select>
                             <span asp-validation-for="TerminalId" class="text-error ui-caption"></span>
                         </div>
                         <div class="schedule-field ui-field" data-tour-step="4">
-                            <label asp-for="VoyageNumber" class="schedule-field-label ui-label">Voyage number</label>
-                            <input asp-for="VoyageNumber" class="modern-input" id="VoyageNumber" maxlength="50" placeholder="VOY-001" />
+                            <label asp-for="VoyageNumber" class="schedule-field-label ui-label">Voyage number *</label>
+                            <input asp-for="VoyageNumber" class="modern-input" id="VoyageNumber" maxlength="50" placeholder="VOY-001" required />
                             <span asp-validation-for="VoyageNumber" class="text-error ui-caption"></span>
                         </div>
                     </div>
@@ -110,24 +116,35 @@
                     <h2 class="schedule-card-title ui-section-title" id="commercialHeading">Commercial settings</h2>
                 </div>
                 <div class="schedule-card-body ui-stack">
-                    <div class="schedule-commercial-row">
-                        <div class="schedule-discount-box">
-                            <label asp-for="CosDiscountPercent" class="schedule-field-label ui-label">Customer discount</label>
-                            <input asp-for="CosDiscountPercent" type="number" step="0.0001" min="0" max="100" class="modern-input schedule-discount-input" id="CosDiscountPercent" placeholder="0.00%" />
+                    <div class="schedule-commercial-cards">
+                        <div class="schedule-option-card schedule-discount-box" id="discountCard">
+                            <input asp-for="SkipCosDiscount" type="checkbox" id="SkipCosDiscount" hidden />
+                            <button type="button" class="schedule-card-toggle" id="discountToggle" aria-pressed="false" aria-controls="CosDiscountPercent">
+                                <span class="schedule-option-title">Customer discount</span>
+                                <span class="material-symbols-outlined schedule-card-check" aria-hidden="true">check</span>
+                            </button>
+                            <div class="schedule-discount-control">
+                                <input asp-for="CosDiscountPercent" type="number" step="0.0001" min="0" max="100" class="modern-input schedule-discount-input" id="CosDiscountPercent" placeholder="0.00" aria-label="Customer discount percentage" aria-describedby="discountHelp" />
+                                <span aria-hidden="true">%</span>
+                            </div>
+                            <p class="ui-caption ui-muted" id="discountHelp" role="status"></p>
                             <span asp-validation-for="CosDiscountPercent" class="text-error ui-caption"></span>
                         </div>
-                        <div class="schedule-commercial-switches-inline">
-                            <label class="schedule-checkbox-inline">
-                                <input asp-for="SkipCosDiscount" type="checkbox" id="SkipCosDiscount" />
-                                <span>Skip discount for this COS</span>
-                            </label>
-                            <label class="schedule-checkbox-inline">
-                                <input asp-for="SbmaEnabled" type="checkbox" id="SbmaEnabled" />
-                                <span>Apply SBMA share</span>
-                            </label>
-                        </div>
+                        <label class="schedule-option-card" id="iocCard">
+                            <input asp-for="IsIoc" type="hidden" id="IsIoc" />
+                            <input type="checkbox" id="iocToggle" aria-label="Use IOC rates" aria-describedby="iocDefault" />
+                            <span class="material-symbols-outlined schedule-card-check" aria-hidden="true">check</span>
+                            <span class="schedule-option-title" id="iocTitle">Non-IOC</span>
+                            <span class="ui-caption ui-muted" id="iocDefault" role="status"></span>
+                            <span asp-validation-for="IsIoc" class="text-error ui-caption"></span>
+                        </label>
+                        <label class="schedule-option-card">
+                            <input asp-for="SbmaEnabled" type="checkbox" id="SbmaEnabled" />
+                            <span class="material-symbols-outlined schedule-card-check" aria-hidden="true">check</span>
+                            <span class="schedule-option-title">Apply SBMA share</span>
+                            <span class="ui-caption ui-muted">Subic Bay Metropolitan Authority share.</span>
+                        </label>
                     </div>
-                    <p class="schedule-field-footnote ui-caption ui-muted">Discount applies to tariff and BAF. SBMA uses actual service time for every tug.</p>
                 </div>
             </section>
 
@@ -138,10 +155,17 @@
                         <h2 class="schedule-section-title ui-section-title" id="tugboatsServicesHeading">Tugboats & services</h2>
                         <p class="schedule-section-subtitle ui-body ui-muted">Add one service entry for each assist the tug will perform.</p>
                     </div>
-                    <button type="button" class="modern-btn-secondary js-add-tugboat-btn" id="addTugboatBtn" data-tour-step="12">
-                        <span class="material-symbols-outlined" aria-hidden="true">add</span> Add tugboat
-                    </button>
+                    <div class="schedule-service-actions">
+                        <label class="schedule-rate-toggle">
+                            <input type="checkbox" id="RateMode" checked="@(!hasManualRates)" aria-describedby="rateModeHelp" />
+                            <span id="rateModeLabel">@(hasManualRates ? "Non-recurring" : "Recurring")</span>
+                        </label>
+                        <button type="button" class="modern-btn-secondary js-add-tugboat-btn" id="addTugboatBtn" data-tour-step="12">
+                            <span class="material-symbols-outlined" aria-hidden="true">add</span> Add tugboat
+                        </button>
+                    </div>
                 </div>
+                <p class="ui-caption ui-muted" id="rateModeHelp">@(hasManualRates ? "Enter manual tariff and BAF rates." : "Use tariff and BAF table rates.")</p>
 
                 <div id="tugServicesContainer" class="schedule-tug-services-list">
                     @if (selectedTugs.Count > 0)
@@ -202,7 +226,7 @@
                                                     </select>
                                                 </div>
                                                 <div class="col-rate">
-                                                    <input name="ServiceEntries[@rowKey].ManualTariffRate" value="@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("0.00##") : "")" type="number" step="0.0001" min="0" placeholder="From table" class="modern-input js-tariff-rate" aria-label="Manual tariff rate" readonly />
+                                                    <input name="ServiceEntries[@rowKey].ManualTariffRate" value="@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("0.00##") : "")" type="number" step="0.0001" min="0.0001" placeholder="From table" class="modern-input js-tariff-rate" aria-label="Manual tariff rate" readonly />
                                                     <span class="schedule-rate-provenance js-tariff-provenance ui-caption ui-muted">@(entry.ManualTariffRate.HasValue ? "Manual rate" : "Rate not checked")</span>
                                                 </div>
                                                 <div class="col-baf-method">
@@ -250,15 +274,6 @@
                     <textarea asp-for="Notes" class="modern-input schedule-notes-textarea" id="Notes" rows="2" placeholder="Add coordination notes or service instructions..."></textarea>
                 </div>
             </section>
-
-            <!-- Bottom Action Bar -->
-            <div class="schedule-bottom-bar" data-tour-step="14">
-                <span class="schedule-save-notice ui-body ui-muted">Saving sends this booking for review.</span>
-                <div class="schedule-action-buttons">
-                    <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">Cancel</a>
-                    <button type="submit" class="ui-button ui-button--primary"><span class="material-symbols-outlined">save</span> Save for reviewing</button>
-                </div>
-            </div>
         </form>
         <!-- Right Column: Booking summary & sidebar cards -->
         <aside class="schedule-summary-sidebar" aria-label="Booking summary and review checklist">
@@ -318,6 +333,15 @@
                 </ul>
             </div>
         </aside>
+
+        <!-- Bottom Action Bar -->
+        <div class="schedule-bottom-bar" data-tour-step="14">
+            <span class="schedule-save-notice ui-body ui-muted">Saving sends this booking for review.</span>
+            <div class="schedule-action-buttons">
+                <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">Cancel</a>
+                <button type="submit" form="scheduleForm" class="ui-button ui-button--primary"><span class="material-symbols-outlined">save</span> Save for reviewing</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -380,7 +404,7 @@
             </select>
         </div>
         <div class="col-rate">
-            <input name="ServiceEntries[__KEY__].ManualTariffRate" type="number" step="0.0001" min="0" placeholder="From table" class="modern-input js-tariff-rate" aria-label="Manual tariff rate" readonly />
+            <input name="ServiceEntries[__KEY__].ManualTariffRate" type="number" step="0.0001" min="0.0001" placeholder="From table" class="modern-input js-tariff-rate" aria-label="Manual tariff rate" readonly />
             <span class="schedule-rate-provenance js-tariff-provenance ui-caption ui-muted">Rate not checked</span>
         </div>
         <div class="col-baf-method">

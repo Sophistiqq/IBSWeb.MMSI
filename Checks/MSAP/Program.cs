@@ -109,6 +109,12 @@ if (args.Contains("--accounting-gaps-only", StringComparer.Ordinal))
     return;
 }
 
+if (args.Contains("--schedule-rates-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.ScheduleRateCheck.RunAsync();
+    return;
+}
+
 if (args.Contains("--other-tugs-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.OtherTugChargeCheck.RunAsync();
@@ -440,8 +446,16 @@ foreach (bool allowed in new[] { false, true })
         bool showOtherTugs = stage >= 2 && stage <= JobProgressCalculator.CompletedStage;
         Check(html.Contains("AP Other Tugs follow-up", StringComparison.Ordinal) == showOtherTugs,
             "Provider-cost follow-up must remain visible through collection/clearing and be hidden for cancelled bookings.");
-        Check(html.Contains("Record AP Other Tugs", StringComparison.Ordinal) == (showOtherTugs && allowed)
-            && html.Contains("Review AP Other Tugs", StringComparison.Ordinal) == (showOtherTugs && allowed),
+        if (showOtherTugs)
+        {
+            Check(html.Contains("2 / 3 recorded", StringComparison.Ordinal)
+                && html.Contains("Does not block customer billing.", StringComparison.Ordinal)
+                && html.Contains("receipt_long", StringComparison.Ordinal), "Provider follow-up must show recorded progress, an unnumbered icon and its billing independence.");
+            Check(html.IndexOf("AP Other Tugs follow-up", StringComparison.Ordinal) < html.IndexOf("</ol>", StringComparison.Ordinal),
+                "Provider follow-up must be part of Job Progress without adding a numbered billing stage.");
+        }
+        Check(html.Contains("Record costs", StringComparison.Ordinal) == (showOtherTugs && allowed)
+            && html.Contains("Review charges", StringComparison.Ordinal) == (showOtherTugs && allowed),
             "Provider input/review links ignored their permissions or disappeared after customer collection.");
         if (showOtherTugs && allowed)
         {

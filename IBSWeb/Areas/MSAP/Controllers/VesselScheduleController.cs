@@ -349,7 +349,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         public async Task<IActionResult> GetTerminalsByPort(int portId, CancellationToken ct)
         {
             var terminals = await unitOfWork.Terminal.GetAllAsync(t => t.PortId == portId, ct);
-            return Json(terminals.OrderBy(t => t.TerminalName).Select(t => new { value = t.TerminalId.ToString(), text = t.TerminalName }));
+            return Json(terminals.OrderBy(t => t.TerminalName).Select(t => new { value = t.TerminalId.ToString(), text = t.TerminalName, isIoc = t.IsIoc }));
         }
 
         [HttpGet]
@@ -406,8 +406,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var portId = selectedPortId ?? vm.PortId;
             if (portId > 0)
             {
-                vm.Terminals = (await unitOfWork.Terminal.GetAllAsync(t => t.PortId == portId, ct))
-                    .OrderBy(t => t.TerminalName)
+                var terminals = (await unitOfWork.Terminal.GetAllAsync(t => t.PortId == portId, ct)).ToList();
+                ViewBag.TerminalIocMap = terminals.ToDictionary(t => t.TerminalId, t => t.IsIoc);
+                vm.Terminals = terminals.OrderBy(t => t.TerminalName)
                     .Select(t => new SelectListItem { Value = t.TerminalId.ToString(), Text = t.TerminalName })
                     .ToList();
             }
@@ -427,6 +428,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     ? JsonSerializer.Serialize(vm.SelectedTugboatIds.Distinct())
                     : null,
                 VoyageNumber = vm.VoyageNumber,
+                IsIoc = vm.IsIoc,
                 Notes = vm.Notes,
                 CosDiscountPercent = vm.CosDiscountPercent,
                 SkipCosDiscount = vm.SkipCosDiscount,
@@ -464,6 +466,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 PlannedEnd = entity.PlannedEnd,
                 SelectedTugboatIds = tugIds,
                 VoyageNumber = entity.VoyageNumber,
+                IsIoc = entity.IsIoc,
                 Status = entity.Status,
                 Notes = entity.Notes,
                 CosDiscountPercent = entity.CosDiscountPercent,

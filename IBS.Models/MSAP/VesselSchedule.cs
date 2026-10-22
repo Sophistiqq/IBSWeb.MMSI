@@ -51,6 +51,9 @@ namespace IBS.Models.MSAP
         [Column(TypeName = "text")]
         public string? AssignedTugboatIds { get; set; }
 
+        [Display(Name = "IOC / Non-IOC")]
+        public bool? IsIoc { get; set; }
+
         [Display(Name = "Voyage Number")]
         [Column(TypeName = "varchar(50)")]
         public string? VoyageNumber { get; set; }

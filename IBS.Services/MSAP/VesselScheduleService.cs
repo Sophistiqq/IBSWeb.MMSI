@@ -253,6 +253,7 @@ namespace IBS.Services.MSAP
                     existing.PlannedEnd = model.PlannedEnd;
                     existing.AssignedTugboatIds = model.AssignedTugboatIds;
                     existing.VoyageNumber = model.VoyageNumber;
+                    existing.IsIoc = model.IsIoc;
                     existing.VesselType = model.VesselType;
                     existing.Notes = model.Notes;
                     existing.CosDiscountPercent = model.CosDiscountPercent;
@@ -617,6 +618,14 @@ namespace IBS.Services.MSAP
 
         private async Task<string?> ValidateAsync(VesselSchedule model, bool allowConflicts, CancellationToken ct, bool confirming = false)
         {
+            if (string.IsNullOrWhiteSpace(model.VoyageNumber))
+            {
+                return "Please enter a voyage number.";
+            }
+            if (model.VoyageNumber.Length > 50)
+            {
+                return "Voyage number must be at most 50 characters.";
+            }
             if (model.CustomerId is not > 0 || await unitOfWork.Customer.GetAsync(c => c.CustomerId == model.CustomerId, ct) == null)
             {
                 return "Choose a valid customer before saving or confirming the schedule.";
@@ -630,6 +639,7 @@ namespace IBS.Services.MSAP
             if (vessel == null) return "Choose a valid vessel.";
             var terminal = await unitOfWork.Terminal.GetAsync(t => t.TerminalId == model.TerminalId && t.PortId == model.PortId, ct);
             if (terminal == null) return "Choose a terminal belonging to the selected port.";
+            model.IsIoc ??= terminal.IsIoc;
             model.VesselType = vessel.VesselType == "FOREIGN" ? "Foreign" : "Local";
 
             if (model.CosDiscountPercent.HasValue && (model.CosDiscountPercent.Value < 0 || model.CosDiscountPercent.Value > 100))
@@ -676,6 +686,22 @@ namespace IBS.Services.MSAP
                     {
                         return "Manual BAF rate must be between 0 and 99,999,999,999,999.9999.";
                     }
+                    if (entry.CancelledAt.HasValue)
+                    {
+                        continue;
+                    }
+                    var rateDate = DateOnly.FromDateTime(model.PlannedStart);
+                    var tariffRate = entry.ManualTariffRate
+                        ?? (await unitOfWork.TariffTable.GetApplicableRateAsync(model.CustomerId.Value, model.TerminalId, entry.ServiceId, rateDate, ct))?.Dispatch;
+                    if (tariffRate is not > 0)
+                    {
+                        return "Tariff rate must be greater than zero. Enter a manual rate or use an applicable positive table rate.";
+                    }
+                    if (!entry.ManualBafRate.HasValue
+                        && await unitOfWork.BafTable.GetApplicableRateAsync(model.CustomerId.Value, model.TerminalId, entry.ServiceId, rateDate, ct) == null)
+                    {
+                        entry.ManualBafRate = 0m;
+                    }
                 }
             }
 
@@ -687,8 +713,9 @@ namespace IBS.Services.MSAP
             }
             var conflicts = await CheckConflictsAsync(model, ct);
             if (conflicts.Count > 0 && !allowConflicts)
-                return "Overlapping plans: " + string.Join(" ", conflicts.Select(c => c.Message))
-                    + " Adjust the booking or review both confirmation alerts to acknowledge and save it.";
+            {
+                return "Overlapping plans:\n" + string.Join("\n\n", conflicts.Select(c => c.Message));
+            }
             return null;
         }
 

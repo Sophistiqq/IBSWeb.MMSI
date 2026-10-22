@@ -319,6 +319,15 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 var data = await unitOfWork.Report.GetDispatchReportData(dateFrom, dateTo, ct, filterByBillingDate: true);
                 var collectionShares = await AllocateCollectionsByTicketAsync(data, ct);
                 var sbmaShares = data.ToDictionary(t => t.DispatchTicketId, t => t.SbmaShareAmount);
+                var cosIds = data.Where(t => t.CustomerOrderSlipId.HasValue).Select(t => t.CustomerOrderSlipId!.Value).Distinct().ToList();
+                var scheduleIoc = (await unitOfWork.VesselSchedule.GetAllAsync(s => s.CustomerOrderSlipId.HasValue
+                    && cosIds.Contains(s.CustomerOrderSlipId.Value), ct))
+                    .ToDictionary(s => s.CustomerOrderSlipId!.Value, s => s.IsIoc);
+                bool IsIoc(DispatchTicket ticket)
+                {
+                    return (ticket.CustomerOrderSlipId.HasValue ? scheduleIoc.GetValueOrDefault(ticket.CustomerOrderSlipId.Value) : null)
+                        ?? (ticket.Terminal?.IsIoc == true);
+                }
 
                 // Load all masterfile entities required for dynamic columns (as in old system curtug, curowner, curcustomer)
                 var companyOwnedTugboats = (await unitOfWork.Tugboat.GetAllAsync(cancellationToken: ct))
@@ -565,7 +574,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     ws.Cells[row, 8].Value = t.Tugboat.IsCompanyOwned ? "OWNED" : "SUBCON";
                     ws.Cells[row, 9].Value = t.Port?.PortName ?? "";
                     ws.Cells[row, 10].Value = t.Terminal?.TerminalName ?? "";
-                    ws.Cells[row, 11].Value = t.Terminal?.IsIoc == true ? "IOC" : "NON-IOC";
+                    ws.Cells[row, 11].Value = IsIoc(t) ? "IOC" : "NON-IOC";
                     ws.Cells[row, 12].Value = t.Service?.ServiceName ?? "";
                     ws.Cells[row, 13].Value = FormatLegacyDateTime(t.DateLeft, t.TimeLeft);
                     ws.Cells[row, 14].Value = FormatLegacyDateTime(t.DateArrived, t.TimeArrived);
@@ -619,7 +628,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     var tugName = t.Tugboat.TugboatName;
                     var isCompanyOwned = t.Tugboat.IsCompanyOwned;
                     var isForeign = t.Vessel.VesselType?.Contains("FOREIGN", StringComparison.OrdinalIgnoreCase) == true;
-                    var isIoc = t.Terminal?.IsIoc == true;
+                    var isIoc = IsIoc(t);
 
                     // Red font on Port (Col 9) and AP Other Tugs (Col 33) for non-company-owned tugs (VFP lines 615-618)
                     if (!isCompanyOwned)
@@ -770,7 +779,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     var rows = data.Where(t =>
                         t.Tugboat.IsCompanyOwned == owned &&
                         (tugName == null || t.Tugboat.TugboatName == tugName) &&
-                        (!ioc.HasValue || (t.Terminal?.IsIoc == true) == ioc.Value) &&
+                        (!ioc.HasValue || IsIoc(t) == ioc.Value) &&
                         (t.Vessel.VesselType?.Contains("FOREIGN", StringComparison.OrdinalIgnoreCase) == true) == foreign).ToList();
                     var tending = rows.Where(t => (t.Service?.ServiceName ?? "")
                         .Contains("TENDING", StringComparison.OrdinalIgnoreCase)).ToList();

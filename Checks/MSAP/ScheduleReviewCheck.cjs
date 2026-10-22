@@ -50,9 +50,13 @@ async function scenario(confirmations, results) {
     assert.equal(stale.errors[0], '&lt;Booking changed>');
     for (const result of [{exists: true, tariffRate: 0, bafRate: 1}, {exists: false}, null]) {
         const tasks = [];
-        const manual = {dataset: {manual: 'true', reviewRate: 'baf'}, textContent: '29,000.00'};
         const label = {textContent: ''};
-        const table = {dataset: {manual: 'false', reviewRate: 'tariff'}, parentElement: {querySelector: () => label}};
+        const manualClasses = new Set();
+        const tableClasses = new Set();
+        const manual = {dataset: {manual: 'true', reviewRate: 'baf'}, textContent: '29,000.00',
+            parentElement: {classList: {toggle: (name, on) => on ? manualClasses.add(name) : manualClasses.delete(name)}, querySelector: () => label}};
+        const table = {dataset: {manual: 'false', reviewRate: 'tariff'},
+            parentElement: {classList: {toggle: (name, on) => on ? tableClasses.add(name) : tableClasses.delete(name)}, querySelector: () => label}};
         const row = {dataset: {reviewService: '1'}, querySelectorAll: () => [table, manual]};
         const review = {
             dataset: {customerId: '1', terminalId: '2', plannedStart: '2026-10-16T08:00', rateUrl: '/rates'},
@@ -65,6 +69,8 @@ async function scenario(confirmations, results) {
         await Promise.all(tasks);
         assert.equal(manual.textContent, '29,000.00', 'Table previews must not overwrite saved manual rates.');
         assert.equal(table.textContent, result === null ? 'Unavailable' : result.exists ? '0.00' : 'No table match');
+        assert.equal(manualClasses.has('schedule-review-attention'), true, 'Saved manual rates must be flagged for attention.');
+        assert.equal(tableClasses.has('schedule-review-attention'), false, 'Table-derived rates must not be flagged for attention.');
     }
     console.log('PASS: review approval/cancellation, anti-forgery and review timestamp, explicit overlap acknowledgement, stale review errors and action recovery.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

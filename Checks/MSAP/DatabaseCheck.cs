@@ -54,7 +54,8 @@ namespace Checks.MSAP
                     .AddDefaultIdentity<ApplicationUser>().AddRoles<IdentityRole>().AddEntityFrameworkStores<ApplicationDbContext>()
                     .Services.BuildServiceProvider();
                 await using var original = migrationServices.GetRequiredService<ApplicationDbContext>();
-                await original.Database.MigrateAsync();
+                // Payment-link triggers require MSAP tables before the remaining shared migrations.
+                await original.Database.MigrateAsync("20261020094302_AddTugboatWorkspaceOwnership");
                 var originalAudit = new FilprideAuditTrail("check", "Base entry with overlapping reference", "COS");
                 original.FilprideAuditTrails.Add(originalAudit);
                 original.Users.Add(new ApplicationUser { Id = "shared-check", UserName = "shared-check", Name = "Shared User", Department = "MIS" });
@@ -69,6 +70,7 @@ namespace Checks.MSAP
                 await module.Database.MigrateAsync(module.Database.GetMigrations().First());
                 await module.Database.ExecuteSqlRawAsync("INSERT INTO msap.msap_ports (port_number, port_name, has_sbma) VALUES ('ZZZ', 'Prefix migration check', false)");
                 await module.Database.MigrateAsync();
+                Check(await SchemaAsync(settings.ConnectionString) == before, "MSAP migration changed public schema.");
                 Check(await module.MsapPorts.AnyAsync(port => port.PortNumber == "ZZZ" && port.PortName == "Prefix migration check"),
                     "Table prefix migration lost existing data.");
                 Console.WriteLine("PASS: mmsi table renames preserve existing MSAP records.");
@@ -92,6 +94,7 @@ namespace Checks.MSAP
                 module.MsapUserAccesses.Remove(migrationAccess);
                 await module.SaveChangesAsync();
                 Console.WriteLine("PASS: approval migration upgrade/downgrade preserves existing grants and defaults all new approvals to false.");
+                Check(await SchemaAsync(settings.ConnectionString) == before, "MSAP migration changed public schema.");
                 using var seedServices = new ServiceCollection().AddSingleton(module).BuildServiceProvider();
                 await DbSeeder.SeedAsync(seedServices);
                 await DbSeeder.SeedAsync(seedServices);
@@ -126,6 +129,8 @@ namespace Checks.MSAP
                     await TicketLinkageCheck.RunAsync(module);
                     return;
                 }
+                await original.Database.MigrateAsync();
+                before = await SchemaAsync(settings.ConnectionString);
                 var roles = new RoleService(users);
                 var access = new AccessControlService(users, new UserAccessService(dashboardWork, users, roles, NullLogger<UserAccessService>.Instance));
                 var dashboard = new IBSWeb.Areas.MSAP.Controllers.HomeController(users, module, access, new DashboardService(module,
@@ -187,8 +192,29 @@ namespace Checks.MSAP
                 Check(timeline.Count == 1 && timeline[0].DocumentType == "COS", "MSAP timeline mixed records with overlapping IDs.");
 
                 var dispatchService = new DispatchTicketService(work, storage, NullLogger<DispatchTicketService>.Instance);
+                var master = new TugMaster { TugMasterNumber = "DB01", TugMasterName = "Database check master" };
+                var schedule = new VesselSchedule
+                {
+                    CustomerOrderSlipId = job.CustomerOrderSlipId, CustomerId = customer.CustomerId, VesselId = vessel.VesselId,
+                    PortId = port.PortId, TerminalId = terminal.TerminalId, VoyageNumber = "DB-CHECK",
+                    PlannedStart = job.Date.ToDateTime(new TimeOnly(8, 0)), PlannedEnd = job.Date.ToDateTime(new TimeOnly(9, 0)),
+                    Status = MsapConstants.VesselScheduleStatus.Confirmed, ApprovedRevision = 1,
+                    ApprovedByUserId = "shared-check", ApprovedAt = DateTimeHelper.GetCurrentPhilippineTime(),
+                    AssignedTugboatIds = System.Text.Json.JsonSerializer.Serialize(new[] { tug.TugboatId }),
+                    ServiceEntries = [new VesselScheduleServiceEntry
+                    {
+                        TugboatId = tug.TugboatId, ServiceId = maritimeService.ServiceId,
+                        TariffBasis = IBS.Models.MSAP.Enums.TariffChargeBasis.PerMove,
+                        BafMethod = IBS.Models.MSAP.Enums.BafCalculationMethod.PerHour,
+                        ManualTariffRate = 100m, ManualBafRate = 0m
+                    }]
+                };
+                module.AddRange(master, schedule);
+                await module.SaveChangesAsync();
                 var dispatch = await dispatchService.CreateDispatchTicketAsync(new DispatchTicketViewModel
                 {
+                    VesselScheduleServiceEntryId = schedule.ServiceEntries[0].VesselScheduleServiceEntryId,
+                    TugMasterId = master.TugMasterId, Date = job.Date,
                     CustomerOrderSlipId = job.CustomerOrderSlipId, DispatchNumber = "D-CHECK", TugBoatId = tug.TugboatId, ServiceId = maritimeService.ServiceId,
                     DateLeft = job.Date, TimeLeft = new TimeOnly(8, 0), DateArrived = job.Date, TimeArrived = new TimeOnly(9, 0)
                 }, null, null, "check", default);

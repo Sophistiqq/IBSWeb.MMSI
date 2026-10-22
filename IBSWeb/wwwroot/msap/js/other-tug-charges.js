@@ -21,11 +21,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         document.getElementById('otherTugChargeTotal').textContent = pending ? 'Pending' : total.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
+    function setEditing(editing) {
+        if (form.dataset.canEdit !== 'true') return;
+        form.dataset.editable = String(editing);
+        form.querySelector('[data-charge-fields]').disabled = !editing;
+        rows.forEach(row => row.querySelector('[data-include]').disabled = !editing);
+        document.getElementById('editOtherTugCharge').hidden = editing;
+        document.getElementById('cancelOtherTugChargeEdit').hidden = !editing || !form.elements.Id.value;
+        document.getElementById('saveOtherTugCharge').hidden = !editing;
+        const confirm = document.getElementById('confirmOtherTugCharge');
+        if (confirm) confirm.hidden = editing;
+        update();
+    }
+    document.getElementById('editOtherTugCharge')?.addEventListener('click', () => {
+        setEditing(true);
+        form.elements.ProviderReference.focus();
+    });
+    document.getElementById('cancelOtherTugChargeEdit')?.addEventListener('click', () => {
+        form.reset();
+        dirty = false;
+        error('');
+        setEditing(false);
+    });
     form.addEventListener('input', () => { dirty = true; update(); });
     form.addEventListener('change', () => { dirty = true; update(); });
     async function submit(confirming) {
         if (busy) return;
         error('');
+        if (confirming && form.dataset.editable === 'true') { error('Finish editing before confirming the saved charges.'); return; }
         if (confirming && dirty) { error('Save your edits and review the saved amounts before confirming.'); return; }
         if (!confirming && !form.reportValidity()) return;
         const selected = rows.filter(row => row.querySelector('[data-include]').checked);

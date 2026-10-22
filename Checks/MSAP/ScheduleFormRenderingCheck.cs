@@ -35,6 +35,7 @@ namespace Checks.MSAP
             var model = new VesselScheduleViewModel
             {
                 VesselScheduleId = 5, CustomerId = 1, VesselId = 1, PortId = 1, TerminalId = 1,
+                IsIoc = true, Terminals = [new SelectListItem("Terminal", "1")],
                 Revision = 2, ApprovedRevision = 1, SkipCosDiscount = true, CosDiscountPercent = 12.5m, SbmaEnabled = true,
                 PlannedStart = new DateTime(2026, 10, 16, 23, 0, 0), PlannedEnd = new DateTime(2026, 10, 17, 1, 0, 0),
                 SelectedTugboatIds = [1, 2], Tugboats = [new SelectListItem("Tug <A>", "1"), new SelectListItem("Tug B", "2")],
@@ -46,6 +47,7 @@ namespace Checks.MSAP
                 }]
             };
             var data = new ViewDataDictionary<VesselScheduleViewModel>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = model };
+            data["TerminalIocMap"] = new Dictionary<int, bool> { [1] = false };
             data.ModelState.AddModelError("", "Save <failed>");
             var engine = services.GetRequiredService<IRazorViewEngine>();
             var view = engine.GetView(null, "/Areas/MSAP/Views/VesselSchedule/_ScheduleForm.cshtml", false);
@@ -53,6 +55,32 @@ namespace Checks.MSAP
             await view.View!.RenderAsync(new ViewContext(context, view.View, data,
                 services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), output, new HtmlHelperOptions()));
             string html = output.ToString();
+            int summaryIndex = html.IndexOf("aria-label=\"Booking summary and review checklist\"", StringComparison.Ordinal);
+            int summaryEnd = summaryIndex < 0 ? -1 : html.IndexOf("</aside>", summaryIndex, StringComparison.Ordinal);
+            int footerIndex = html.IndexOf("class=\"schedule-bottom-bar\"", StringComparison.Ordinal);
+            Check(summaryIndex >= 0 && summaryEnd > summaryIndex && footerIndex > summaryEnd,
+                "The schedule summary must render before the final actions.");
+            Check(Regex.Matches(html, "<button(?=[^>]*type=\"submit\")(?=[^>]*form=\"scheduleForm\")[^>]*>").Count == 1
+                && html.IndexOf("</form>", StringComparison.Ordinal) < footerIndex,
+                "The final action must submit the schedule form exactly once.");
+            Check(Regex.IsMatch(html, "<input[^>]*id=\"VoyageNumber\"[^>]*required"), "Voyage number is not required in the form.");
+            Check(Regex.IsMatch(html, "<input(?=[^>]*type=\"hidden\")(?=[^>]*id=\"IsIoc\")(?=[^>]*value=\"True\")[^>]*>"), "Schedule IOC selection was not retained.");
+            Check(Regex.IsMatch(html, "<option(?=[^>]*data-is-ioc=\"false\")(?=[^>]*selected=\"selected\")[^>]*>Terminal</option>"), "Selected terminal lost its IOC default.");
+            Check(html.Contains("id=\"RateMode\"", StringComparison.Ordinal), "Rate mode selection is missing from the form.");
+            Check(Regex.IsMatch(html, "<input(?=[^>]*id=\"RateMode\")(?![^>]*checked)[^>]*>")
+                && html.Contains("id=\"rateModeLabel\">Non-recurring", StringComparison.Ordinal), "Saved manual rates must default the form to non-recurring mode.");
+            foreach (string? voyage in new string?[] { null, "", "   ", new string('V', 51) })
+            {
+                var errors = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+                Check(!System.ComponentModel.DataAnnotations.Validator.TryValidateProperty(voyage,
+                    new System.ComponentModel.DataAnnotations.ValidationContext(model) { MemberName = nameof(model.VoyageNumber) }, errors),
+                    "Voyage validation accepted an empty value.");
+                var scheduleService = new VesselScheduleService(null!, null!, Microsoft.Extensions.Logging.Abstractions.NullLogger<VesselScheduleService>.Instance);
+                var invalidSchedule = new VesselSchedule { VoyageNumber = voyage };
+                string expectedMessage = voyage?.Length > 50 ? "Voyage number must be at most 50 characters." : "Please enter a voyage number.";
+                Check((await scheduleService.CreateAsync(invalidSchedule, "check")).Message == expectedMessage,
+                    "The service must reject a missing voyage before accessing storage.");
+            }
             Check(html.Contains("Save for reviewing", StringComparison.Ordinal) && html.Contains("__RequestVerificationToken", StringComparison.Ordinal), "Schedule save action or anti-forgery token is missing.");
             Check(Regex.Matches(html, "name=\"ServiceEntries.Index\"").Count == 2, "Saved service rows and the new-row template must retain collection binding indices.");
             Check(Regex.IsMatch(html, "name=\"ServiceEntries\\[[^\\]]+\\].ManualTariffRate\" value=\"0.00\""), "A zero manual rate was lost when rendering.");
@@ -93,6 +121,13 @@ namespace Checks.MSAP
                 await reviewView.View!.RenderAsync(new ViewContext(context, reviewView.View, reviewData,
                     services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), reviewOutput, new HtmlHelperOptions()));
                 string reviewHtml = reviewOutput.ToString();
+                int reviewSummaryIndex = reviewHtml.IndexOf("aria-label=\"Review summary\"", StringComparison.Ordinal);
+                int reviewSummaryEnd = reviewSummaryIndex < 0 ? -1 : reviewHtml.IndexOf("</aside>", reviewSummaryIndex, StringComparison.Ordinal);
+                int approvalIndex = reviewHtml.IndexOf("id=\"confirmSchedule\"", StringComparison.Ordinal);
+                Check(reviewSummaryIndex >= 0 && reviewSummaryEnd > reviewSummaryIndex && approvalIndex > reviewSummaryEnd
+                    && Regex.Matches(reviewHtml, "id=\"confirmSchedule\"").Count == 1
+                    && approvalIndex < reviewHtml.IndexOf("</main>", StringComparison.Ordinal),
+                    "The review summary must render before the final approval action.");
                 Check(reviewHtml.Contains("Customer &lt;A&gt;", StringComparison.Ordinal) && reviewHtml.Contains("Coordinate &lt;safely&gt;", StringComparison.Ordinal), "Review text was not encoded.");
                 Check(reviewHtml.Contains("Tug &lt;A&gt;", StringComparison.Ordinal) && reviewHtml.Contains("Docking &lt;review&gt;", StringComparison.Ordinal), "Review did not group the recorded service under its tug.");
                 Check(reviewHtml.Contains(">0.00</span>", StringComparison.Ordinal) && reviewHtml.Contains("29,000.00", StringComparison.Ordinal), "Review lost zero/manual rates.");

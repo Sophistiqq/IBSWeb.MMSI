@@ -155,7 +155,17 @@ namespace Checks.MSAP
                     db.ChangeTracker.Clear();
                     return await db.MsapVesselSchedules.SingleAsync(s => s.VesselScheduleId == id);
                 }
+                foreach (string? voyage in new string?[] { null, "", "   ", new string('V', 51) })
+                {
+                    var invalid = Booking(26);
+                    invalid.VoyageNumber = voyage;
+                    Check(!(await schedules.CreateAsync(invalid, "check")).IsSuccess, "Invalid voyage number was accepted.");
+                }
+                var defaultBooking = Booking(25);
+                Check((await schedules.CreateAsync(defaultBooking, "check")).IsSuccess, "Could not save terminal IOC default.");
+                Check((await Reload(defaultBooking.VesselScheduleId)).IsIoc == terminal.IsIoc, "Schedule did not persist its terminal IOC default.");
                 var prepared = Booking(26);
+                prepared.IsIoc = !terminal.IsIoc;
                 prepared.CosDiscountPercent = 12.5m;
                 prepared.SbmaEnabled = true;
                 prepared.ServiceEntries = [new VesselScheduleServiceEntry
@@ -168,6 +178,7 @@ namespace Checks.MSAP
                 var restored = await schedules.GetByIdAsync(prepared.VesselScheduleId);
                 Check(restored!.ServiceEntries.Count == 1 && restored.CosDiscountPercent == 12.5m && restored.SbmaEnabled
                     && restored.ServiceEntries[0].ManualTariffRate == 0m, "Schedule details lost expected services, a zero manual rate or commercial settings.");
+                Check(restored.IsIoc == !terminal.IsIoc, "Schedule IOC override was lost during validation or persistence.");
                 int savedEntryId = restored.ServiceEntries[0].VesselScheduleServiceEntryId;
                 var reviewController = new IBSWeb.Areas.MSAP.Controllers.VesselScheduleController(work, schedules, new CheckAccess(ProcedureEnum.ApproveSchedule));
                 reviewController.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
@@ -228,14 +239,17 @@ namespace Checks.MSAP
                 var reviewedAt = booking.CreatedDate;
                 var stale = await schedules.ConfirmAsync(booking.VesselScheduleId, reviewedAt.AddMinutes(-1), "check");
                 Check(!stale.IsSuccess && !await db.MsapCustomerOrderSlips.AnyAsync(), "A stale booking review created an order.");
-                var closed = new MsapPostedPeriod { Year = 2030, Month = 1, IsClosed = true };
-                db.MsapPostedPeriods.Add(closed);
-                await db.SaveChangesAsync();
-                Check(!(await schedules.ConfirmAsync(booking.VesselScheduleId, reviewedAt, "check")).IsSuccess, "Closed period confirmation succeeded.");
-                booking = await Reload(booking.VesselScheduleId);
-                Check(booking.Status == MsapConstants.VesselScheduleStatus.Tentative && booking.CustomerOrderSlipId == null && !await db.MsapCustomerOrderSlips.AnyAsync(), "Failed confirmation did not roll back.");
-                db.Remove(await db.MsapPostedPeriods.SingleAsync());
-                await db.SaveChangesAsync();
+                if (MsapConstants.EnforceClosedPeriods)
+                {
+                    var closed = new MsapPostedPeriod { Year = 2030, Month = 1, IsClosed = true };
+                    db.MsapPostedPeriods.Add(closed);
+                    await db.SaveChangesAsync();
+                    Check(!(await schedules.ConfirmAsync(booking.VesselScheduleId, reviewedAt, "check")).IsSuccess, "Closed period confirmation succeeded.");
+                    booking = await Reload(booking.VesselScheduleId);
+                    Check(booking.Status == MsapConstants.VesselScheduleStatus.Tentative && booking.CustomerOrderSlipId == null && !await db.MsapCustomerOrderSlips.AnyAsync(), "Failed confirmation did not roll back.");
+                    db.Remove(await db.MsapPostedPeriods.SingleAsync());
+                    await db.SaveChangesAsync();
+                }
                 var overlap = Booking(1);
                 Check((await schedules.CreateAsync(overlap, "check", allowConflicts: true)).IsSuccess, "Could not prepare overlap check.");
                 Check(!(await schedules.ConfirmAsync(booking.VesselScheduleId, reviewedAt, "check")).IsSuccess, "Confirmation ignored overlaps.");
@@ -281,7 +295,9 @@ namespace Checks.MSAP
                     CustomerId = customer.CustomerId, ToBillDispatchTickets = [ticket.DispatchTicketId.ToString()]
                 };
                 Check(!(await progressBilling.CreateBillingAsync(splitRequest, "check", "MMSI", default)).IsSuccess, "Split billing bypassed ticket readiness.");
-                Check((await progressDispatcher.SaveTariffAsync(new DispatchTicket { DispatchTicketId = ticket.DispatchTicketId, CustomerId = customer.CustomerId, DispatchRate = 100, BAFRate = 10 }, "Per hour", "Per hour", "check", true, default)).IsSuccess, "Disapproved tariff could not be corrected for resubmission.");
+                Check(!(await progressDispatcher.SaveTariffAsync(new DispatchTicket { DispatchTicketId = ticket.DispatchTicketId, CustomerId = customer.CustomerId, DispatchRate = 100, BAFRate = 10 }, "Per hour", "Per hour", "check", true, default)).IsSuccess, "The retired tariff workflow accepted a manual correction.");
+                ticket = await db.MsapDispatchTickets.SingleAsync(t => t.DispatchTicketId == ticket.DispatchTicketId);
+                unfinished = await db.MsapDispatchTickets.SingleAsync(t => t.DispatchTicketId == unfinished.DispatchTicketId);
                 ticket.Status = unfinished.Status = MsapConstants.DispatchTicketStatus.ForBilling;
                 var progressBill = new Billing
                 {
@@ -339,7 +355,8 @@ namespace Checks.MSAP
                 customer.WithHoldingVat = true;
                 progressBill.IsVatable = true;
                 progressBill.Amount = progressBill.Balance = 112;
-                unfinished.Status = MsapConstants.DispatchTicketStatus.Billed;
+                progressBill.Status = MsapConstants.BillingStatus.ForCollection;
+                ticket.Status = unfinished.Status = MsapConstants.DispatchTicketStatus.Billed;
                 unfinished.BillingId = progressBill.MsapBillingId;
                 var settlementSplit = new Billing
                 {
@@ -348,6 +365,12 @@ namespace Checks.MSAP
                     TerminalId = terminal.TerminalId, CreatedBy = "check", CustomerOrderSlipId = order.CustomerOrderSlipId, IsVatable = true, Amount = 56, Balance = 56
                 };
                 db.Add(settlementSplit);
+                foreach (var approvedBill in new[] { progressBill, settlementSplit })
+                {
+                    approvedBill.ApprovedRevision = approvedBill.Revision;
+                    approvedBill.ApprovedByUserId = "check";
+                    approvedBill.ApprovedAt = DateTimeHelper.GetCurrentPhilippineTime();
+                }
                 await db.SaveChangesAsync();
                 var settlementRequest = new IBS.Models.MSAP.ViewModels.CreateCollectionViewModel
                 {
@@ -384,7 +407,7 @@ namespace Checks.MSAP
                 }
                 var concurrentCollections = await Task.WhenAll(CollectInNewContext("SETTLE-A"), CollectInNewContext("SETTLE-B"));
                 Check(concurrentCollections.Count(r => r.IsSuccess) == 1 && await db.MsapCollections.CountAsync() == 1,
-                    "Concurrent collection submissions paid the same split bills twice.");
+                    "Expected exactly one successful collection: " + string.Join("; ", concurrentCollections.Select(r => r.Message)));
                 var settled = concurrentCollections.Single(r => r.IsSuccess);
                 settlementRequest.MsapCollectionNumber = (await db.MsapCollections.SingleAsync(c => c.MsapCollectionId == settled.Data)).MsapCollectionNumber;
                 progressBill = await db.MsapBillings.SingleAsync(b => b.MsapBillingId == progressBill.MsapBillingId);
@@ -428,7 +451,7 @@ namespace Checks.MSAP
                 db.Remove(progressBill);
                 db.Remove(unfinished);
                 await db.SaveChangesAsync();
-                Console.WriteLine("PASS: real service gates block premature individual/batch approval, normal/split billing, posting and collection; rejected tariff correction resubmits successfully.");
+                Console.WriteLine("PASS: real service gates block premature individual/batch approval, normal/split billing, posting, collection and retired tariff correction.");
 
                 var revision = Booking(2);
                 revision.VesselScheduleId = booking.VesselScheduleId;
@@ -529,18 +552,25 @@ namespace Checks.MSAP
                 {
                     DispatchNumber = "DONE-DT", Date = past, CustomerOrderSlipId = concurrent.CustomerOrderSlipId,
                     CustomerId = customer.CustomerId, VesselId = vessel.VesselId, PortId = port.PortId, TerminalId = terminal.TerminalId,
-                    TugBoatId = tug.TugboatId, ServiceId = serviceType.ServiceId, Status = MsapConstants.DispatchTicketStatus.ForTariff,
-                    CreatedBy = "check", DateLeft = past, TimeLeft = new TimeOnly(8, 0), DateArrived = past
+                    TugBoatId = tug.TugboatId, ServiceId = serviceType.ServiceId, Status = MsapConstants.DispatchTicketStatus.ForBilling,
+                    CreatedBy = "check", DateLeft = past, TimeLeft = new TimeOnly(8, 0), DateArrived = past, TimeArrived = new TimeOnly(9, 0)
                 };
                 db.Add(completedTicket);
                 await db.SaveChangesAsync();
-                Check(!(await jobs.CompleteBookingAsync(concurrent.CustomerOrderSlipId!.Value, "check")).IsSuccess, "Booking completed without actual end time.");
-                completedTicket.TimeArrived = new TimeOnly(7, 0);
-                await db.SaveChangesAsync();
-                Check(!(await jobs.CompleteBookingAsync(concurrent.CustomerOrderSlipId.Value, "check")).IsSuccess, "Booking completed with reversed actual times.");
-                completedTicket.TimeArrived = new TimeOnly(9, 0);
-                await db.SaveChangesAsync();
-                Check((await jobs.CompleteBookingAsync(concurrent.CustomerOrderSlipId.Value, "check")).IsSuccess, "Operational completion failed before tariff/billing.");
+                foreach (TimeOnly? invalidEnd in new TimeOnly?[] { null, new TimeOnly(7, 0) })
+                {
+                    await using var transaction = await db.Database.BeginTransactionAsync();
+                    try
+                    {
+                        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE msap.mmsi_dispatch_tickets SET time_arrived = {invalidEnd} WHERE \"RECID\" = {completedTicket.DispatchTicketId}");
+                        throw new InvalidOperationException("Database accepted missing or reversed actual times.");
+                    }
+                    catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.CheckViolation)
+                    {
+                        await transaction.RollbackAsync();
+                    }
+                }
+                Check((await jobs.CompleteBookingAsync(concurrent.CustomerOrderSlipId!.Value, "check")).IsSuccess, "Operational completion failed for a calculated ticket.");
                 concurrent = await Reload(concurrent.VesselScheduleId);
                 Check(concurrent.Status == MsapConstants.VesselScheduleStatus.Completed &&
                     (await db.MsapCustomerOrderSlips.SingleAsync(j => j.CustomerOrderSlipId == concurrent.CustomerOrderSlipId)).Status == MsapConstants.CustomerOrderSlipStatus.Open,
@@ -560,10 +590,21 @@ namespace Checks.MSAP
                 Check((await db.MsapCustomerOrderSlips.SingleAsync(j => j.CustomerOrderSlipId == cancellation.CustomerOrderSlipId)).Status == MsapConstants.CustomerOrderSlipStatus.Cancelled,
                     "Schedule-only cancellation left its COS active.");
                 var race = Booking(10);
+                race.ServiceEntries = [new VesselScheduleServiceEntry
+                {
+                    TugboatId = tug.TugboatId, ServiceId = serviceType.ServiceId,
+                    TariffBasis = TariffChargeBasis.PerMove, BafMethod = BafCalculationMethod.PerHour,
+                    ManualTariffRate = 0m, ManualBafRate = 0m
+                }];
                 Check((await schedules.CreateAsync(race, "check")).IsSuccess, "Could not prepare booking race.");
                 race = await Reload(race.VesselScheduleId);
                 Check((await schedules.ConfirmAsync(race.VesselScheduleId, race.CreatedDate, "check")).IsSuccess, "Could not confirm booking race.");
                 race = await Reload(race.VesselScheduleId);
+                int raceEntryId = await db.MsapVesselScheduleServiceEntries.Where(e => e.VesselScheduleId == race.VesselScheduleId)
+                    .Select(e => e.VesselScheduleServiceEntryId).SingleAsync();
+                var raceMaster = new TugMaster { TugMasterNumber = "RACE1", TugMasterName = "Race check master" };
+                db.Add(raceMaster);
+                await db.SaveChangesAsync();
                 async Task<bool> RaceAction(bool cancel)
                 {
                     await using var isolated = new MsapDbContext(options);
@@ -575,7 +616,9 @@ namespace Checks.MSAP
                     var raceDispatch = new DispatchTicketService(raceWork, null!, NullLogger<DispatchTicketService>.Instance);
                     return (await raceDispatch.CreateDispatchTicketAsync(new IBS.Models.MSAP.ViewModels.DispatchTicketViewModel
                     {
+                        VesselScheduleServiceEntryId = raceEntryId, TugMasterId = raceMaster.TugMasterId,
                         CustomerOrderSlipId = race.CustomerOrderSlipId, DispatchNumber = "RACE-DT", Date = past, CustomerId = customer.CustomerId,
+                        DateLeft = past, DateArrived = past, TimeLeft = new TimeOnly(8, 0), TimeArrived = new TimeOnly(9, 0),
                         VesselId = vessel.VesselId, PortId = port.PortId, TerminalId = terminal.TerminalId, TugBoatId = tug.TugboatId, ServiceId = serviceType.ServiceId
                     }, null, null, "check", default)).IsSuccess;
                 }
@@ -618,15 +661,18 @@ namespace Checks.MSAP
                     && originalOrder.Status == MsapConstants.CustomerOrderSlipStatus.Open && originalOrder.RequiredTugCount == 2
                     && originalOrder.PreferredTugboatId == tug.TugboatId && await db.MsapCustomerOrderSlips.CountAsync() == orderCount,
                     "Adding tugboats failed to increment revision, preserve COS identity, or require reapproval.");
-                db.MsapPostedPeriods.Add(new MsapPostedPeriod { Year = 2030, Month = 1, IsClosed = true });
-                await db.SaveChangesAsync();
-                Check(!(await schedules.ConfirmAsync(revisable.VesselScheduleId, revisable.EditedDate!.Value, "check")).IsSuccess,
-                    "Reapproval bypassed the closed-period guard.");
-                db.ChangeTracker.Clear();
-                var stillPending = await Reload(revisable.VesselScheduleId);
-                Check(stillPending.ApprovedRevision == 1 && stillPending.Revision == 2, "Rejected reapproval changed approval evidence.");
-                db.Remove(await db.MsapPostedPeriods.SingleAsync());
-                await db.SaveChangesAsync();
+                if (MsapConstants.EnforceClosedPeriods)
+                {
+                    db.MsapPostedPeriods.Add(new MsapPostedPeriod { Year = 2030, Month = 1, IsClosed = true });
+                    await db.SaveChangesAsync();
+                    Check(!(await schedules.ConfirmAsync(revisable.VesselScheduleId, revisable.EditedDate!.Value, "check")).IsSuccess,
+                        "Reapproval bypassed the closed-period guard.");
+                    db.ChangeTracker.Clear();
+                    var stillPending = await Reload(revisable.VesselScheduleId);
+                    Check(stillPending.ApprovedRevision == 1 && stillPending.Revision == 2, "Rejected reapproval changed approval evidence.");
+                    db.Remove(await db.MsapPostedPeriods.SingleAsync());
+                    await db.SaveChangesAsync();
+                }
                 var firstReapproval = await schedules.ConfirmAsync(revisable.VesselScheduleId, revisable.EditedDate!.Value, "check");
                 Check(firstReapproval.IsSuccess && firstReapproval.Data == firstConfirmation.Data, "Reapproval failed or replaced the COS.");
                 revisable = await Reload(revisable.VesselScheduleId);
@@ -673,10 +719,16 @@ namespace Checks.MSAP
                 directOptions.DispatchNumber = "DIRECT-LOCK";
                 directOptions.TugBoatId = outsider.TugboatId;
                 directOptions.ServiceId = serviceType.ServiceId;
-                Check((await dispatcher.CreateDispatchTicketAsync(directOptions, null, null, "check", default)).IsSuccess, "Direct ticket entry failed.");
+                Check(!(await dispatcher.CreateDispatchTicketAsync(directOptions, null, null, "check", default)).IsSuccess, "Direct ticket entry bypassed the required service link.");
+                // Imported legacy tickets must still prevent direct COS edits.
+                var legacyDirectTicket = directOptions.ToEntity();
+                legacyDirectTicket.CreatedBy = "check";
+                legacyDirectTicket.Status = MsapConstants.DispatchTicketStatus.ForTariff;
+                db.Add(legacyDirectTicket);
+                await db.SaveChangesAsync();
                 Check(!(await jobs.UpdateCustomerOrderSlipAsync(directRevision, "check", default)).IsSuccess, "Direct COS remained editable after ticket entry.");
                 await CosTicketCheck.RunAsync(db, work, schedules);
-                Console.WriteLine("PASS: tug and booking revisions require reapproval, retain the same order and numbering, respect closed periods and record revision approval evidence; bookings with tickets remain read-only; assigned tugboats are enforced.");
+                Console.WriteLine("PASS: tug and booking revisions require reapproval, retain the same order and numbering and record revision approval evidence; bookings with tickets remain read-only; assigned tugboats are enforced.");
                 Console.WriteLine("PASS: scheduling migration, tentative-only save, booking review, customer/tug/period/overlap guards, linked order, revisions, actual times, synchronized cancellation, billing guards, operational completion, duplicate clicks, concurrent numbering/cancellation and atomic rollback.");
             }
             finally

@@ -5,6 +5,11 @@
     form.noValidate = true;
 
     function validateForm() {
+        form.querySelectorAll('[data-service-row]').forEach(row => {
+            const baf = row.querySelector('.js-baf-rate');
+            if (!baf.readOnly && baf.value === '') baf.value = '0';
+            updateRateProvenance(row);
+        });
         const invalidSelect = [...form.querySelectorAll('select.js-modern-select')].find(select => !select.checkValidity());
         if (invalidSelect) {
             const label = invalidSelect.getAttribute('aria-label') || invalidSelect.labels?.[0]?.textContent.trim() || 'tugboat';
@@ -27,13 +32,14 @@
 
     async function acknowledgeConflicts(errorMessage) {
         const review = await ModernAlert.confirm({
-            title: 'Review schedule conflicts', text: errorMessage, icon: 'warning',
-            confirmText: 'Continue to final confirmation', cancelText: 'Keep editing'
+            title: 'Schedule overlaps found',
+            text: '<span class="schedule-conflict-details">' + errorMessage.replace(/^Overlapping plans:\s*/, '') + '</span>', icon: 'warning',
+            confirmText: 'Continue', cancelText: 'Keep editing'
         });
         if (!review.isConfirmed) return;
         const acknowledgement = await ModernAlert.confirm({
-            title: 'Save this overlapping plan?',
-            text: 'I acknowledge the overlapping vessel, terminal or tugboat bookings. Save this plan with these assignments.',
+            title: 'Save despite these overlaps?',
+            text: 'I have reviewed the overlapping bookings and want to save these assignments.',
             icon: 'warning', confirmText: 'Acknowledge and save', cancelText: 'Keep editing'
         });
         if (!acknowledgement.isConfirmed || !validateForm()) return;
@@ -44,6 +50,16 @@
 
     const port = document.getElementById('PortId');
     const terminal = document.getElementById('TerminalId');
+    const rateMode = document.getElementById('RateMode');
+    function manualRates() {
+        return rateMode?.checked === false;
+    }
+    const sbma = document.getElementById('SbmaEnabled');
+    function applyPortCommercialDefaults() {
+        sbma.checked = /^subic(?:\s|$)/i.test(port.selectedOptions[0]?.textContent.trim() || '');
+    }
+    $(port).on('change', applyPortCommercialDefaults);
+    if (form.dataset.isNew === 'true') applyPortCommercialDefaults();
     const message = document.getElementById('terminalMessage');
     let terminalRequest;
 
@@ -61,7 +77,11 @@
             if (!response.ok) throw new Error('Unable to load terminals.');
             const items = await response.json();
             if (request.signal.aborted) return;
-            items.forEach(item => terminal.add(new Option(item.text, item.value)));
+            items.forEach(item => {
+                const option = new Option(item.text, item.value);
+                option.dataset.isIoc = String(item.isIoc);
+                terminal.add(option);
+            });
             window.refreshModernSelect($(terminal));
             $(terminal).trigger('change');
             if (message) message.textContent = items.length ? '' : 'No terminals registered for this port.';
@@ -73,43 +93,103 @@
         }
     });
 
+    const ioc = document.getElementById('IsIoc');
+    const iocToggle = document.getElementById('iocToggle');
+    function updateIocDefault() {
+        const defaultValue = terminal.selectedOptions[0]?.dataset.isIoc;
+        iocToggle.checked = (ioc.value.toLowerCase() || defaultValue) === 'true';
+        const overridden = defaultValue != null && iocToggle.checked !== (defaultValue === 'true');
+        document.getElementById('iocCard').classList.toggle('schedule-option-override', overridden);
+        document.getElementById('iocTitle').textContent = iocToggle.checked ? 'IOC' : 'Non-IOC';
+        document.getElementById('iocDefault').textContent = defaultValue == null
+            ? 'Select a terminal to use its default.'
+            : (iocToggle.checked ? 'Insular Oil Corporation rates.' : 'Non-IOC rates.')
+                + (overridden ? ' Overrides terminal default.' : ' Terminal default.');
+    }
+    iocToggle.addEventListener('change', () => {
+        const value = String(iocToggle.checked);
+        ioc.value = value === terminal.selectedOptions[0]?.dataset.isIoc ? '' : value;
+        updateIocDefault();
+    });
     $(terminal).on('change', () => {
+        ioc.value = '';
+        updateIocDefault();
         updateSummary();
     });
+    updateIocDefault();
 
     const customer = document.getElementById('CustomerId');
     const discountInput = document.getElementById('CosDiscountPercent');
     const skipDiscount = document.getElementById('SkipCosDiscount');
-
+    const discountCard = document.getElementById('discountCard');
+    const discountToggle = document.getElementById('discountToggle');
+    let defaultDiscount = 0;
+    let discountEdited = false;
     let discountRequest;
-    $(customer).on('change', async () => {
+
+    async function loadCustomerDiscount(fill) {
         discountRequest?.abort();
         const request = discountRequest = new AbortController();
-        const customerId = customer.value;
-        discountInput.value = '';
-        updateSummary();
-        if (!customerId || !form.dataset.discountUrl) return;
+        defaultDiscount = 0;
+        if (fill) {
+            discountInput.value = '0';
+            skipDiscount.checked = true;
+        }
+        updateDiscountState();
+        if (!customer.value || !form.dataset.discountUrl) return;
         try {
-            const response = await fetch(form.dataset.discountUrl + '?customerId=' + encodeURIComponent(customerId), { signal: request.signal });
+            const response = await fetch(form.dataset.discountUrl + '?customerId=' + encodeURIComponent(customer.value), { signal: request.signal });
             if (!response.ok) throw new Error('Unable to load customer discount.');
             const data = await response.json();
-            if (request.signal.aborted || discountInput.value !== '') return;
-            discountInput.value = data.defaultDiscount;
-            updateSummary();
+            if (request.signal.aborted) return;
+            defaultDiscount = Number(data.defaultDiscount) || 0;
+            if (fill && !discountEdited) {
+                discountInput.value = defaultDiscount;
+                skipDiscount.checked = defaultDiscount <= 0;
+            }
+            updateDiscountState();
         } catch (error) {
             if (error.name !== 'AbortError') {
                 ModernAlert.error('Could not load the customer discount. Check the discount before saving.', 'Customer discount unavailable');
             }
         }
+    }
+    $(customer).on('change', () => {
+        discountEdited = false;
+        loadCustomerDiscount(true);
     });
 
     function updateDiscountState() {
-        discountInput.readOnly = skipDiscount.checked;
-        discountInput.classList.toggle('schedule-input-disabled', skipDiscount.checked);
+        const enabled = !skipDiscount.checked;
+        discountInput.readOnly = !enabled;
+        discountInput.classList.toggle('schedule-input-disabled', !enabled);
+        discountCard.classList.toggle('is-enabled', enabled);
+        discountToggle.setAttribute('aria-pressed', String(enabled));
+        document.getElementById('discountHelp').textContent = enabled
+            ? 'Applies to tariff and BAF.'
+            : defaultDiscount > 0 ? 'Default ' + defaultDiscount + '% skipped. Click to enable.' : 'No discount. Click to enable.';
         updateSummary();
     }
-    skipDiscount.addEventListener('change', updateDiscountState);
-    discountInput.addEventListener('input', updateSummary);
+    discountCard.addEventListener('click', event => {
+        if (event.target.closest('input') && !discountInput.readOnly) return;
+        if (!skipDiscount.checked && !event.target.closest('button')) return;
+        discountEdited = true;
+        skipDiscount.checked = !skipDiscount.checked;
+        if (skipDiscount.checked) discountInput.value = '0';
+        updateDiscountState();
+        if (!skipDiscount.checked) discountInput.focus();
+    });
+    discountInput.addEventListener('input', () => {
+        discountEdited = true;
+        updateSummary();
+    });
+    discountInput.addEventListener('blur', () => {
+        if (discountInput.value === '' || Number(discountInput.value) === 0) {
+            discountInput.value = '0';
+            skipDiscount.checked = true;
+            updateDiscountState();
+        }
+    });
 
     const start = document.getElementById('PlannedStart');
     const end = document.getElementById('PlannedEnd');
@@ -206,7 +286,7 @@
         }
         document.getElementById('summaryTariffRates').textContent = rateSummary('.js-tariff-rate');
         document.getElementById('summaryBafRates').textContent = rateSummary('.js-baf-rate');
-        document.getElementById('summaryRecurringBadge').textContent = manualCount ? 'Non-recurring' : 'Recurring';
+        document.getElementById('summaryRecurringBadge').textContent = manualRates() || manualCount ? 'Non-recurring' : 'Recurring';
         const summaryNotice = document.getElementById('summaryRatesNotice');
         summaryNotice.textContent = manualCount
             ? 'Manual rates need review. Table estimates use the planned date; final rates use actual service start.'
@@ -315,8 +395,11 @@
     function updateRateProvenance(row) {
         for (const kind of ['tariff', 'baf']) {
             const input = row.querySelector(`.js-${kind}-rate`);
+            input.required = kind === 'tariff' && !input.readOnly;
+            const overridesTable = input.value !== '' && input.dataset.lookup === 'found';
+            input.classList.toggle('schedule-rate-override', overridesTable);
             row.querySelector(`.js-${kind}-provenance`).textContent = input.value !== ''
-                ? 'Manual rate'
+                ? overridesTable ? 'Overrides table rate' : 'Manual rate'
                 : ({ found: 'Table estimate · planned date', missing: 'No table match', loading: 'Checking table…', error: 'Lookup unavailable' }[input.dataset.lookup] || 'Rate not checked');
         }
     }
@@ -330,7 +413,7 @@
         inputs.forEach(input => {
             input.dataset.lookup = canLookup ? 'loading' : 'unchecked';
             input.placeholder = 'From table';
-            input.readOnly = true;
+            input.readOnly = !manualRates();
         });
         updateRateProvenance(row);
         updateSummary();
@@ -343,8 +426,8 @@
             if (request.signal.aborted || !row.isConnected) return;
             inputs.forEach((input, index) => {
                 const rate = index === 0 ? data.tariffRate : data.bafRate;
-                input.dataset.lookup = data.exists && rate != null ? 'found' : 'missing';
-                input.readOnly = input.dataset.lookup === 'found';
+                input.dataset.lookup = data.exists && rate != null && (index !== 0 || Number(rate) > 0) ? 'found' : 'missing';
+                input.readOnly = !manualRates() && input.dataset.lookup === 'found';
                 if (input.readOnly) input.value = '';
                 // Estimates stay out of Manual* fields so saving cannot turn a table rate into a manual override.
                 input.placeholder = input.dataset.lookup === 'found' ? Number(rate).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : 'Enter manual rate';
@@ -354,6 +437,18 @@
             inputs.forEach(input => input.dataset.lookup = 'error');
         }
         updateRateProvenance(row);
+        updateSummary();
+    }
+
+    function applyRateLock() {
+        if (!servicesContainer) return;
+        servicesContainer.querySelectorAll('[data-service-row]').forEach(row => {
+            row.querySelectorAll('.js-tariff-rate, .js-baf-rate').forEach(input => {
+                input.readOnly = !manualRates() && input.dataset.lookup !== 'missing';
+                if (input.readOnly && input.dataset.lookup === 'found') input.value = '';
+            });
+            updateRateProvenance(row);
+        });
         updateSummary();
     }
 
@@ -373,6 +468,7 @@
         temp.innerHTML = html.trim();
         const newRow = temp.firstElementChild;
         targetContainer.appendChild(newRow);
+        newRow.querySelectorAll('.js-tariff-rate, .js-baf-rate').forEach(input => input.readOnly = !manualRates());
         ModernSelect.init($(newRow).find('.js-modern-select'));
         updateSummary();
         // No auto-fetch on new row: service not yet selected
@@ -437,6 +533,14 @@
             }
         });
 
+        servicesContainer.addEventListener('focusout', e => {
+            if (e.target.matches('.js-baf-rate') && !e.target.readOnly && e.target.value === '') {
+                e.target.value = '0';
+                updateRateProvenance(e.target.closest('[data-service-row]'));
+                updateSummary();
+            }
+        });
+
         servicesContainer.addEventListener('input', e => {
             if (e.target.matches('.js-tariff-rate, .js-baf-rate')) {
                 updateRateProvenance(e.target.closest('[data-service-row]'));
@@ -488,6 +592,12 @@
         refreshAllRates();
     });
 
+    rateMode.addEventListener('change', () => {
+        document.getElementById('rateModeLabel').textContent = manualRates() ? 'Non-recurring' : 'Recurring';
+        document.getElementById('rateModeHelp').textContent = manualRates() ? 'Enter manual tariff and BAF rates.' : 'Use tariff and BAF table rates.';
+        applyRateLock();
+    });
+
     start.addEventListener('input', () => {
         validateTime();
         updateSummary();
@@ -529,7 +639,12 @@
     });
 
     // Initialize summary metrics and bookings check
-    updateDiscountState();
+    const fillDiscount = discountInput.value === '' && !skipDiscount.checked;
+    if (!fillDiscount && (skipDiscount.checked || Number(discountInput.value) === 0)) {
+        discountInput.value = '0';
+        skipDiscount.checked = true;
+    }
+    loadCustomerDiscount(fillDiscount);
     refreshTugBookings();
     refreshAllRates();
 })();

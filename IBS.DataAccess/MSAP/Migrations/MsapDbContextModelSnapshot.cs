@@ -2898,6 +2898,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("edited_date");
 
+                    b.Property<bool?>("IsIoc")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_ioc");
+
                     b.Property<string>("Notes")
                         .HasColumnType("text")
                         .HasColumnName("notes");

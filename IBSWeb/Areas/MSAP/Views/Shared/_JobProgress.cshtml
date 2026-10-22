@@ -127,36 +127,39 @@
                     <span class="visually-hidden">Skipped for direct COS</span>
                 }
             </li>
+            @if (step.Stage == 2 && Model.OtherTugTicketCount > 0 && !Model.IsCancelled && !Model.IsInvalidated)
+            {
+                bool canManageCosts = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.ManageOtherTugCharges);
+                bool canConfirmCosts = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.ConfirmOtherTugCharges);
+                <li class="job-progress-costs" aria-label="AP Other Tugs follow-up" title="Provider costs do not block customer billing.">
+                    <span class="job-progress-dot" aria-hidden="true"><span class="material-symbols-outlined">receipt_long</span></span>
+                    <div class="job-progress-stage-content">
+                        <div>
+                            <span>AP Other Tugs</span>
+                            <small class="job-progress-detail">@(Model.OtherTugTicketCount - Model.MissingOtherTugTicketCount) / @Model.OtherTugTicketCount recorded</small>
+                            <span class="visually-hidden">Does not block customer billing.</span>
+                            @if (Model.MissingOtherTugTicketCount > 0 && !canManageCosts || Model.OtherTugChargeReviewCount > 0 && !canManageCosts && !canConfirmCosts)
+                            {
+                                <small class="job-progress-detail">Awaiting finance</small>
+                            }
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            @if (Model.MissingOtherTugTicketId.HasValue && canManageCosts)
+                            {
+                                <a asp-area="MSAP" asp-controller="OtherTugCharge" asp-action="Editor" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId"
+                                   asp-route-id="" asp-route-ticketId="@Model.MissingOtherTugTicketId" class="job-progress-stage-link">Record costs</a>
+                            }
+                            @if (Model.OtherTugChargeReviewId.HasValue && (canManageCosts || canConfirmCosts))
+                            {
+                                <a asp-area="MSAP" asp-controller="OtherTugCharge" asp-action="Editor" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId"
+                                   asp-route-id="@Model.OtherTugChargeReviewId" class="job-progress-stage-link">@(canConfirmCosts ? "Review charges" : "Open draft")</a>
+                            }
+                        </div>
+                    </div>
+                </li>
+            }
         }
     </ol>
-    @if (Model.OtherTugTicketCount > 0 && !Model.IsCancelled && !Model.IsInvalidated)
-    {
-        bool canManageCosts = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.ManageOtherTugCharges);
-        bool canConfirmCosts = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.ConfirmOtherTugCharges);
-        <div class="job-progress-next job-progress-costs @(Model.MissingOtherTugTicketCount > 0 || Model.OtherTugChargeReviewCount > 0 ? "ui-attention" : "")" aria-label="AP Other Tugs follow-up">
-            <div>
-                <h3 class="modern-label">AP Other Tugs</h3>
-                <p>@Model.MissingOtherTugTicketCount ticket(s) need cost entry · @Model.OtherTugChargeReviewCount provider bill(s) await confirmation.</p>
-                <p class="job-progress-handoff">@Model.ConfirmedOtherTugTicketCount / @Model.OtherTugTicketCount ticket costs confirmed.</p>
-                @if (Model.MissingOtherTugTicketCount > 0 && !canManageCosts || Model.OtherTugChargeReviewCount > 0 && !canManageCosts && !canConfirmCosts)
-                {
-                    <p class="job-progress-handoff">Waiting for an authorized user to complete the provider cost inputs.</p>
-                }
-            </div>
-            <div class="flex flex-wrap gap-2">
-                @if (Model.MissingOtherTugTicketId.HasValue && canManageCosts)
-                {
-                    <a asp-area="MSAP" asp-controller="OtherTugCharge" asp-action="Editor" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId"
-                       asp-route-id="" asp-route-ticketId="@Model.MissingOtherTugTicketId" class="modern-btn-secondary">Record AP Other Tugs</a>
-                }
-                @if (Model.OtherTugChargeReviewId.HasValue && (canManageCosts || canConfirmCosts))
-                {
-                    <a asp-area="MSAP" asp-controller="OtherTugCharge" asp-action="Editor" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId"
-                       asp-route-id="@Model.OtherTugChargeReviewId" class="modern-btn-secondary">@(canConfirmCosts ? "Review AP Other Tugs" : "Open AP Other Tugs draft")</a>
-                }
-            </div>
-        </div>
-    }
     <div class="job-progress-next @(Model.CalculationBlockers.Count > 0 ? "ui-critical" : Model.Stopped && !Model.IsCancelled && !Model.IsInvalidated ? "ui-attention" : "")">
         <div>
             <span class="modern-label">@(Model.Stage == JobProgressCalculator.CompletedStage && !Model.Stopped ? "Completed" : "Next Action")</span>
