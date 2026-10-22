@@ -5,6 +5,11 @@
     form.noValidate = true;
 
     function validateForm() {
+        form.querySelectorAll('[data-service-row]').forEach(row => {
+            const baf = row.querySelector('.js-baf-rate');
+            if (!baf.readOnly && baf.value === '') baf.value = '0';
+            updateRateProvenance(row);
+        });
         const invalidSelect = [...form.querySelectorAll('select.js-modern-select')].find(select => !select.checkValidity());
         if (invalidSelect) {
             const label = invalidSelect.getAttribute('aria-label') || invalidSelect.labels?.[0]?.textContent.trim() || 'tugboat';
@@ -27,13 +32,14 @@
 
     async function acknowledgeConflicts(errorMessage) {
         const review = await ModernAlert.confirm({
-            title: 'Review schedule conflicts', text: errorMessage, icon: 'warning',
-            confirmText: 'Continue to final confirmation', cancelText: 'Keep editing'
+            title: 'Schedule overlaps found',
+            text: '<span class="schedule-conflict-details">' + errorMessage.replace(/^Overlapping plans:\s*/, '') + '</span>', icon: 'warning',
+            confirmText: 'Continue', cancelText: 'Keep editing'
         });
         if (!review.isConfirmed) return;
         const acknowledgement = await ModernAlert.confirm({
-            title: 'Save this overlapping plan?',
-            text: 'I acknowledge the overlapping vessel, terminal or tugboat bookings. Save this plan with these assignments.',
+            title: 'Save despite these overlaps?',
+            text: 'I have reviewed the overlapping bookings and want to save these assignments.',
             icon: 'warning', confirmText: 'Acknowledge and save', cancelText: 'Keep editing'
         });
         if (!acknowledgement.isConfirmed || !validateForm()) return;
@@ -389,6 +395,7 @@
     function updateRateProvenance(row) {
         for (const kind of ['tariff', 'baf']) {
             const input = row.querySelector(`.js-${kind}-rate`);
+            input.required = kind === 'tariff' && !input.readOnly;
             const overridesTable = input.value !== '' && input.dataset.lookup === 'found';
             input.classList.toggle('schedule-rate-override', overridesTable);
             row.querySelector(`.js-${kind}-provenance`).textContent = input.value !== ''
@@ -419,7 +426,7 @@
             if (request.signal.aborted || !row.isConnected) return;
             inputs.forEach((input, index) => {
                 const rate = index === 0 ? data.tariffRate : data.bafRate;
-                input.dataset.lookup = data.exists && rate != null ? 'found' : 'missing';
+                input.dataset.lookup = data.exists && rate != null && (index !== 0 || Number(rate) > 0) ? 'found' : 'missing';
                 input.readOnly = !manualRates() && input.dataset.lookup === 'found';
                 if (input.readOnly) input.value = '';
                 // Estimates stay out of Manual* fields so saving cannot turn a table rate into a manual override.
@@ -523,6 +530,14 @@
                 }
                 updateSummary();
                 return;
+            }
+        });
+
+        servicesContainer.addEventListener('focusout', e => {
+            if (e.target.matches('.js-baf-rate') && !e.target.readOnly && e.target.value === '') {
+                e.target.value = '0';
+                updateRateProvenance(e.target.closest('[data-service-row]'));
+                updateSummary();
             }
         });
 

@@ -29,6 +29,12 @@ namespace IBS.Services.MSAP
             return DispatchTicketRepository.QueryOtherTugChargeTickets(_db);
         }
 
+        private IQueryable<DispatchTicket> AllocationTickets(int cosId, int? chargeId)
+        {
+            return EligibleTickets().Where(t => t.CustomerOrderSlipId == cosId
+                || chargeId.HasValue && t.OtherTugChargeLine != null && t.OtherTugChargeLine.OtherTugChargeId == chargeId);
+        }
+
         public async Task<List<OtherTugCharge>> GetForCosAsync(int cosId, CancellationToken ct)
         {
             return await _db.MsapOtherTugCharges.AsNoTracking().Include(c => c.Lines).ThenInclude(l => l.Ticket)
@@ -66,9 +72,9 @@ namespace IBS.Services.MSAP
                 Id = charge?.OtherTugChargeId, Revision = charge?.Revision ?? 0, CustomerOrderSlipId = cosId,
                 TugboatOwnerId = ownerId, ProviderName = charge?.ProviderName ?? initial!.Tugboat.TugboatOwner!.TugboatOwnerName,
                 ProviderReference = charge?.ProviderReference ?? "", DocumentDate = charge?.DocumentDate ?? DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()),
-                IncludesVat = charge?.IncludesVat, Remarks = charge?.Remarks, Charge = charge
+                IncludesVat = charge?.IncludesVat ?? false, Remarks = charge?.Remarks, Charge = charge
             };
-            var query = EligibleTickets().AsNoTracking().Where(t => t.Tugboat.TugboatOwnerId == ownerId
+            var query = AllocationTickets(cosId, id).AsNoTracking().Where(t => t.Tugboat.TugboatOwnerId == ownerId
                 && (t.OtherTugChargeLine == null || t.OtherTugChargeLine.OtherTugChargeId == id));
             if (charge?.ConfirmedAt != null)
             {
@@ -166,14 +172,14 @@ namespace IBS.Services.MSAP
                 {
                     await _db.MsapDispatchTickets.FromSqlInterpolated($"SELECT * FROM msap.mmsi_dispatch_tickets WHERE \"RECID\" = {id} FOR UPDATE").LoadAsync(ct);
                 }
-                var tickets = await EligibleTickets().Include(t => t.Tugboat).ThenInclude(t => t.TugboatOwner)
+                var tickets = await AllocationTickets(model.CustomerOrderSlipId, model.Id).Include(t => t.Tugboat).ThenInclude(t => t.TugboatOwner)
                     .Where(t => ids.Contains(t.DispatchTicketId)).ToListAsync(ct);
                 if (tickets.Count != ids.Count
                     || tickets.Select(t => t.Tugboat.TugboatOwnerId).Distinct().Count() != 1
                     || model.Id.HasValue && tickets[0].Tugboat.TugboatOwnerId != charge.TugboatOwnerId
                     || await _db.MsapOtherTugChargeLines.AnyAsync(l => ids.Contains(l.DispatchTicketId) && l.OtherTugChargeId != model.Id, ct))
                 {
-                    return ServiceResult<int>.Failure("Select recorded tickets for one provider that are not already allocated to another provider bill.");
+                    return ServiceResult<int>.Failure("Select recorded tickets from this COS for one provider that are not already allocated to another provider bill.");
                 }
                 if (!tickets.Any(t => t.CustomerOrderSlipId == model.CustomerOrderSlipId))
                 {

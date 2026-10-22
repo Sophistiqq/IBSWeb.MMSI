@@ -686,6 +686,22 @@ namespace IBS.Services.MSAP
                     {
                         return "Manual BAF rate must be between 0 and 99,999,999,999,999.9999.";
                     }
+                    if (entry.CancelledAt.HasValue)
+                    {
+                        continue;
+                    }
+                    var rateDate = DateOnly.FromDateTime(model.PlannedStart);
+                    var tariffRate = entry.ManualTariffRate
+                        ?? (await unitOfWork.TariffTable.GetApplicableRateAsync(model.CustomerId.Value, model.TerminalId, entry.ServiceId, rateDate, ct))?.Dispatch;
+                    if (tariffRate is not > 0)
+                    {
+                        return "Tariff rate must be greater than zero. Enter a manual rate or use an applicable positive table rate.";
+                    }
+                    if (!entry.ManualBafRate.HasValue
+                        && await unitOfWork.BafTable.GetApplicableRateAsync(model.CustomerId.Value, model.TerminalId, entry.ServiceId, rateDate, ct) == null)
+                    {
+                        entry.ManualBafRate = 0m;
+                    }
                 }
             }
 
@@ -697,8 +713,9 @@ namespace IBS.Services.MSAP
             }
             var conflicts = await CheckConflictsAsync(model, ct);
             if (conflicts.Count > 0 && !allowConflicts)
-                return "Overlapping plans: " + string.Join(" ", conflicts.Select(c => c.Message))
-                    + " Adjust the booking or review both confirmation alerts to acknowledge and save it.";
+            {
+                return "Overlapping plans:\n" + string.Join("\n\n", conflicts.Select(c => c.Message));
+            }
             return null;
         }
 

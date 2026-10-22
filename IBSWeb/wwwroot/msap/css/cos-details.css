@@ -234,3 +234,109 @@ button.cos-ticket-link:hover {
     font-size: var(--ui-text-caption);
     font-weight: var(--ui-weight-medium);
 }
+
+.other-tug-charge-workspace {
+    --ui-section-gap: var(--ui-space-3);
+}
+
+.other-tug-charge-workspace :is(h2, p) {
+    margin: 0;
+}
+
+.other-tug-charge-workspace .other-tug-bill-fields {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: end;
+}
+
+.other-tug-bill-fields .modern-input,
+.other-tug-vat-card {
+    box-sizing: border-box;
+    height: var(--ui-control-height);
+}
+
+.other-tug-vat-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-3);
+    min-height: var(--ui-control-height);
+    margin: 0;
+    padding: var(--ui-space-2) var(--ui-space-3);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    cursor: pointer;
+    font-size: var(--ui-text-body);
+    white-space: nowrap;
+}
+
+.other-tug-vat-card input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+}
+
+.other-tug-vat-card .material-symbols-outlined {
+    padding: 1px;
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    color: transparent;
+    font-size: 12px;
+}
+
+.other-tug-vat-card:has(input:checked) {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 7%, var(--ui-surface));
+}
+
+.other-tug-vat-card:has(input:checked) .material-symbols-outlined {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--on-primary, #fff);
+}
+
+.other-tug-vat-card:has(input:focus-visible) {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.other-tug-charge-workspace fieldset:disabled .other-tug-vat-card {
+    cursor: default;
+}
+
+.other-tug-charge-workspace fieldset {
+    margin: 0;
+}
+
+.other-tug-charge-workspace .schedule-review-table :is(th, td) {
+    padding: var(--ui-space-2) var(--ui-space-3);
+    vertical-align: middle;
+}
+
+.other-tug-charge-workspace .schedule-review-table small {
+    display: block;
+    margin-top: var(--ui-space-1);
+}
+
+.other-tug-charge-workspace [data-amount] {
+    min-width: 10rem;
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+}
+
+.other-tug-charge-workspace .cos-entry-footer > span {
+    flex: 1 1 20rem;
+}
+
+@media (max-width: 1100px) {
+    .other-tug-charge-workspace .other-tug-bill-fields {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767px) {
+    .other-tug-charge-workspace .other-tug-bill-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

@@ -31,7 +31,7 @@
             };
             let result = await submit();
             if (result.requiresConflictAcknowledgement) {
-                const conflicts = await ModernAlert.confirm({title: 'Review schedule conflicts', text: escape(result.message), icon: 'warning', confirmText: 'Continue to final confirmation', cancelText: 'Keep reviewing'});
+                const conflicts = await ModernAlert.confirm({title: 'Schedule overlaps found', text: '<span class="schedule-conflict-details">' + escape(result.message).replace(/^Overlapping plans:\s*/, '') + '</span>', icon: 'warning', confirmText: 'Continue', cancelText: 'Keep reviewing'});
                 if (!conflicts.isConfirmed) return;
                 const acknowledgement = await ModernAlert.confirm({
                     title: 'Approve this overlapping booking?', text: 'I acknowledge the overlapping bookings and want to approve this schedule.',

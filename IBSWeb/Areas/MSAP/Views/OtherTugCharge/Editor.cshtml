@@ -4,6 +4,7 @@
     ViewData["IsFullWidth"] = true;
     bool confirmed = Model.Charge?.ConfirmedAt.HasValue == true;
     bool canEdit = !confirmed && ViewData["CanManageCharges"] is true;
+    bool editing = canEdit && !Model.Id.HasValue;
     bool canConfirm = !confirmed && Model.Id.HasValue && ViewData["CanConfirmCharges"] is true;
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
@@ -11,44 +12,51 @@
 <link rel="stylesheet" href="~/msap/css/cos-details.css" asp-append-version="true" />
 <div class="schedule-screen-layout app-ui">
     <partial name="_WorkflowProgress" model="Model.Progress" />
-    <main class="cos-details-workspace ui-stack">
+    <main class="cos-details-workspace other-tug-charge-workspace ui-stack">
         <header class="ui-page-header">
             <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId">COS details</a></li><li aria-current="page">Other Tug Charges</li></ol></nav>
             <h1 class="ui-page-title">@(confirmed ? "Provider charge details" : "Review provider charges")</h1>
             <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-fragment="otherTugCharges" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
             <p class="ui-page-description ui-body ui-muted">@Model.ProviderName · @(confirmed ? "Confirmed" : "For reviewing") · Payment in IBS</p>
         </header>
-        <form asp-action="Save" method="post" enctype="multipart/form-data" class="ui-stack" id="otherTugChargeForm" data-editable="@canEdit.ToString().ToLowerInvariant()">
+        <form asp-action="Save" method="post" enctype="multipart/form-data" class="ui-stack" id="otherTugChargeForm" data-can-edit="@canEdit.ToString().ToLowerInvariant()" data-editable="@editing.ToString().ToLowerInvariant()">
             <input asp-for="Id" type="hidden" /><input asp-for="Revision" type="hidden" /><input asp-for="CustomerOrderSlipId" type="hidden" />
-            <fieldset disabled="@(!canEdit)" class="ui-panel ui-stack">
+            <fieldset disabled="@(!editing)" class="ui-panel ui-panel--compact ui-stack" data-charge-fields>
                 <h2 class="ui-section-title">Provider bill</h2>
-                <div class="schedule-review-fields">
-                    <div class="ui-field"><label asp-for="ProviderReference" class="ui-label">Provider bill / reference *</label><input asp-for="ProviderReference" class="modern-input" maxlength="100" required /></div>
-                    <div class="ui-field"><label asp-for="DocumentDate" class="ui-label">Provider document date *</label><input asp-for="DocumentDate" type="date" class="modern-input" required /></div>
-                    <div class="ui-field"><label for="providerDocument" class="ui-label">Supporting document · PDF / image, up to 10 MB</label><input id="providerDocument" type="file" name="document" accept=".pdf,.png,.jpg,.jpeg" class="modern-input" /></div>
+                <div class="schedule-review-fields other-tug-bill-fields">
+                    <div class="ui-field"><label asp-for="ProviderReference" class="ui-label">Bill / reference *</label><input asp-for="ProviderReference" class="modern-input" maxlength="100" required /></div>
+                    <div class="ui-field"><label asp-for="DocumentDate" class="ui-label">Document date *</label><input asp-for="DocumentDate" type="date" class="modern-input" required /></div>
+                    <div class="ui-field"><label for="providerDocument" class="ui-label">Supporting document</label><input id="providerDocument" title="PDF or image, up to 10 MB" type="file" name="document" accept=".pdf,.png,.jpg,.jpeg" class="modern-input" /></div>
+                    <div class="ui-field">
+                        <label for="includesVat" class="ui-label">VAT Setting</label>
+                        <label class="other-tug-vat-card">
+                            <input id="includesVat" type="checkbox" name="IncludesVat" value="true" checked="@(Model.IncludesVat == true)" />
+                            <span>Includes VAT</span>
+                            <span class="material-symbols-outlined" aria-hidden="true">check</span>
+                        </label>
+                    </div>
+                    <input type="hidden" name="IncludesVat" value="false" />
                 </div>
-                <div class="ui-field"><label asp-for="IncludesVat" class="ui-label">Do the entered amounts include VAT? *</label><select asp-for="IncludesVat" class="js-modern-select" required><option value="">Select VAT inclusion</option><option value="true">Yes · Includes VAT</option><option value="false">No · Excludes VAT / not applicable</option></select></div>
-                <p class="ui-caption ui-muted">Record the provider's final amounts. This records VAT inclusion for existing reports; it does not calculate payment withholding or post accounting entries.</p>
                 <div class="ui-field"><label asp-for="Remarks" class="ui-label">Remarks</label><textarea asp-for="Remarks" class="modern-input" maxlength="500" rows="2"></textarea></div>
             </fieldset>
             @if (Model.DocumentUrl != null) { <a href="@Model.DocumentUrl" target="_blank" rel="noopener" class="cos-ticket-link">View supporting document</a> }
-            <section class="ui-panel ui-stack">
+            <section class="ui-panel ui-panel--compact ui-stack">
                 <h2 class="ui-section-title">Allocate the provider charge to actual tickets</h2>
-                <p class="ui-caption ui-muted">Tickets for this provider can come from different COS. Enter the amount for each selected ticket; the total should match the provider bill. Blank is pending; enter 0 only when the provider charge is explicitly zero.</p>
+                <p class="ui-caption ui-muted">Select this COS's tickets and enter each provider charge. Blank is pending; 0 means an explicitly zero charge. Existing allocations on this bill are retained.</p>
                 <div class="schedule-services-table"><table class="schedule-review-table">
                     <thead><tr><th>Include</th><th>COS / ticket</th><th>Tugboat / service</th><th>Service date</th><th>Provider charge (PHP)</th></tr></thead>
                     <tbody>
                     @foreach (var ticket in Model.Tickets)
                     {
                         <tr data-charge-ticket="@ticket.DispatchTicketId">
-                            <td><input type="checkbox" data-include checked="@ticket.Selected" disabled="@(!canEdit)" aria-label="Include ticket @ticket.TicketNumber" /></td>
+                            <td><input type="checkbox" data-include checked="@ticket.Selected" disabled="@(!editing)" aria-label="Include ticket @ticket.TicketNumber" /></td>
                             <td>@ticket.CosNumber<small class="ui-caption ui-muted">@ticket.TicketNumber</small></td>
                             <td>@ticket.TugboatName<small class="ui-caption ui-muted">@ticket.ServiceName</small></td>
                             <td>@ticket.ServiceDate?.ToString("dd MMM yyyy")</td>
-                            <td><input type="number" class="modern-input" data-amount value="@ticket.Amount?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" min="0" step="0.01" max="99999999999999.99" disabled="@(!canEdit || !ticket.Selected)" aria-label="Provider charge for @ticket.TicketNumber" /></td>
+                            <td><input type="number" class="modern-input" data-amount value="@ticket.Amount?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" min="0" step="0.01" max="99999999999999.99" disabled="@(!editing || !ticket.Selected)" aria-label="Provider charge for @ticket.TicketNumber" /></td>
                         </tr>
                     }
-                    @if (Model.Tickets.Count == 0) { <tr><td colspan="5">No eligible recorded tickets remain for this provider.</td></tr> }
+                    @if (Model.Tickets.Count == 0) { <tr><td colspan="5">No eligible recorded tickets remain for this provider on this COS.</td></tr> }
                     </tbody>
                 </table></div>
                 <p class="ui-value">Allocated total: PHP <output id="otherTugChargeTotal">0.00</output></p>
@@ -61,9 +69,14 @@
                 </section>
             }
             <footer class="cos-entry-footer">
-                <span class="ui-caption ui-muted">@(confirmed ? "Confirmed charges are locked. IBS payment integration is pending." : "Draft amounts do not update AP reports. Customer billing remains independent of provider charge entry.")</span>
-                @if (canEdit) { <button type="submit" class="ui-button ui-button--primary">Save for reviewing</button> }
-                @if (canConfirm) { <button type="button" class="modern-btn-secondary" id="confirmOtherTugCharge" data-url="@Url.Action("Confirm")">Confirm saved charges</button> }
+                <span class="ui-caption ui-muted">@(confirmed ? "Confirmed charges are locked." : "Draft amounts do not update AP reports. Customer billing remains independent of provider charge entry.")</span>
+                @if (canEdit)
+                {
+                    <button type="button" class="modern-btn-secondary" id="editOtherTugCharge" hidden="@editing">Edit</button>
+                    <button type="button" class="modern-btn-secondary" id="cancelOtherTugChargeEdit" hidden="@(!editing || !Model.Id.HasValue)">Cancel</button>
+                    <button type="submit" class="ui-button ui-button--primary" id="saveOtherTugCharge" hidden="@(!editing)">Save for reviewing</button>
+                }
+                @if (canConfirm) { <button type="button" class="ui-button ui-button--primary" id="confirmOtherTugCharge" hidden="@editing" data-url="@Url.Action("Confirm")">Confirm saved charges</button> }
             </footer>
         </form>
     </main>

@@ -21,7 +21,7 @@
         <dt>Planned end</dt><dd>@Model.PlannedEnd.ToString("MMM d, yyyy · HH:mm")</dd>
         <dt>Assigned tugs</dt><dd>@(tugs.Count == 0 ? "Not assigned" : string.Join(", ", tugs))</dd>
         <dt>Schedule revision</dt><dd>Revision @Model.Revision @(isReapproval ? "(Reapproval)" : "")</dd>
-        <dt>COS Discount</dt><dd class="@(appliedDiscount != defaultDiscount ? "schedule-review-attention" : "")">@(skippedDefaultDiscount ? $"Skipped (default {Model.Customer.DefaultCosDiscountPercent:0.##}%)" : Model.SkipCosDiscount ? "0%" : (Model.CosDiscountPercent.HasValue ? $"{Model.CosDiscountPercent.Value:0.##}%" : "0% (Default)"))</dd>
+        <dt>COS Discount</dt><dd class="@(appliedDiscount != defaultDiscount ? "schedule-review-attention" : "")">@(skippedDefaultDiscount ? $"Skipped (default {defaultDiscount:0.##}%)" : Model.SkipCosDiscount ? "0%" : (Model.CosDiscountPercent.HasValue ? $"{Model.CosDiscountPercent.Value:0.##}%" : "0% (Default)"))</dd>
         <dt>IOC / Non-IOC</dt>
         <dd class="@(isIoc != Model.Terminal.IsIoc ? "schedule-review-attention" : "")">@(isIoc ? "IOC · Insular Oil Corporation" : "Non-IOC") · @(isIoc != Model.Terminal.IsIoc ? "Overrides terminal default" : "Terminal default")</dd>
         <dt>SBMA Share · Subic Bay Metropolitan Authority</dt>

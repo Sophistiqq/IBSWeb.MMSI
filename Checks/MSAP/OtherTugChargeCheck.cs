@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Reflection;
 using IBS.DataAccess.MSAP.Data;
 using IBS.Models.MSAP;
@@ -14,6 +15,7 @@ namespace Checks.MSAP
     {
         public static async Task RunAsync()
         {
+            Check(new OtherTugChargeViewModel().IncludesVat == false, "New provider bills must default to non-VAT.");
             var model = new OtherTugChargeViewModel
             {
                 ProviderReference = "BILL-1", DocumentDate = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()), IncludesVat = true,
@@ -50,9 +52,21 @@ namespace Checks.MSAP
             var method = typeof(OtherTugChargeService).GetMethod("EligibleTickets", BindingFlags.NonPublic | BindingFlags.Instance)!;
             string sql = ((IQueryable<DispatchTicket>)method.Invoke(service, null)!).ToQueryString();
             Check(sql.Contains("RECID", StringComparison.Ordinal) && sql.Contains("MMSI", StringComparison.Ordinal), "Actual-ticket eligibility did not translate with company scope.");
+            var allocationMethod = typeof(OtherTugChargeService).GetMethod("AllocationTickets", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var allocationQuery = (IQueryable<DispatchTicket>)allocationMethod.Invoke(service, [10, (int?)7])!;
+            Check(allocationQuery.ToQueryString().Contains("customer_order_slip_id", StringComparison.Ordinal), "Allocation COS filter did not translate.");
+            var where = (MethodCallExpression)allocationQuery.Expression;
+            var predicate = (Expression<Func<DispatchTicket, bool>>)((UnaryExpression)where.Arguments[1]).Operand;
+            var allowed = predicate.Compile();
+            Check(allowed(new DispatchTicket { CustomerOrderSlipId = 10 }), "Current-COS ticket was excluded.");
+            Check(!allowed(new DispatchTicket { CustomerOrderSlipId = 11 }), "Unrelated COS ticket was offered for allocation.");
+            Check(allowed(new DispatchTicket { CustomerOrderSlipId = 11, OtherTugChargeLine = new OtherTugChargeLine { OtherTugChargeId = 7 } }),
+                "An existing cross-COS bill allocation would be lost while editing.");
+            Check(!allowed(new DispatchTicket { CustomerOrderSlipId = 11, OtherTugChargeLine = new OtherTugChargeLine { OtherTugChargeId = 8 } }),
+                "Another bill's unrelated allocation was offered.");
             var line = db.Model.FindEntityType(typeof(OtherTugChargeLine))!;
             Check(line.GetIndexes().Any(index => index.IsUnique && index.Properties.Single().Name == nameof(OtherTugChargeLine.DispatchTicketId)), "Ticket allocation uniqueness is missing.");
-            Console.WriteLine("PASS: provider allocation validation, pending/confirmed zero, document boundaries, company-scoped query translation and unique ticket allocation (no database).");
+            Console.WriteLine("PASS: non-VAT default, COS-scoped allocation choices, existing allocation preservation, provider allocation validation, pending/confirmed zero, document boundaries, company-scoped query translation and unique ticket allocation (no database).");
         }
 
         private static void Check(bool condition, string message)
