@@ -240,7 +240,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
         {
             // ... (rest of ProcessAddress implementation)
             var words = model.PrincipalId != null
-                ? model.Principal?.Address1.Split(' ')
+                ? model.Principal?.Address.Split(' ')
                 : model.Customer?.CustomerAddress.Split(' ');
             var resultStrings = new List<string>();
             var currentString = "";

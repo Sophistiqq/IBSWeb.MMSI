@@ -79,7 +79,7 @@
                             <div id="CustomerDetailsSection" class="border-t border-outline-variant pt-3" style="gap: 1rem; display: flex; flex-direction: column;">
                                 <div>
                                     <p class="modern-label ui-label">Address</p>
-                                    <p id="CustomerAddress" class="modern-value-md">@(Model.PrincipalId.HasValue && Model.BilledTo == "PRINCIPAL" ? Model.Principal?.Address1 : Model.Customer?.CustomerAddress ?? "-")</p>
+                                    <p id="CustomerAddress" class="modern-value-md">@(Model.PrincipalId.HasValue && Model.BilledTo == "PRINCIPAL" ? Model.Principal?.Address : Model.Customer?.CustomerAddress ?? "-")</p>
                                 </div>
                                 <div class="modern-grid-compact">
                                     <div class="modern-col-6">
@@ -366,7 +366,7 @@
                 currentPrincipal = {
                     name: @Html.Raw(Json.Serialize(Model.CustomerPrincipal?.FirstOrDefault(p => p.Value == Model.PrincipalId?.ToString())?.Text ?? "")),
                     value: @Html.Raw(Json.Serialize(Model.PrincipalId)),
-                    address: @Html.Raw(Json.Serialize(Model.Principal.Address1 ?? "")),
+                    address: @Html.Raw(Json.Serialize(Model.Principal.Address ?? "")),
                     tinNo: @Html.Raw(Json.Serialize(Model.Principal.TIN ?? "")),
                     terms: @Html.Raw(Json.Serialize(Model.Principal.Terms ?? ""))
                 };

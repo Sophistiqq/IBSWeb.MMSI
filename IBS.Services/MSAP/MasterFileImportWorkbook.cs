@@ -32,7 +32,7 @@ namespace IBS.Services.MSAP
                     header.Value = column.Label;
                     header.AddComment(column.Note, "MSAP");
                     sheet.Column(index + 1).Style.Numberformat.Format = kind == "tariff" && column.Key is "DISPATCH" or "BAF" ? "0.0000" : "@";
-                    sheet.Column(index + 1).Width = column.Key is "NAME" or "DESC" or "ADDRESS1" or "ADDRESS2" or "ADDRESS3" ? 36 : 24;
+                    sheet.Column(index + 1).Width = column.Key is "NAME" or "DESC" or "ADDRESS" or "ADDRESS1" or "ADDRESS2" or "ADDRESS3" ? 36 : 24;
                     for (int rowIndex = 0; rowIndex < (source?.Rows.Count ?? 0); rowIndex++)
                     {
                         var row = new MasterFileImportCsv.Row(source!.Rows[rowIndex].Row, source.Rows[rowIndex].Fields);
@@ -224,7 +224,7 @@ namespace IBS.Services.MSAP
                 {
                     throw new InvalidDataException($"{sheet.Name}: maximum 10,000 records and 50 columns.");
                 }
-                var columns = MasterFileImportColumns.For(kind);
+                var columns = MasterFileImportColumns.ForInput(kind);
                 var selected = Enumerable.Range(1, sheet.Dimension.End.Column).Where(index =>
                     columns.Any(column => column.Key.Equals(sheet.Cells[1, index].Text.Trim(), StringComparison.OrdinalIgnoreCase)
                         || column.Label.Equals(sheet.Cells[1, index].Text.Trim(), StringComparison.OrdinalIgnoreCase))

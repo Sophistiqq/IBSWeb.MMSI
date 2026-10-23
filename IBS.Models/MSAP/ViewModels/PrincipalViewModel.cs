@@ -11,7 +11,7 @@ namespace IBS.Models.MSAP.ViewModels
             PrincipalId = entity.PrincipalId;
             PrincipalNumber = entity.PrincipalNumber;
             PrincipalName = entity.PrincipalName;
-            Address1 = entity.Address1;
+            Address = entity.Address;
             BusinessType = entity.BusinessType;
             Terms = entity.Terms;
             TIN = entity.TIN;

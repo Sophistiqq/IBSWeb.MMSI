@@ -20,7 +20,7 @@ namespace IBS.Models.MSAP.MasterFile
 
         [StringLength(200)]
         [Column(TypeName = "varchar(200)")]
-        public string Address1 { get; set; } = null!;
+        public string Address { get; set; } = null!;
 
         public string? BusinessType { get; set; }
 

@@ -13,7 +13,7 @@ namespace IBS.Services.MSAP
                 "bankacct" => ["CODE|Bank account code", "BANK|Bank", "BANKNAME|Branch", "ACCOUNTNO|Account number", "ACCOUNTNAM|Account name"],
                 "tariff" => ["DATE|Effective date", "CUSTNO|Customer code", "PORT|Port code", "TERMINAL|Port-terminal code", "SERVICE|Service code", "DISPATCH|Tariff amount", "BAF|Final BAF amount", "TYPE|Legacy vessel type", "VESSEL|Legacy vessel code"],
                 "customer" => ["NUMBER|Customer code", "NAME|Customer name", "ADDRESS1|Address line 1", "ADDRESS2|Address line 2", "ADDRESS3|Address line 3", "ZIP|ZIP code", "TIN|TIN", "BUSINESS|Business style", "TERMS|Payment term days", "VATTYPE|VAT type", "VATABLE|Legacy VAT registered", "WHT|Withholding tax (2307)", "WVAT|Withholding VAT (2306)", "COSDISCOUNT|Default COS discount (%)", "ACTIVE|Active"],
-                "principal" => ["AGENT|Customer code", "NUMBER|Principal code", "NAME|Principal name", "ADDRESS1|Address line 1", "TIN|TIN", "BUSINESS|Business style", "TERMS|Payment term days", "VATABLE|VAT registered", "ACTIVE|Active"],
+                "principal" => ["AGENT|Customer code", "NUMBER|Principal code", "NAME|Principal name", "ADDRESS|Address", "TIN|TIN", "BUSINESS|Business style", "TERMS|Payment term days", "VATABLE|VAT registered", "ACTIVE|Active"],
                 "tugmaster" => ["EMPNO|Captain code", "NAME|Captain name", "ACTIVE|Active"],
                 "services" => ["NUMBER|Service code", "DESC|Service name"],
                 "vessel" => ["NUMBER|Vessel code", "NAME|Vessel name", "TYPE|Vessel type"],
@@ -39,6 +39,16 @@ namespace IBS.Services.MSAP
             }).ToList();
         }
 
+        public static List<MasterFileImportColumn> ForInput(string kind)
+        {
+            var columns = For(kind);
+            if (kind == "principal")
+            {
+                columns.AddRange(For("customer").Where(column => column.Key is "ADDRESS1" or "ADDRESS2" or "ADDRESS3"));
+            }
+            return columns;
+        }
+
         private static string Guidance(string kind, string key)
         {
             return key switch
@@ -51,7 +61,7 @@ namespace IBS.Services.MSAP
                 "COSDISCOUNT" => "Confirm the default COS discount from 0 to 100 percent. Enter 0 explicitly for no discount.",
                 "ZIP" => "Supply the real ZIP code. Do not enter invented zeros to fill a missing value.",
                 "TIN" => "Confirm the registered TIN/branch as supplied by Accounting. Preserve leading zeros; do not invent a replacement TIN. Existing Customer-form format differences need review.",
-                "ADDRESS1" when kind == "principal" => "Supply the principal billing address in this field.",
+                "ADDRESS" when kind == "principal" => "Supply the principal billing address in this field.",
                 "ADDRESS1" or "ADDRESS2" or "ADDRESS3" => "Supply the billing address. At least one address line is needed; leave unused extra lines blank.",
                 "TERMS" => "Payment term days: 0 means COD. Confirm missing terms; the corresponding shared IBS payment term must exist.",
                 "OWNER" => "Use the owner master code, not a database ID. External tugboats require an owner; 000 is not an external provider.",
@@ -73,7 +83,8 @@ namespace IBS.Services.MSAP
             }
             return column.Required || column.Key == "VATTYPE" && row.Text("VATABLE").ToUpperInvariant() is not ("TRUE" or "T" or "1")
                 || column.Key == "VATABLE" && kind == "principal" || column.Key == "PORT" && kind == "tugboat"
-                || column.Key == "ADDRESS1" && (kind == "principal" || kind == "customer" && new[] { "ADDRESS1", "ADDRESS2", "ADDRESS3" }.All(key => row.Text(key).Length == 0))
+                || column.Key == "ADDRESS" && kind == "principal"
+                || column.Key == "ADDRESS1" && kind == "customer" && new[] { "ADDRESS1", "ADDRESS2", "ADDRESS3" }.All(key => row.Text(key).Length == 0)
                 || column.Key == "OWNER" && row.Text("COMPANYOWN").ToUpperInvariant() is "FALSE" or "F" or "0";
         }
     }

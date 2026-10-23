@@ -1746,11 +1746,11 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("PrincipalId"));
 
-                    b.Property<string>("Address1")
+                    b.Property<string>("Address")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)")
-                        .HasColumnName("address1");
+                        .HasColumnName("address");
 
                     b.Property<string>("BusinessType")
                         .HasColumnType("text")

@@ -355,10 +355,10 @@ namespace IBS.Services.MSAP
                                     Apply(principals, principal => principal.Customer.CustomerCode + "/" + principal.PrincipalNumber, new Principal
                                     {
                                         PrincipalNumber = principalCode, PrincipalName = item.Name, Customer = customer, CustomerId = customer.CustomerId,
-                                        Address1 = row.Text("ADDRESS1"),
+                                        Address = row.Text("ADDRESS"),
                                         TIN = row.Text("TIN"), BusinessType = row.Text("BUSINESS"), Terms = principalTerms,
                                         IsActive = row.Flag("ACTIVE"), IsVatable = row.Flag("VATABLE"), MsapRecId = legacyId
-                                    }, "PrincipalName,Address1,TIN,BusinessType,Terms,IsActive,IsVatable,MsapRecId", model, item, seenCodes);
+                                    }, "PrincipalName,Address,TIN,BusinessType,Terms,IsActive,IsVatable,MsapRecId", model, item, seenCodes);
                                     break;
                             }
                         }

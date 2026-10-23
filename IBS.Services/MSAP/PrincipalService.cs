@@ -56,7 +56,7 @@ namespace IBS.Services.MSAP
 
                 existingPrincipal.PrincipalNumber = model.PrincipalNumber;
                 existingPrincipal.PrincipalName = model.PrincipalName;
-                existingPrincipal.Address1 = model.Address1;
+                existingPrincipal.Address = model.Address;
                 existingPrincipal.BusinessType = model.BusinessType;
                 existingPrincipal.Terms = model.Terms;
                 existingPrincipal.TIN = model.TIN;

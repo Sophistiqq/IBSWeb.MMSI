@@ -741,7 +741,7 @@ namespace IBS.Services.MSAP
             {
                 value = p.PrincipalId,
                 name = p.PrincipalName,
-                address = p.Address1,
+                address = p.Address,
                 tinNo = p.TIN,
                 businessStyle = p.BusinessType,
                 terms = p.Terms
@@ -956,7 +956,7 @@ namespace IBS.Services.MSAP
             {
                 value = p.PrincipalId,
                 name = p.PrincipalName,
-                address = p.Address1,
+                address = p.Address,
                 tinNo = p.TIN,
                 businessStyle = p.BusinessType,
                 terms = p.Terms
