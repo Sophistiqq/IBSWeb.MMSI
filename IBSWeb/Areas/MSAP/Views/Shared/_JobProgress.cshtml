@@ -21,6 +21,8 @@
     bool actionHere = ViewData["JobProgressActionStage"] is int stage && stage == Model.Stage
         && (ViewData["JobProgressActionTargetId"] is not int targetId || targetId == Model.TargetId);
     bool canViewBilling = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.ViewBillings);
+    bool canViewCollections = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.ViewCollections);
+    var collectionIds = Model.LinkedBillings.Where(b => b.CollectionId.HasValue).Select(b => b.CollectionId!.Value).Distinct().OrderBy(id => id).ToList();
     bool canViewCos = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.ViewOperations);
     var reviewBill = Model.LinkedBillings.FirstOrDefault(b => b.Status == MsapConstants.BillingStatus.ForPosting) ?? Model.LinkedBillings.FirstOrDefault();
     var actionUrl = !canAct ? null : Url.Action(Model.ActionName, Model.ActionController, new
@@ -73,6 +75,10 @@
                         stepUrl = actionUrl;
                     }
                 }
+                else if (step.Stage == JobProgressCalculator.CollectionStage && canViewCollections && collectionIds.Count > 0)
+                {
+                    stepUrl = Url.Action("Preview", "Collection", new { area = "MSAP", id = collectionIds[0] });
+                }
                 else if (step.Stage == JobProgressCalculator.PostingStage && canViewBilling && reviewBill != null)
                 {
                     stepUrl = Url.Action("Review", "Billing", new { area = "MSAP", id = reviewBill.MsapBillingId });
@@ -96,6 +102,16 @@
                     @if (step.Stage == 2 && Model.CustomerOrderSlipId.HasValue)
                     {
                         <small class="job-progress-detail">@(Model.ExpectedTicketCount > 0 ? $"{Model.RecordedTicketCount} / {Model.ExpectedTicketCount} recorded" : $"{Model.RecordedTicketCount} recorded")</small>
+                    }
+                    @if (step.Stage == JobProgressCalculator.CollectionStage && canViewCollections && collectionIds.Count > 1)
+                    {
+                        @foreach (var collectionId in collectionIds)
+                        {
+                            var receipt = Model.LinkedBillings.First(b => b.CollectionId == collectionId).Collection;
+                            <small class="job-progress-detail">
+                                <a asp-area="MSAP" asp-controller="Collection" asp-action="Preview" asp-route-id="@collectionId">@(receipt?.MsapCollectionNumber ?? $"Receipt {collectionIds.IndexOf(collectionId) + 1}")</a>
+                            </small>
+                        }
                     }
                     @if (step.Stage == JobProgressCalculator.PostingStage)
                     {
