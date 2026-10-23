@@ -181,7 +181,8 @@ builder.Services.AddScoped<IBS.DataAccess.Repository.IRepository.IUnitOfWork, IB
 builder.Services.AddMsapModule(builder.Configuration);
 if (args.Contains("--calendar-render-only", StringComparer.Ordinal)
     || args.Contains("--schedule-render-only", StringComparer.Ordinal)
-    || args.Contains("--rebuild-render-only", StringComparer.Ordinal))
+    || args.Contains("--rebuild-render-only", StringComparer.Ordinal)
+    || args.Contains("--master-render-only", StringComparer.Ordinal))
 {
     builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
 }
@@ -193,6 +194,11 @@ app.UseEndpoints(endpoints => endpoints.MapControllerRoute("default", "{area=Use
 #pragma warning restore ASP0014
 using var scope = app.Services.CreateScope();
 var services = scope.ServiceProvider;
+if (args.Contains("--master-render-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.MasterFileRenderingCheck.RunAsync(services);
+    return;
+}
 if (args.Contains("--rebuild-render-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.RebuildRenderingCheck.RunAsync(services);

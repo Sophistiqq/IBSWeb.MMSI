@@ -12,7 +12,7 @@
                 <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
             </div>
             <div class="flex gap-2 ui-actions">
-                <a asp-action="Create" class="modern-btn-primary">
+                <a asp-action="Create" class="modern-btn-primary ui-page-action">
                     <span class="material-symbols-outlined">add_circle</span>
                     CREATE NEW
                 </a>
@@ -33,7 +33,6 @@
                         <tr>
                             <th>Principal #</th>
                             <th>Principal Name</th>
-                            <th>Agent</th>
                             <th>TIN</th>
                             <th class="text-center">Active?</th>
                             <th class="text-center">Actions</th>
@@ -60,12 +59,11 @@
                         data: "principalName",
                         render: (data) => `<span class="font-bold uppercase">${data}</span>`
                     },
-                    { data: "agent", defaultContent: "-" },
                     { data: "tin", defaultContent: "-" },
                     {
                         data: "isActive",
                         className: "text-center",
-                        render: (data) => data ? ModernTable.render.badge('YES', 'bg-success text-white') : ModernTable.render.badge('NO', 'bg-secondary text-white')
+                        render: (data) => data ? ModernTable.render.badge('YES', 'ui-status ui-complete') : ModernTable.render.badge('NO', 'ui-status')
                     },
                     {
                         data: null,

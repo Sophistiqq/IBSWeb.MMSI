@@ -1,17 +1,17 @@
 @model IBS.Models.MSAP.ViewModels.TugboatOwnerViewModel
 
 <fieldset class="flex flex-column gap-3 mt-4">
-    <legend class="modern-headline-md">Payment Profile</legend>
-    <p>Complete this profile before paying the owner through AP Trade.</p>
+    <legend class="modern-headline-md ui-section-title">Payment Profile</legend>
+    <p class="ui-caption ui-muted">Complete this profile before paying the owner through AP Trade.</p>
     <div>
         <label asp-for="Address" class="modern-label ui-label"></label>
         <input asp-for="Address" class="form-control ui-input" />
-        <span asp-validation-for="Address" class="text-error"></span>
+        <span asp-validation-for="Address" class="text-error ui-caption"></span>
     </div>
     <div>
         <label asp-for="Tin" class="modern-label ui-label"></label>
         <input asp-for="Tin" class="form-control ui-input" />
-        <span asp-validation-for="Tin" class="text-error"></span>
+        <span asp-validation-for="Tin" class="text-error ui-caption"></span>
     </div>
     <div>
         <label asp-for="VatType" class="modern-label ui-label"></label>
@@ -19,7 +19,7 @@
             <option value="">Select classification</option>
             <option>Vatable</option><option>Zero-Rated</option><option>Exempt</option>
         </select>
-        <span asp-validation-for="VatType" class="text-error"></span>
+        <span asp-validation-for="VatType" class="text-error ui-caption"></span>
     </div>
     <div>
         <label asp-for="TaxType" class="modern-label ui-label"></label>
@@ -27,7 +27,7 @@
             <option value="">Select classification</option>
             <option>Withholding Tax</option><option>Exempt</option>
         </select>
-        <span asp-validation-for="TaxType" class="text-error"></span>
+        <span asp-validation-for="TaxType" class="text-error ui-caption"></span>
     </div>
     <div>
         <label asp-for="WithholdingTaxPercent" class="modern-label ui-label"></label>
@@ -40,6 +40,6 @@
             <option value="0.10" selected="@(Model.WithholdingTaxPercent == 0.10m)">10%</option>
             <option value="0" selected="@(Model.WithholdingTaxPercent == 0m)">Exempt</option>
         </select>
-        <span asp-validation-for="WithholdingTaxPercent" class="text-error"></span>
+        <span asp-validation-for="WithholdingTaxPercent" class="text-error ui-caption"></span>
     </div>
 </fieldset>

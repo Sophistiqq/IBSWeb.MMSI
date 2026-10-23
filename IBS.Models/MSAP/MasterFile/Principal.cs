@@ -18,35 +18,15 @@ namespace IBS.Models.MSAP.MasterFile
         [Column(TypeName = "varchar(100)")]
         public string PrincipalName { get; set; } = null!;
 
-        [StringLength(50)]
-        [Column(TypeName = "varchar(50)")]
-        public string? Agent { get; set; }
-
         [StringLength(200)]
         [Column(TypeName = "varchar(200)")]
         public string Address1 { get; set; } = null!;
-
-        [StringLength(200)]
-        [Column(TypeName = "varchar(200)")]
-        public string? Address2 { get; set; }
-
-        [StringLength(200)]
-        [Column(TypeName = "varchar(200)")]
-        public string? Address3 { get; set; }
 
         public string? BusinessType { get; set; }
 
         public string? Terms { get; set; }
 
         public string? TIN { get; set; }
-
-        public string? Landline1 { get; set; }
-
-        public string? Landline2 { get; set; }
-
-        public string? Mobile1 { get; set; }
-
-        public string? Mobile2 { get; set; }
 
         public bool IsActive { get; set; }
 

@@ -16,10 +16,10 @@
                     <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
                 </div>
                 <div class="flex gap-2 ui-actions">
-                    <button type="submit" class="modern-btn-primary">
+                    <button type="submit" class="modern-btn-primary ui-page-action">
                         <span class="material-symbols-outlined">save</span> Save Changes
                     </button>
-                    <a asp-action="Index" class="modern-btn-secondary">
+                    <a asp-action="Index" class="modern-btn-secondary ui-page-action">
                         <span class="material-symbols-outlined">cancel</span> Cancel
                     </a>
                 </div>
@@ -39,13 +39,13 @@
                                 <div>
                                     <label asp-for="PortNumber" class="modern-label ui-label">Port Number <span class="text-error">*</span></label>
                                     <input asp-for="PortNumber" class="form-control ui-input" placeholder="Enter 3-digit code" maxlength="3" />
-                                    <span asp-validation-for="PortNumber" class="text-error text-xs"></span>
+                                    <span asp-validation-for="PortNumber" class="text-error ui-caption"></span>
                                 </div>
 
                                 <div>
                                     <label asp-for="PortName" class="modern-label ui-label">Port Name <span class="text-error">*</span></label>
                                     <input asp-for="PortName" class="form-control ui-input" placeholder="Enter port name" />
-                                    <span asp-validation-for="PortName" class="text-error text-xs"></span>
+                                    <span asp-validation-for="PortName" class="text-error ui-caption"></span>
                                 </div>
                             </div>
                         </div>

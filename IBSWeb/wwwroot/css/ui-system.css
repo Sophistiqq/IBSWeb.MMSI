@@ -29,7 +29,7 @@
     --ui-grid-gap: var(--ui-space-4);
     --ui-summary-width: 22rem;
     --ui-progress-width: 16rem;
-    --ui-control-height: 2.5rem;
+    --ui-control-height: max(2.5rem, 40px);
     --ui-radius: .25rem;
     font-family: var(--ui-font-family);
     font-size: var(--ui-text-body);
@@ -310,7 +310,7 @@
     align-items: center;
     justify-content: center;
     gap: var(--ui-space-2);
-    min-height: 2.75rem;
+    min-height: max(2.75rem, 44px);
     min-width: 10rem;
     padding: var(--ui-space-3) var(--ui-space-5);
     border-radius: var(--ui-radius);
@@ -468,7 +468,8 @@
         padding: var(--ui-space-2);
     }
 
-    .app-ui .ui-page-toolbar > :last-child:not(:first-child) {
+    .app-ui .ui-page-toolbar > :last-child:not(:first-child),
+    .app-ui .ui-page-toolbar .ui-page-action {
         width: 100%;
     }
 }
@@ -493,6 +494,11 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--ui-grid-gap);
+}
+
+.app-ui .ui-field-grid > [class*="modern-col-"] {
+    grid-column: auto;
+    min-width: 0;
 }
 
 @media (max-width: 640px) {

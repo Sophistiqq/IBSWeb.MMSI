@@ -18,8 +18,6 @@ namespace IBS.Models.MSAP.MasterFile
         [Column(TypeName = "varchar(50)")]
         public string TugboatOwnerName { get; set; } = null!;
 
-        public decimal FixedRate { get; set; }
-
         [StringLength(200)]
         [Display(Name = "Payee Address")]
         [Column(TypeName = "varchar(200)")]

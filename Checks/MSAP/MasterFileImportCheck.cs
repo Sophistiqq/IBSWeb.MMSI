@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using IBS.DataAccess.MSAP.Data;
 using IBS.Models.MSAP.MasterFile;
 using IBS.Models.MSAP.ViewModels;
@@ -22,6 +23,13 @@ namespace Checks.MSAP
             {
                 Check(MasterFileImportCsv.Kind(file) == null, $"Unsupported file accepted: {file}");
             }
+            var principalColumns = MasterFileImportColumns.For("principal");
+            Check(principalColumns.Any(column => column.Key == "AGENT")
+                && !principalColumns.Any(column => new[] { "ADDRESS2", "ADDRESS3", "LANDLINE1", "LANDLINE2", "MOBILE1", "MOBILE2" }.Contains(column.Key)),
+                "Principal template must retain customer linkage and omit retired fields.");
+            var principalAddress = new MasterFileImportCsv.Row(2, new Dictionary<string, string> { ["ADDRESS2"] = "Retired address" });
+            Check(MasterFileImportColumns.Missing(principalColumns.Single(column => column.Key == "ADDRESS1"), principalAddress, "principal"),
+                "Retired principal address fields must not satisfy billing address validation.");
             var rows = await ReadAsync("customer.csv", "RECID,NUMBER,NAME,ADDRESS1,ADDRESS2,ADDRESS3,TIN,TERMS,VATABLE,ACTIVE\n1,0015,Example,One-Harbor Road,,,---,3,False,True\n");
             var row = rows.Single();
             var friendly = await ReadAsync("port.csv", "Legacy source ID (optional),Port code,Port name\n1,001,Batangas\n");
@@ -121,7 +129,19 @@ namespace Checks.MSAP
 
             Check(!db.Database.HasPendingModelChanges(), "MSAP migration snapshot does not match the current model.");
             var migrator = db.GetService<IMigrator>();
-            string lastMigration = db.Database.GetMigrations().Last();
+            string[] migrations = db.Database.GetMigrations().ToArray();
+            int cleanup = Array.FindIndex(migrations, migration => migration.EndsWith("_RemoveUnusedMasterFileFields", StringComparison.Ordinal));
+            Check(cleanup > 0, "Master-file cleanup migration is missing.");
+            string masterCleanupSql = migrator.GenerateScript(migrations[cleanup - 1], migrations[cleanup]);
+            Check(Regex.Matches(masterCleanupSql, "DROP COLUMN").Count == 8
+                && masterCleanupSql.Contains("ALTER TABLE msap.mmsi_tugboat_owners DROP COLUMN fixed_rate")
+                && !masterCleanupSql.Contains("DROP TABLE") && !masterCleanupSql.Contains("msap_recid"),
+                "Master-file cleanup must drop only the eight retired MSAP columns and retain legacy IDs.");
+            Check(db.Model.FindEntityType(typeof(TugboatOwner))!.FindProperty("FixedRate") == null
+                && new[] { "Agent", "Address2", "Address3", "Landline1", "Landline2", "Mobile1", "Mobile2" }
+                    .All(property => db.Model.FindEntityType(typeof(Principal))!.FindProperty(property) == null),
+                "Retired master-file fields remain mapped.");
+            string lastMigration = "20261019045214_RemoveUnusedMsapCustomerFields";
             string cleanupSql = migrator.GenerateScript("20261018082734_RemoveOtherTugSupplierLinks", lastMigration);
             Check(cleanupSql.Contains("DROP COLUMN has_sbma") && cleanupSql.Contains("DROP COLUMN commission_rate")
                 && !cleanupSql.Contains("ALTER TABLE msap.mmsi_vessel_schedules"),
