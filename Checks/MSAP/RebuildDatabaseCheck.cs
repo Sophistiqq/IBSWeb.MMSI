@@ -202,18 +202,19 @@ namespace Checks.MSAP
                 .UseNpgsql(connection, pg => pg.MigrationsHistoryTable("__EFMigrationsHistory", "msap")).Options);
             string directory = Path.Combine(Path.GetTempPath(), "ibs-reimplementation-" + database);
             Directory.CreateDirectory(directory);
-            foreach ((DbContext context, string name, string first) in new[]
+            foreach ((DbContext context, string name, string first, string last) in new[]
             {
-                ((DbContext)shared, "IBS", "_AddTugboatWorkspaceOwnership"),
-                ((DbContext)msap, "MSAP", "_AddTugboatOwnerPaymentProfile")
+                ((DbContext)shared, "IBS", "_AddTugboatWorkspaceOwnership", "_AllowTicketSelectionForTugboatPayments"),
+                ((DbContext)msap, "MSAP", "_AddTugboatOwnerPaymentProfile", "_AddScheduleIocSelection")
             })
             {
                 string[] migrations = context.Database.GetMigrations().ToArray();
                 int start = Array.FindIndex(migrations, x => x.EndsWith(first, StringComparison.Ordinal));
-                Check(start > 0, "Reimplementation migration boundary was not found.");
+                int end = Array.FindIndex(migrations, x => x.EndsWith(last, StringComparison.Ordinal));
+                Check(start > 0 && end >= start, "Reimplementation migration boundary was not found.");
                 IMigrator migrator = context.GetService<IMigrator>();
-                string upgrade = migrator.GenerateScript(migrations[start - 1], migrations[^1]);
-                string rollback = migrator.GenerateScript(migrations[^1], migrations[start - 1]);
+                string upgrade = migrator.GenerateScript(migrations[start - 1], migrations[end]);
+                string rollback = migrator.GenerateScript(migrations[end], migrations[start - 1]);
                 Check(!System.Text.RegularExpressions.Regex.IsMatch(upgrade, @"(?m)^\s*UPDATE\s", System.Text.RegularExpressions.RegexOptions.IgnoreCase) && !upgrade.Contains("DROP TABLE", StringComparison.Ordinal),
                     "Upgrade script contains data repair or table removal.");
                 Check(rollback.Contains("DROP COLUMN", StringComparison.Ordinal), "Rollback is missing the new schema removal.");

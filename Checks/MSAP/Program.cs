@@ -167,6 +167,7 @@ builder.Logging.SetMinimumLevel(LogLevel.Error);
 builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
 {
     ["ConnectionStrings:MMSIConnection"] = args.Contains("--rebuild-render-only", StringComparer.Ordinal)
+        || args.Contains("--master-access-database", StringComparer.Ordinal)
         ? Checks.MSAP.TugboatOwnerCheck.TestConnection()
         : "Host=localhost;Database=msap_check;Username=postgres"
 });
@@ -182,11 +183,15 @@ builder.Services.AddMsapModule(builder.Configuration);
 if (args.Contains("--calendar-render-only", StringComparer.Ordinal)
     || args.Contains("--schedule-render-only", StringComparer.Ordinal)
     || args.Contains("--rebuild-render-only", StringComparer.Ordinal)
-    || args.Contains("--master-render-only", StringComparer.Ordinal))
+    || args.Contains("--master-render-only", StringComparer.Ordinal)
+    || args.Contains("--master-access-database", StringComparer.Ordinal))
 {
     builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
 }
-builder.Services.AddSingleton<IBS.Services.MSAP.AccessControl.IAccessControlService, Checks.MSAP.JobProgressCheck.CheckAccess>();
+if (!args.Contains("--master-access-database", StringComparer.Ordinal))
+{
+    builder.Services.AddSingleton<IBS.Services.MSAP.AccessControl.IAccessControlService, Checks.MSAP.JobProgressCheck.CheckAccess>();
+}
 await using var app = builder.Build();
 app.UseRouting();
 #pragma warning disable ASP0014 // Populate routing without starting a server.
@@ -194,6 +199,11 @@ app.UseEndpoints(endpoints => endpoints.MapControllerRoute("default", "{area=Use
 #pragma warning restore ASP0014
 using var scope = app.Services.CreateScope();
 var services = scope.ServiceProvider;
+if (args.Contains("--master-access-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.MasterFileAccessDatabaseCheck.RunAsync(services);
+    return;
+}
 if (args.Contains("--master-render-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.MasterFileRenderingCheck.RunAsync(services);
