@@ -399,6 +399,21 @@
     white-space: normal;
 }
 
+@media (min-width: 1201px) {
+    .schedule-review-workspace {
+        grid-template-rows: auto auto 1fr;
+    }
+
+    .schedule-review-workspace .schedule-summary-sidebar {
+        grid-column: 2;
+        grid-row: 2 / span 2;
+    }
+
+    .schedule-review-footer {
+        grid-column: 1;
+    }
+}
+
 @media (max-width: 1399px) {
     .schedule-review-booking-fields {
         grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -81,7 +81,25 @@ namespace IBS.Models.MSAP.MasterFile
 
         #region -- Master Files --
 
-        public bool CanManageMaritimeMasterFile { get; set; }
+        public bool CanManageCustomerMasterFile { get; set; }
+
+        public bool CanManageServiceMasterFile { get; set; }
+
+        public bool CanManagePortMasterFile { get; set; }
+
+        public bool CanManageTerminalMasterFile { get; set; }
+
+        public bool CanManageVesselMasterFile { get; set; }
+
+        public bool CanManageTugboatMasterFile { get; set; }
+
+        public bool CanManageTugboatOwnerMasterFile { get; set; }
+
+        public bool CanManageTugMasterMasterFile { get; set; }
+
+        public bool CanManagePrincipalMasterFile { get; set; }
+
+        public bool CanManageBankAccountMasterFile { get; set; }
 
         #endregion -- Master Files --
 

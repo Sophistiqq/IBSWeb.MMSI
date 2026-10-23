@@ -16,7 +16,7 @@ using ApplicationUser = IBS.Models.ApplicationUser;
 namespace IBSWeb.Areas.MSAP.Controllers
 {
     [Area("MSAP")]
-    [RequireAnyAccess("Access denied. You don't have permission to manage maritime master files.", ProcedureEnum.ManageMaritimeMasterFile)]
+    [RequireAnyAccess("Access denied. You don't have permission to manage the Customer master file.", ProcedureEnum.ManageCustomerMasterFile)]
     public class CustomerController(
         IUnitOfWork unitOfWork,
         ILogger<CustomerController> logger,

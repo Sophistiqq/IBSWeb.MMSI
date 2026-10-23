@@ -61,9 +61,24 @@
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanConfirmOtherTugCharges" class="form-check-input" /> <span>Confirm provider charges</span></label>
         </fieldset>
         <fieldset class="ui-panel ui-stack">
-            <legend class="ui-section-title">References and reports</legend>
+            <legend class="ui-section-title">Master files</legend>
+            <p class="ui-caption ui-muted">Each transit reference file is granted separately. Admins and Super Admins keep full access.</p>
+            <div class="grid grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-2 lg:grid-cols-3">
+                <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageCustomerMasterFile" class="form-check-input" /> <span>Customer</span></label>
+                <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageServiceMasterFile" class="form-check-input" /> <span>Activities / Services</span></label>
+                <label class="flex items-start gap-2 ui-body"><input asp-for="CanManagePortMasterFile" class="form-check-input" /> <span>Ports</span></label>
+                <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageTerminalMasterFile" class="form-check-input" /> <span>Terminals</span></label>
+                <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageVesselMasterFile" class="form-check-input" /> <span>Vessels</span></label>
+                <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageTugboatMasterFile" class="form-check-input" /> <span>Tugboats</span></label>
+                <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageTugboatOwnerMasterFile" class="form-check-input" /> <span>Tugboat Company / Owner</span></label>
+                <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageTugMasterMasterFile" class="form-check-input" /> <span>Tug Masters</span></label>
+                <label class="flex items-start gap-2 ui-body"><input asp-for="CanManagePrincipalMasterFile" class="form-check-input" /> <span>Principals</span></label>
+                <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageBankAccountMasterFile" class="form-check-input" /> <span>Bank Account</span></label>
+            </div>
+        </fieldset>
+        <fieldset class="ui-panel ui-stack">
+            <legend class="ui-section-title">Reports</legend>
             <p class="ui-caption ui-muted">Reports allow reading linked workflow records without changing them.</p>
-            <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageMaritimeMasterFile" class="form-check-input" /> <span>Maintain maritime master files</span></label>
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanViewMaritimeReport" class="form-check-input" /> <span>View / export maritime reports</span></label>
         </fieldset>
     </div>

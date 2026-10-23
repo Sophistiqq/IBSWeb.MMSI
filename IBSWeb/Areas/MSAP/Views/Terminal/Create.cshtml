@@ -15,10 +15,10 @@
                     <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
                 </div>
                 <div class="flex gap-2 ui-actions">
-                    <button type="submit" class="modern-btn-primary">
+                    <button type="submit" class="modern-btn-primary ui-page-action">
                         <span class="material-symbols-outlined">save</span> Save Changes
                     </button>
-                    <a asp-action="Index" class="modern-btn-secondary">
+                    <a asp-action="Index" class="modern-btn-secondary ui-page-action">
                         <span class="material-symbols-outlined">cancel</span> Cancel
                     </a>
                 </div>
@@ -38,13 +38,13 @@
                                 <div>
                                     <label asp-for="TerminalNumber" class="modern-label ui-label">Terminal Number <span class="text-error">*</span></label>
                                     <input asp-for="TerminalNumber" class="form-control ui-input" placeholder="Enter 3-digit code" maxlength="3" />
-                                    <span asp-validation-for="TerminalNumber" class="text-error text-xs"></span>
+                                    <span asp-validation-for="TerminalNumber" class="text-error ui-caption"></span>
                                 </div>
 
                                 <div>
                                     <label asp-for="TerminalName" class="modern-label ui-label">Terminal Name <span class="text-error">*</span></label>
                                     <input asp-for="TerminalName" class="form-control ui-input" placeholder="Enter terminal name" />
-                                    <span asp-validation-for="TerminalName" class="text-error text-xs"></span>
+                                    <span asp-validation-for="TerminalName" class="text-error ui-caption"></span>
                                 </div>
 
                                 <div>
@@ -52,11 +52,11 @@
                                     <select asp-for="PortId" asp-items="@Model.Ports" class="js-modern-select" data-placeholder="-- Select Port --">
                                         <option value="">-- Select Port --</option>
                                     </select>
-                                    <span asp-validation-for="PortId" class="text-error text-xs"></span>
+                                    <span asp-validation-for="PortId" class="text-error ui-caption"></span>
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <input asp-for="IsIoc" class="form-check-input" type="checkbox" style="width:1.25rem; height:1.25rem; border: 1px solid var(--outline-variant);">
-                                    <label asp-for="IsIoc" class="modern-label mb-0 ui-label" style="text-transform: none; font-size: 14px; font-weight: 500;">Classify as IOC?</label>
+                                    <label asp-for="IsIoc" class="modern-label mb-0 ui-label">Classify as IOC?</label>
                                 </div>
                             </div>
                         </div>

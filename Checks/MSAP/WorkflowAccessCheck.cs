@@ -219,6 +219,57 @@ namespace Checks.MSAP
             await AssertAccessAsync(ProcedureEnum.AccessTreasury, true);
             await AssertAccessAsync((ProcedureEnum)999, false);
 
+            // Granular master-file permissions: each file gates only itself, the retired umbrella is gone.
+            Check(!typeof(ProcedureEnum).GetEnumNames().Contains("ManageMaritimeMasterFile"), "Umbrella master-file permission is still defined.");
+            (string flag, ProcedureEnum permission)[] masterFiles =
+            [
+                ("CanManageCustomerMasterFile", ProcedureEnum.ManageCustomerMasterFile),
+                ("CanManageServiceMasterFile", ProcedureEnum.ManageServiceMasterFile),
+                ("CanManagePortMasterFile", ProcedureEnum.ManagePortMasterFile),
+                ("CanManageTerminalMasterFile", ProcedureEnum.ManageTerminalMasterFile),
+                ("CanManageVesselMasterFile", ProcedureEnum.ManageVesselMasterFile),
+                ("CanManageTugboatMasterFile", ProcedureEnum.ManageTugboatMasterFile),
+                ("CanManageTugboatOwnerMasterFile", ProcedureEnum.ManageTugboatOwnerMasterFile),
+                ("CanManageTugMasterMasterFile", ProcedureEnum.ManageTugMasterMasterFile),
+                ("CanManagePrincipalMasterFile", ProcedureEnum.ManagePrincipalMasterFile),
+                ("CanManageBankAccountMasterFile", ProcedureEnum.ManageBankAccountMasterFile),
+            ];
+            foreach ((string flag, ProcedureEnum permission) in masterFiles)
+            {
+                role = MsapRoles.User;
+                grants = new UserAccess { UserId = "access-check" };
+                typeof(UserAccess).GetProperty(flag)!.SetValue(grants, true);
+                await AssertAccessAsync(permission, true);
+                await AssertAccessAsync(ProcedureEnum.AccessMsap, true); // any master-file flag re-opens MSAP entry
+                foreach ((string otherName, ProcedureEnum other) in masterFiles)
+                {
+                    if (other != permission)
+                    {
+                        await AssertAccessAsync(other, false);
+                    }
+                }
+            }
+
+            role = MsapRoles.Admin;
+            grants = null;
+            foreach ((string _, ProcedureEnum permission) in masterFiles)
+            {
+                await AssertAccessAsync(permission, true);
+            }
+
+            Type[] masterFileControllers =
+            [
+                typeof(CustomerController), typeof(MaritimeServiceController), typeof(PortController),
+                typeof(TerminalController), typeof(VesselController), typeof(TugboatController),
+                typeof(TugboatOwnerController), typeof(TugMasterController), typeof(PrincipalController),
+                typeof(BankAccountController), typeof(MasterFileController),
+            ];
+            foreach (Type controller in masterFileControllers)
+            {
+                Check(controller.GetCustomAttributes<RequireAccessBaseAttribute>().Any(),
+                    $"Missing granular access guard: {controller.Name}.");
+            }
+
             Check(typeof(BillingController).GetMethod("Reverse") == null, "Billing reversal is still exposed.");
             foreach (string name in new[] { "SetTariff", "EditTariff", "ApproveTariff", "DisapproveTariff", "BatchApproveTariff", "BatchSetTariff", "Delete", "Restore", "ChangeStatus", "DeleteImage", "DeleteVideo" })
             {

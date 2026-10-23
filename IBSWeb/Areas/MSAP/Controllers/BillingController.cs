@@ -384,7 +384,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 worksheet.Cells["B2"].Value = billing.Principal?.PrincipalName ?? billing.Customer.CustomerName;
                 worksheet.Cells["E2"].Value = $"{billing.Date}";
                 worksheet.Cells["E2"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
-                worksheet.Cells["B3"].Value = $"{billing.Principal?.Address1 ?? billing.Customer.CustomerAddress} TERMS: {billing.Terms}";
+                worksheet.Cells["B3"].Value = $"{billing.Principal?.Address ?? billing.Customer.CustomerAddress} TERMS: {billing.Terms}";
                 worksheet.Cells["B4"].Value = billing.Principal?.TIN ?? billing.Customer.CustomerTin;
                 worksheet.Cells["E4"].Value = $"VOYAGE NO. {billing.VoyageNumber}";
                 worksheet.Cells["B6"].Value = $"FOR THE SERVICE RE: {billing.Vessel.VesselName}";

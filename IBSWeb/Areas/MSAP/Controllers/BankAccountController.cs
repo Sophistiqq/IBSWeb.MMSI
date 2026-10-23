@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
+using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.MasterFile;
+using IBS.Services.MSAP.Attributes;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +12,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace IBSWeb.Areas.MSAP.Controllers
 {
     [Area("MSAP")]
-    [Authorize(Policy = MsapRoles.AdminPolicy)]
+    [RequireAccess(ProcedureEnum.ManageBankAccountMasterFile,
+        "Access denied. You don't have permission to manage the Bank Account master file.")]
     public class BankAccountController(
         IUnitOfWork unitOfWork)
         : Controller

@@ -13,7 +13,7 @@
                 <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
             </div>
             <div class="flex gap-2 ui-actions">
-                <a asp-area="MSAP" asp-controller="Customer" asp-action="Create" class="modern-btn-primary">
+                <a asp-area="MSAP" asp-controller="Customer" asp-action="Create" class="modern-btn-primary ui-page-action">
                     <span class="material-symbols-outlined">add_circle</span>
                     CREATE CUSTOMER
                 </a>
@@ -68,7 +68,7 @@
                     { data: "vatType" },
                     {
                         data: "isActive",
-                        render: (data) => ModernTable.render.badge(data ? "Active" : "Inactive", data ? "status-open" : "status-closed")
+                        render: (data) => ModernTable.render.badge(data ? "Active" : "Inactive", data ? "ui-status ui-complete" : "ui-status")
                     },
                     {
                         data: null,

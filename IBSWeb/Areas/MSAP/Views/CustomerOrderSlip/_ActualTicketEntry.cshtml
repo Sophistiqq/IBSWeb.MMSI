@@ -40,6 +40,7 @@
             }
         </div>
         <div class="ui-field cos-entry-half"><label for="DateLeft" class="ui-label">Actual start * · Philippine time</label><div class="cos-date-time"><input asp-for="DateLeft" type="date" class="modern-input ui-input" aria-label="Actual start date" required /><input asp-for="TimeLeft" type="time" class="modern-input ui-input" aria-label="Actual start time" required /></div></div>
+        <div class="ui-field cos-entry-half cos-entry-end"><label for="DateArrived" class="ui-label">Actual end * · Philippine time</label><div class="cos-date-time"><input asp-for="DateArrived" type="date" class="modern-input ui-input" aria-label="Actual end date" required /><input asp-for="TimeArrived" type="time" class="modern-input ui-input" aria-label="Actual end time" required /></div></div>
         <div class="ui-field cos-entry-half">
             @if (readOnly)
             {
@@ -63,7 +64,6 @@
                 }
             }
         </div>
-        <div class="ui-field cos-entry-half"><label for="DateArrived" class="ui-label">Actual end * · Philippine time</label><div class="cos-date-time"><input asp-for="DateArrived" type="date" class="modern-input ui-input" aria-label="Actual end date" required /><input asp-for="TimeArrived" type="time" class="modern-input ui-input" aria-label="Actual end time" required /></div></div>
         <div class="ui-field cos-entry-half">
             @if (readOnly)
             {

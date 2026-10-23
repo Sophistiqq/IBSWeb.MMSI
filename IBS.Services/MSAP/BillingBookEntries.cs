@@ -22,7 +22,7 @@ namespace IBS.Services.MSAP
                 TransactionDate = DateOnly.FromDateTime(approvedAt), SerialNo = bill.MsapBillingNumber,
                 SoldTo = bill.Principal?.PrincipalName ?? bill.Customer.CustomerName,
                 TinNo = bill.Principal?.TIN ?? bill.Customer.CustomerTin,
-                Address = bill.Principal?.Address1 ?? bill.Customer.CustomerAddress,
+                Address = bill.Principal?.Address ?? bill.Customer.CustomerAddress,
                 Description = bill.Vessel.VesselName, Amount = amount, Discount = bill.Discount,
                 VatableSales = bill.IsVatable ? net : 0m, VatAmount = bill.IsVatable ? amount - net : 0m,
                 VatExemptSales = exempt ? net : 0m, ZeroRated = !bill.IsVatable && !exempt ? net : 0m,

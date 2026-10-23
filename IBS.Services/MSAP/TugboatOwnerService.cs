@@ -64,7 +64,6 @@ namespace IBS.Services.MSAP
 
                 existingOwner.TugboatOwnerNumber = model.TugboatOwnerNumber;
                 existingOwner.TugboatOwnerName = model.TugboatOwnerName;
-                existingOwner.FixedRate = model.FixedRate;
                 existingOwner.Address = model.Address;
                 existingOwner.Tin = model.Tin;
                 existingOwner.VatType = model.VatType;

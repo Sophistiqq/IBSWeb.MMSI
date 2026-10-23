@@ -4,6 +4,13 @@ const vm = require('node:vm');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
+const progressView = read('IBSWeb/Areas/MSAP/Views/Shared/_JobProgress.cshtml');
+assert(progressView.includes('ProcedureEnum.ViewCollections'), 'Collection navigation must check preview access.');
+assert(progressView.includes('step.Stage == JobProgressCalculator.CollectionStage && canViewCollections && collectionIds.Count > 0'),
+    'The Collection node must link saved receipts, including after clearing.');
+assert(progressView.includes('Url.Action("Preview", "Collection", new { area = "MSAP", id = collectionIds[0] })'),
+    'The Collection node must open the saved receipt preview.');
+assert(progressView.includes('asp-action="Preview" asp-route-id="@collectionId"'), 'Each linked receipt must be accessible.');
 let selector;
 vm.runInNewContext(read('IBSWeb/wwwroot/msap/js/schedule-confirmation.js'), {
     document: { querySelectorAll: value => { selector = value; return []; }, getElementById: () => null }

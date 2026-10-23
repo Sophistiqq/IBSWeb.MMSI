@@ -1,13 +1,19 @@
+using System.Globalization;
+using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using IBS.DataAccess.MSAP.Data;
+using IBS.Models.MSAP;
 using IBS.Models.MSAP.MasterFile;
 using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using OfficeOpenXml;
 
 namespace Checks.MSAP
@@ -22,6 +28,28 @@ namespace Checks.MSAP
             {
                 Check(MasterFileImportCsv.Kind(file) == null, $"Unsupported file accepted: {file}");
             }
+            var principalColumns = MasterFileImportColumns.For("principal");
+            Check(principalColumns.Any(column => column.Key == "AGENT")
+                && principalColumns.Any(column => column.Key == "ADDRESS" && column.Label == "Address")
+                && !principalColumns.Any(column => new[] { "ADDRESS1", "ADDRESS2", "ADDRESS3", "LANDLINE1", "LANDLINE2", "MOBILE1", "MOBILE2" }.Contains(column.Key)),
+                "Principal template must retain customer linkage and omit retired fields.");
+            foreach (string headers in new[] { "AGENT,NUMBER,NAME,ADDRESS,TIN,TERMS,VATABLE,ACTIVE", "Customer code,Principal code,Principal name,Address,TIN,Payment term days,VAT registered,Active", "AGENT,NUMBER,NAME,ADDRESS1,TIN,TERMS,VATABLE,ACTIVE", "Customer code,Principal code,Principal name,Address line 1,TIN,Payment term days,VAT registered,Active" })
+            {
+                var principals = await ReadAsync("principal.csv", headers + "\n0015,0001,Principal,Harbor Road,123,0,True,True\n");
+                Check(principals.Single().Code("AGENT", 4) == "0015" && principals.Single().Text("ADDRESS") == "Harbor Road",
+                    "Principal CSV must accept current headers without retired address columns.");
+            }
+            foreach (string headers in new[] { "AGENT,NUMBER,NAME,ADDRESS1,ADDRESS2,ADDRESS3,TIN,TERMS,VATABLE,ACTIVE", "Customer code,Principal code,Principal name,Address line 1,Address line 2,Address line 3,TIN,Payment term days,VAT registered,Active" })
+            {
+                var principals = await ReadAsync("principal.csv", headers + "\n0015,0001,Principal,Harbor Road,City,Country,123,0,True,True\n");
+                Check(principals.Single().Text("ADDRESS") == "Harbor Road City Country"
+                    && !principals.Single().Fields.ContainsKey("ADDRESS1")
+                    && !principals.Single().Fields.ContainsKey("ADDRESS2") && !principals.Single().Fields.ContainsKey("ADDRESS3"),
+                    "Legacy Principal address lines must merge into the current field without leaving duplicate source lines.");
+            }
+            var principalAddress = new MasterFileImportCsv.Row(2, new Dictionary<string, string> { ["ADDRESS2"] = "Retired address" });
+            Check(MasterFileImportColumns.Missing(principalColumns.Single(column => column.Key == "ADDRESS"), principalAddress, "principal"),
+                "Retired principal address fields must not satisfy billing address validation.");
             var rows = await ReadAsync("customer.csv", "RECID,NUMBER,NAME,ADDRESS1,ADDRESS2,ADDRESS3,TIN,TERMS,VATABLE,ACTIVE\n1,0015,Example,One-Harbor Road,,,---,3,False,True\n");
             var row = rows.Single();
             var friendly = await ReadAsync("port.csv", "Legacy source ID (optional),Port code,Port name\n1,001,Batangas\n");
@@ -58,6 +86,20 @@ namespace Checks.MSAP
             using (var template = new ExcelPackage(new MemoryStream(await MasterFileImportWorkbook.WriteAsync(null, default))))
             {
                 Check(template.Workbook.Worksheets["tariff"].Cells[1, 6].Text == "Tariff amount", "Template omits migration rate headers.");
+                var principalValues = new Dictionary<string, string>
+                {
+                    ["AGENT"] = "0015", ["NUMBER"] = "0001", ["NAME"] = "Principal", ["ADDRESS"] = "Harbor Road",
+                    ["TIN"] = "123", ["TERMS"] = "0", ["VATABLE"] = "True", ["ACTIVE"] = "True"
+                };
+                for (int index = 0; index < principalColumns.Count; index++)
+                {
+                    template.Workbook.Worksheets["principal"].Cells[2, index + 1].Value = principalValues.GetValueOrDefault(principalColumns[index].Key);
+                }
+                await using var principalWorkbook = new MemoryStream(await template.GetAsByteArrayAsync());
+                var principalSheets = await MasterFileImportWorkbook.ReadAsync(
+                    new FormFile(principalWorkbook, 0, principalWorkbook.Length, "Files", "principal.xlsx"), default);
+                Check(principalSheets.Single().Kind == "principal" && principalSheets.Single().Rows.Single().Code("AGENT", 4) == "0015",
+                    "Populated Principal template must round-trip without retired address columns.");
             }
             var review = new MasterFileImportViewModel
             {
@@ -120,8 +162,23 @@ namespace Checks.MSAP
                 && db.Model.FindEntityType(typeof(Terms))!.GetTableName() == "terms", "Import transaction lock table names no longer match EF mapping.");
 
             Check(!db.Database.HasPendingModelChanges(), "MSAP migration snapshot does not match the current model.");
+            Check(db.Model.FindEntityType(typeof(Principal))!.FindProperty("Address")?.GetColumnName() == "address"
+                && db.Model.FindEntityType(typeof(Principal))!.FindProperty("Address1") == null,
+                "Principal must map one Address property to the address column.");
             var migrator = db.GetService<IMigrator>();
-            string lastMigration = db.Database.GetMigrations().Last();
+            string[] migrations = db.Database.GetMigrations().ToArray();
+            int cleanup = Array.FindIndex(migrations, migration => migration.EndsWith("_RemoveUnusedMasterFileFields", StringComparison.Ordinal));
+            Check(cleanup > 0, "Master-file cleanup migration is missing.");
+            string masterCleanupSql = migrator.GenerateScript(migrations[cleanup - 1], migrations[cleanup]);
+            Check(Regex.Matches(masterCleanupSql, "DROP COLUMN").Count == 8
+                && masterCleanupSql.Contains("ALTER TABLE msap.mmsi_tugboat_owners DROP COLUMN fixed_rate")
+                && !masterCleanupSql.Contains("DROP TABLE") && !masterCleanupSql.Contains("msap_recid"),
+                "Master-file cleanup must drop only the eight retired MSAP columns and retain legacy IDs.");
+            Check(db.Model.FindEntityType(typeof(TugboatOwner))!.FindProperty("FixedRate") == null
+                && new[] { "Agent", "Address2", "Address3", "Landline1", "Landline2", "Mobile1", "Mobile2" }
+                    .All(property => db.Model.FindEntityType(typeof(Principal))!.FindProperty(property) == null),
+                "Retired master-file fields remain mapped.");
+            string lastMigration = "20261019045214_RemoveUnusedMsapCustomerFields";
             string cleanupSql = migrator.GenerateScript("20261018082734_RemoveOtherTugSupplierLinks", lastMigration);
             Check(cleanupSql.Contains("DROP COLUMN has_sbma") && cleanupSql.Contains("DROP COLUMN commission_rate")
                 && !cleanupSql.Contains("ALTER TABLE msap.mmsi_vessel_schedules"),
@@ -134,6 +191,7 @@ namespace Checks.MSAP
             string folder = Path.Combine("Docs", "MSAP", "CSVs for Imports");
             if (Directory.Exists(folder))
             {
+                await CheckPrincipalAddressesAsync(folder);
                 int files = 0;
                 int records = 0;
                 int unknownFlags = 0;
@@ -169,6 +227,71 @@ namespace Checks.MSAP
         {
             await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(contents));
             return await MasterFileImportCsv.ReadAsync(new FormFile(stream, 0, stream.Length, "Files", name), CancellationToken.None);
+        }
+
+        private static async Task CheckPrincipalAddressesAsync(string folder)
+        {
+            string path = Path.Combine(folder, "principal.csv");
+            var expected = new Dictionary<string, string>();
+            using (var reader = new StreamReader(path))
+            using (var csv = new CsvHelper.CsvReader(reader, CultureInfo.InvariantCulture))
+            {
+                await csv.ReadAsync();
+                csv.ReadHeader();
+                while (await csv.ReadAsync())
+                {
+                    expected[csv.GetField("RECID")!] = string.Join(" ", new[] { "ADDRESS1", "ADDRESS2", "ADDRESS3" }
+                        .Select(column => csv.GetField(column)?.Trim() ?? string.Empty)
+                        .Where(value => value.Any(character => character != '-')));
+                }
+            }
+            await using var input = File.OpenRead(path);
+            var rows = await MasterFileImportCsv.ReadAsync(new FormFile(input, 0, input.Length, "Files", "principal.csv"), default);
+            Check(rows.All(row => row.Text("ADDRESS") == expected[row.Text("RECID")]), "Source Principal CSV lost address lines.");
+            string workbook = Path.Combine(folder, "TEST DATA", "PRINCIPAL TEST IMPORT DATA.xlsx");
+            if (File.Exists(workbook))
+            {
+                await using var stream = File.OpenRead(workbook);
+                var sheets = await MasterFileImportWorkbook.ReadAsync(new FormFile(stream, 0, stream.Length, "Files", Path.GetFileName(workbook)), default);
+                var principals = sheets.Single(sheet => sheet.Kind == "principal").Rows;
+                Check(principals.Count == expected.Count && principals.All(row => row.Text("ADDRESS") == expected[row.Text("RECID")]),
+                    "TEST DATA Principal workbook lost address lines from the original CSV.");
+            }
+            var document = new MasterFileImportDocument { Kind = "principal", FileName = "principal.csv",
+                Rows = rows.Select(row => new MasterFileImportRow { Row = row.Number, Fields = row.Fields.ToDictionary(pair => pair.Key, pair => pair.Value) }).ToList() };
+            await using var cleaned = new MemoryStream(await MasterFileImportWorkbook.WriteAsync([document], default));
+            var returned = await MasterFileImportWorkbook.ReadAsync(new FormFile(cleaned, 0, cleaned.Length, "Files", "cleaned.xlsx"), default);
+            Check(returned.Single().Rows.All(row => row.Text("ADDRESS") == expected[row.Text("RECID")]),
+                "Cleaned Principal workbook dropped or duplicated address lines.");
+            await CheckBillingPrintAddressAsync(rows.First().Text("ADDRESS"));
+            Console.WriteLine($"PASS: {expected.Count} Principal source addresses survive CSV, TEST DATA workbook and cleaned-workbook round-trip; billing print retains the complete address.");
+        }
+
+        private static async Task CheckBillingPrintAddressAsync(string address)
+        {
+            var billing = new Billing
+            {
+                MsapBillingId = 1, MsapBillingNumber = "ADDRESS-CHECK", Status = IBS.Utility.MSAP.Constants.MsapConstants.BillingStatus.ForCollection,
+                Revision = 1, ApprovedRevision = 1, ApprovedByUserId = "check", ApprovedAt = DateTime.Now,
+                Principal = new Principal { PrincipalName = "Principal", Address = address }, Terms = "COD",
+                Customer = new Customer(), Vessel = new Vessel { VesselName = "Check vessel" }, Port = new Port { PortName = "Check port" }
+            };
+            var repository = DispatchProxy.Create<IBS.DataAccess.MSAP.Repository.Msap.IRepository.IBillingRepository, CollectionCheck.CheckProxy>();
+            ((CollectionCheck.CheckProxy)(object)repository).Handler = (method, _) => method.Name switch
+            {
+                "GetAsync" => Task.FromResult<Billing?>(billing),
+                "GetPaidDispatchTicketsAsync" => Task.FromResult<List<DispatchTicket>?>([]),
+                "GetUniqueTugboatsListAsync" => Task.FromResult<List<string>?>([]),
+                _ => throw new InvalidOperationException("Unexpected billing print operation: " + method.Name)
+            };
+            var work = DispatchProxy.Create<IBS.DataAccess.MSAP.Repository.IRepository.IUnitOfWork, CollectionCheck.CheckProxy>();
+            ((CollectionCheck.CheckProxy)(object)work).Handler = (_, _) => repository;
+            var controller = new IBSWeb.Areas.MSAP.Controllers.BillingController(work, null!, null!, null!,
+                NullLogger<IBSWeb.Areas.MSAP.Controllers.BillingController>.Instance);
+            var result = await controller.Print(1, default) as FileContentResult;
+            Check(result != null, "Billing print did not produce a workbook.");
+            using var print = new ExcelPackage(new MemoryStream(result!.FileContents));
+            Check(print.Workbook.Worksheets[0].Cells["B3"].Text == address + " TERMS: COD", "Billing print lost part of the Principal address.");
         }
 
         private static void MustReject(Action action)

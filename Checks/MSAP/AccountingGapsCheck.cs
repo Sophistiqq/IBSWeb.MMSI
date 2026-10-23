@@ -46,7 +46,7 @@ namespace Checks.MSAP
             Check(book.Amount == 1008m && book.NetSales == 900m, "Sales Book deducted discount twice.");
             bill.Discount = 0; bill.IsVatable = false; bill.Customer.VatType = MsapConstants.VatType_Exempt;
             Check(BillingBookEntries.Create(bill, DateTime.Now, "Name", "id").VatExemptSales == 1120m, "Exempt sales were classified as zero rated.");
-            bill.Principal = new Principal { PrincipalName = "Principal", TIN = "Principal TIN", Address1 = "Principal address" };
+            bill.Principal = new Principal { PrincipalName = "Principal", TIN = "Principal TIN", Address = "Principal address" };
             Check(BillingBookEntries.Create(bill, DateTime.Now, "Name", "id").SoldTo == "Principal", "Principal billing used the customer as billed party.");
             ticket.TimeArrived = new TimeOnly(8, 0, 2);
             second.TimeLeft = new TimeOnly(9, 0); second.TimeArrived = new TimeOnly(9, 0, 2);

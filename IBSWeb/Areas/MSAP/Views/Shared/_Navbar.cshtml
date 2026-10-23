@@ -29,7 +29,18 @@
     bool showOperations = canViewOperations || canViewBillings;
     bool showFinance = canViewCollections || canViewReports;
 
-    bool canManageReferences = await ModernHasAnyAccess(ProcedureEnum.ManageMaritimeMasterFile);
+    bool canManageCustomer = await ModernHasAnyAccess(ProcedureEnum.ManageCustomerMasterFile);
+    bool canManageService = await ModernHasAnyAccess(ProcedureEnum.ManageServiceMasterFile);
+    bool canManagePort = await ModernHasAnyAccess(ProcedureEnum.ManagePortMasterFile);
+    bool canManageTerminal = await ModernHasAnyAccess(ProcedureEnum.ManageTerminalMasterFile);
+    bool canManageVessel = await ModernHasAnyAccess(ProcedureEnum.ManageVesselMasterFile);
+    bool canManageTugboat = await ModernHasAnyAccess(ProcedureEnum.ManageTugboatMasterFile);
+    bool canManageTugboatOwner = await ModernHasAnyAccess(ProcedureEnum.ManageTugboatOwnerMasterFile);
+    bool canManageTugMaster = await ModernHasAnyAccess(ProcedureEnum.ManageTugMasterMasterFile);
+    bool canManagePrincipal = await ModernHasAnyAccess(ProcedureEnum.ManagePrincipalMasterFile);
+    bool canManageBankAccount = await ModernHasAnyAccess(ProcedureEnum.ManageBankAccountMasterFile);
+    bool canManageReferences = canManageCustomer || canManageService || canManagePort || canManageTerminal
+        || canManageVessel || canManageTugboat || canManageTugboatOwner || canManageTugMaster || canManagePrincipal;
     bool canAccessRates = await ModernHasAnyAccess(ProcedureEnum.ViewRates, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload);
 
 }
@@ -179,7 +190,7 @@
                     </li>
                 }
 
-                @if (msapRole is MsapRoles.Admin or MsapRoles.SuperAdmin)
+                @if (msapRole is MsapRoles.Admin or MsapRoles.SuperAdmin || canManageBankAccount)
                 {
                     <!-- Master File mega menu -->
                     <li class="mnav-item" data-mega role="none">
@@ -208,15 +219,6 @@
                                             <div>
                                                 <div class="mnav-link-title">User Access</div>
                                                 <div class="mnav-link-sub">Module restrictions</div>
-                                            </div>
-                                        </a>
-                                        <a class="mnav-mega-link"
-                                           asp-area="MSAP" asp-controller="Employee" asp-action="Index"
-                                           role="menuitem">
-                                            <span class="material-symbols-outlined">badge</span>
-                                            <div>
-                                                <div class="mnav-link-title">Employee</div>
-                                                <div class="mnav-link-sub">Staff records</div>
                                             </div>
                                         </a>
                                     </div>
@@ -269,7 +271,7 @@
                                                 <div><div class="mnav-link-title">Master File Import</div><div class="mnav-link-sub">Validate and import reference CSVs</div></div>
                                             </a>
                                         }
-                                        @if (canManageReferences)
+                                        @if (canManageService)
                                         {
                                             <a class="mnav-mega-link"
                                                asp-area="MSAP" asp-controller="MaritimeService" asp-action="Index"
@@ -278,7 +280,7 @@
                                                 <div><div class="mnav-link-title">Activities / Services</div></div>
                                             </a>
                                         }
-                                        @if (canManageReferences)
+                                        @if (canManagePort)
                                         {
                                             <a class="mnav-mega-link"
                                                asp-area="MSAP" asp-controller="Port" asp-action="Index"
@@ -287,7 +289,7 @@
                                                 <div><div class="mnav-link-title">Ports</div></div>
                                             </a>
                                         }
-                                        @if (canManageReferences)
+                                        @if (canManagePrincipal)
                                         {
                                             <a class="mnav-mega-link"
                                                asp-area="MSAP" asp-controller="Principal" asp-action="Index"
@@ -305,7 +307,7 @@
                                                 <div><div class="mnav-link-title">Rates</div></div>
                                             </a>
                                         }
-                                        @if (canManageReferences)
+                                        @if (canManageTerminal)
                                         {
                                             <a class="mnav-mega-link"
                                                asp-area="MSAP" asp-controller="Terminal" asp-action="Index"
@@ -314,7 +316,7 @@
                                                 <div><div class="mnav-link-title">Terminals</div></div>
                                             </a>
                                         }
-                                        @if (canManageReferences)
+                                        @if (canManageTugMaster)
                                         {
                                             <a class="mnav-mega-link"
                                                asp-area="MSAP" asp-controller="TugMaster" asp-action="Index"
@@ -323,7 +325,7 @@
                                                 <div><div class="mnav-link-title">Tug Masters</div></div>
                                             </a>
                                         }
-                                        @if (canManageReferences)
+                                        @if (canManageTugboatOwner)
                                         {
                                             <a class="mnav-mega-link"
                                                asp-area="MSAP" asp-controller="TugboatOwner" asp-action="Index"
@@ -332,7 +334,7 @@
                                                 <div><div class="mnav-link-title">Tugboat Company / Owner</div></div>
                                             </a>
                                         }
-                                        @if (canManageReferences)
+                                        @if (canManageTugboat)
                                         {
                                             <a class="mnav-mega-link"
                                                asp-area="MSAP" asp-controller="Tugboat" asp-action="Index"
@@ -341,7 +343,7 @@
                                                 <div><div class="mnav-link-title">Tugboats</div></div>
                                             </a>
                                         }
-                                        @if (canManageReferences)
+                                        @if (canManageVessel)
                                         {
                                             <a class="mnav-mega-link"
                                                asp-area="MSAP" asp-controller="Vessel" asp-action="Index"
@@ -357,22 +359,13 @@
                                     <div>
                                         <div class="mnav-section-label">Sales &amp; MSAP</div>
                                         <div class="mnav-link-list">
-                                            @if (canManageReferences)
+                                            @if (canManageCustomer)
                                             {
                                                 <a class="mnav-mega-link"
                                                    asp-area="MSAP" asp-controller="Customer" asp-action="Index"
                                                    role="menuitem">
                                                     <span class="material-symbols-outlined">person</span>
                                                     <div><div class="mnav-link-title">Customer</div></div>
-                                                </a>
-                                            }
-                                            @if (canManageReferences)
-                                            {
-                                                <a class="mnav-mega-link"
-                                                   asp-area="MSAP" asp-controller="Supplier" asp-action="Index"
-                                                   role="menuitem">
-                                                    <span class="material-symbols-outlined">local_shipping</span>
-                                                    <div><div class="mnav-link-title">Supplier</div></div>
                                                 </a>
                                             }
                                         </div>

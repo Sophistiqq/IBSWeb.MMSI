@@ -44,7 +44,7 @@ namespace IBS.Services.MSAP
                 throw new InvalidDataException("CSV header is missing.");
             }
             csv.ReadHeader();
-            var columns = MasterFileImportColumns.For(kind);
+            var columns = MasterFileImportColumns.ForInput(kind);
             string[] headers = csv.HeaderRecord!.Select(header => header.Trim().Equals("VAT registered", StringComparison.OrdinalIgnoreCase) ? "VATABLE"
                 : columns.FirstOrDefault(column => column.Label.Equals(header.Trim(), StringComparison.OrdinalIgnoreCase))?.Key ?? header.Trim().ToUpperInvariant()).ToArray();
             string[] required = kind switch
@@ -52,7 +52,7 @@ namespace IBS.Services.MSAP
                 "bankacct" => ["CODE", "BANK", "BANKNAME", "ACCOUNTNO", "ACCOUNTNAM"],
                 "tariff" => ["RECID", "DATE", "CUSTNO", "PORT", "TERMINAL", "SERVICE", "DISPATCH", "BAF"],
                 "customer" => ["RECID", "NUMBER", "NAME", "ADDRESS1", "ADDRESS2", "ADDRESS3", "TIN", "TERMS", "VATABLE", "ACTIVE"],
-                "principal" => ["RECID", "AGENT", "NUMBER", "NAME", "ADDRESS1", "ADDRESS2", "ADDRESS3", "TIN", "TERMS", "VATABLE", "ACTIVE"],
+                "principal" => ["RECID", "AGENT", "NUMBER", "NAME", "ADDRESS", "TIN", "TERMS", "VATABLE", "ACTIVE"],
                 "tugboat" => ["RECID", "NUMBER", "NAME", "COMPANYOWN", "OWNER"],
                 "tugmaster" => ["RECID", "EMPNO", "NAME", "ACTIVE"],
                 "services" => ["RECID", "NUMBER", "DESC"],
@@ -60,7 +60,8 @@ namespace IBS.Services.MSAP
                 _ => ["RECID", "NUMBER", "NAME"]
             };
             string[] missing = required.Where(column => column != "RECID"
-                && !(kind == "customer" && column == "VATABLE" && headers.Contains("VATTYPE"))).Except(headers).ToArray();
+                && !(kind == "customer" && column == "VATABLE" && headers.Contains("VATTYPE"))
+                && !(kind == "principal" && column == "ADDRESS" && headers.Any(header => header is "ADDRESS1" or "ADDRESS2" or "ADDRESS3"))).Except(headers).ToArray();
             if (missing.Length > 0 || headers.Distinct().Count() != headers.Length)
             {
                 throw new InvalidDataException(missing.Length > 0
@@ -74,8 +75,17 @@ namespace IBS.Services.MSAP
                 {
                     throw new InvalidDataException($"Row {csv.Parser.Row}: invalid column count or more than 10,000 rows.");
                 }
-                rows.Add(new Row(csv.Parser.Row, headers.Select((header, index) => (header, value: csv.GetField(index)?.Trim() ?? string.Empty))
-                    .ToDictionary(item => item.header, item => item.value, StringComparer.OrdinalIgnoreCase)));
+                var fields = headers.Select((header, index) => (header, value: csv.GetField(index)?.Trim() ?? string.Empty))
+                    .ToDictionary(item => item.header, item => item.value, StringComparer.OrdinalIgnoreCase);
+                var row = new Row(csv.Parser.Row, fields);
+                if (kind == "principal")
+                {
+                    fields["ADDRESS"] = string.Join(" ", new[] { "ADDRESS", "ADDRESS1", "ADDRESS2", "ADDRESS3" }.Select(row.Text).Where(value => value.Length > 0));
+                    fields.Remove("ADDRESS1");
+                    fields.Remove("ADDRESS2");
+                    fields.Remove("ADDRESS3");
+                }
+                rows.Add(row);
             }
             if (rows.Count == 0)
             {

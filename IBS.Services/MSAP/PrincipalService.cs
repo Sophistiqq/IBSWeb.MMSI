@@ -56,17 +56,10 @@ namespace IBS.Services.MSAP
 
                 existingPrincipal.PrincipalNumber = model.PrincipalNumber;
                 existingPrincipal.PrincipalName = model.PrincipalName;
-                existingPrincipal.Agent = model.Agent;
-                existingPrincipal.Address1 = model.Address1;
-                existingPrincipal.Address2 = model.Address2;
-                existingPrincipal.Address3 = model.Address3;
+                existingPrincipal.Address = model.Address;
                 existingPrincipal.BusinessType = model.BusinessType;
                 existingPrincipal.Terms = model.Terms;
                 existingPrincipal.TIN = model.TIN;
-                existingPrincipal.Landline1 = model.Landline1;
-                existingPrincipal.Landline2 = model.Landline2;
-                existingPrincipal.Mobile1 = model.Mobile1;
-                existingPrincipal.Mobile2 = model.Mobile2;
                 existingPrincipal.IsActive = model.IsActive;
                 existingPrincipal.IsVatable = model.IsVatable;
                 existingPrincipal.CustomerId = model.CustomerId;

@@ -269,7 +269,7 @@ namespace Checks.MSAP
                 module.MsapDispatchTickets.Add(splitTicket);
                 await module.SaveChangesAsync();
                 var principal = new Principal { PrincipalNumber = "P001", PrincipalName = "Check Principal", CustomerId = customer.CustomerId,
-                    Address1 = "Principal Address", TIN = "111-111-111-11111", Terms = "CHECK17", IsActive = true };
+                    Address = "Principal Address", TIN = "111-111-111-11111", Terms = "CHECK17", IsActive = true };
                 module.MsapPrincipals.Add(principal);
                 await module.SaveChangesAsync();
                 var undocumented = new Billing

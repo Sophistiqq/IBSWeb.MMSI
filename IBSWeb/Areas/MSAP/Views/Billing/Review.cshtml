@@ -54,7 +54,7 @@
                     <div><span class="ui-caption ui-muted">Port / terminal</span><p class="ui-body">@Model.Port.PortName / @Model.Terminal.TerminalName</p></div>
                 </div>
                 <div class="billing-recipient">
-                    <div><span class="ui-caption ui-muted">Statement address</span><p class="ui-body">@(Model.Principal?.Address1 ?? Model.Customer.CustomerAddress)</p></div>
+                    <div><span class="ui-caption ui-muted">Statement address</span><p class="ui-body">@(Model.Principal?.Address ?? Model.Customer.CustomerAddress)</p></div>
                     <div><span class="ui-caption ui-muted">Statement TIN</span><p class="ui-body">@(Model.Principal?.TIN ?? Model.Customer.CustomerTin)</p></div>
                     <div><span class="ui-caption ui-muted">Payment terms</span><p class="ui-body">@Model.Terms</p></div>
                 </div>

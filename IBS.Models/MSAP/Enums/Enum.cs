@@ -42,7 +42,16 @@ namespace IBS.Models.MSAP.Enums
 
         #region -- Master Files --
 
-        ManageMaritimeMasterFile,
+        ManageCustomerMasterFile = 40,
+        ManageServiceMasterFile,
+        ManagePortMasterFile,
+        ManageTerminalMasterFile,
+        ManageVesselMasterFile,
+        ManageTugboatMasterFile,
+        ManageTugboatOwnerMasterFile,
+        ManageTugMasterMasterFile,
+        ManagePrincipalMasterFile,
+        ManageBankAccountMasterFile,
 
         #endregion -- Master Files --
 

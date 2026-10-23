@@ -35,7 +35,12 @@ namespace IBS.Services.MSAP
             model.CanManageRates = await access.HasAccessAsync(userId, ProcedureEnum.ManageRates);
             model.CanViewRates = await access.HasAccessAsync(userId, ProcedureEnum.ViewRates);
             model.CanViewReports = await access.HasAccessAsync(userId, ProcedureEnum.ViewMaritimeReport);
-            model.CanManageReferences = await access.HasAccessAsync(userId, ProcedureEnum.ManageMaritimeMasterFile);
+            model.CanManageReferences = await access.HasAnyAccessAsync(userId,
+                ProcedureEnum.ManageCustomerMasterFile, ProcedureEnum.ManageServiceMasterFile,
+                ProcedureEnum.ManagePortMasterFile, ProcedureEnum.ManageTerminalMasterFile,
+                ProcedureEnum.ManageVesselMasterFile, ProcedureEnum.ManageTugboatMasterFile,
+                ProcedureEnum.ManageTugboatOwnerMasterFile, ProcedureEnum.ManageTugMasterMasterFile,
+                ProcedureEnum.ManagePrincipalMasterFile, ProcedureEnum.ManageBankAccountMasterFile);
             model.CanManageOtherTugCharges = await access.HasAccessAsync(userId, ProcedureEnum.ManageOtherTugCharges);
             model.CanConfirmOtherTugCharges = await access.HasAccessAsync(userId, ProcedureEnum.ConfirmOtherTugCharges);
             model.CanReadCos = await access.HasAccessAsync(userId, ProcedureEnum.ViewOperations);
