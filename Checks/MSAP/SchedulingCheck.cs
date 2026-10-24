@@ -92,7 +92,7 @@ namespace Checks.MSAP
                 var schedules = new VesselScheduleService(work, jobs, NullLogger<VesselScheduleService>.Instance);
                 if (calendarOnly)
                 {
-                    var calendarController = new IBSWeb.Areas.MSAP.Controllers.VesselScheduleController(work, schedules, new CheckAccess(null));
+                    var calendarController = new IBSWeb.Areas.MSAP.Controllers.VesselScheduleController(work, schedules, new CheckAccess(null), new RateUploadService(db, work));
                     var legacyDay = (RedirectToActionResult)calendarController.Day(new DateTime(2030, 1, 2), default);
                     Check(legacyDay.ActionName == "Index" && (string?)legacyDay.RouteValues!["date"] == "2030-01-02",
                         "Legacy day links did not retain selected-date context.");
@@ -180,7 +180,7 @@ namespace Checks.MSAP
                     && restored.ServiceEntries[0].ManualTariffRate == 0m, "Schedule details lost expected services, a zero manual rate or commercial settings.");
                 Check(restored.IsIoc == !terminal.IsIoc, "Schedule IOC override was lost during validation or persistence.");
                 int savedEntryId = restored.ServiceEntries[0].VesselScheduleServiceEntryId;
-                var reviewController = new IBSWeb.Areas.MSAP.Controllers.VesselScheduleController(work, schedules, new CheckAccess(ProcedureEnum.ApproveSchedule));
+                var reviewController = new IBSWeb.Areas.MSAP.Controllers.VesselScheduleController(work, schedules, new CheckAccess(ProcedureEnum.ApproveSchedule), new RateUploadService(db, work));
                 reviewController.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
                 Check(await reviewController.Confirm(prepared.VesselScheduleId, default) is RedirectToActionResult reviewPage
                     && reviewPage.ActionName == "Details", "The old confirmation route did not lead to canonical booking details.");

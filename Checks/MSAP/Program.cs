@@ -115,6 +115,12 @@ if (args.Contains("--schedule-rates-only", StringComparer.Ordinal))
     return;
 }
 
+if (args.Contains("--operational-rates-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.OperationalRateDatabaseCheck.RunAsync();
+    return;
+}
+
 if (args.Contains("--other-tugs-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.OtherTugChargeCheck.RunAsync();

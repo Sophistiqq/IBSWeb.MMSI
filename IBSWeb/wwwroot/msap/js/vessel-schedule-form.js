@@ -398,6 +398,7 @@
             input.required = kind === 'tariff' && !input.readOnly;
             const overridesTable = input.value !== '' && input.dataset.lookup === 'found';
             input.classList.toggle('schedule-rate-override', overridesTable);
+            input.classList.toggle('schedule-rate-missing', input.value !== '' && input.dataset.lookup === 'missing');
             row.querySelector(`.js-${kind}-provenance`).textContent = input.value !== ''
                 ? overridesTable ? 'Overrides table rate' : 'Manual rate'
                 : ({ found: 'Table estimate · planned date', missing: 'No table match', loading: 'Checking table…', error: 'Lookup unavailable' }[input.dataset.lookup] || 'Rate not checked');
@@ -427,8 +428,7 @@
             inputs.forEach((input, index) => {
                 const rate = index === 0 ? data.tariffRate : data.bafRate;
                 input.dataset.lookup = data.exists && rate != null && (index !== 0 || Number(rate) > 0) ? 'found' : 'missing';
-                input.readOnly = !manualRates() && input.dataset.lookup === 'found';
-                if (input.readOnly) input.value = '';
+                input.readOnly = !manualRates() && input.value === '' && input.dataset.lookup === 'found';
                 // Estimates stay out of Manual* fields so saving cannot turn a table rate into a manual override.
                 input.placeholder = input.dataset.lookup === 'found' ? Number(rate).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : 'Enter manual rate';
             });

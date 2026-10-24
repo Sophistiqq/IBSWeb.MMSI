@@ -88,7 +88,7 @@ namespace IBS.Services.MSAP
             ticket.DispatchDiscount = 0;
             ticket.BAFDiscount = 0;
             ticket.IsManualTariffRate = entry.ManualTariffRate.HasValue;
-            ticket.IsManualBafRate = entry.ManualBafRate.HasValue;
+            ticket.IsManualBafRate = ManualBafForServiceDate(ticket, schedule, entry).HasValue;
             ticket.DispatchRate = 0;
             ticket.BAFRate = 0;
             ticket.DispatchBillingAmount = 0;
@@ -108,7 +108,7 @@ namespace IBS.Services.MSAP
             ticket.RawDurationHours = (decimal)duration.TotalHours;
             ticket.TotalHours = Math.Round(Math.Max(ticket.RawDurationHours.Value, 1m), 2);
             var dispatchRate = entry.ManualTariffRate ?? rate!.Dispatch;
-            var bafAmount = entry.ManualBafRate ?? bafRate!.Amount;
+            var bafAmount = ManualBafForServiceDate(ticket, schedule, entry) ?? bafRate!.Amount;
             var discount = schedule.SkipCosDiscount ? 0m : schedule.CosDiscountPercent.GetValueOrDefault();
             var hours = Math.Max(ticket.RawDurationHours.Value, 1m);
             ticket.DispatchChargeType = entry.TariffBasis == TariffChargeBasis.PerHour ? "Per hour" : "Per move";
@@ -123,7 +123,7 @@ namespace IBS.Services.MSAP
             ticket.DispatchRate = dispatchRate;
             ticket.BAFRate = bafAmount;
             ticket.IsManualTariffRate = entry.ManualTariffRate.HasValue;
-            ticket.IsManualBafRate = entry.ManualBafRate.HasValue;
+            ticket.IsManualBafRate = ManualBafForServiceDate(ticket, schedule, entry).HasValue;
             ticket.DispatchDiscount = discount;
             ticket.BAFDiscount = discount;
             var dispatchGross = dispatchRate * (entry.TariffBasis == TariffChargeBasis.PerHour ? hours : 1m);
@@ -142,6 +142,13 @@ namespace IBS.Services.MSAP
         {
             int daysSinceTuesday = ((int)serviceDate.DayOfWeek - (int)DayOfWeek.Tuesday + 7) % 7;
             return serviceDate.AddDays(-daysSinceTuesday);
+        }
+
+        private static decimal? ManualBafForServiceDate(DispatchTicket ticket, VesselSchedule schedule, VesselScheduleServiceEntry entry)
+        {
+            return ticket.DateLeft.HasValue
+                && BafCycleStart(ticket.DateLeft.Value) == BafCycleStart(DateOnly.FromDateTime(schedule.PlannedStart))
+                    ? entry.ManualBafRate : null;
         }
 
         public static string? GetBlocker(DispatchTicket ticket, VesselSchedule schedule, VesselScheduleServiceEntry entry, TariffRate? rate, BafRate? bafRate)
@@ -179,7 +186,8 @@ namespace IBS.Services.MSAP
                 return "The approved service has no valid BAF method.";
             }
             var dispatchRate = entry.ManualTariffRate ?? rate?.Dispatch;
-            var bafAmount = entry.ManualBafRate ?? bafRate?.Amount;
+            decimal? manualBaf = ManualBafForServiceDate(ticket, schedule, entry);
+            var bafAmount = manualBaf ?? bafRate?.Amount;
             if (!dispatchRate.HasValue || dispatchRate < 0)
             {
                 return $"No valid tariff rate applies on {ticket.DateLeft:dd MMM yyyy}. Check rate maintenance or the approved manual tariff.";
@@ -188,7 +196,7 @@ namespace IBS.Services.MSAP
             {
                 return $"No valid BAF rate applies on {ticket.DateLeft:dd MMM yyyy}. Check rate maintenance or the approved manual BAF.";
             }
-            if (!entry.ManualBafRate.HasValue && (bafRate == null || !bafRate.ApprovedAt.HasValue
+            if (!manualBaf.HasValue && (bafRate == null || !bafRate.ApprovedAt.HasValue
                 || bafRate.AsOfDate < BafCycleStart(ticket.DateLeft.Value)))
             {
                 return $"Approve BAF coverage for the week beginning {BafCycleStart(ticket.DateLeft.Value):dd MMM yyyy} before saving this ticket.";

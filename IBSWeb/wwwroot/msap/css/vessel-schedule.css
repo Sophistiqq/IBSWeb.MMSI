@@ -484,7 +484,7 @@
 }
 
 /* Commercial and rate exceptions use the same warning treatment in entry and review. */
-.modern-input.schedule-rate-override,
+.modern-input.schedule-rate-missing,
 .schedule-review-attention {
     border: 1px solid var(--warning, #d6a100);
     border-radius: var(--ui-radius);
@@ -497,6 +497,23 @@
 
 .schedule-review-attention small {
     display: block;
+}
+
+.modern-input.schedule-rate-override,
+.schedule-review-override {
+    border: 1px solid #b95d00;
+    border-radius: var(--ui-radius);
+    background: color-mix(in srgb, #f59e0b 18%, var(--surface-container-lowest, #fff));
+}
+
+.schedule-rate-save {
+    display: flex;
+    width: max-content;
+    max-width: 100%;
+    margin-left: auto;
+    align-items: center;
+    gap: .25rem;
+    margin-top: .5rem;
 }
 
 .modern-swal-popup:has(.schedule-conflict-details) {

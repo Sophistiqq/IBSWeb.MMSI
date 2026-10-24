@@ -18,7 +18,7 @@ namespace Checks.MSAP
             };
             var schedule = new VesselSchedule
             {
-                VesselScheduleId = 1, CustomerOrderSlipId = 1, Revision = 1,
+                VesselScheduleId = 1, CustomerOrderSlipId = 1, Revision = 1, PlannedStart = new DateTime(2026, 1, 1),
                 Status = MsapConstants.VesselScheduleStatus.Tentative, ServiceEntries = [entry], SkipCosDiscount = true
             };
             var ticket = new DispatchTicket

@@ -35,6 +35,9 @@ namespace IBS.Models.MSAP.ViewModels
         public string? ApprovalStatus { get; set; }
         public string? LegacySourceId { get; set; }
         public string? LegacyVesselType { get; set; }
+        public int? SourceScheduleId { get; set; }
+        public int? SourceServiceEntryId { get; set; }
+        public int? SourceRevision { get; set; }
         public string Change => !ExistingRateId.HasValue ? "New" : StoredAmount == Amount ? "Unchanged" : "Changed";
     }
 }

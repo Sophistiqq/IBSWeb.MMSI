@@ -74,6 +74,59 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
+        [RequireAccess(ProcedureEnum.ApproveRateUpload)]
+        public async Task<IActionResult> PreviewScheduleRate(int scheduleId, int entryId, RateTableKind kind,
+            DateOnly effectiveDate, CancellationToken ct)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { message = "Choose a valid rate kind and effective date." });
+            }
+
+            if (!await _access.HasAccessAsync(UserId, ProcedureEnum.ApproveSchedule))
+            {
+                return Forbid();
+            }
+
+            ServiceResult<ScheduleRateCaptureViewModel> result = await _rates.PreviewScheduleCaptureAsync(scheduleId, entryId, kind, effectiveDate, ct);
+            return result.IsSuccess ? Json(result.Data) : BadRequest(new { message = result.Message });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.ApproveRateUpload)]
+        public async Task<IActionResult> CaptureScheduleRate(int scheduleId, int entryId, RateTableKind kind,
+            DateOnly effectiveDate, string fingerprint, CancellationToken ct)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { message = "Review the amount and effective date again." });
+            }
+
+            if (!await _access.HasAccessAsync(UserId, ProcedureEnum.ApproveSchedule))
+            {
+                return Forbid();
+            }
+
+            try
+            {
+                ServiceResult<Guid> result = await _rates.CaptureScheduleRateAsync(scheduleId, entryId, kind, effectiveDate,
+                    fingerprint, UserId, ct);
+                return result.IsSuccess
+                    ? Json(new
+                    {
+                        message = result.Message, url = Url.Action(nameof(Details), new { id = result.Data })
+                    })
+                    : BadRequest(new { message = result.Message });
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Could not capture schedule {ScheduleId} rate", scheduleId);
+                return StatusCode(500, new { message = "The rate could not be saved. Review again before retrying." });
+            }
+        }
+
+        [HttpGet]
         public async Task<IActionResult> Details(Guid id, CancellationToken ct)
         {
             RateUploadViewModel? model = await _rates.GetAsync(id, UserId, ct);

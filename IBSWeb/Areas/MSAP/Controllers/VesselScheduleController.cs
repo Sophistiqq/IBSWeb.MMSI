@@ -20,7 +20,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
     public class VesselScheduleController(
         IUnitOfWork unitOfWork,
         IVesselScheduleService scheduleService,
-        IAccessControlService accessControl) : Controller
+        IAccessControlService accessControl,
+        RateUploadService rates) : Controller
     {
         [HttpGet]
         [RequireAccess(ProcedureEnum.ViewOperations)]
@@ -184,6 +185,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return NotFound();
             }
             await SetActionPermissionsAsync();
+            ViewBag.RateCaptures = await rates.GetScheduleCapturesAsync(schedule, ct);
+            ViewBag.CanCaptureRates = ViewBag.CanConfirm == true
+                && await accessControl.HasAccessAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!, ProcedureEnum.ApproveRateUpload);
             ViewData["JobProgressActionStage"] = 1;
             ViewData["JobProgressActionTargetId"] = id;
             var job = schedule.CustomerOrderSlipId.HasValue
@@ -250,14 +254,22 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.ApproveSchedule)]
-        public async Task<IActionResult> Confirm(int id, DateTime reviewedAt, bool allowConflicts, CancellationToken ct)
+        public async Task<IActionResult> Confirm(int id, DateTime reviewedAt, bool allowConflicts, CancellationToken ct,
+            string? rateAcknowledgement = null)
         {
             if (!ModelState.IsValid)
             {
                 return Json(new { success = false, message = "Review the schedule again before confirming." });
             }
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var result = await scheduleService.ConfirmAsync(id, reviewedAt, User.Identity?.Name ?? "system", ct, allowConflicts, userId);
+            if (userId == null)
+            {
+                return StatusCode(503, new { success = false, message = "Rate review is unavailable. Try again." });
+            }
+
+            var (result, acknowledgement) = await rates.ConfirmScheduleAsync(scheduleService, id, reviewedAt,
+                allowConflicts,
+                rateAcknowledgement, User.Identity?.Name ?? "system", userId, ct);
             if (result.IsSuccess)
             {
                 TempData["success"] = result.Message;
@@ -266,6 +278,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 success = result.IsSuccess,
                 message = result.Message,
+                rateAcknowledgement = acknowledgement,
                 requiresConflictAcknowledgement = !allowConflicts && result.Message?.StartsWith("Overlapping plans:", StringComparison.Ordinal) == true,
                 redirectUrl = result.IsSuccess ? Url.Action("Details", "CustomerOrderSlip", new { area = "MSAP", id = result.Data }) : null
             });
@@ -336,6 +349,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var rate = await unitOfWork.TariffTable.GetApplicableRateAsync(customerId, terminalId, serviceId, asOfDate, ct);
 
             var bafRate = await unitOfWork.BafTable.GetApplicableRateAsync(customerId, terminalId, serviceId, asOfDate, ct);
+            if (bafRate?.AsOfDate < ScheduledTicketCharges.BafCycleStart(asOfDate))
+            {
+                bafRate = null;
+            }
+
             return Json(new
             {
                 exists = rate != null || bafRate != null,
