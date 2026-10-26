@@ -38,7 +38,7 @@ const initializeCosTicketEntry = () => {
             const savedAmount = value => data.hasSavedCharges ? amount(value) : 'Pending';
             const confirmation = await ModernAlert.confirm({
                 title: 'Apply reviewed ticket charges?',
-                text: `BAF rate: ${savedAmount(data.savedBafRate)} → ${amount(data.proposedBafRate)}<br>Gross charges: ${savedAmount(data.savedGross)} → ${amount(data.proposedGross)}<br>After COS discount: ${savedAmount(data.savedNet)} → ${amount(data.proposedNet)}<br>Uses the actual service date and approved COS terms.`,
+                text: `Basic tariff: ${savedAmount(data.savedTariffRate)} → ${amount(data.proposedTariffRate)}<br>BAF rate: ${savedAmount(data.savedBafRate)} → ${amount(data.proposedBafRate)}<br>Gross charges: ${savedAmount(data.savedGross)} → ${amount(data.proposedGross)}<br>After COS discount: ${savedAmount(data.savedNet)} → ${amount(data.proposedNet)}<br>Uses actual service-date rates. Missing-match manual tariffs follow approved table rates; job-specific tariff overrides remain fixed. Applicable approved weekly table BAF replaces manual BAF.`,
                 confirmText: 'Recalculate charges',
                 cancelText: 'Keep reviewing'
             });

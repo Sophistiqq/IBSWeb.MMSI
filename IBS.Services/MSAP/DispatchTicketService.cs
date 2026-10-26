@@ -278,6 +278,7 @@ namespace IBS.Services.MSAP
                 DispatchTicketId = id, CustomerOrderSlipId = customerOrderSlipId, TicketNumber = ticket.DispatchNumber,
                 HasSavedCharges = ticket.Status is MsapConstants.DispatchTicketStatus.ForBilling or MsapConstants.DispatchTicketStatus.Billed,
                 SavedBafRate = ticket.BAFRate, ProposedBafRate = preview.Ticket.BAFRate,
+                SavedTariffRate = ticket.DispatchRate, ProposedTariffRate = preview.Ticket.DispatchRate,
                 SavedGross = ticket.TotalBilling, ProposedGross = preview.Ticket.TotalBilling,
                 SavedNet = ticket.TotalNetRevenue, ProposedNet = preview.Ticket.TotalNetRevenue,
                 Fingerprint = ScheduledTicketCharges.ReviewFingerprint(ticket, preview.Ticket, schedule)
@@ -347,6 +348,8 @@ namespace IBS.Services.MSAP
                     decimal oldGross = ticket.TotalBilling;
                     decimal oldNet = ticket.TotalNetRevenue;
                     decimal oldBaf = ticket.BAFRate;
+                    decimal oldTariff = ticket.DispatchRate;
+                    bool oldManualTariff = ticket.IsManualTariffRate;
                     var blocker = ScheduledTicketCharges.Apply(ticket, schedule, entry, preview.Tariff, preview.Baf);
                     if (blocker != null)
                     {
@@ -357,7 +360,7 @@ namespace IBS.Services.MSAP
                     ticket.TariffDate = DateTimeHelper.GetCurrentPhilippineTime();
                     ticket.EditedBy = username;
                     ticket.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Recalculate charges for #{ticket.DispatchNumber}: BAF {oldBaf} -> {ticket.BAFRate}; gross {oldGross} -> {ticket.TotalBilling}; net {oldNet} -> {ticket.TotalNetRevenue}. {blocker ?? "Charges calculated from approved COS terms and service-date rates"}", "Dispatch Ticket", ticket.DispatchTicketId, ticket.DispatchNumber), ct);
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Recalculate charges for #{ticket.DispatchNumber}: tariff {oldTariff} -> {ticket.DispatchRate} (manual {oldManualTariff} -> {ticket.IsManualTariffRate}); BAF {oldBaf} -> {ticket.BAFRate}; gross {oldGross} -> {ticket.TotalBilling}; net {oldNet} -> {ticket.TotalNetRevenue}. {blocker ?? "Charges calculated from approved COS terms and service-date rates"}", "Dispatch Ticket", ticket.DispatchTicketId, ticket.DispatchNumber), ct);
                     await unitOfWork.SaveAsync(ct);
                     result = blocker == null ? ServiceResult.Success("Ticket charges recalculated successfully.") : ServiceResult.Failure(blocker);
                 }, ct);

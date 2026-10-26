@@ -2725,6 +2725,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("character varying(450)")
                         .HasColumnName("cancelled_by_user_id");
 
+                    b.Property<bool?>("IsManualTariffOverride")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_manual_tariff_override");
+
                     b.Property<decimal?>("ManualBafRate")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")

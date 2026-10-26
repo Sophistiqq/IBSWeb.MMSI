@@ -51,7 +51,7 @@
                 <tr>
                     <th scope="row">Basic tariff</th><td>@tariffMethod</td>
                     <td>@(calculated ? Model.DispatchRate.ToString("N2") : entry?.ManualTariffRate?.ToString("N2") ?? "Pending")</td>
-                    <td>@(Model.IsManualTariffRate || entry?.ManualTariffRate.HasValue == true ? approvalPending ? "Proposed manual" : "Approved manual" : "Rate table")</td>
+                    <td>@((calculated ? Model.IsManualTariffRate : entry?.ManualTariffRate.HasValue == true) ? approvalPending ? "Proposed manual" : "Approved manual" : "Rate table")</td>
                     <td>@(calculated ? Model.DispatchBillingAmount.ToString("N2") : "Pending")</td>
                     <td>@(calculated ? $"{Model.DispatchDiscount:0.##}%" : "—")</td>
                     <td>@(calculated ? Model.DispatchNetRevenue.ToString("N2") : "Pending")</td>
@@ -59,7 +59,7 @@
                 <tr>
                     <th scope="row">BAF</th><td>@bafMethod</td>
                     <td>@(calculated ? Model.BAFRate.ToString("N2") : entry?.ManualBafRate?.ToString("N2") ?? "Pending")</td>
-                    <td>@(Model.IsManualBafRate || entry?.ManualBafRate.HasValue == true ? approvalPending ? "Proposed manual" : "Approved manual" : "Rate table")</td>
+                    <td>@((calculated ? Model.IsManualBafRate : entry?.ManualBafRate.HasValue == true) ? approvalPending ? "Proposed manual" : "Approved manual" : "Rate table")</td>
                     <td>@(calculated ? Model.BAFBillingAmount.ToString("N2") : "Pending")</td>
                     <td>@(calculated ? $"{Model.BAFDiscount:0.##}%" : "—")</td>
                     <td>@(calculated ? Model.BAFNetRevenue.ToString("N2") : "Pending")</td>
@@ -68,5 +68,5 @@
             <tfoot><tr><th scope="row" colspan="4">Total</th><td>@(calculated ? Model.TotalBilling.ToString("N2") : "Pending")</td><td></td><td>@(calculated ? Model.TotalNetRevenue.ToString("N2") : "Pending")</td></tr></tfoot>
         </table>
     </div>
-    <p class="ui-caption ui-muted">Amounts are in PHP. @(editing ? "These are the saved charges. Saving changes recalculates charges when actual service times change." : "Recalculation uses recorded service times, approved manual terms and applicable service-date table rates.")</p>
+    <p class="ui-caption ui-muted">Amounts are in PHP. @(editing ? "These are the saved charges. Saving changes recalculates charges when actual service times change." : "Recalculation uses recorded service times and approved tariff terms. Missing-match manual tariffs follow approved table rates; job-specific tariff overrides remain fixed. Applicable approved weekly table BAF replaces manual BAF.")</p>
 </section>

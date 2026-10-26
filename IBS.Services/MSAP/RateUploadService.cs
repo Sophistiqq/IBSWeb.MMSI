@@ -363,9 +363,11 @@ namespace IBS.Services.MSAP
             List<int> customers = included.Select(row => row.CustomerId).Distinct().ToList();
             DateOnly from = included.Min(row => row.EffectiveDate);
             // shortcut: review the latest 200 candidate tickets; use the COS review for older jobs until impact paging is needed.
-            var candidates = await _db.MsapDispatchTickets.AsNoTracking().Include(ticket => ticket.CustomerOrderSlip)
+            List<DispatchTicket> candidates = await _db.MsapDispatchTickets.AsNoTracking().Include(ticket => ticket.CustomerOrderSlip).Include(ticket => ticket.ExpectedServiceEntry)
                 .Where(ticket => customers.Contains(ticket.CustomerId) && ticket.Customer.Company == MsapConstants.Company_MMSI
-                    && ticket.DateLeft >= from && ticket.CustomerOrderSlipId != null && (tariff ? !ticket.IsManualTariffRate : !ticket.IsManualBafRate)
+                    && ticket.DateLeft >= from && ticket.CustomerOrderSlipId != null
+                    && (!tariff || !ticket.IsManualTariffRate
+                        || ticket.ExpectedServiceEntry != null && ticket.ExpectedServiceEntry.IsManualTariffOverride == false)
                     && ticket.BillingId == null && ticket.CustomerOrderSlip!.Status == MsapConstants.CustomerOrderSlipStatus.Open
                     && (ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending)
                     && !_db.MsapBillings.Any(bill => bill.CustomerOrderSlipId == ticket.CustomerOrderSlipId))
@@ -375,11 +377,18 @@ namespace IBS.Services.MSAP
             {
                 TariffRate? basic = tariff ? await _work.TariffTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft!.Value, ct) : null;
                 BafRate? baf = !tariff ? await _work.BafTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft!.Value, ct) : null;
+                if (tariff && ticket.ExpectedServiceEntry != null
+                    && ScheduledTicketCharges.ManualTariffForServiceDate(ticket, ticket.ExpectedServiceEntry, basic).HasValue)
+                {
+                    continue;
+                }
                 DateOnly? date = tariff ? basic?.AsOfDate : baf?.AsOfDate;
                 decimal? amount = tariff ? basic?.Dispatch : baf?.Amount;
-                if (!amount.HasValue || !included.Any(row => row.CustomerId == ticket.CustomerId && row.TerminalId == ticket.TerminalId
+                if (!amount.HasValue || (!tariff && baf != null && baf.AsOfDate < ScheduledTicketCharges.BafCycleStart(ticket.DateLeft!.Value))
+                    || !included.Any(row => row.CustomerId == ticket.CustomerId && row.TerminalId == ticket.TerminalId
                     && row.ServiceId == ticket.ServiceId && row.EffectiveDate == date)
-                    || ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling && (tariff ? ticket.DispatchRate : ticket.BAFRate) == amount)
+                    || (ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling && (tariff ? ticket.DispatchRate : ticket.BAFRate) == amount
+                        && (tariff || !ticket.IsManualBafRate)))
                 {
                     continue;
                 }

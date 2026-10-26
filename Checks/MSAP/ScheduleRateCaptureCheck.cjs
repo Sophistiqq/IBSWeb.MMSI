@@ -9,7 +9,8 @@ async function scenario({
                             cancelDate = false,
                             cancelApproval = false,
                             previewFailure = false,
-                            saveFailure = false
+                            saveFailure = false,
+                            validDate = true
                         } = {}) {
     let click;
     let reloads = 0;
@@ -21,7 +22,7 @@ async function scenario({
         addEventListener: (_, handler) => click = handler
     };
     const input = {
-        value: '2026-10-13', reportValidity: () => true, focus() {
+        value: '2026-10-13', reportValidity: () => validDate, focus() {
         }
     };
     const review = {dataset: {capturePreviewUrl: '/preview', captureUrl: '/capture'}, querySelectorAll: () => [button]};
@@ -37,7 +38,8 @@ async function scenario({
                 dialogs.push(options);
                 if (dialogs.length === 1) {
                     options.didOpen();
-                    return {isConfirmed: !cancelDate, value: options.preConfirm()};
+                    const value = options.preConfirm();
+                    return {isConfirmed: !cancelDate && value !== false, value};
                 }
                 return {isConfirmed: !cancelApproval};
             }
@@ -70,6 +72,8 @@ async function scenario({
 (async () => {
     const basic = await scenario();
     assert.equal(basic.dialogs[0].title, 'Save Basic for reuse');
+    assert.match(basic.dialogs[0].text, /min="1900-01-01"/);
+    assert.doesNotMatch(basic.dialogs[0].text, /step="7"/, 'Basic rates must allow any date.');
     assert.equal(basic.requests.length, 2, 'Double clicks must not duplicate capture.');
     assert.match(basic.requests[0].url, /effectiveDate=2026-10-13/);
     assert.match(basic.dialogs[1].text, /&lt;Customer>/, 'Source names must be escaped.');
@@ -81,6 +85,11 @@ async function scenario({
     const baf = await scenario({kind: '2'});
     assert.equal(baf.dialogs[0].title, 'Save BAF for reuse');
     assert.match(baf.dialogs[0].text, /Tuesday/);
+    assert.match(baf.dialogs[0].text, /min="1900-01-02" step="7"/, 'BAF dates must be anchored to a Tuesday with weekly steps.');
+    assert.equal((await scenario({
+        kind: '2',
+        validDate: false
+    })).requests.length, 0, 'Invalid dates must not request a preview or save.');
     assert.match(baf.dialogs[1].text, /Approved amount: 0/);
     assert.equal((await scenario({cancelDate: true})).requests.length, 0);
     assert.equal((await scenario({cancelApproval: true})).requests.length, 1);

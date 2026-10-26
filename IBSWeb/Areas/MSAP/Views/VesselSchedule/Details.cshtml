@@ -122,7 +122,7 @@
                                             <tr data-review-service="@entry.ServiceId">
                                                 <td>@(entry.Service?.ServiceName ?? $"Service #{entry.ServiceId}")@if (entry.CancelledAt.HasValue) { <small class="ui-caption ui-muted">Cancelled · @entry.CancellationReason</small> }</td>
                                                 <td>@(entry.TariffBasis == TariffChargeBasis.PerMove ? "Per move" : entry.TariffBasis == TariffChargeBasis.PerHour ? "Per hour" : "Not specified")</td>
-                                                <td>
+                                                <td class="schedule-review-rate-cell">
                                                     <span class="@(entry.ManualTariffRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="tariff" data-manual="@entry.ManualTariffRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("N2") : "Checking table…")</span>
                                                     <small class="ui-caption ui-muted" data-rate-source>@(entry.ManualTariffRate.HasValue ? "Saved manual rate" : "Table estimate pending")</small>
                                                     <partial name="_ScheduleRateCapture" model="captures.SingleOrDefault(item => item.EntryId == entry.VesselScheduleServiceEntryId && item.Kind == RateTableKind.Tariff)" />
@@ -134,7 +134,7 @@
                                                         <small class="ui-caption">Approved amount applied once per service</small>
                                                     }
                                                 </td>
-                                                <td>
+                                                <td class="schedule-review-rate-cell">
                                                     <span class="@(entry.ManualBafRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="baf" data-manual="@entry.ManualBafRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualBafRate.HasValue ? entry.ManualBafRate.Value.ToString("N2") : "Checking table…")</span>
                                                     <small class="ui-caption ui-muted" data-rate-source>@(entry.ManualBafRate.HasValue ? "Saved manual rate" : "Table estimate pending")</small>
                                                     <partial name="_ScheduleRateCapture" model="captures.SingleOrDefault(item => item.EntryId == entry.VesselScheduleServiceEntryId && item.Kind == RateTableKind.BAF)" />

@@ -34,22 +34,23 @@ namespace IBS.Services.MSAP
                         && JsonSerializer.Deserialize<List<RateUploadRowViewModel>>(update.RowsJson)!.Any(row => row.Selected
                             && row.SourceScheduleId == schedule.VesselScheduleId && row.SourceRevision == schedule.Revision
                             && row.SourceServiceEntryId == entry.VesselScheduleServiceEntryId && row.Amount == amount));
-                    bool missing;
+                    bool eligible;
                     if (kind == RateTableKind.Tariff)
                     {
-                        missing = await _work.TariffTable.GetApplicableRateAsync(schedule.CustomerId.GetValueOrDefault(), schedule.TerminalId, entry.ServiceId, plannedDate, ct) == null;
+                        TariffRate? rate = await _work.TariffTable.GetApplicableRateAsync(schedule.CustomerId.GetValueOrDefault(), schedule.TerminalId, entry.ServiceId, plannedDate, ct);
+                        eligible = rate == null || rate.Dispatch == amount;
                     }
                     else
                     {
                         BafRate? rate = await _work.BafTable.GetApplicableRateAsync(schedule.CustomerId.GetValueOrDefault(), schedule.TerminalId, entry.ServiceId, plannedDate, ct);
-                        missing = rate == null || rate.AsOfDate < ScheduledTicketCharges.BafCycleStart(plannedDate);
+                        eligible = rate == null || rate.AsOfDate < ScheduledTicketCharges.BafCycleStart(plannedDate) || rate.Amount == amount;
                     }
                     result.Add(new ScheduleRateCaptureViewModel
                     {
                         ScheduleId = schedule.VesselScheduleId, EntryId = entry.VesselScheduleServiceEntryId, Kind = kind,
                         EffectiveDate = kind == RateTableKind.BAF ? ScheduledTicketCharges.BafCycleStart(plannedDate) : plannedDate,
                         PublishedUpdateId = captured?.RateUploadId,
-                        CanCapture = captured == null && missing && schedule.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+                        CanCapture = captured == null && eligible && schedule.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
                     });
                 }
             }
@@ -73,6 +74,10 @@ namespace IBS.Services.MSAP
                 || schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
             {
                 return ServiceResult<ScheduleRateCaptureViewModel>.Failure("Choose an active service and rate kind.");
+            }
+            if (kind == RateTableKind.BAF && effectiveDate.DayOfWeek != DayOfWeek.Tuesday)
+            {
+                return ServiceResult<ScheduleRateCaptureViewModel>.Failure("BAF effective date must be a Tuesday.");
             }
             if (kind == RateTableKind.Tariff && (!entry.TariffBasis.HasValue || !Enum.IsDefined(entry.TariffBasis.Value))
                 || kind == RateTableKind.BAF && (!entry.BafMethod.HasValue || !Enum.IsDefined(entry.BafMethod.Value)))
@@ -167,6 +172,10 @@ namespace IBS.Services.MSAP
             };
             _db.MsapRateUploads.Add(update);
             await ActivateRowsAsync(update, [row], actor, ct);
+            if (kind == RateTableKind.Tariff)
+            {
+                schedule.ServiceEntries.Single(entry => entry.VesselScheduleServiceEntryId == entryId).IsManualTariffOverride = false;
+            }
             await _db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
             return ServiceResult<Guid>.Success(update.RateUploadId, "Rate approved for reuse. Saved schedule and ticket amounts are unchanged.");

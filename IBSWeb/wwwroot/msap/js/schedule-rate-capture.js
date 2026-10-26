@@ -12,8 +12,8 @@
             const date = await ModernAlert.confirm({
                 title: `Save ${kind} for reuse`,
                 text: '<label for="captureEffectiveDate">Effective date</label>' +
-                    `<input id="captureEffectiveDate" type="date" class="modern-input" min="1900-01-01" max="9998-12-31" required value="${escape(button.dataset.effectiveDate)}">` +
-                    (kind === 'BAF' ? '<p>BAF coverage ends at the next Tuesday, 12:00 AM. Review zero explicitly before saving it.</p>' : '<p>A one-time override can stay on this schedule without changing reusable rates.</p>'),
+                    `<input id="captureEffectiveDate" type="date" class="modern-input" min="${kind === 'BAF' ? '1900-01-02' : '1900-01-01'}" ${kind === 'BAF' ? 'step="7"' : ''} max="9998-12-31" required value="${escape(button.dataset.effectiveDate)}">` +
+                    (kind === 'BAF' ? '<p>Choose a Tuesday. BAF coverage ends at the next Tuesday, 12:00 AM. Review zero explicitly before saving it.</p>' : '<p>A one-time override can stay on this schedule without changing reusable rates.</p>'),
                 confirmText: 'Review rate', cancelText: 'Keep reviewing',
                 didOpen: () => document.getElementById('captureEffectiveDate').focus(),
                 preConfirm: () => {
