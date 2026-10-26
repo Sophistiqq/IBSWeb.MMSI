@@ -107,9 +107,7 @@
     </script>
     <script>
         $(document).ready(function () {
-            const editUrl = '@Url.Action("Edit", "Billing")';
             const reviewUrl = '@Url.Action("Review", "Billing")';
-            const canEdit = @((ViewBag.CanEdit as bool? ?? false).ToString().ToLower());
             const canDelete = @((ViewBag.CanDelete as bool? ?? false).ToString().ToLower());
 
             // Get status from URL on load
@@ -171,8 +169,7 @@
                             if (row.status === "@MsapConstants.BillingStatus.ForPosting") {
                                 return ModernTable.render.dropdown([
                                     { label: 'Review billing', icon: 'visibility', url: `${reviewUrl}?id=${row.msapBillingId}` },
-                                    { label: 'Edit', icon: 'edit', url: `${editUrl}?id=${row.msapBillingId}`, condition: !row.isMonthClosed && !row.basicBillingId && !row.bafBilling && canEdit },
-                                    { label: 'Delete', icon: 'delete', isError: true, onclick: `confirmDelete(${row.msapBillingId})`, condition: !row.isMonthClosed && canDelete }
+                                    { label: 'Discard draft', icon: 'delete', isError: true, onclick: `confirmDiscard(${row.msapBillingId})`, condition: row.canDiscard && canDelete }
                                 ]);
                             } else {
                                 return ModernTable.render.dropdown([
@@ -230,15 +227,15 @@
             }
         });
 
-        function confirmDelete(id) {
+        function confirmDiscard(id) {
             ModernAlert.confirm({
-                title: 'Are you sure?',
-                text: "This will delete the draft billing and return all dispatch tickets to the queue.",
+                title: 'Discard this billing preparation?',
+                text: "This discards the unapproved draft and any paired Basic/BAF draft. Actual service tickets and charges are kept and become available for preparation again.",
                 icon: 'warning',
-                confirmText: 'Yes, delete it!'
+                confirmText: 'Discard draft'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    ModernAlert.showLoading("Deleting billing...");
+                    ModernAlert.showLoading("Discarding draft billing...");
                     const form = document.getElementById('discardBilling');
                     form.elements.id.value = id;
                     form.submit();

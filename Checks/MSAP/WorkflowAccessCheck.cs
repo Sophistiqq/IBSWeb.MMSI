@@ -64,6 +64,31 @@ namespace Checks.MSAP
                 Check((context.Result == null) == allowed, $"Unexpected endpoint access: {controller.Name}.{action}.");
             }
 
+            (Type Controller, string Action)[] retiredActions =
+            [
+                (typeof(BillingController), "Edit"),
+                (typeof(BillingController), "GetDispatchTickets"),
+                (typeof(BillingController), "SearchPrincipals"),
+                (typeof(BillingController), "GetPrincipalsJson"),
+                (typeof(BillingController), "GetCustomerDetails"),
+                (typeof(BillingController), "CheckBillingNumber"),
+                (typeof(BillingController), "GetDispatchTicketsByCustomer"),
+                (typeof(CollectionController), "GetSelectedBillings"),
+                (typeof(CollectionController), "IsCustomerVatable"),
+                (typeof(CollectionController), "GetBankAccountDetails"),
+                (typeof(CustomerOrderSlipController), "GetTicketDetails"),
+                (typeof(CustomerOrderSlipController), "AssignTugboat"),
+                (typeof(CustomerOrderSlipController), "UnassignTugboat"),
+                (typeof(CustomerController), "GetAllCustomerIds"),
+                (typeof(AuditTrailController), "SearchCustomerOrderSlips"),
+                (typeof(DispatchTicketController), "GetDispatchTicketList")
+            ];
+            foreach ((Type controller, string action) in retiredActions)
+            {
+                Check(!controller.GetMethods(BindingFlags.Public | BindingFlags.Instance).Any(m => m.Name == action),
+                    $"Retired endpoint is still exposed: {controller.Name}.{action}.");
+            }
+
             var dashboardService = new DashboardService(null!, null!, NullLogger<DashboardService>.Instance);
             async Task<DashboardCountViewModel> DashboardAsync()
             {
@@ -169,10 +194,24 @@ namespace Checks.MSAP
             await AssertEndpointAsync(typeof(CollectionController), "Create", false, post: true);
             await AssertEndpointAsync(typeof(CollectionController), "Edit", false, post: true);
             grants.CanAccessTreasury = false;
-            grants.CanEditBilling = true;
+            grants.CanDeleteBilling = true;
+            await AssertEndpointAsync(typeof(BillingController), "Delete", true, post: true);
             await AssertEndpointAsync(typeof(BillingController), "GetBillingList", true, post: true);
-            await AssertEndpointAsync(typeof(BillingController), "Review", true);
+            await AssertEndpointAsync(typeof(BillingController), "Create", false, post: true);
             await AssertEndpointAsync(typeof(BillingController), "ReviewConfirmed", false, post: true);
+            grants.CanDeleteBilling = false;
+            await AssertEndpointAsync(typeof(BillingController), "Delete", false, post: true);
+            grants.CanReverseBilling = true;
+            await AssertAccessAsync(ProcedureEnum.AccessMsap, false);
+            await AssertAccessAsync(ProcedureEnum.ReverseBilling, false);
+            grants.CanReverseBilling = false;
+            grants.CanEditBilling = true;
+            await AssertAccessAsync(ProcedureEnum.AccessMsap, false);
+            await AssertAccessAsync(ProcedureEnum.ViewOperations, false);
+            await AssertEndpointAsync(typeof(BillingController), "GetBillingList", false, post: true);
+            await AssertEndpointAsync(typeof(BillingController), "Review", false);
+            await AssertEndpointAsync(typeof(BillingController), "SearchCustomers", false);
+            Check(!(await DashboardAsync()).ShowDashboard, "Retired billing edit access opened the dashboard.");
             grants.CanEditBilling = false;
             grants.CanApproveFinalBilling = true;
             await AssertEndpointAsync(typeof(BillingController), "ReviewConfirmed", true, post: true);
@@ -187,7 +226,7 @@ namespace Checks.MSAP
             await AssertAccessAsync(ProcedureEnum.ViewOperations, true);
             await AssertAccessAsync(ProcedureEnum.ConfirmOtherTugCharges, false);
 
-            ProcedureEnum[] retired = [ProcedureEnum.SetTariff, ProcedureEnum.ApproveTariff, ProcedureEnum.DeleteDispatchTicket,
+            ProcedureEnum[] retired = [ProcedureEnum.EditBilling, ProcedureEnum.SetTariff, ProcedureEnum.ApproveTariff, ProcedureEnum.DeleteDispatchTicket,
                 ProcedureEnum.DeleteCustomerOrderSlip, ProcedureEnum.CloseCustomerOrderSlip, ProcedureEnum.ReverseBilling,
                 ProcedureEnum.CreateDisbursement, ProcedureEnum.ManagePostedPeriod, ProcedureEnum.ViewInventoryReport, ProcedureEnum.ManageMsapImport];
             foreach (PropertyInfo property in typeof(UserAccess).GetProperties().Where(p => p.PropertyType == typeof(bool)))
@@ -270,7 +309,8 @@ namespace Checks.MSAP
                     $"Missing granular access guard: {controller.Name}.");
             }
 
-            Check(typeof(BillingController).GetMethod("Reverse") == null, "Billing reversal is still exposed.");
+            Check(typeof(BillingController).GetMethod("Reverse") == null && typeof(BillingService).GetMethod("ReverseBillingAsync") == null,
+                "Billing reversal is still exposed.");
             foreach (string name in new[] { "SetTariff", "EditTariff", "ApproveTariff", "DisapproveTariff", "BatchApproveTariff", "BatchSetTariff", "Delete", "Restore", "ChangeStatus", "DeleteImage", "DeleteVideo" })
             {
                 Check(typeof(DispatchTicketController).GetMethods().All(m => m.Name != name), $"Retired action still exposed: {name}.");

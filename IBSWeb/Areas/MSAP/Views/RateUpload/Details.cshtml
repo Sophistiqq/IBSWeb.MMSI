@@ -61,18 +61,18 @@
             </div>
             <p class="ui-caption ui-muted">New dates retain earlier rates. Corrections update only the selected dated entry. Unselected or omitted rows are retained. Approved updates keep this comparison as audit evidence.</p>
         </section>
-        @if (approved && update.RateKind == RateTableKind.BAF)
+        @if (approved)
         {
             <section class="ui-panel ui-stack">
                 <h2 class="ui-section-title">Unbilled tickets to review</h2>
-                <p class="ui-caption ui-muted">Saved amounts remain unchanged. Open each ticket to compare and explicitly apply the current service-date charges. Manual BAF and COS with billing are excluded.</p>
+                <p class="ui-caption ui-muted">Saved amounts remain unchanged. Open each ticket to compare and explicitly apply the current service-date charges. Manual @(update.RateKind == RateTableKind.Tariff ? "Basic" : "BAF") overrides and COS with billing are excluded.</p>
                 @if (Model.ImpactLimitReached) { <p class="ui-body">This list checks the latest 200 candidate tickets. Older jobs still check current rates when opened or billed.</p> }
                 <div class="rate-table-scroll"><table class="modern-table ui-table">
-                    <thead><tr><th>COS / ticket</th><th>Saved BAF rate</th><th>Applicable BAF rate</th><th>Action</th></tr></thead>
+                    <thead><tr><th>COS / ticket</th><th>Saved @update.RateKind rate</th><th>Applicable @update.RateKind rate</th><th>Action</th></tr></thead>
                     <tbody>
                     @foreach (var ticket in Model.AffectedTickets)
                     {
-                        <tr class="ui-attention"><td>@ticket.CosNumber / @ticket.TicketNumber</td><td>@(ticket.HasSavedCharges ? ticket.SavedBafRate.ToString("N2") : "Pending")</td><td>@ticket.ProposedBafRate.ToString("N2")</td><td>@if (ViewData["CanReviewTickets"] is true) { <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@ticket.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId">Review ticket</a> } else { <span>Operations review required</span> }</td></tr>
+                        <tr class="ui-attention"><td>@ticket.CosNumber / @ticket.TicketNumber</td><td>@(ticket.HasSavedCharges ? (update.RateKind == RateTableKind.Tariff ? ticket.SavedTariffRate : ticket.SavedBafRate).ToString("N2") : "Pending")</td><td>@((update.RateKind == RateTableKind.Tariff ? ticket.ProposedTariffRate : ticket.ProposedBafRate).ToString("N2"))</td><td>@if (ViewData["CanReviewTickets"] is true) { <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@ticket.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId">Review ticket</a> } else { <span>Operations review required</span> }</td></tr>
                     }
                     @if (Model.AffectedTickets.Count == 0) { <tr><td colspan="4">No affected tickets found in the checked unbilled jobs.</td></tr> }
                     </tbody>

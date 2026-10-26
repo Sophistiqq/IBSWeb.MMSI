@@ -1,0 +1,23 @@
+@model ScheduleRateCaptureViewModel
+@if (Model != null)
+{
+    if (Model.PublishedUpdateId.HasValue)
+    {
+        <small class="ui-caption">Saved for reuse · <a asp-controller="RateUpload" asp-action="Details"
+                                                          asp-route-id="@Model.PublishedUpdateId">View rate evidence</a></small>
+    }
+    else
+    {
+        <small class="ui-caption">Not saved to rate table</small>
+        @if (Model.CanCapture && ViewBag.CanCaptureRates == true)
+        {
+            <button type="button" class="schedule-rate-save" data-rate-capture
+                    data-schedule-id="@Model.ScheduleId" data-entry-id="@Model.EntryId" data-kind="@((int)Model.Kind)"
+                    data-effective-date="@Model.EffectiveDate.ToString("yyyy-MM-dd")"
+                    aria-label="Save @(Model.Kind == RateTableKind.Tariff ? "Basic" : "BAF") rate for reuse"
+                    title="Review effective date and approve this rate for reuse">
+                <span class="material-symbols-outlined" aria-hidden="true">save</span>
+            </button>
+        }
+    }
+}

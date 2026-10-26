@@ -218,10 +218,6 @@ namespace IBS.Services.MSAP
                     {
                         chargeBlocker = await ScheduledTicketCharges.ApplyAsync(unitOfWork, model, booking, username, cancellationToken);
                     }
-                    if (chargeBlocker != null)
-                    {
-                        throw new InvalidOperationException(chargeBlocker);
-                    }
                     if (imageFile is { Length: > 0 })
                     {
                         var ext = Path.GetExtension(imageFile.FileName);
@@ -278,6 +274,7 @@ namespace IBS.Services.MSAP
                 DispatchTicketId = id, CustomerOrderSlipId = customerOrderSlipId, TicketNumber = ticket.DispatchNumber,
                 HasSavedCharges = ticket.Status is MsapConstants.DispatchTicketStatus.ForBilling or MsapConstants.DispatchTicketStatus.Billed,
                 SavedBafRate = ticket.BAFRate, ProposedBafRate = preview.Ticket.BAFRate,
+                SavedTariffRate = ticket.DispatchRate, ProposedTariffRate = preview.Ticket.DispatchRate,
                 SavedGross = ticket.TotalBilling, ProposedGross = preview.Ticket.TotalBilling,
                 SavedNet = ticket.TotalNetRevenue, ProposedNet = preview.Ticket.TotalNetRevenue,
                 Fingerprint = ScheduledTicketCharges.ReviewFingerprint(ticket, preview.Ticket, schedule)
@@ -347,6 +344,8 @@ namespace IBS.Services.MSAP
                     decimal oldGross = ticket.TotalBilling;
                     decimal oldNet = ticket.TotalNetRevenue;
                     decimal oldBaf = ticket.BAFRate;
+                    decimal oldTariff = ticket.DispatchRate;
+                    bool oldManualTariff = ticket.IsManualTariffRate;
                     var blocker = ScheduledTicketCharges.Apply(ticket, schedule, entry, preview.Tariff, preview.Baf);
                     if (blocker != null)
                     {
@@ -357,7 +356,7 @@ namespace IBS.Services.MSAP
                     ticket.TariffDate = DateTimeHelper.GetCurrentPhilippineTime();
                     ticket.EditedBy = username;
                     ticket.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Recalculate charges for #{ticket.DispatchNumber}: BAF {oldBaf} -> {ticket.BAFRate}; gross {oldGross} -> {ticket.TotalBilling}; net {oldNet} -> {ticket.TotalNetRevenue}. {blocker ?? "Charges calculated from approved COS terms and service-date rates"}", "Dispatch Ticket", ticket.DispatchTicketId, ticket.DispatchNumber), ct);
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Recalculate charges for #{ticket.DispatchNumber}: tariff {oldTariff} -> {ticket.DispatchRate} (manual {oldManualTariff} -> {ticket.IsManualTariffRate}); BAF {oldBaf} -> {ticket.BAFRate}; gross {oldGross} -> {ticket.TotalBilling}; net {oldNet} -> {ticket.TotalNetRevenue}. {blocker ?? "Charges calculated from approved COS terms and service-date rates"}", "Dispatch Ticket", ticket.DispatchTicketId, ticket.DispatchNumber), ct);
                     await unitOfWork.SaveAsync(ct);
                     result = blocker == null ? ServiceResult.Success("Ticket charges recalculated successfully.") : ServiceResult.Failure(blocker);
                 }, ct);
@@ -600,11 +599,9 @@ namespace IBS.Services.MSAP
                         return ServiceResult.Failure("The linked schedule is unavailable.");
                     }
                     var chargeBlocker = await ScheduledTicketCharges.ApplyAsync(unitOfWork, currentModel, schedule, username, cancellationToken);
-                    if (chargeBlocker != null)
-                    {
-                        return ServiceResult.Failure(chargeBlocker);
-                    }
-                    changes.Add("Charges recalculated from approved schedule terms and service-date rates");
+                    changes.Add(chargeBlocker == null
+                        ? "Charges recalculated from approved schedule terms and service-date rates"
+                        : $"Calculation pending: {chargeBlocker}");
                 }
 
                 await RefreshSbmaAsync(currentModel, cancellationToken);
@@ -1232,16 +1229,12 @@ namespace IBS.Services.MSAP
                         throw new InvalidOperationException("The approved schedule is unavailable.");
                     }
                     string? chargeError = await ScheduledTicketCharges.ApplyAsync(unitOfWork, model, readySchedule, username, cancellationToken);
-                    if (chargeError != null)
-                    {
-                        throw new InvalidOperationException(chargeError);
-                    }
                     await RefreshSbmaAsync(model, cancellationToken);
 
                     model.EditedBy = username;
                     model.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Restored dispatch ticket #{model.DispatchNumber}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Restored dispatch ticket #{model.DispatchNumber}{(chargeError == null ? "" : $"; Calculation pending: {chargeError}")}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
                 }, cancellationToken);
 
@@ -1398,50 +1391,6 @@ namespace IBS.Services.MSAP
             return viewModel;
         }
 
-        public async Task<IEnumerable<DispatchTicket>> GetDispatchTicketsByFilterAsync(string status, CancellationToken cancellationToken)
-        {
-            return status == "All"
-                ? await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.Status != "For Posting", cancellationToken)
-                : await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.Status == status, cancellationToken);
-        }
-
-        public async Task<object?> GetTicketDetailsAsync(int id, CancellationToken cancellationToken)
-        {
-            var ticket = await unitOfWork.DispatchTicket.GetDispatchTicketWithDetailsAsync(id, cancellationToken);
-            if (ticket == null)
-            {
-                return null;
-            }
-
-            return new
-            {
-                id = ticket.DispatchTicketId,
-                dispatchNumber = ticket.DispatchNumber,
-                date = ticket.Date.ToString("MMM dd, yyyy"),
-                serviceName = ticket.Service.ServiceName,
-                tugboatName = ticket.Tugboat.TugboatName,
-                tugMasterName = ticket.TugMaster?.TugMasterName,
-                location = $"{ticket.Terminal.Port.PortName} - {ticket.Terminal.TerminalName}",
-                timeStart = ticket is { DateLeft: not null, TimeLeft: not null }
-                    ? $"{ticket.DateLeft.Value:MMM dd, yyyy} {ticket.TimeLeft.Value:HH:mm}"
-                    : "-",
-                timeEnd = ticket is { DateArrived: not null, TimeArrived: not null }
-                    ? $"{ticket.DateArrived.Value:MMM dd, yyyy} {ticket.TimeArrived.Value:HH:mm}"
-                    : "-",
-                remarks = ticket.Remarks ?? "No remarks",
-                status = ticket.Status,
-                totalHours = ticket.TotalHours.ToString("N2"),
-                dispatchRate = ticket.DispatchRate.ToString("N2"),
-                dispatchDiscount = ticket.DispatchDiscount.ToString("N2"),
-                dispatchBilling = ticket.DispatchBillingAmount.ToString("N2"),
-                bafRate = ticket.BAFRate.ToString("N2"),
-                bafDiscount = ticket.BAFDiscount.ToString("N2"),
-                bafBilling = ticket.BAFBillingAmount.ToString("N2"),
-                totalBilling = ticket.TotalBilling.ToString("N2"),
-                totalNetRevenue = ticket.TotalNetRevenue.ToString("N2")
-            };
-        }
-
         private async Task<string?> ValidateReadyAsync(DispatchTicketViewModel model, CancellationToken ct)
         {
             var results = new List<ValidationResult>();
@@ -1461,7 +1410,12 @@ namespace IBS.Services.MSAP
             var entry = schedule?.ServiceEntries.SingleOrDefault(x => x.VesselScheduleServiceEntryId == model.VesselScheduleServiceEntryId);
             if (parent == null || schedule == null || entry == null)
             {
-                return "Select an approved COS service before saving its ticket.";
+                return "Select a COS service before saving its ticket.";
+            }
+            if (entry.CancelledAt.HasValue || entry.TugboatId != model.TugBoatId || entry.ServiceId != model.ServiceId
+                || schedule.Status == MsapConstants.VesselScheduleStatus.Cancelled)
+            {
+                return "The ticket must match an active COS service requirement.";
             }
 
             model.CustomerId = parent.CustomerId;
@@ -1470,8 +1424,7 @@ namespace IBS.Services.MSAP
             model.TerminalId = parent.TerminalId;
             model.VoyageNumber = parent.VoyageNumber;
             model.COSNumber = parent.CustomerOrderSlipNumber;
-            var preview = await ScheduledTicketCharges.PreviewAsync(unitOfWork, model.ToEntity(), schedule, ct);
-            return ScheduledTicketCharges.GetBlocker(preview.Ticket, schedule, entry, preview.Tariff, preview.Baf);
+            return null;
         }
 
         private async Task RefreshSbmaAsync(DispatchTicket ticket, CancellationToken ct)

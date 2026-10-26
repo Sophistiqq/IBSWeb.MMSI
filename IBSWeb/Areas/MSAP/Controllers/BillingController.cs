@@ -48,7 +48,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewBag.CanPost = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateBilling);
-            ViewBag.CanEdit = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditBilling);
             ViewBag.CanDelete = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteBilling);
             return View(Enumerable.Empty<Billing>());
         }
@@ -131,104 +130,14 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         #endregion
 
-        #region Edit
-
-        /// <summary>
-        /// Displays the form to edit an existing Billing.
-        /// </summary>
-        [HttpGet]
-        [RequireAccess(ProcedureEnum.EditBilling, "Access denied. You don't have permission to edit Billings.")]
-        public async Task<IActionResult> Edit(int id, CancellationToken cancellationToken)
-        {
-            var model = await billingService.GetBillingByIdAsync(id, cancellationToken);
-            if (model == null)
-            {
-                return NotFound();
-            }
-
-            if (model.BasicBillingId.HasValue || model.BafBilling != null)
-            {
-                TempData["error"] = "Split billings must be corrected together. Delete the unposted preparation and prepare it again.";
-                return RedirectToAction(nameof(Preview), new { id });
-            }
-            if (model.Status != MsapConstants.BillingStatus.ForPosting)
-            {
-                TempData["error"] = "Only billings with 'For Posting' status can be edited.";
-                return RedirectToAction(nameof(Index));
-            }
-
-            BillingService.ApplyCustomerTaxSettings(model);
-            model = await billingService.PopulateBillingSelectListsAsync(model, cancellationToken);
-            model.UnbilledDispatchTickets = await billingService.GetEditTicketsSelectListAsync(model.CustomerId, model.MsapBillingId, cancellationToken);
-
-            if (model.CustomerId != 0)
-            {
-                model.CustomerPrincipal = await billingService.GetPrincipalsSelectListAsync(model.CustomerId, cancellationToken);
-            }
-
-            model = await billingService.PopulateTicketListsAsync(model, cancellationToken);
-
-            if (model.CustomerOrderSlipId.HasValue)
-            {
-                var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetAsync(jo => jo.CustomerOrderSlipId == model.CustomerOrderSlipId.Value, cancellationToken);
-                ViewData["CurrentCustomerOrderSlipNumber"] = customerOrderSlip?.CustomerOrderSlipNumber;
-            }
-
-            ViewData["HasPrincipal"] = model.CustomerPrincipal is { Count: > 0 };
-
-            ViewData["CustomerAddress"] = model.Customer.CustomerAddress;
-            ViewData["CustomerTIN"] = model.Customer.CustomerTin;
-            ViewData["CustomerTerms"] = model.Customer.CustomerTerms;
-            ViewData["CustomerBusinessStyle"] = model.Customer.BusinessStyle ?? "-";
-            ViewData["CustomerVatType"] = model.Customer.VatType;
-            ViewData["CustomerType"] = model.Customer.Type;
-            ViewData["CustomerWht"] = model.Customer.WithHoldingTax;
-
-            ViewBag.JobProgressItems = await JobProgressCalculator.LoadForBillingsAsync(unitOfWork, [model.MsapBillingId], cancellationToken);
-            return View(model);
-        }
-
-        /// <summary>
-        /// Processes the update of an existing Billing, including ticket reallocation.
-        /// </summary>
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.EditBilling, "Access denied. You don't have permission to edit Billings.")]
-        public async Task<IActionResult> Edit([Bind("MsapBillingId,Date,IsUndocumented,BilledTo,VoyageNumber,COSNumber,CustomerId,PrincipalId,VesselId,PortId,TerminalId,ToBillDispatchTickets,CustomerOrderSlipId,IsVatable,IsVatInclusive,PrintWht,BafRates")] Billing model, IFormFile? file, CancellationToken cancellationToken)
-        {
-            try
-            {
-                var result = await billingService.UpdateBillingAsync(model, User.Identity?.Name ?? "System", cancellationToken);
-
-                if (result.IsSuccess)
-                {
-                    return Json(new { success = true, message = result.Message ?? "Entry edited successfully!", redirectUrl = Url.Action(nameof(Review), new { id = model.MsapBillingId }) });
-                }
-
-                if (result.Status == ServiceResultStatus.NotFound)
-                {
-                    return Json(new { success = false, message = "Billing not found." });
-                }
-
-                return Json(new { success = false, message = result.Message });
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to edit billing");
-                return Json(new { success = false, message = ExceptionHelper.GetErrorMessage(ex) });
-            }
-        }
-
-        #endregion
-
         #region Delete
 
         /// <summary>
-        /// Deletes a specific Billing.
+        /// Discards an unapproved billing preparation.
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.DeleteBilling, "Access denied. You don't have permission to delete Billings.")]
+        [RequireAccess(ProcedureEnum.DeleteBilling, "Access denied. You don't have permission to discard draft billings.")]
         public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
         {
             List<JobProgressViewModel> progress = await JobProgressCalculator.LoadForBillingsAsync(unitOfWork, [id], cancellationToken);
@@ -509,28 +418,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
         #region AJAX Endpoints
 
         /// <summary>
-        /// Retrieves detailed information for a list of Dispatch Tickets.
-        /// </summary>
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
-        public async Task<IActionResult> GetDispatchTickets(List<string> dispatchTicketIds, CancellationToken cancellationToken)
-        {
-            try
-            {
-                var intDispatchTicketIds = dispatchTicketIds.Select(int.Parse).ToList();
-                var dispatchTickets = await billingService.GetDispatchTicketsByIdsAsync(intDispatchTicketIds, cancellationToken);
-
-                return Json(new { success = true, data = dispatchTickets });
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to get dispatch tickets");
-                return Json(new { success = false, message = ex.Message });
-            }
-        }
-
-        /// <summary>
         /// Retrieves a paged and filtered list of Billings for DataTables.
         /// </summary>
         [HttpPost]
@@ -543,12 +430,13 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 var (data, filtered, total) = await billingService.GetPagedBillingsAsync(parameters, cancellationToken, customerOrderSlipId);
 
                 var closedMonths = (await unitOfWork.PostedPeriod.GetAllAsync(cancellationToken))
-                    .Where(p => MsapConstants.EnforceClosedPeriods && p.IsClosed)
+                    .Where(p => p.IsClosed)
                     .Select(p => (p.Year, p.Month))
                     .ToHashSet();
                 foreach (var item in data)
                 {
                     item.IsMonthClosed = closedMonths.Contains((item.Date.Year, item.Date.Month));
+                    item.CanDiscard &= !item.IsMonthClosed;
                 }
 
                 return Json(new
@@ -570,7 +458,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// Searches for customers matching a search term.
         /// </summary>
         [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
+        [RequireAccess(ProcedureEnum.CreateBilling)]
         public async Task<JsonResult> SearchCustomers(string? term, CancellationToken cancellationToken)
         {
             var result = await unitOfWork.Customer.SearchCustomersDtoAsync(term ?? string.Empty, 10, cancellationToken);
@@ -581,7 +469,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// Gets full customer details by ID (used after SSR modern-select selection).
         /// </summary>
         [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
+        [RequireAccess(ProcedureEnum.CreateBilling)]
         public async Task<JsonResult> GetCustomerDetail(int customerId, CancellationToken cancellationToken)
         {
             var result = await billingService.GetCustomerDetailsAsync(customerId, cancellationToken);
@@ -592,7 +480,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// Gets all principals for a customer (used to populate principal modern-select).
         /// </summary>
         [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
+        [RequireAccess(ProcedureEnum.CreateBilling)]
         public async Task<JsonResult> GetPrincipalsByCustomer(int customerId, CancellationToken cancellationToken)
         {
             var result = await billingService.GetPrincipalsByCustomerAsync(customerId, cancellationToken);
@@ -600,21 +488,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         /// <summary>
-        /// Searches for principals associated with a specific customer.
-        /// </summary>
-        [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
-        public async Task<JsonResult> SearchPrincipals(string? term, int customerId, CancellationToken cancellationToken)
-        {
-            var result = await billingService.SearchPrincipalsAsync(term, customerId, cancellationToken);
-            return Json(result);
-        }
-
-        /// <summary>
         /// Gets all billable COS records for a customer (used to populate JO modern-select).
         /// </summary>
         [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
+        [RequireAccess(ProcedureEnum.CreateBilling)]
         public async Task<JsonResult> GetBillableCustomerOrderSlips(int customerId, CancellationToken cancellationToken)
         {
             var result = await billingService.GetBillableCustomerOrderSlipsAsync(customerId, cancellationToken);
@@ -625,7 +502,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// Retrieves unbilled 'For Billing' tickets associated with a specific COS.
         /// </summary>
         [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
+        [RequireAccess(ProcedureEnum.CreateBilling)]
         public async Task<JsonResult> GetDispatchTicketsByCustomerOrderSlip(int customerOrderSlipId, CancellationToken cancellationToken)
         {
             var result = await billingService.GetDispatchTicketsByCustomerOrderSlipAsync(customerOrderSlipId, cancellationToken);
@@ -643,69 +520,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             return Json(new { success = false, message = result.Message });
         }
 
-        /// <summary>
-        /// Retrieves principals for a customer as a JSON list.
-        /// </summary>
-        [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
-        public async Task<IActionResult> GetPrincipalsJson(string customerId, CancellationToken cancellationToken)
-        {
-            var principalsList = await billingService.GetPrincipalsSelectListAsync(int.Parse(customerId), cancellationToken);
-            return Json(principalsList);
-        }
-
-        /// <summary>
-        /// Retrieves unbilled tickets for a customer that have no COS.
-        /// </summary>
-        [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
-        public async Task<IActionResult> GetDispatchTicketsByCustomer(string customerId, CancellationToken cancellationToken)
-        {
-            var result = await billingService.GetDispatchTicketsByCustomerAsync(int.Parse(customerId), cancellationToken);
-
-            if (result is { IsSuccess: true, Data: not null })
-            {
-                return Json(new
-                {
-                    success = true,
-                    header = result.Data.Header,
-                    tickets = result.Data.Tickets
-                });
-            }
-
-            return Json(new { success = false, message = result.Message });
-        }
-
-        /// <summary>
-        /// Retrieves detailed information for a specific customer.
-        /// </summary>
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
-        public async Task<IActionResult> GetCustomerDetails(int customerId, CancellationToken cancellationToken)
-        {
-            var result = await billingService.GetCustomerDetailsAsync(customerId, cancellationToken);
-            if (result.IsSuccess)
-            {
-                return Json(result.Data);
-            }
-
-            return result.Status == ServiceResultStatus.NotFound ? NotFound() : BadRequest(result.Message);
-        }
-
-        /// <summary>
-        /// Checks whether a billing number already exists (used for client-side duplicate validation).
-        /// </summary>
-        [HttpGet]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.CreateBilling, ProcedureEnum.EditBilling)]
-        public async Task<IActionResult> CheckBillingNumber(string number, CancellationToken cancellationToken)
-        {
-            var exists = await unitOfWork.Billing.GetAsync(b => b.MsapBillingNumber == number, cancellationToken) != null;
-            return Json(new { exists });
-        }
-
         #endregion
-
 
     }
 }

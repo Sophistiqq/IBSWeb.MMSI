@@ -9,6 +9,8 @@ namespace IBS.Models.MSAP.ViewModels
         public bool HasSavedCharges { get; set; }
         public decimal SavedBafRate { get; set; }
         public decimal ProposedBafRate { get; set; }
+        public decimal SavedTariffRate { get; set; }
+        public decimal ProposedTariffRate { get; set; }
         public decimal SavedGross { get; set; }
         public decimal ProposedGross { get; set; }
         public decimal SavedNet { get; set; }

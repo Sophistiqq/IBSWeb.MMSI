@@ -107,7 +107,7 @@ namespace Checks.MSAP
 
         private static void CheckCharges()
         {
-            var schedule = new VesselSchedule { Revision = 1, ApprovedRevision = 1, Status = MsapConstants.VesselScheduleStatus.Confirmed, CosDiscountPercent = 10m };
+            var schedule = new VesselSchedule { PlannedStart = new DateTime(2026, 1, 1), Revision = 1, ApprovedRevision = 1, Status = MsapConstants.VesselScheduleStatus.Confirmed, CosDiscountPercent = 10m };
             var entry = new VesselScheduleServiceEntry { VesselScheduleServiceEntryId = 1, TugboatId = 1, ServiceId = 1, TariffBasis = TariffChargeBasis.PerHour };
             var ticket = new DispatchTicket
             {

@@ -14,7 +14,7 @@ namespace Checks.MSAP
             var date = new DateOnly(2026, 10, 14);
             var entry = new VesselScheduleServiceEntry { VesselScheduleServiceEntryId = 1, TugboatId = 2, ServiceId = 3,
                 TariffBasis = TariffChargeBasis.PerHour, BafMethod = BafCalculationMethod.PerHour };
-            var schedule = new VesselSchedule { Revision = 1, ApprovedRevision = 1, Status = MsapConstants.VesselScheduleStatus.Confirmed, SbmaEnabled = true };
+            var schedule = new VesselSchedule { PlannedStart = date.ToDateTime(TimeOnly.MinValue), Revision = 1, ApprovedRevision = 1, Status = MsapConstants.VesselScheduleStatus.Confirmed, SbmaEnabled = true };
             entry.VesselSchedule = schedule;
             var ticket = new DispatchTicket { DispatchTicketId = 1, VesselScheduleServiceEntryId = 1, TugBoatId = 2, ServiceId = 3,
                 CustomerOrderSlipId = 1, DateLeft = date, DateArrived = date, TimeLeft = new TimeOnly(8, 0), TimeArrived = new TimeOnly(8, 30), ExpectedServiceEntry = entry };
@@ -30,6 +30,19 @@ namespace Checks.MSAP
                 && ScheduledTicketCharges.BafCycleStart(new DateOnly(2026, 10, 13)) == new DateOnly(2026, 10, 13), "Tuesday boundary is incorrect.");
             entry.ManualBafRate = 0m;
             Check(ScheduledTicketCharges.GetBlocker(ticket, schedule, entry, tariff, null) == null, "Approved manual BAF was subjected to weekly table coverage.");
+            var nextTuesday = new DispatchTicket
+            {
+                VesselScheduleServiceEntryId = 1, TugBoatId = 2, ServiceId = 3,
+                DateLeft = new DateOnly(2026, 10, 20), DateArrived = new DateOnly(2026, 10, 20),
+                TimeLeft = TimeOnly.MinValue, TimeArrived = new TimeOnly(1, 0)
+            };
+            entry.ManualTariffRate = 55m;
+            Check(ScheduledTicketCharges.Apply(nextTuesday, schedule, entry, tariff, null) != null,
+                "A previous week's manual BAF carried forward at Tuesday midnight.");
+            Check(ScheduledTicketCharges.Apply(nextTuesday, schedule, entry, tariff,
+                new BafRate { Amount = 25m, AsOfDate = new DateOnly(2026, 10, 20), ApprovedAt = new DateTime(2026, 10, 20) }) == null
+                && nextTuesday.BAFRate == 25m && !nextTuesday.IsManualBafRate && nextTuesday.DispatchRate == 55m,
+                "Tuesday service must use fresh BAF while preserving its one-time Basic override.");
             Check(SbmaShareCalculator.Calculate(ticket, true) == 2625m && SbmaShareCalculator.Calculate(ticket, false) == 0m,
                 "SBMA ignored actual minutes or its COS toggle.");
             var second = new DispatchTicket { DispatchTicketId = 2, CustomerOrderSlipId = 1, TugBoatId = 2,

@@ -292,7 +292,7 @@ namespace IBS.Services.MSAP
                         if (job.Status != MsapConstants.CustomerOrderSlipStatus.Open || tickets.Any(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted || t.BillingId != null)
                             || await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == id, ct) != null)
                         {
-                            result = ServiceResult.Failure("Cannot cancel this COS. Resolve its active Dispatch Tickets and billing first. Posted billing must follow the reversal workflow.", ServiceResultStatus.ValidationError);
+                            result = ServiceResult.Failure("Cannot cancel this COS. Resolve its active Dispatch Tickets and billing first. Only unapproved billing preparations can be discarded; approved bills must be retained.", ServiceResultStatus.ValidationError);
                             return;
                         }
                         job.Status = MsapConstants.CustomerOrderSlipStatus.Cancelled;

@@ -114,6 +114,12 @@ namespace Checks.MSAP
                 var reviewData = new ViewDataDictionary<VesselSchedule>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = schedule };
                 reviewData["AssignedTugboatModels"] = new List<Tugboat> { tug };
                 reviewData["CanConfirm"] = true;
+                reviewData["CanCaptureRates"] = true;
+                reviewData["RateCaptures"] = new List<ScheduleRateCaptureViewModel>
+                {
+                    new() { ScheduleId = 5, EntryId = 0, Kind = RateTableKind.Tariff, CanCapture = true, EffectiveDate = new DateOnly(2026, 10, 13) },
+                    new() { ScheduleId = 5, EntryId = 0, Kind = RateTableKind.BAF, CanCapture = true, EffectiveDate = new DateOnly(2026, 10, 13) }
+                };
                 reviewData["JobProgress"] = new JobProgressViewModel { HasSchedule = true, VesselScheduleId = 5, Stage = 1 };
                 reviewData["JobProgressActionStage"] = 1;
                 var reviewView = engine.GetView(null, "/Areas/MSAP/Views/VesselSchedule/Details.cshtml", false);
@@ -121,6 +127,10 @@ namespace Checks.MSAP
                 await reviewView.View!.RenderAsync(new ViewContext(context, reviewView.View, reviewData,
                     services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), reviewOutput, new HtmlHelperOptions()));
                 string reviewHtml = reviewOutput.ToString();
+                Check(Regex.Matches(reviewHtml, "data-rate-capture").Count == 2
+                    && reviewHtml.Contains("Save Basic rate for reuse", StringComparison.Ordinal)
+                    && reviewHtml.Contains("Save BAF rate for reuse", StringComparison.Ordinal)
+                    && reviewHtml.Contains("captureRateToken", StringComparison.Ordinal), "Authorized capture actions or anti-forgery token were missing.");
                 int reviewSummaryIndex = reviewHtml.IndexOf("aria-label=\"Review summary\"", StringComparison.Ordinal);
                 int reviewSummaryEnd = reviewSummaryIndex < 0 ? -1 : reviewHtml.IndexOf("</aside>", reviewSummaryIndex, StringComparison.Ordinal);
                 int approvalIndex = reviewHtml.IndexOf("id=\"confirmSchedule\"", StringComparison.Ordinal);

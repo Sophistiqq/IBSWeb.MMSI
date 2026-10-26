@@ -17,6 +17,7 @@
         || Model.Port.PortName.Trim().StartsWith("Subic ", StringComparison.OrdinalIgnoreCase);
     var sbmaOverride = Model.SbmaEnabled != subicPort;
     var manualEntries = Model.ServiceEntries.Where(entry => entry.ManualTariffRate.HasValue || entry.ManualBafRate.HasValue).ToList();
+    var captures = ViewBag.RateCaptures as List<ScheduleRateCaptureViewModel> ?? new List<ScheduleRateCaptureViewModel>();
 }
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
@@ -24,7 +25,10 @@
     <partial name="_WorkflowProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
     <main class="schedule-main-workspace schedule-review-workspace" id="scheduleReview"
           data-rate-url="@Url.Action("GetTariffRate")" data-customer-id="@Model.CustomerId"
-          data-terminal-id="@Model.TerminalId" data-planned-start="@Model.PlannedStart.ToString("yyyy-MM-ddTHH:mm")">
+          data-terminal-id="@Model.TerminalId" data-planned-start="@Model.PlannedStart.ToString("yyyy-MM-ddTHH:mm")"
+          data-capture-preview-url="@Url.Action("PreviewScheduleRate", "RateUpload")"
+          data-capture-url="@Url.Action("CaptureScheduleRate", "RateUpload")">
+        <form asp-action="Confirm" method="post" id="captureRateToken" hidden></form>
         <header class="schedule-header-stack ui-page-header">
             <nav aria-label="Breadcrumb">
                 <ol class="ui-breadcrumb">
@@ -118,7 +122,11 @@
                                             <tr data-review-service="@entry.ServiceId">
                                                 <td>@(entry.Service?.ServiceName ?? $"Service #{entry.ServiceId}")@if (entry.CancelledAt.HasValue) { <small class="ui-caption ui-muted">Cancelled · @entry.CancellationReason</small> }</td>
                                                 <td>@(entry.TariffBasis == TariffChargeBasis.PerMove ? "Per move" : entry.TariffBasis == TariffChargeBasis.PerHour ? "Per hour" : "Not specified")</td>
-                                                <td><span class="@(entry.ManualTariffRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="tariff" data-manual="@entry.ManualTariffRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("N2") : "Checking table…")</span><small class="ui-caption ui-muted" data-rate-source>@(entry.ManualTariffRate.HasValue ? "Saved manual rate" : "Table estimate pending")</small></td>
+                                                <td class="schedule-review-rate-cell">
+                                                    <span class="@(entry.ManualTariffRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="tariff" data-manual="@entry.ManualTariffRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("N2") : "Checking table…")</span>
+                                                    <small class="ui-caption ui-muted" data-rate-source>@(entry.ManualTariffRate.HasValue ? "Saved manual rate" : "Table estimate pending")</small>
+                                                    <partial name="_ScheduleRateCapture" model="captures.SingleOrDefault(item => item.EntryId == entry.VesselScheduleServiceEntryId && item.Kind == RateTableKind.Tariff)" />
+                                                </td>
                                                 <td>
                                                     @(entry.BafMethod == BafCalculationMethod.PerMove ? "Per move" : entry.BafMethod == BafCalculationMethod.PerHour ? "Per hour" : entry.BafMethod.HasValue ? entry.BafMethod.Value.ToString() : "Not specified")
                                                     @if (entry.BafMethod == BafCalculationMethod.Lumpsum || entry.BafMethod == BafCalculationMethod.Industry)
@@ -126,7 +134,11 @@
                                                         <small class="ui-caption">Approved amount applied once per service</small>
                                                     }
                                                 </td>
-                                                <td><span class="@(entry.ManualBafRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="baf" data-manual="@entry.ManualBafRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualBafRate.HasValue ? entry.ManualBafRate.Value.ToString("N2") : "Checking table…")</span><small class="ui-caption ui-muted" data-rate-source>@(entry.ManualBafRate.HasValue ? "Saved manual rate" : "Table estimate pending")</small></td>
+                                                <td class="schedule-review-rate-cell">
+                                                    <span class="@(entry.ManualBafRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="baf" data-manual="@entry.ManualBafRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualBafRate.HasValue ? entry.ManualBafRate.Value.ToString("N2") : "Checking table…")</span>
+                                                    <small class="ui-caption ui-muted" data-rate-source>@(entry.ManualBafRate.HasValue ? "Saved manual rate" : "Table estimate pending")</small>
+                                                    <partial name="_ScheduleRateCapture" model="captures.SingleOrDefault(item => item.EntryId == entry.VesselScheduleServiceEntryId && item.Kind == RateTableKind.BAF)" />
+                                                </td>
                                             </tr>
                                         }
                                     </tbody>
@@ -220,5 +232,6 @@
 </div>
 @section Scripts {
     <script src="~/msap/js/schedule-confirmation.js" asp-append-version="true"></script>
+    <script src="~/msap/js/schedule-rate-capture.js" asp-append-version="true"></script>
     <script src="~/msap/js/schedule-actions.js" asp-append-version="true"></script>
 }

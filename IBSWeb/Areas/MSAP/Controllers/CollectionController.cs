@@ -229,40 +229,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
         #region AJAX Endpoints
 
         /// <summary>
-        /// Retrieves detailed information for a list of selected billings.
-        /// </summary>
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [RequireAnyAccess(ProcedureEnum.CreateCollection)]
-        public async Task<IActionResult> GetSelectedBillings(List<string> billingIds, CancellationToken cancellationToken = default)
-        {
-            var result = await collectionService.GetSelectedBillingsAsync(billingIds, cancellationToken);
-            return Json(new { success = result.IsSuccess, data = result.Data, message = result.Message });
-        }
-
-        /// <summary>
-        /// Checks if a customer is vatable based on their ID.
-        /// </summary>
-        [HttpGet]
-        [RequireAnyAccess(ProcedureEnum.CreateCollection)]
-        public async Task<IActionResult> IsCustomerVatable(int customerId, CancellationToken cancellationToken = default)
-        {
-            var isVatable = await collectionService.IsCustomerVatableAsync(customerId, cancellationToken);
-            return Json(isVatable);
-        }
-
-        /// <summary>
-        /// Retrieves detailed information for a specific bank account.
-        /// </summary>
-        [HttpGet]
-        [RequireAnyAccess(ProcedureEnum.CreateCollection, ProcedureEnum.AccessTreasury)]
-        public async Task<IActionResult> GetBankAccountDetails(int bankId, CancellationToken cancellationToken = default)
-        {
-            var result = await collectionService.GetBankAccountDetailsAsync(bankId, cancellationToken);
-            return Json(result.IsSuccess ? new { success = true, bank = result.Data } : new { success = false, message = result.Message });
-        }
-
-        /// <summary>
         /// Retrieves uncollected billings (and optionally currently associated ones) for a specific customer in a detailed format for DataTables.
         /// </summary>
         [HttpGet]

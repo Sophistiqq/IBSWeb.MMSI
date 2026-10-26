@@ -226,6 +226,9 @@ namespace IBS.Models.MSAP
         public bool IsMonthClosed { get; set; }
 
         [NotMapped]
+        public bool CanDiscard { get; set; }
+
+        [NotMapped]
         public string? DispatchTicketNumbers { get; set; }
     }
 }

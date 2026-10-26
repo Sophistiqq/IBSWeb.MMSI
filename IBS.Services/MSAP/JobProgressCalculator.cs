@@ -250,7 +250,7 @@ namespace IBS.Services.MSAP
                     {
                         result.Stopped = true;
                         result.Billings = bills;
-                        result.Guidance += " Resolve linked billing through its existing correction or reversal controls before editing service details.";
+                        result.Guidance += " Only unapproved billing preparations can be discarded. Approved bills and their service details must be retained.";
                     }
                     else
                     {

@@ -311,17 +311,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         /// <summary>
-        /// Retrieves a list of Dispatch Tickets filtered by status.
-        /// </summary>
-        [HttpGet]
-        [RequireAccess(ProcedureEnum.ViewOperations)]
-        public async Task<IActionResult> GetDispatchTicketList(string status, CancellationToken cancellationToken)
-        {
-            var items = await dispatchTicketService.GetDispatchTicketsByFilterAsync(status, cancellationToken);
-            return Json(items);
-        }
-
-        /// <summary>
         /// Retrieves a paged and filtered list of Dispatch Tickets for DataTables.
         /// Includes signed URLs for media attachments.
         /// </summary>

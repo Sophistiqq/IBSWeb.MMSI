@@ -616,14 +616,5 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         #endregion -- export xlsx record --
 
-        [HttpGet]
-        public IActionResult GetAllCustomerIds()
-        {
-            var customerIds = dbContext.Customers
-                .Select(c => c.CustomerId)
-                .ToList();
-
-            return Json(customerIds);
-        }
     }
 }

@@ -462,34 +462,6 @@ namespace IBS.Services.MSAP
             }
         }
 
-        public async Task<ServiceResult<IEnumerable<Billing>>> GetSelectedBillingsAsync(List<string> billingIds, CancellationToken cancellationToken)
-        {
-            var ids = billingIds.Select(int.Parse).ToList();
-            var billings = await unitOfWork.Billing.GetAllAsync(b => ids.Contains(b.MsapBillingId), cancellationToken);
-            if (billings.Any(b => !BillingService.CanPrint(b)))
-            {
-                return ServiceResult<IEnumerable<Billing>>.Failure("Only bills with current final approval can receive collection.");
-            }
-            return ServiceResult<IEnumerable<Billing>>.Success(billings);
-        }
-
-        public async Task<bool> IsCustomerVatableAsync(int customerId, CancellationToken cancellationToken)
-        {
-            var customer = await unitOfWork.Customer.GetAsync(c => c.CustomerId == customerId, cancellationToken);
-            return customer?.VatType == MsapConstants.VatType_Vatable;
-        }
-
-        public async Task<ServiceResult<object>> GetBankAccountDetailsAsync(int bankId, CancellationToken cancellationToken)
-        {
-            var bank = await unitOfWork.BankAccount.GetAsync(b => b.BankAccountId == bankId, cancellationToken);
-            if (bank == null)
-            {
-                return ServiceResult<object>.Failure("Bank not found.", ServiceResultStatus.NotFound);
-            }
-
-            return ServiceResult<object>.Success(new { bank = bank.Bank, accountNo = bank.AccountNo, accountName = bank.AccountName });
-        }
-
         public async Task<List<SelectListItem>?> GetUncollectedBillingsSelectListAsync(int? customerId, CancellationToken cancellationToken)
         {
             return await unitOfWork.Collection.GetMsapUncollectedBillingsByCustomer(customerId, cancellationToken);

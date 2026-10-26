@@ -94,9 +94,9 @@ function respond(data) { pending.shift()({ok: true, json: async () => data}); }
     respond({exists: true, tariffRate: 35000, bafRate: 1200});
     await Promise.all([old, latest]);
     assert.equal(entry.querySelector('.js-tariff-rate').placeholder, '35,000.00', 'An old lookup must not overwrite a newer selection.');
-    assert.equal(entry.querySelector('.js-baf-rate').value, '', 'A detected table rate supersedes a previous manual entry.');
-    assert.equal(entry.querySelector('.js-baf-rate').readOnly, true);
-    assert.equal(entry.querySelector('.js-baf-provenance').textContent, 'Table estimate · planned date');
+    assert.equal(entry.querySelector('.js-baf-rate').value, '0', 'A lookup must preserve a previously entered manual amount.');
+    assert.equal(entry.querySelector('.js-baf-rate').readOnly, false);
+    assert.equal(entry.querySelector('.js-baf-provenance').textContent, 'Overrides table rate');
 
     const missing = context.lookup(entry, 3);
     respond({exists: false});

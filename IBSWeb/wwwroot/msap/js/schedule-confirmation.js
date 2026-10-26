@@ -30,7 +30,18 @@
                 return response.json();
             };
             let result = await submit();
-            if (result.requiresConflictAcknowledgement) {
+            for (let attempt = 0; attempt < 3 && !result.success; attempt++) {
+                if (result.rateAcknowledgement) {
+                    const manual = await ModernAlert.confirm({
+                        title: 'Manual rates are not published', text: escape(result.message),
+                        icon: 'warning', confirmText: 'Approve using manual rates', cancelText: 'Keep reviewing'
+                    });
+                    if (!manual.isConfirmed) return;
+                    body.set('rateAcknowledgement', result.rateAcknowledgement);
+                    result = await submit();
+                    continue;
+                }
+                if (!result.requiresConflictAcknowledgement) break;
                 const conflicts = await ModernAlert.confirm({title: 'Schedule overlaps found', text: '<span class="schedule-conflict-details">' + escape(result.message).replace(/^Overlapping plans:\s*/, '') + '</span>', icon: 'warning', confirmText: 'Continue', cancelText: 'Keep reviewing'});
                 if (!conflicts.isConfirmed) return;
                 const acknowledgement = await ModernAlert.confirm({
@@ -67,6 +78,7 @@
                 const manual = cell.dataset.manual === 'true';
                 const formattedRate = found ? Number(rate).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 4}) : '';
                 cell.parentElement.classList.toggle('schedule-review-attention', manual);
+                cell.parentElement.classList.toggle('schedule-review-override', manual && found);
                 if (!manual) cell.textContent = found ? formattedRate : 'No table match';
                 cell.parentElement.querySelector('[data-rate-source]').textContent = manual
                     ? found ? 'Manual override · table estimate: ' + formattedRate : 'Manual rate · no table match'
@@ -76,6 +88,7 @@
             cells.forEach(cell => {
                 const manual = cell.dataset.manual === 'true';
                 cell.parentElement.classList.toggle('schedule-review-attention', manual);
+                cell.parentElement.classList.toggle('schedule-review-override', false);
                 if (!manual) cell.textContent = 'Unavailable';
                 cell.parentElement.querySelector('[data-rate-source]').textContent = manual ? 'Saved manual rate · table lookup unavailable' : 'Could not check table rate';
             });

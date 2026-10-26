@@ -42,9 +42,8 @@
         </fieldset>
         <fieldset class="ui-panel ui-stack">
             <legend class="ui-section-title">Billing</legend>
-            <p class="ui-caption ui-muted">Only eligible draft preparations can be edited or discarded. Final approval does not bypass completeness and revision checks.</p>
+            <p class="ui-caption ui-muted">Eligible draft preparations can be discarded and prepared again. Final approval does not bypass completeness and revision checks.</p>
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanCreateBilling" class="form-check-input" /> <span>Prepare billing</span></label>
-            <label class="flex items-start gap-2 ui-body"><input asp-for="CanEditBilling" class="form-check-input" /> <span>Edit draft billing</span></label>
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanDeleteBilling" class="form-check-input" /> <span>Discard draft preparation</span></label>
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanApproveFinalBilling" class="form-check-input" /> <span>Approve final billing</span></label>
         </fieldset>

@@ -32,6 +32,10 @@ namespace IBS.Models.MSAP
         [Column(TypeName = "numeric(18,4)")]
         public decimal? ManualTariffRate { get; set; }
 
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool? IsManualTariffOverride { get; set; }
+
         [Range(typeof(decimal), "0", "99999999999999.9999")]
         [Column(TypeName = "numeric(18,4)")]
         public decimal? ManualBafRate { get; set; }

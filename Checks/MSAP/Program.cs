@@ -92,6 +92,7 @@ if (args.Contains("--master-import-only", StringComparer.Ordinal))
 if (args.Contains("--workflow-access-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.WorkflowAccessCheck.RunAsync();
+    await Checks.MSAP.BillingDiscardCheck.RunAsync();
     await Checks.MSAP.RateAccessCheck.RunAsync();
     Checks.MSAP.JobProgressCheck.Run();
     return;
@@ -112,6 +113,12 @@ if (args.Contains("--accounting-gaps-only", StringComparer.Ordinal))
 if (args.Contains("--schedule-rates-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.ScheduleRateCheck.RunAsync();
+    return;
+}
+
+if (args.Contains("--operational-rates-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.OperationalRateDatabaseCheck.RunAsync();
     return;
 }
 
@@ -138,6 +145,7 @@ if (args.Contains("--urgent-entry-only", StringComparer.Ordinal))
 {
     Checks.MSAP.JobProgressCheck.Run();
     Checks.MSAP.UrgentEntryCheck.Run();
+    await Checks.MSAP.UrgentEntryCheck.RunSaveAsync();
     return;
 }
 

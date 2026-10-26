@@ -48,6 +48,25 @@ async function scenario(confirmations, results) {
     const stale = await scenario([true], [{success: false, message: '<Booking changed>'}]);
     assert.equal(stale.window.location.href, '');
     assert.equal(stale.errors[0], '&lt;Booking changed>');
+    const manual = await scenario([true, true], [{
+        rateAcknowledgement: 'reviewed-state',
+        message: 'Unpublished rates'
+    }, {success: true, redirectUrl: '/approved'}]);
+    assert.equal(manual.requests[0].body.has('rateAcknowledgement'), false);
+    assert.equal(manual.requests[1].body.get('rateAcknowledgement'), 'reviewed-state');
+    const unpublished = await scenario([true, false], [{
+        rateAcknowledgement: 'reviewed-state',
+        message: 'Unpublished rates'
+    }]);
+    assert.equal(unpublished.requests.length, 1, 'Declining manual-rate acknowledgement must not approve.');
+    const both = await scenario([true, true, true, true], [{
+        rateAcknowledgement: 'reviewed-state',
+        message: 'Unpublished'
+    },
+        {requiresConflictAcknowledgement: true, message: 'Overlap'}, {success: true, redirectUrl: '/approved'}]);
+    assert.equal(both.requests.length, 3);
+    assert.equal(both.requests[2].body.get('rateAcknowledgement'), 'reviewed-state');
+    assert.equal(both.requests[2].body.get('allowConflicts'), 'true');
     for (const result of [{exists: true, tariffRate: 0, bafRate: 1}, {exists: false}, null]) {
         const tasks = [];
         const label = {textContent: ''};

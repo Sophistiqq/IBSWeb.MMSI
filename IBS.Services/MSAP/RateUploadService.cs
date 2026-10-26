@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace IBS.Services.MSAP
 {
-    public class RateUploadService
+    public partial class RateUploadService
     {
         private readonly MsapDbContext _db;
         private readonly IUnitOfWork _work;
@@ -55,7 +55,7 @@ namespace IBS.Services.MSAP
                 Upload = update, Rows = rows, IsOwner = update.UploadedByUserId == userId,
                 BaselineChanged = !update.ApprovedAt.HasValue && await UpdateBaselineAsync(rows, update.RateKind, false, ct)
             };
-            if (update.ApprovedAt.HasValue && update.RateKind == RateTableKind.BAF)
+            if (update.ApprovedAt.HasValue)
             {
                 await PopulateAffectedTicketsAsync(model, ct);
             }
@@ -305,6 +305,16 @@ namespace IBS.Services.MSAP
                 return ServiceResult.Failure("Stored rates changed after review. The preparer must refresh the comparison and resubmit.");
             }
             await PopulateNamesAsync([update], ct);
+            await ActivateRowsAsync(update, rows, actor, ct);
+            await _db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+            return ServiceResult.Success(
+                "Selected rates approved and activated. Existing ticket amounts were not changed; pending charges can now be recalculated from the COS.");
+        }
+
+        private async Task ActivateRowsAsync(RateUpload update, List<RateUploadRowViewModel> rows,
+            ApplicationUser actor, CancellationToken ct)
+        {
             DateTime now = DateTimeHelper.GetCurrentPhilippineTime();
             foreach (var row in rows)
             {
@@ -340,9 +350,6 @@ namespace IBS.Services.MSAP
             update.ApprovedAt = now;
             update.ApprovedBy = actor.Name.Trim();
             _db.AuditTrails.Add(CreateAudit(actor, update, "Approved selected rates", update.RowsJson, true));
-            await _db.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
-            return ServiceResult.Success("Selected rates approved and activated. Existing ticket amounts were not changed; pending charges can now be recalculated from the COS.");
         }
 
         private async Task PopulateAffectedTicketsAsync(RateUploadViewModel model, CancellationToken ct)
@@ -352,12 +359,15 @@ namespace IBS.Services.MSAP
             {
                 return;
             }
+            bool tariff = model.Upload!.RateKind == RateTableKind.Tariff;
             List<int> customers = included.Select(row => row.CustomerId).Distinct().ToList();
             DateOnly from = included.Min(row => row.EffectiveDate);
             // shortcut: review the latest 200 candidate tickets; use the COS review for older jobs until impact paging is needed.
-            var candidates = await _db.MsapDispatchTickets.AsNoTracking().Include(ticket => ticket.CustomerOrderSlip)
+            List<DispatchTicket> candidates = await _db.MsapDispatchTickets.AsNoTracking().Include(ticket => ticket.CustomerOrderSlip).Include(ticket => ticket.ExpectedServiceEntry)
                 .Where(ticket => customers.Contains(ticket.CustomerId) && ticket.Customer.Company == MsapConstants.Company_MMSI
-                    && ticket.DateLeft >= from && ticket.CustomerOrderSlipId != null && !ticket.IsManualBafRate
+                    && ticket.DateLeft >= from && ticket.CustomerOrderSlipId != null
+                    && (!tariff || !ticket.IsManualTariffRate
+                        || ticket.ExpectedServiceEntry != null && ticket.ExpectedServiceEntry.IsManualTariffOverride == false)
                     && ticket.BillingId == null && ticket.CustomerOrderSlip!.Status == MsapConstants.CustomerOrderSlipStatus.Open
                     && (ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending)
                     && !_db.MsapBillings.Any(bill => bill.CustomerOrderSlipId == ticket.CustomerOrderSlipId))
@@ -365,10 +375,20 @@ namespace IBS.Services.MSAP
             model.ImpactLimitReached = candidates.Count > 200;
             foreach (var ticket in candidates.Take(200))
             {
-                var rate = await _work.BafTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft!.Value, ct);
-                if (rate == null || !included.Any(row => row.CustomerId == rate.CustomerId && row.TerminalId == rate.TerminalId
-                    && row.ServiceId == rate.ServiceId && row.EffectiveDate == rate.AsOfDate)
-                    || ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling && ticket.BAFRate == rate.Amount)
+                TariffRate? basic = tariff ? await _work.TariffTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft!.Value, ct) : null;
+                BafRate? baf = !tariff ? await _work.BafTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft!.Value, ct) : null;
+                if (tariff && ticket.ExpectedServiceEntry != null
+                    && ScheduledTicketCharges.ManualTariffForServiceDate(ticket, ticket.ExpectedServiceEntry, basic).HasValue)
+                {
+                    continue;
+                }
+                DateOnly? date = tariff ? basic?.AsOfDate : baf?.AsOfDate;
+                decimal? amount = tariff ? basic?.Dispatch : baf?.Amount;
+                if (!amount.HasValue || (!tariff && baf != null && baf.AsOfDate < ScheduledTicketCharges.BafCycleStart(ticket.DateLeft!.Value))
+                    || !included.Any(row => row.CustomerId == ticket.CustomerId && row.TerminalId == ticket.TerminalId
+                    && row.ServiceId == ticket.ServiceId && row.EffectiveDate == date)
+                    || (ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling && (tariff ? ticket.DispatchRate : ticket.BAFRate) == amount
+                        && (tariff || !ticket.IsManualBafRate)))
                 {
                     continue;
                 }
@@ -377,7 +397,8 @@ namespace IBS.Services.MSAP
                     DispatchTicketId = ticket.DispatchTicketId, CustomerOrderSlipId = ticket.CustomerOrderSlipId!.Value,
                     TicketNumber = ticket.DispatchNumber, CosNumber = ticket.CustomerOrderSlip!.CustomerOrderSlipNumber,
                     HasSavedCharges = ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling,
-                    SavedBafRate = ticket.BAFRate, ProposedBafRate = rate.Amount
+                    SavedBafRate = ticket.BAFRate, ProposedBafRate = baf?.Amount ?? ticket.BAFRate,
+                    SavedTariffRate = ticket.DispatchRate, ProposedTariffRate = basic?.Dispatch ?? ticket.DispatchRate
                 });
             }
         }
@@ -409,6 +430,7 @@ namespace IBS.Services.MSAP
                 {
                     row.CustomerId, row.PortId, row.TerminalId, row.ServiceId,
                     row.EffectiveDate, BaselineAmount = row.StoredAmount, row.BaselineDate,
+                    row.SourceScheduleId, row.SourceServiceEntryId, row.SourceRevision,
                     Amount = activating && previous ? row.StoredAmount : row.Amount, row.Selected
                 }));
             }
