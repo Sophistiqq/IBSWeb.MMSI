@@ -61,7 +61,6 @@ namespace IBSWeb.MSAP
             });
             services.AddScoped<IAuditTrailService, AuditTrailService>();
             services.AddScoped<IVesselScheduleService, VesselScheduleService>();
-            services.AddScoped<SuperAdminService>();
             services.AddControllersWithViews(options =>
             {
                 options.Filters.Add<MsapJsonResultFilter>();

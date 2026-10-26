@@ -1,6 +1,6 @@
 # MSAP blockers and next work
 
-Updated 26 October 2026 during local audit remediation. This is the active gap list. Delivered milestones and verification limits are in [CURRENT_STATUS.md](CURRENT_STATUS.md); the archived plan is background only.
+Updated 27 October 2026 during local audit remediation and authorized cleanup. This is the active gap list. Delivered milestones and verification limits are in [CURRENT_STATUS.md](CURRENT_STATUS.md); the archived plan is background only.
 
 ## Immediate implementation and acceptance
 
@@ -10,6 +10,7 @@ Updated 26 October 2026 during local audit remediation. This is the active gap l
 | G02 | Awaiting external corrections | Master-data correction handoff | User reports using placeholders to proceed and handing off exported Excel workbooks with notes. This no longer blocks current implementation/testing. Await returned corrections; placeholders are not confirmed business policy. Revalidate returned XLSX before applying changes. See the [source review](MASTER_FILE_IMPORT_REVIEW.md). |
 | G03 | User testing | Full workflow acceptance | User will start the [test plan](WORKFLOW_TEST_PLAN.md). Record results for concurrency, denied actions, stale approvals, financial reconciliation, split/principal billing, multi-bill checks and returns. Execution results are not yet supplied; do not mark acceptance complete. |
 | G04 | Resolved locally | Broader automated rendering check | IBS-46 replaces the stale controller-count assertion with the explicit active controller inventory. The default runner passes. IBS-56 uses a fresh billing request after discard; the corrected original billing diagnostic and dependent provider-progress diagnostic pass on a designated clone. |
+| IBS-59 | Medium | Scheduling diagnostic zero-rate mismatch | The full scheduling database runner expects ManualTariffRate=0 to save, while the unchanged schedule validator requires a positive tariff. Confirm the intended contract and repair the appropriate fixture/expectations or validation; this is separate from cleanup and does not invalidate the passing default runner. |
 
 ## Business decisions and integration
 

@@ -1,11 +1,23 @@
-# MSAP dead-code candidates
+# MSAP dead-code cleanup record
 
-Recorded 26 October 2026 for [IBS-49](https://linear.app/ibs-msap/issue/IBS-49). These are candidates for later reachability review, not approved removals. No code was deleted or marked inline. Cleanup remains deferred until the reviews are reconciled.
+Candidates recorded 26 October 2026 for [IBS-49](https://linear.app/ibs-msap/issue/IBS-49). The user authorized cleanup on 27 October, after checkpoint 1126bcbf1. The removals below are included in the cleanup checkpoint and await review.
 
-| Candidate | Evidence recorded so far | Required before a removal decision |
+| Scope | Reachability evidence | Decision |
 | --- | --- | --- |
-| `IBSWeb/Areas/MSAPSuperAdmin/Controllers/DataController.cs` and `Views/Data/Index.cshtml` in that area | The controller is explicitly `[NonController]`. The default endpoint inventory excludes it, and WorkflowAccessCheck asserts that raw financial editing remains unavailable. | Check explicit view rendering, reflection, scripts, diagnostics and operational use. Preserve the regression checks that prevent this workflow from becoming exposed again. |
-| `IBS.Services/MSAP/SuperAdminService.cs` and its DI registration in `IBSWeb/MSAP/MsapModule.cs` | The service is still registered. The retired DataController consumes its table metadata, query, lookup and save methods. | Trace every remaining consumer and any reflection-based use before deciding whether the service, registration and retired view can be removed together. DI registration alone does not establish active use. |
-| Retired tariff methods in `IBS.Services/MSAP/DispatchTicketService.cs`: `SaveTariffAsync`, `ApproveTariffAsync`, `RevokeTariffApprovalAsync`, `DisapproveTariffAsync`, `BatchApproveTariffAsync`, `BatchSetTariffAsync` | Corresponding controller actions are absent. `Checks/MSAP/SchedulingCheck.cs` still calls SaveTariffAsync, ApproveTariffAsync and BatchApproveTariffAsync to verify rejected legacy operations. | Review C#, Razor, JavaScript, reflection and diagnostic callers. Decide explicitly how to preserve the legacy-workflow rejection coverage before deleting or replacing these methods. |
+| Retired MSAPSuperAdmin `Controllers/DataController.cs` and `Views/Data/Index.cshtml` | The controller was `[NonController]`. MVC inventory excluded it. Repository C#, Razor, JavaScript and reflection-name searches found only its own view, service and obsolete landing-page links. | Removed both files. The endpoint inventory still rejects a Data controller, and WorkflowAccessCheck asserts the retired controller type is absent. |
+| `IBS.Services/MSAP/SuperAdminService.cs`, its local `TableColumnDef`/`FieldDefinition` records and the MsapModule DI registration | The retired DataController was its only application consumer; the records were used only within the service. No diagnostic consumers were found. | Removed the service, its records and registration together. |
+| DispatchTicketService tariff methods: `SaveTariffAsync`, `ApproveTariffAsync`, `RevokeTariffApprovalAsync`, `DisapproveTariffAsync`, `BatchApproveTariffAsync`, `BatchSetTariffAsync` | No application callers remained and corresponding controller actions were already retired. SchedulingCheck had three negative calls that tested the retired path. | Removed all six methods and those obsolete diagnostic calls. WorkflowAccessCheck now asserts the service methods stay absent as well as the retired HTTP actions. Active billing-readiness checks remain. |
+| DispatchTicketService `DeleteImageAsync`, `DeleteVideoAsync`, `CheckForTariffRateAsync`, `GetCustomerSelectListAsync` | Repository searches found definitions only, with no application, Razor, JavaScript, reflection-name or diagnostic callers. Standalone media-deletion HTTP actions were already retired. | Removed these four helpers. Active ticket editing, attachment replacement/rollback and current rate preview/recalculation remain. |
 
-The active MSAPSuperAdmin HomeController is not included merely because it shares the retired controller's area. Missing menu links, direct references or graph edges are insufficient evidence of dead code. A complete unused-code inventory and retain/remove decisions remain open under IBS-49.
+## Retained behavior
+
+- MSAPSuperAdmin HomeController and its authorized route remain. Its landing view now links to the active MSAP workspace instead of the retired raw editor. A Razor rendering check verifies the destination and absence of retired editor links.
+- DispatchTicketService `DeleteTicketAsync` and `RestoreTicketAsync` remain: CosTicketCheck, UrgentEntryCheck and SchedulingCheck still exercise deletion protection and restoration behavior. The shared editability guard is also used by active ticket editing.
+- `GetTerminalsByPortAsync` remains because DispatchTicketController calls it. Same-named methods in other services were not treated as this service's callers.
+- Models, historical status values, migrations, accounting evidence and persisted records were not removed. This record covers the reviewed candidates and adjacent confirmed unused helpers, not a claim that every unused MSAP symbol has been eliminated.
+
+## Verification and remaining gap
+
+Solution build, default MSAP checks, workflow access, urgent actual-ticket checks, fresh-clone workspace and ticket/billing integrity checks pass. The code-only Graphify refresh pruned nodes sourced from the removed files; direct caller searches remain the removal evidence because the extractor does not model every Razor/top-level symbol.
+
+The optional full scheduling database diagnostic stops before the cleanup-related fixture changes: it expects a zero manual tariff to save, while the unchanged schedule validator requires a positive tariff. [IBS-59](https://linear.app/ibs-msap/issue/IBS-59) tracks that existing contract/diagnostic mismatch. No scheduling rate policy was changed for this cleanup.

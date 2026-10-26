@@ -602,6 +602,20 @@ foreach (var area in new[] { "MSAP", "MSAPAdmin", "MSAPSuperAdmin" })
     route.Values["controller"] = descriptor.ControllerName;
     var actionContext = new ActionContext(http, route, descriptor);
     Check(engine.FindView(actionContext, "_Layout", false).View?.Path == "/Areas/MSAP/Views/Shared/_Layout.cshtml", "MSAP picked the base layout.");
+    if (area == "MSAPSuperAdmin")
+    {
+        http.SetEndpoint(new Endpoint(_ => Task.CompletedTask, new EndpointMetadataCollection(), "SuperAdmin landing rendering check"));
+        http.Request.RouteValues = route.Values;
+        using var output = new StringWriter();
+        var view = engine.GetView(null, "/Areas/MSAPSuperAdmin/Views/Home/Index.cshtml", false).View!;
+        var data = new ViewDataDictionary(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary());
+        await view.RenderAsync(new ViewContext(actionContext, view, data,
+            services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), output, new HtmlHelperOptions()));
+        var html = output.ToString();
+        Check(html.Contains($"href=\"{links.GetPathByAction("Index", "Home", new { area = "MSAP" })}\"", StringComparison.Ordinal)
+            && !html.Contains("/MSAPSuperAdmin/Data", StringComparison.Ordinal),
+            "SuperAdmin landing page must link to the active workspace without retired editor links.");
+    }
 }
 var moduleAction = moduleActions.First();
 var result = new JsonResult(new { Amount = 1.235m });

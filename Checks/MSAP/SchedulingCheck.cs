@@ -174,7 +174,8 @@ namespace Checks.MSAP
                     TariffBasis = TariffChargeBasis.PerHour, BafMethod = BafCalculationMethod.PerMove,
                     ManualTariffRate = 0m, ManualBafRate = 29000m
                 }];
-                Check((await schedules.CreateAsync(prepared, "check")).IsSuccess, "Could not save schedule commercial settings and expected services.");
+                var preparedResult = await schedules.CreateAsync(prepared, "check");
+                Check(preparedResult.IsSuccess, $"Could not save schedule commercial settings and expected services: {preparedResult.Message}");
                 var restored = await schedules.GetByIdAsync(prepared.VesselScheduleId);
                 Check(restored!.ServiceEntries.Count == 1 && restored.CosDiscountPercent == 12.5m && restored.SbmaEnabled
                     && restored.ServiceEntries[0].ManualTariffRate == 0m, "Schedule details lost expected services, a zero manual rate or commercial settings.");
@@ -271,7 +272,6 @@ namespace Checks.MSAP
                 };
                 db.Add(ticket);
                 await db.SaveChangesAsync();
-                var progressDispatcher = new DispatchTicketService(work, null!, NullLogger<DispatchTicketService>.Instance);
                 var progressBilling = new BillingService(work, jobs, NullLogger<BillingService>.Instance, new CheckAccess(ProcedureEnum.ApproveFinalBilling));
                 var progressCollection = new CollectionService(work, NullLogger<CollectionService>.Instance);
                 var unfinished = new DispatchTicket
@@ -281,11 +281,7 @@ namespace Checks.MSAP
                     ServiceId = serviceType.ServiceId, Status = MsapConstants.DispatchTicketStatus.ForTariff, CreatedBy = "check",
                     DateLeft = order.Date, DateArrived = order.Date, TimeLeft = new TimeOnly(8, 15), TimeArrived = new TimeOnly(9, 15)
                 };
-                ticket.Status = MsapConstants.DispatchTicketStatus.ForApproval;
                 db.Add(unfinished);
-                await db.SaveChangesAsync();
-                Check(!(await progressDispatcher.ApproveTariffAsync(ticket.DispatchTicketId, "check", default)).IsSuccess, "Individual approval bypassed unfinished tariff on another ticket.");
-                Check(!(await progressDispatcher.BatchApproveTariffAsync([ticket.DispatchTicketId], "check", default)).IsSuccess, "Batch approval bypassed unfinished tariff on another ticket.");
                 ticket.Status = MsapConstants.DispatchTicketStatus.Disapproved;
                 await db.SaveChangesAsync();
                 Check(!(await progressBilling.CreateBillingAsync(new Billing { Date = order.Date, CustomerOrderSlipId = order.CustomerOrderSlipId }, "check", "MMSI", default)).IsSuccess, "Billing ignored disapproved tickets.");
@@ -295,7 +291,6 @@ namespace Checks.MSAP
                     CustomerId = customer.CustomerId, ToBillDispatchTickets = [ticket.DispatchTicketId.ToString()]
                 };
                 Check(!(await progressBilling.CreateBillingAsync(splitRequest, "check", "MMSI", default)).IsSuccess, "Split billing bypassed ticket readiness.");
-                Check(!(await progressDispatcher.SaveTariffAsync(new DispatchTicket { DispatchTicketId = ticket.DispatchTicketId, CustomerId = customer.CustomerId, DispatchRate = 100, BAFRate = 10 }, "Per hour", "Per hour", "check", true, default)).IsSuccess, "The retired tariff workflow accepted a manual correction.");
                 ticket = await db.MsapDispatchTickets.SingleAsync(t => t.DispatchTicketId == ticket.DispatchTicketId);
                 unfinished = await db.MsapDispatchTickets.SingleAsync(t => t.DispatchTicketId == unfinished.DispatchTicketId);
                 ticket.Status = unfinished.Status = MsapConstants.DispatchTicketStatus.ForBilling;

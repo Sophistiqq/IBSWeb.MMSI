@@ -320,7 +320,13 @@ namespace Checks.MSAP
             Check(typeof(AuditTrailController).GetCustomAttribute<AuthorizeAttribute>()?.Policy == MsapRoles.AdminPolicy,
                 "MSAP audit history and COS timelines must be Admin-only.");
             Check(typeof(MsapImportController).GetMethods().All(method => method.Name != "Reset"), "Legacy import reset is still exposed.");
-            Check(typeof(IBSWeb.Areas.MSAPSuperAdmin.Controllers.DataController).GetCustomAttribute<NonControllerAttribute>() != null, "Raw financial editing is still exposed.");
+            Check(typeof(DispatchTicketController).Assembly.GetType("IBSWeb.Areas.MSAPSuperAdmin.Controllers.DataController") is null,
+                "The retired raw financial editor must not return.");
+            foreach (var name in new[] { "SaveTariffAsync", "ApproveTariffAsync", "RevokeTariffApprovalAsync", "DisapproveTariffAsync", "BatchApproveTariffAsync", "BatchSetTariffAsync", "DeleteImageAsync", "DeleteVideoAsync", "CheckForTariffRateAsync", "GetCustomerSelectListAsync" })
+            {
+                Check(typeof(DispatchTicketService).GetMethods().All(method => method.Name != name),
+                    $"Retired dispatch service method still exists: {name}.");
+            }
             Type[] deletionControllerTypes =
             [
                 typeof(MaritimeServiceController), typeof(TugMasterController), typeof(VesselController), typeof(TerminalController),

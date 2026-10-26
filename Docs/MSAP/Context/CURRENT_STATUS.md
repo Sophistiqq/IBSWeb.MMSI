@@ -51,6 +51,8 @@ The first HTTP launch used the configured source connection because of PowerShel
 
 At the user's explicit request, normal chart administration registered account 358 in ibs_dev: 201020500, AP - Trade - Other Tugs, Level 4, Credit, under account 51 / Accounts Payable 201010000. The mapping is provisional and must be verified at the next meeting (IBS-57). The seven other synthetic AP diagnostic accounts were not copied into the source chart. No payment or source posting was performed.
 
-Continue final review of the local fixes and the remaining full mutation/role coverage in Linear. User manuals, dead-code cleanup and full owner workflow acceptance remain deferred.
+Continue final review of the local fixes and the remaining full mutation/role coverage in Linear. User manuals and full owner workflow acceptance remain deferred. The user authorized dead-code cleanup on 27 October.
 
-The [dead-code candidate ledger](DEAD_CODE_CANDIDATES.md) records the retired raw-data controller/view, its service/DI registration and retired tariff methods, including surviving diagnostic callers. IBS-49 remains open for complete reachability review and retain/remove decisions; no removal is approved by this candidate list.
+The [cleanup record](DEAD_CODE_CANDIDATES.md) documents removal of the retired raw-data controller/view, its service/DI registration, six retired tariff methods and four unused dispatch helpers. The authorized SuperAdmin route remains, with a workspace entry replacing broken editor links. Existing deletion/restoration diagnostic consumers are retained. Builds, default/access/urgent checks and fresh-clone workspace/ticket/billing checks pass; the code-only graph is refreshed. These changes are included in the cleanup checkpoint.
+
+IBS-59 records a separate verification gap: the full scheduling database runner expects a zero manual tariff to save, but the unchanged schedule validator rejects it. The failure occurs before the cleanup-related fixture changes. A passing full scheduling database run is not claimed; no rate-policy change or source database mutation was made for cleanup.
