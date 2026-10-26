@@ -214,7 +214,7 @@ namespace IBS.Services.MSAP
             if (!manualBaf.HasValue && (bafRate == null || !bafRate.ApprovedAt.HasValue
                 || bafRate.AsOfDate < BafCycleStart(ticket.DateLeft.Value)))
             {
-                return $"Approve BAF coverage for the week beginning {BafCycleStart(ticket.DateLeft.Value):dd MMM yyyy} before saving this ticket.";
+                return $"Approve BAF coverage for the week beginning {BafCycleStart(ticket.DateLeft.Value):dd MMM yyyy} before calculating charges.";
             }
             var discount = schedule.SkipCosDiscount ? 0m : schedule.CosDiscountPercent.GetValueOrDefault();
             return discount is < 0 or > 100 ? "The approved COS discount must be between 0% and 100%." : null;

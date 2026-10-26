@@ -218,10 +218,6 @@ namespace IBS.Services.MSAP
                     {
                         chargeBlocker = await ScheduledTicketCharges.ApplyAsync(unitOfWork, model, booking, username, cancellationToken);
                     }
-                    if (chargeBlocker != null)
-                    {
-                        throw new InvalidOperationException(chargeBlocker);
-                    }
                     if (imageFile is { Length: > 0 })
                     {
                         var ext = Path.GetExtension(imageFile.FileName);
@@ -603,11 +599,9 @@ namespace IBS.Services.MSAP
                         return ServiceResult.Failure("The linked schedule is unavailable.");
                     }
                     var chargeBlocker = await ScheduledTicketCharges.ApplyAsync(unitOfWork, currentModel, schedule, username, cancellationToken);
-                    if (chargeBlocker != null)
-                    {
-                        return ServiceResult.Failure(chargeBlocker);
-                    }
-                    changes.Add("Charges recalculated from approved schedule terms and service-date rates");
+                    changes.Add(chargeBlocker == null
+                        ? "Charges recalculated from approved schedule terms and service-date rates"
+                        : $"Calculation pending: {chargeBlocker}");
                 }
 
                 await RefreshSbmaAsync(currentModel, cancellationToken);
@@ -1235,16 +1229,12 @@ namespace IBS.Services.MSAP
                         throw new InvalidOperationException("The approved schedule is unavailable.");
                     }
                     string? chargeError = await ScheduledTicketCharges.ApplyAsync(unitOfWork, model, readySchedule, username, cancellationToken);
-                    if (chargeError != null)
-                    {
-                        throw new InvalidOperationException(chargeError);
-                    }
                     await RefreshSbmaAsync(model, cancellationToken);
 
                     model.EditedBy = username;
                     model.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Restored dispatch ticket #{model.DispatchNumber}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Restored dispatch ticket #{model.DispatchNumber}{(chargeError == null ? "" : $"; Calculation pending: {chargeError}")}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
                 }, cancellationToken);
 
@@ -1464,7 +1454,12 @@ namespace IBS.Services.MSAP
             var entry = schedule?.ServiceEntries.SingleOrDefault(x => x.VesselScheduleServiceEntryId == model.VesselScheduleServiceEntryId);
             if (parent == null || schedule == null || entry == null)
             {
-                return "Select an approved COS service before saving its ticket.";
+                return "Select a COS service before saving its ticket.";
+            }
+            if (entry.CancelledAt.HasValue || entry.TugboatId != model.TugBoatId || entry.ServiceId != model.ServiceId
+                || schedule.Status == MsapConstants.VesselScheduleStatus.Cancelled)
+            {
+                return "The ticket must match an active COS service requirement.";
             }
 
             model.CustomerId = parent.CustomerId;
@@ -1473,8 +1468,7 @@ namespace IBS.Services.MSAP
             model.TerminalId = parent.TerminalId;
             model.VoyageNumber = parent.VoyageNumber;
             model.COSNumber = parent.CustomerOrderSlipNumber;
-            var preview = await ScheduledTicketCharges.PreviewAsync(unitOfWork, model.ToEntity(), schedule, ct);
-            return ScheduledTicketCharges.GetBlocker(preview.Ticket, schedule, entry, preview.Tariff, preview.Baf);
+            return null;
         }
 
         private async Task RefreshSbmaAsync(DispatchTicket ticket, CancellationToken ct)

@@ -144,6 +144,7 @@ if (args.Contains("--urgent-entry-only", StringComparer.Ordinal))
 {
     Checks.MSAP.JobProgressCheck.Run();
     Checks.MSAP.UrgentEntryCheck.Run();
+    await Checks.MSAP.UrgentEntryCheck.RunSaveAsync();
     return;
 }
 

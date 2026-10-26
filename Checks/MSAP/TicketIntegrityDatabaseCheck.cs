@@ -99,13 +99,13 @@ namespace Checks.MSAP
                 ServiceId = suffix == "2" ? anotherService.ServiceId : service.ServiceId, TugMasterId = captain.TugMasterId,
                 Date = date, DateLeft = date, DateArrived = date, TimeLeft = new TimeOnly(8, 0), TimeArrived = new TimeOnly(8, 0, seconds)
             };
-            await RejectAsync(Input("U"), "Unapproved COS was accepted.");
+            await SavePendingAsync(Input("U"));
             schedule.ApprovedRevision = 1;
             schedule.Status = MsapConstants.VesselScheduleStatus.Confirmed;
             schedule.ApprovedAt = DateTime.SpecifyKind(DateTime.Now, DateTimeKind.Unspecified);
             schedule.ApprovedByUserId = await db.Users.Select(x => x.Id).FirstAsync();
             await db.SaveChangesAsync();
-            await RejectAsync(Input("R"), "Missing approved tariff/BAF was accepted.");
+            await SavePendingAsync(Input("R"));
             entry.ManualTariffRate = 0m;
             entry.ManualBafRate = 0m;
             await db.SaveChangesAsync();
@@ -205,7 +205,7 @@ namespace Checks.MSAP
                     await transaction.RollbackAsync();
                 }
             }
-            Console.WriteLine("PASS: migration rollback/reapply, missing approval/rates, partial/backwards times, wrong linkage, approved zero rates, COS identity, persisted SBMA/rounding/report subsets, concurrent duplicate entry, edit/replacement upload rollback, and SQL constraints (isolated database).");
+            Console.WriteLine("PASS: migration rollback/reapply, pending actuals with missing approval/rates, partial/backwards times, wrong linkage, approved zero rates, COS identity, persisted SBMA/rounding/report subsets, concurrent duplicate entry, edit/replacement upload rollback, and SQL constraints (isolated database).");
             if (includeBilling)
             {
                 await BillingIntegrityDatabaseCheck.RunAsync(db, shared, work, dispatch,
@@ -221,6 +221,17 @@ namespace Checks.MSAP
                 var input = Input("F");
                 input.DispatchNumber = reference + suffix;
                 return await competingService.CreateDispatchTicketAsync(input, null, null, "Check", default);
+            }
+
+            async Task SavePendingAsync(DispatchTicketViewModel input)
+            {
+                var result = await dispatch.CreateDispatchTicketAsync(input, null, null, "Check", default);
+                Check(result.IsSuccess, $"Valid actual details could not be saved pending calculation: {result.Message}");
+                var pending = await db.MsapDispatchTickets.SingleAsync(x => x.DispatchTicketId == result.Data);
+                Check(pending.Status == MsapConstants.DispatchTicketStatus.CalculationPending && pending.TotalBilling == 0m,
+                    "Missing approval or rates unlocked billing or retained calculated amounts.");
+                db.Remove(pending);
+                await db.SaveChangesAsync();
             }
 
             async Task RejectAsync(DispatchTicketViewModel input, string message)

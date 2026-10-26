@@ -71,10 +71,10 @@ namespace Checks.MSAP
             var ticket = new DispatchTicketViewModel { COSNumber = "COS-<check>", DispatchNumber = "ACTUAL-1" };
             string actual = await RenderAsync("/Areas/MSAP/Views/CustomerOrderSlip/_ActualTicketEntry.cshtml", ticket);
             Check(actual.Contains("COS-&lt;check&gt;", StringComparison.Ordinal)
-                && actual.Contains("before saving", StringComparison.Ordinal)
+                && actual.Contains("can be saved while approval or rates are pending", StringComparison.Ordinal)
                 && !actual.Contains("name=\"COSNumber\"", StringComparison.Ordinal)
                 && actual.Contains("name=\"VesselScheduleServiceEntryId\"", StringComparison.Ordinal),
-                "Actual-ticket form lost canonical COS display, approved service linkage or strict-save guidance.");
+                "Actual-ticket form lost canonical COS display, service linkage or pending-calculation guidance.");
             workspace.Select(null, "MMSI / All tugboats");
             route.Values["area"] = "Filpride";
             route.Values["controller"] = "CheckVoucherTrade";

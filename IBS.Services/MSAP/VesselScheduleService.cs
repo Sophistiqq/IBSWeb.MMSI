@@ -481,10 +481,6 @@ namespace IBS.Services.MSAP
                             throw new InvalidOperationException("A ticket is billed or belongs to a closed period. Approval cannot change its charges.");
                         }
                         var blocker = await ScheduledTicketCharges.ApplyAsync(unitOfWork, ticket, schedule, username, ct);
-                        if (blocker != null)
-                        {
-                            throw new InvalidOperationException(blocker);
-                        }
                         await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
                             $"Applied approved COS terms to urgent ticket #{ticket.DispatchNumber}: {blocker ?? "Charges calculated"}",
                             "Dispatch Ticket", ticket.DispatchTicketId, ticket.DispatchNumber), ct);
