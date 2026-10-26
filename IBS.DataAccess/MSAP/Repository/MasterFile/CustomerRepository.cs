@@ -1,3 +1,4 @@
+using System.Globalization;
 using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository.MasterFile.IRepository;
 using IBS.Models.MSAP.Enums;
@@ -14,30 +15,41 @@ namespace IBS.DataAccess.MSAP.Repository.MasterFile
 
         public async Task<string> GenerateCodeAsync(string customerType, CancellationToken cancellationToken = default)
         {
-            var lastCustomer = await _db
-                .Customers
-                .OrderByDescending(c => c.CustomerId)
-                .FirstOrDefaultAsync(c => c.CustomerType == customerType, cancellationToken);
-
-            if (lastCustomer == null)
+            var prefix = customerType switch
             {
-                return customerType switch
-                {
-                    nameof(CustomerType.Retail) => "RET0001",
-                    nameof(CustomerType.Industrial) => "IND0001",
-                    nameof(CustomerType.Reseller) => "RES0001",
-                    _ => "GOV0001"
-                };
+                nameof(CustomerType.Retail) => "RET",
+                nameof(CustomerType.Industrial) => "IND",
+                nameof(CustomerType.Reseller) => "RES",
+                _ => throw new ArgumentException("Unsupported customer type.", nameof(customerType))
+            };
+
+            if (_db.Database.CurrentTransaction is null)
+            {
+                throw new InvalidOperationException("Customer codes must be generated inside the customer creation transaction.");
             }
 
-            var lastCode = lastCustomer.CustomerCode;
-            var numericPart = lastCode.Substring(3);
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext('msap_customer_code'), hashtext({customerType}))",
+                cancellationToken);
 
-            // Parse the numeric part and increment it by one
-            var incrementedNumber = int.Parse(numericPart) + 1;
+            var codes = await _db.Customers.Where(c => c.CustomerCode.StartsWith(prefix))
+                .Select(c => c.CustomerCode).ToListAsync(cancellationToken);
+            var lastNumber = 0;
+            foreach (var code in codes)
+            {
+                if (code.Length != 7 || !int.TryParse(code.AsSpan(3), NumberStyles.None, CultureInfo.InvariantCulture, out var number))
+                {
+                    throw new InvalidOperationException($"Customer code {code} does not match the {prefix}#### format.");
+                }
+                lastNumber = Math.Max(lastNumber, number);
+            }
 
-            // Format the incremented number with leading zeros and concatenate with the letter part
-            return lastCode.Substring(0, 3) + incrementedNumber.ToString("D4");
+            if (lastNumber >= 9999)
+            {
+                throw new InvalidOperationException($"The {prefix} customer code range is exhausted.");
+            }
+
+            return prefix + (lastNumber + 1).ToString("D4", CultureInfo.InvariantCulture);
         }
 
         public async Task<bool> IsTinNoExistAsync(string tin, string company, CancellationToken cancellationToken = default)

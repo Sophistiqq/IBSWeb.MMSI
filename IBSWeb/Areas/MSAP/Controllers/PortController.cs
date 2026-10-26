@@ -38,6 +38,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(PortViewModel model, CancellationToken cancellationToken = default)
         {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
             var result = await portService.CreateAsync(model, userManager.GetUserName(User)!, cancellationToken);
 
             if (result.IsSuccess)
@@ -65,6 +70,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(PortViewModel model, CancellationToken cancellationToken)
         {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
             var result = await portService.UpdateAsync(model, userManager.GetUserName(User)!, cancellationToken);
 
             if (result.IsSuccess)
@@ -77,6 +87,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
             return View(model);
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
         {
             var result = await portService.DeleteAsync(id, userManager.GetUserName(User)!, cancellationToken);

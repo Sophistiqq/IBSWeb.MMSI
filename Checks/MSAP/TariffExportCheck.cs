@@ -128,6 +128,23 @@ namespace Checks.MSAP
             Check(ScheduledTicketCharges.Apply(ticket, schedule, entry, new TariffRate { Dispatch = 100m }, null) != null, "Missing BAF treated as zero.");
             entry.ManualBafRate = 0m;
             Check(ScheduledTicketCharges.Apply(ticket, schedule, entry, new TariffRate { Dispatch = 100m }, null) == null && ticket.BAFBillingAmount == 0m, "Approved manual zero rejected.");
+            schedule.CosDiscountPercent = 0m;
+            entry.TariffBasis = TariffChargeBasis.PerMove;
+            entry.BafMethod = BafCalculationMethod.PerMove;
+            entry.ManualBafRate = null;
+            Check(ScheduledTicketCharges.Apply(ticket, schedule, entry, new TariffRate { Dispatch = 100.005m },
+                new BafRate { Amount = 200.005m, AsOfDate = new DateOnly(2025, 12, 30), ApprovedAt = new DateTime(2025, 12, 30) }) == null,
+                "Half-cent rates should still calculate.");
+            Check(ticket.DispatchBillingAmount == 100m && ticket.BAFBillingAmount == 200m && ticket.TotalBilling == 300m
+                && ticket.TotalBilling == ticket.DispatchBillingAmount + ticket.BAFBillingAmount
+                && ticket.TotalNetRevenue == ticket.DispatchNetRevenue + ticket.BAFNetRevenue,
+                "Ticket totals must equal their persisted rounded components.");
+            schedule.CosDiscountPercent = 10m;
+            Check(ScheduledTicketCharges.Apply(ticket, schedule, entry, new TariffRate { Dispatch = 100.005m },
+                new BafRate { Amount = 200.005m, AsOfDate = new DateOnly(2025, 12, 30), ApprovedAt = new DateTime(2025, 12, 30) }) == null
+                && ticket.DispatchNetRevenue == 90m && ticket.BAFNetRevenue == 180m
+                && ticket.TotalNetRevenue == 270m && ticket.TotalNetRevenue == ticket.DispatchNetRevenue + ticket.BAFNetRevenue,
+                "Discounted ticket totals must equal their rounded components.");
         }
 
         private static void Check(bool passed, string message)

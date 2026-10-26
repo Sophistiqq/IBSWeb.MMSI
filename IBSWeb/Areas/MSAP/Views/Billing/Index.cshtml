@@ -123,7 +123,7 @@
                     { data: "date", defaultContent: "" },
                     {
                         data: "msapBillingNumber",
-                        render: (data, type, row) => `<a href="${reviewUrl}?id=${row.msapBillingId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${data}</a>`
+                        render: (data, type, row) => `<a href="${reviewUrl}?id=${row.msapBillingId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${ModernTable.render.text(data)}</a>`
                     },
                     {
                         data: "amount",

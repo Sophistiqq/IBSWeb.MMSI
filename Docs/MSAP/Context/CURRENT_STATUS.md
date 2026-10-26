@@ -1,6 +1,6 @@
 # Current MSAP status
 
-Checkpoint: 19 October 2026. Latest application milestone: 3257f348b. Read [BLOCKERS.md](BLOCKERS.md) for outstanding work; this file records delivered scope and evidence.
+Audit checkpoint: 26 October 2026. The delivered milestone table below records the 19 October baseline (3257f348b); audit fixes are local changes on `chore/audits-and-reviews`. Read [BLOCKERS.md](BLOCKERS.md) for outstanding work and the Linear project for individual findings and decisions.
 
 ## Delivered milestones
 
@@ -33,12 +33,24 @@ Checkpoint: 19 October 2026. Latest application milestone: 3257f348b. Read [BLOC
 - Database-free master-import checks passed for workbook round trips/comments/notes, code preservation, formula rejection, correction boundaries, removed fields, migration/model alignment and forward/rollback SQL generation. Source inspection covered eleven master/rate CSVs and 2,083 rows.
 - Targeted workflow-access, rate-access and Job Progress checks passed in the preceding access/import work. They have not been represented as the complete automated suite.
 - The user has reported successful testing and will start the full workflow test plan. Complete recorded case-by-case browser/database acceptance remains outstanding; see the test plan.
-- Schedule rendering verification now passes through `dotnet <isolated-output>/Check.dll --schedule-render-only`. The original reapproval failure was a stale fixture: COS existence does not establish approval history. Checks now cover initial approval with/without an urgent COS, reapproval, matching confirmation/status, read-only states and COS pending-ticket links with the correct route context. No application approval behavior changed. The check project build succeeded with the existing EF1002 warning. The broad command still stops at its stale 32-controller inventory assertion; the full suite has not passed.
+- Schedule rendering checks cover initial approval with/without an urgent COS, reapproval, matching confirmation/status, read-only states and COS pending-ticket links. The default runner now passes after IBS-46 corrected the stale controller inventory. The check project still reports the existing EF1002 warning in SchedulingCheck.cs:72.
 - The user reports using placeholders to proceed with master data and handing off exported Excel workbooks with notes. Returned corrections remain pending; this is no longer an immediate implementation/testing blocker and does not confirm the placeholder business values.
-- The agent has not applied migrations or run live database imports. Verify the target environment rather than assuming whether the owner has applied them.
+- Audit migrations and mutating workflow checks use designated local disposable databases. No source database reset, master import or source schema migration was performed. Target-environment deployment remains unverified.
 - Latest supplied cleanup migrations: 20261019044840_RemovePortSbmaFlag and 20261019045214_RemoveUnusedMsapCustomerFields. They drop retired column values; Down restores columns/defaults, not those old values.
 - Source CSVs and supporting workbooks remain unchanged. No Chrome Recorder artifacts have been produced.
 
 ## Resume point
 
-The user is reviewing removal of inherited customer numbering logic. All 92 source customer codes are numeric (maximum 0093); none uses RET/IND/RES/GOV. Existing codes/source IDs remain necessary for import identity and customer references. The proposed single numeric sequence is not implemented. User manuals are deferred, correction workbooks have been handed off, and full workflow testing is owner-led. The focused schedule rendering failure is resolved; the broad check's controller inventory remains open.
+The user confirmed type-prefixed codes for new customers while preserving numeric/imported identifiers. IBS-47 is implemented locally with a unique-index migration and a passing disposable PostgreSQL concurrency check. Audit history is restricted to administrators, including COS timeline controls; the role lookup uses the existing current-role service rather than login-cookie claims. All three User-role demo accounts were denied on the three audit endpoints, and the administrator received nonempty history. Actual COS pages matched those visibility rules.
+
+The corrected original billing and dependent provider-progress diagnostics pass on `ibs_workspace_check_59c8d6163aae`. Persisted receipt-rename and actual XLSX checks on the earlier financial clone confirm the linked reference/audit fix and the discounted gross, income, withholding and BAF receipt totals. Report regression checks also cover Basic-only/separate/combined receipts and multi-COS receipts with different discounts, including filtered exports.
+
+Clone HTTP checks now reject GET and missing/invalid antiforgery POST requests on all eight master delete endpoints. Invalid Port, Terminal and Vessel create/edit submissions preserve record counts and existing values. Chrome rendered the stored HTML probe literally, with no image or event attribute injected; normal confirmed Port deletion removed that clone fixture.
+
+The first HTTP launch used the configured source connection because of PowerShell dictionary adaptation; those requests covered login and audit reads, with no business edits. The app was stopped and the full audit role/visibility check was repeated successfully with an explicit verified clone connection. No temporary audit app remains running.
+
+At the user's explicit request, normal chart administration registered account 358 in ibs_dev: 201020500, AP - Trade - Other Tugs, Level 4, Credit, under account 51 / Accounts Payable 201010000. The mapping is provisional and must be verified at the next meeting (IBS-57). The seven other synthetic AP diagnostic accounts were not copied into the source chart. No payment or source posting was performed.
+
+Continue final review of the local fixes and the remaining full mutation/role coverage in Linear. User manuals, dead-code cleanup and full owner workflow acceptance remain deferred.
+
+The [dead-code candidate ledger](DEAD_CODE_CANDIDATES.md) records the retired raw-data controller/view, its service/DI registration and retired tariff methods, including surviving diagnostic callers. IBS-49 remains open for complete reachability review and retain/remove decisions; no removal is approved by this candidate list.

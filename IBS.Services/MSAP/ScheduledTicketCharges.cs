@@ -133,8 +133,8 @@ namespace IBS.Services.MSAP
             ticket.BAFBillingAmount = Math.Round(bafGross, 2);
             ticket.DispatchNetRevenue = Math.Round(dispatchGross * (1m - discount / 100m), 2);
             ticket.BAFNetRevenue = Math.Round(bafGross * (1m - discount / 100m), 2);
-            ticket.TotalBilling = Math.Round(dispatchGross + bafGross, 2);
-            ticket.TotalNetRevenue = Math.Round((dispatchGross + bafGross) * (1m - discount / 100m), 2);
+            ticket.TotalBilling = ticket.DispatchBillingAmount + ticket.BAFBillingAmount;
+            ticket.TotalNetRevenue = ticket.DispatchNetRevenue + ticket.BAFNetRevenue;
             ticket.Status = MsapConstants.DispatchTicketStatus.ForBilling;
             return null;
         }

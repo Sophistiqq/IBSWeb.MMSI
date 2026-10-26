@@ -47,6 +47,12 @@ if (args.Contains("--workspace-only", StringComparer.Ordinal))
     return;
 }
 
+if (args.Contains("--customer-code-only", StringComparer.Ordinal))
+{
+    await Checks.MSAP.CustomerCodeDatabaseCheck.RunAsync();
+    return;
+}
+
 if (args.Contains("--tugboat-owner-database", StringComparer.Ordinal))
 {
     await Checks.MSAP.TugboatOwnerCheck.RunAsync();
@@ -199,6 +205,11 @@ if (args.Contains("--calendar-render-only", StringComparer.Ordinal)
 if (!args.Contains("--master-access-database", StringComparer.Ordinal))
 {
     builder.Services.AddSingleton<IBS.Services.MSAP.AccessControl.IAccessControlService, Checks.MSAP.JobProgressCheck.CheckAccess>();
+    var renderingRoles = System.Reflection.DispatchProxy.Create<IRoleService, Checks.MSAP.CollectionCheck.CheckProxy>();
+    ((Checks.MSAP.CollectionCheck.CheckProxy)(object)renderingRoles).Handler = (method, arguments) => method.Name == "GetUserRoleAsync"
+        ? Task.FromResult(MsapRoles.IsValid((string?)arguments![0]) ? (string?)arguments[0] : null)
+        : throw new NotSupportedException(method.Name);
+    builder.Services.AddSingleton(renderingRoles);
 }
 await using var app = builder.Build();
 app.UseRouting();
@@ -254,9 +265,17 @@ Check(services.GetRequiredService<IBS.DataAccess.MSAP.Repository.IRepository.IUn
 
 var actions = services.GetRequiredService<IActionDescriptorCollectionProvider>().ActionDescriptors.Items.OfType<ControllerActionDescriptor>().ToList();
 var moduleActions = actions.Where(a => a.ControllerTypeInfo.Namespace?.StartsWith("IBSWeb.Areas.MSAP", StringComparison.Ordinal) == true).ToList();
-Check(moduleActions.Select(a => a.ControllerTypeInfo).Distinct().Count() == 31,
-    "Expected 31 active MSAP controllers; found " + moduleActions.Select(a => a.ControllerTypeInfo).Distinct().Count()
-    + ": " + string.Join(", ", moduleActions.Select(a => a.ControllerName).Distinct().Order()));
+var expectedMsapControllers = new HashSet<string>(StringComparer.Ordinal)
+{
+    "AppRole", "AuditTrail", "BankAccount", "Billing", "Collection", "Customer", "CustomerOrderSlip",
+    "DispatchTicket", "Docs", "Home", "MaritimeReport", "MaritimeService", "MasterFile", "MsapImport",
+    "OtherTugCharge", "PaymentTerms", "Port", "PostedPeriod", "Principal", "RateUpload", "TariffRate",
+    "Terminal", "Tugboat", "TugboatOwner", "TugMaster", "UserAccess", "Vessel", "VesselSchedule"
+};
+var discoveredMsapControllers = moduleActions.Select(a => a.ControllerName).ToHashSet(StringComparer.Ordinal);
+Check(expectedMsapControllers.SetEquals(discoveredMsapControllers),
+    "MSAP controller inventory mismatch. Missing: " + string.Join(", ", expectedMsapControllers.Except(discoveredMsapControllers).Order())
+    + "; unexpected: " + string.Join(", ", discoveredMsapControllers.Except(expectedMsapControllers).Order()));
 Check(!moduleActions.Any(a => a.ControllerName == "Data"), "Retired direct data changes are exposed as endpoints.");
 Check(moduleActions.All(a => a.RouteValues["area"] is "MSAP" or "MSAPAdmin" or "MSAPSuperAdmin"), "An MSAP controller collides with a base area.");
 Check(moduleActions.All(action => action.FilterDescriptors.Any(filter =>

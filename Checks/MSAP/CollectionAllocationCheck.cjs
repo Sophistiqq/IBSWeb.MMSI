@@ -14,3 +14,5 @@ const path = require('node:path');
 const service = fs.readFileSync(path.join(__dirname, '../../IBS.Services/MSAP/CollectionService.cs'), 'utf8');
 assert(service.includes('if (!BillingService.CanPrint(billing))'), 'Saving must reject unapproved or stale-approved bills.');
 assert(service.includes('!BillingService.CanPrint(b)'), 'Selection must mark unapproved or stale-approved bills ineligible.');
+assert(service.indexOf('currentModel.MsapCollectionNumber = newCollectionNumber;') < service.indexOf('billing.CollectionNumber = newCollectionNumber'), 'Renamed receipt numbers must be applied before updating linked bill references.');
+assert(service.includes('Edit collection #{oldCollectionNumber} to #{newCollectionNumber}'), 'The audit must identify both receipt numbers after a rename.');

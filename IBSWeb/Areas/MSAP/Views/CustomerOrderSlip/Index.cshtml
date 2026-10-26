@@ -90,7 +90,7 @@
                     },
                     {
                         data: "customerOrderSlipNumber",
-                        render: (data, type, row) => `<a href="${detailsUrl}?id=${row.customerOrderSlipId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${data}</a>`
+                        render: (data, type, row) => `<a href="${detailsUrl}?id=${row.customerOrderSlipId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${ModernTable.render.text(data)}</a>`
                     },
                     {
                         data: "customer.customerName",

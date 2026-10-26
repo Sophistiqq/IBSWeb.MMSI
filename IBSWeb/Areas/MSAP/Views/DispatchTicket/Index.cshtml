@@ -123,7 +123,7 @@
                     { data: "cosNumber", defaultContent: "" },
                     {
                         data: "dispatchNumber",
-                        render: (data, type, row) => `<a href="${previewUrl}?id=${row.dispatchTicketId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${data}</a>`
+                        render: (data, type, row) => `<a href="${previewUrl}?id=${row.dispatchTicketId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${ModernTable.render.text(data)}</a>`
                     },
                     { data: "billing.msapBillingNumber", defaultContent: "" },
                     {

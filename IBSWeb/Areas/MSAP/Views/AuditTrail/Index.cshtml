@@ -150,7 +150,7 @@
                         data: 'documentType',
                         name: 'documentType',
                         render: function(data) {
-                            return `<span class="modern-badge-sm ${getBadgeClass(data)}">${data}</span>`;
+                            return `<span class="modern-badge-sm ${getBadgeClass(data)}">${ModernTable.render.text(data)}</span>`;
                         }
                     },
                     {

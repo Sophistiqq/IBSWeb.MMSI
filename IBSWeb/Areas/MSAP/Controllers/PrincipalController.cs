@@ -84,6 +84,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
             return View(model);
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
         {
             var result = await principalService.DeleteAsync(id, userManager.GetUserName(User)!, cancellationToken);

@@ -65,7 +65,7 @@
                     {
                         data: "msapCollectionNumber",
                         defaultContent: "",
-                        render: (data, type, row) => `<a href="${previewUrl}?id=${row.msapCollectionId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${data}</a>`
+                        render: (data, type, row) => `<a href="${previewUrl}?id=${row.msapCollectionId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${ModernTable.render.text(data)}</a>`
                     },
                     {
                         data: "checkDate",

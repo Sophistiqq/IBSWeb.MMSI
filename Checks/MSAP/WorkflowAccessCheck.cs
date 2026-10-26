@@ -317,8 +317,31 @@ namespace Checks.MSAP
             }
             Check(typeof(MsapImportController).GetCustomAttribute<AuthorizeAttribute>()?.Policy == MsapRoles.AdminPolicy,
                 "Master-file import must remain Admin-only.");
+            Check(typeof(AuditTrailController).GetCustomAttribute<AuthorizeAttribute>()?.Policy == MsapRoles.AdminPolicy,
+                "MSAP audit history and COS timelines must be Admin-only.");
             Check(typeof(MsapImportController).GetMethods().All(method => method.Name != "Reset"), "Legacy import reset is still exposed.");
             Check(typeof(IBSWeb.Areas.MSAPSuperAdmin.Controllers.DataController).GetCustomAttribute<NonControllerAttribute>() != null, "Raw financial editing is still exposed.");
+            Type[] deletionControllerTypes =
+            [
+                typeof(MaritimeServiceController), typeof(TugMasterController), typeof(VesselController), typeof(TerminalController),
+                typeof(TugboatController), typeof(PrincipalController), typeof(TugboatOwnerController), typeof(PortController)
+            ];
+            foreach (var controller in deletionControllerTypes)
+            {
+                var delete = controller.GetMethod("Delete");
+                Check(delete?.GetCustomAttribute<HttpPostAttribute>() != null && delete.GetCustomAttribute<ValidateAntiForgeryTokenAttribute>() != null,
+                    $"{controller.Name}.Delete must require POST and antiforgery validation.");
+            }
+            IPortService portService = DispatchProxy.Create<IPortService, CollectionCheck.CheckProxy>();
+            ((CollectionCheck.CheckProxy)(object)portService).Handler = (method, _) => throw new InvalidOperationException($"Invalid Port request reached {method.Name}.");
+            var invalidPortCreate = new PortController(portService, null!);
+            invalidPortCreate.ModelState.AddModelError(nameof(PortViewModel.PortNumber), "Invalid code.");
+            Check(await invalidPortCreate.Create(new PortViewModel(), default) is ViewResult,
+                "Invalid Port creates must return the form without calling the service.");
+            var invalidPortEdit = new PortController(portService, null!);
+            invalidPortEdit.ModelState.AddModelError(nameof(PortViewModel.PortNumber), "Invalid code.");
+            Check(await invalidPortEdit.Edit(new PortViewModel(), default) is ViewResult,
+                "Invalid Port edits must return the form without calling the service.");
             MethodInfo discard = typeof(BillingController).GetMethod("Delete")!;
             Check(discard.GetCustomAttribute<HttpPostAttribute>() != null && discard.GetCustomAttribute<ValidateAntiForgeryTokenAttribute>() != null,
                 "Discarding a preparation must require POST and antiforgery validation.");

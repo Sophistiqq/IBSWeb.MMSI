@@ -1647,6 +1647,7 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasName("pk_customers");
 
                     b.HasIndex("CustomerCode")
+                        .IsUnique()
                         .HasDatabaseName("ix_customers_customer_code");
 
                     b.HasIndex("CustomerName")

@@ -6,7 +6,7 @@ const ModernTable = {
     // Generates a base configuration for DataTables
     config: function(options = {}) {
         const initComplete = options.initComplete;
-        return $.extend(true, {
+        const config = $.extend(true, {
             dom: '<"flex-stack mb-2"lf><"modern-table-container"t><"flex-stack mt-2"ip>',
             pageLength: 10,
             processing: true,
@@ -35,6 +35,8 @@ const ModernTable = {
                 if (initComplete) initComplete.call(this, settings, json);
             }
         });
+        config.columnDefs = [{ targets: '_all', render: $.fn.dataTable.render.text() }, ...(config.columnDefs || [])];
+        return config;
     },
 
     // Standard AJAX helper with CSRF protection
@@ -51,6 +53,14 @@ const ModernTable = {
 
     // Reusable column renderers
     render: {
+        text: (data) => String(data ?? '').replace(/[&<>"']/g, character => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        })[character]),
+
         date: (data) => data ? new Date(data).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '-',
 
         dateTime: (datePart, timePart) => {
@@ -60,11 +70,12 @@ const ModernTable = {
 
         currency: (data) => '₱' + parseFloat(data || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
 
-        badge: (data, statusClass) => `<span class="modern-badge-sm ${statusClass || ''}">${data}</span>`,
+        badge: (data, statusClass) => `<span class="modern-badge-sm ${statusClass || ''}">${ModernTable.render.text(data)}</span>`,
 
         ellipsis: (data, maxWidth = '250px') => {
             if (!data) return '';
-            return `<div style="max-width: ${maxWidth}; overflow: hidden; text-overflow: ellipsis;" title="${data}">${data}</div>`;
+            const text = ModernTable.render.text(data);
+            return `<div style="max-width: ${maxWidth}; overflow: hidden; text-overflow: ellipsis;" title="${text}">${text}</div>`;
         },
 
         // Generates a standard modern action dropdown

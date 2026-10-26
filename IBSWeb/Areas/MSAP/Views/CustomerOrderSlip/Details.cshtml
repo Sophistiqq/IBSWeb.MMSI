@@ -1,4 +1,5 @@
 @model CustomerOrderSlip
+@inject IRoleService MsapRoleService
 @{
     ViewData["Title"] = $"COS {Model.CustomerOrderSlipNumber}";
     ViewData["IsFullWidth"] = true;
@@ -22,6 +23,9 @@
     var ticketEntry = ViewBag.ActualTicketEntry as DispatchTicketViewModel;
     var viewedTicket = ViewData["ViewedTicket"] as DispatchTicket;
     var selectedEntry = entries.FirstOrDefault(entry => entry.VesselScheduleServiceEntryId == ticketEntry?.VesselScheduleServiceEntryId);
+    var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    var msapRole = userId is not null ? await MsapRoleService.GetUserRoleAsync(userId) : null;
+    var canViewAuditHistory = msapRole is MsapRoles.Admin or MsapRoles.SuperAdmin;
 }
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
@@ -128,10 +132,13 @@
         {
             <section class="ui-panel ui-stack"><h2 class="ui-section-title">Planning notes</h2><p class="ui-body schedule-note">@Model.Remarks</p></section>
         }
-        <section class="ui-panel" id="timelineAccordion" aria-label="Workflow activity">
-            <button type="button" id="timelineToggle" class="cos-timeline-toggle" aria-expanded="false" aria-controls="timelineBody"><span class="ui-section-title">Workflow timeline</span><span class="material-symbols-outlined" id="timelineChevron" aria-hidden="true">expand_more</span></button>
-            <div id="timelineBody" style="overflow:hidden;max-height:0;opacity:0"><div id="timelineContainer"><p class="ui-body ui-muted">Expand to load the workflow activity.</p></div></div>
-        </section>
+        @if (canViewAuditHistory)
+        {
+            <section class="ui-panel" id="timelineAccordion" aria-label="Workflow activity">
+                <button type="button" id="timelineToggle" class="cos-timeline-toggle" aria-expanded="false" aria-controls="timelineBody"><span class="ui-section-title">Workflow timeline</span><span class="material-symbols-outlined" id="timelineChevron" aria-hidden="true">expand_more</span></button>
+                <div id="timelineBody" style="overflow:hidden;max-height:0;opacity:0"><div id="timelineContainer"><p class="ui-body ui-muted">Expand to load the workflow activity.</p></div></div>
+            </section>
+        }
         <footer class="cos-details-footer">
             <span class="ui-caption ui-muted">@progress.Guidance</span>
             <span class="ui-body">@Model.DispatchTickets.Count ticket(s) · Calculated billing ₱ @Model.DispatchTickets.Where(ticket => ticket.Status != MsapConstants.DispatchTicketStatus.CalculationPending).Sum(ticket => ticket.TotalBilling).ToString("N2")
@@ -151,7 +158,10 @@
             { selector: '.job-progress-next', title: 'Next action', text: 'Read the guidance for the current stage and any blockers before continuing.', interactive: false },
             { selector: '#cosBookingDetails', title: 'Order details', text: 'Review the customer, vessel, location, references, and planned schedule. Direct orders can be edited here when their status and access allow it.', interactive: false },
             { selector: '#cosServices', title: 'Dispatch Tickets', text: 'Add service tickets when allowed, then review each ticket’s timeline, tugboat, billing amount, and status. Use View ticket to review saved actual service details.', interactive: false },
-            { selector: '#timelineAccordion', title: 'Activity timeline', text: 'Expand this section to load the COS activity history.', interactive: false },
+            @if (canViewAuditHistory)
+            {
+                <text>{ selector: '#timelineAccordion', title: 'Activity timeline', text: 'Expand this section to load the COS activity history.', interactive: false },</text>
+            }
             { selector: '.cos-details-footer', title: 'Order totals', text: 'See the total ticket count and accumulated billing amount for this COS.', interactive: false }
         ];
     </script>

@@ -766,8 +766,8 @@ namespace IBS.Services.MSAP
                 currentModel.BAFNetRevenue = Math.Round(bafRevenue, 2);
                 currentModel.ApOtherTugs = model.ApOtherTugs;
                 currentModel.ApOtherTugsIncludesVat = model.ApOtherTugsIncludesVat;
-                currentModel.TotalBilling = Math.Round(dispatchBilling + bafBilling, 2);
-                currentModel.TotalNetRevenue = Math.Round(dispatchRevenue + bafRevenue, 2);
+                currentModel.TotalBilling = currentModel.DispatchBillingAmount + currentModel.BAFBillingAmount;
+                currentModel.TotalNetRevenue = currentModel.DispatchNetRevenue + currentModel.BAFNetRevenue;
 
                 await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, auditMessage, documentType, currentModel.DispatchTicketId, currentModel.DispatchNumber), cancellationToken);
                 await unitOfWork.SaveAsync(cancellationToken);
@@ -1077,8 +1077,8 @@ namespace IBS.Services.MSAP
                         ticket.BAFBillingAmount = Math.Round(bafBilling, 2);
                         ticket.DispatchNetRevenue = Math.Round(dispatchRevenue, 2);
                         ticket.BAFNetRevenue = Math.Round(bafRevenue, 2);
-                        ticket.TotalBilling = Math.Round(dispatchBilling + bafBilling, 2);
-                        ticket.TotalNetRevenue = Math.Round(dispatchRevenue + bafRevenue, 2);
+                        ticket.TotalBilling = ticket.DispatchBillingAmount + ticket.BAFBillingAmount;
+                        ticket.TotalNetRevenue = ticket.DispatchNetRevenue + ticket.BAFNetRevenue;
                         ticket.TariffBy = username;
                         ticket.TariffDate = now;
 

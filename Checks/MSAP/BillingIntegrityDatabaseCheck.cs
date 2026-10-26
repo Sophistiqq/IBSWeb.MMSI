@@ -81,6 +81,11 @@ namespace Checks.MSAP
             Check(!await db.MsapBillings.AnyAsync(x => x.MsapBillingId == id)
                 && await db.MsapDispatchTickets.Where(x => x.CustomerOrderSlipId == cosId).AllAsync(x => x.BillingId == null),
                 "Discard retained the single draft or its ticket links.");
+            requested = new Billing
+            {
+                MsapBillingNumber = number, Date = split.Date, CustomerId = job.CustomerId,
+                CustomerOrderSlipId = cosId, BilledTo = "LOCAL", COSNumber = "Forged COS", Amount = 99999m
+            };
             created = await billing.CreateBillingAsync(requested, "Billing check", "MMSI", default);
             Check(created.IsSuccess, created.Message ?? "Discarded tickets/billing number could not be prepared again.");
             id = created.Data;

@@ -153,7 +153,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
             try
             {
                 var data = await unitOfWork.Report.GetDispatchReportData(dateFrom, dateTo, ct);
-                var collectionShares = await AllocateCollectionsByTicketAsync(data, ct);
+                var (collectionShares, collectionsByTicket) = await AllocateCollectionsByTicketAsync(data, ct);
                 using var pkg = new ExcelPackage();
                 var ws = pkg.Workbook.Worksheets.Add("Dispatch Summary");
                 const int totalCols = 35;
@@ -261,10 +261,11 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     ws.Cells[row, 27].Value = NullIfZero(t.BAFRate);
                     ws.Cells[row, 28].Value = NullIfZero(t.BAFBillingAmount);
                     ws.Cells[row, 29].Value = t.OtherTugCostPending ? "Pending" : t.OtherTugChargeLine?.Charge.ConfirmedAt != null ? t.ApOtherTugs : NullIfZero(t.ApOtherTugs);
-                    ws.Cells[row, 30].Value = t.Billing?.Collection?.MsapCollectionNumber;
-                    ws.Cells[row, 31].Value = t.Billing?.Collection?.CheckNumber?.Trim();
-                    ws.Cells[row, 32].Value = t.Billing?.Collection?.CheckDate?.ToString("MM/dd/yyyy");
-                    ws.Cells[row, 33].Value = t.Billing?.Collection?.DepositDate?.ToString("MM/dd/yyyy");
+                    var ticketCollections = collectionsByTicket.GetValueOrDefault(t.DispatchTicketId) ?? [];
+                    ws.Cells[row, 30].Value = JoinCollectionValues(ticketCollections, c => c.MsapCollectionNumber.Trim());
+                    ws.Cells[row, 31].Value = JoinCollectionValues(ticketCollections, c => c.CheckNumber?.Trim());
+                    ws.Cells[row, 32].Value = JoinCollectionValues(ticketCollections, c => c.CheckDate?.ToString("MM/dd/yyyy"));
+                    ws.Cells[row, 33].Value = JoinCollectionValues(ticketCollections, c => c.DepositDate?.ToString("MM/dd/yyyy"));
                     var (amount, ewt) = collectionShares.GetValueOrDefault(t.DispatchTicketId);
                     ws.Cells[row, 34].Value = NullIfZero(amount);
                     ws.Cells[row, 35].Value = NullIfZero(ewt);
@@ -317,7 +318,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
 
                 // Includes billed records by billing date and qualifying unbilled records by dispatch date.
                 var data = await unitOfWork.Report.GetDispatchReportData(dateFrom, dateTo, ct, filterByBillingDate: true);
-                var collectionShares = await AllocateCollectionsByTicketAsync(data, ct);
+                var (collectionShares, collectionsByTicket) = await AllocateCollectionsByTicketAsync(data, ct);
                 var sbmaShares = data.ToDictionary(t => t.DispatchTicketId, t => t.SbmaShareAmount);
                 var cosIds = data.Where(t => t.CustomerOrderSlipId.HasValue).Select(t => t.CustomerOrderSlipId!.Value).Distinct().ToList();
                 var scheduleIoc = (await unitOfWork.VesselSchedule.GetAllAsync(s => s.CustomerOrderSlipId.HasValue
@@ -580,7 +581,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     ws.Cells[row, 14].Value = FormatLegacyDateTime(t.DateArrived, t.TimeArrived);
                     ws.Cells[row, 15].Value = Math.Round(t.TotalHours, 2);
 
-                    var ticketCharges = t.DispatchBillingAmount + t.BAFBillingAmount;
+                    var ticketCharges = t.DispatchNetRevenue + t.BAFNetRevenue;
                     var vatExclusive = t.Billing is { IsVatable: true, IsVatInclusive: false };
                     decimal grossSales = vatExclusive ? Math.Round(ticketCharges * 1.12m, 2) : ticketCharges;
                     var vatIncluded = t.Billing is { IsVatable: true, IsVatInclusive: true }
@@ -593,11 +594,11 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     ws.Cells[row, 20].Value = t.Billing?.PrintWht == true ? Math.Round(netOfVat * 0.02m, 2) : 0m;
 
                     // Collection/Deposit details
-                    var collection = t.Billing?.Collection;
-                    ws.Cells[row, 21].Value = collection?.DepositDate?.ToString("MM/dd/yyyy") ?? "";
-                    ws.Cells[row, 22].Value = collection?.Date.ToString("MM/dd/yyyy") ?? "";
-                    ws.Cells[row, 23].Value = collection?.MsapCollectionNumber?.Trim();
-                    ws.Cells[row, 24].Value = collection?.CheckBank ?? "";
+                    var ticketCollections = collectionsByTicket.GetValueOrDefault(t.DispatchTicketId) ?? [];
+                    ws.Cells[row, 21].Value = JoinCollectionValues(ticketCollections, c => c.DepositDate?.ToString("MM/dd/yyyy"));
+                    ws.Cells[row, 22].Value = JoinCollectionValues(ticketCollections, c => c.Date.ToString("MM/dd/yyyy"));
+                    ws.Cells[row, 23].Value = JoinCollectionValues(ticketCollections, c => c.MsapCollectionNumber.Trim());
+                    ws.Cells[row, 24].Value = JoinCollectionValues(ticketCollections, c => c.CheckBank?.Trim());
 
                     var (amountDeposited, ewt) = collectionShares.GetValueOrDefault(t.DispatchTicketId);
                     decimal vatableAmount = ewt != 0 && t.Billing?.IsVatable == true ? netOfVat : 0m;
@@ -1220,45 +1221,94 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 : null;
         }
 
-        private async Task<Dictionary<int, (decimal Amount, decimal Ewt)>> AllocateCollectionsByTicketAsync(
+        private async Task<(Dictionary<int, (decimal Amount, decimal Ewt)> Shares, Dictionary<int, List<Collection>> CollectionsByTicket)> AllocateCollectionsByTicketAsync(
             List<DispatchTicket> reportTickets, CancellationToken ct)
         {
-            var collections = reportTickets
-                .Where(t => t.Billing?.CollectionId.HasValue == true && t.Billing.Collection != null)
-                .GroupBy(t => t.Billing!.CollectionId!.Value)
-                .ToDictionary(g => g.Key, g => g.First().Billing!.Collection!);
             var shares = new Dictionary<int, (decimal Amount, decimal Ewt)>();
-            if (collections.Count == 0)
+            var collectionsByTicket = new Dictionary<int, List<Collection>>();
+            var sourceBillingIds = reportTickets.Where(t => t.BillingId.HasValue).Select(t => t.BillingId!.Value).Distinct().ToArray();
+            if (sourceBillingIds.Length == 0)
             {
-                return shares;
+                return (shares, collectionsByTicket);
             }
 
-            var collectionIds = collections.Keys.ToArray();
-            var billings = await unitOfWork.Billing.GetAllAsync(
-                b => b.CollectionId.HasValue && collectionIds.Contains(b.CollectionId.Value), ct);
-            var collectionByBilling = billings.ToDictionary(b => b.MsapBillingId, b => b.CollectionId!.Value);
-            var billingIds = collectionByBilling.Keys.ToArray();
-            var allTickets = await unitOfWork.DispatchTicket.GetAllAsync(
-                t => t.BillingId.HasValue && billingIds.Contains(t.BillingId.Value), ct);
-            foreach (var group in allTickets.GroupBy(t => collectionByBilling[t.BillingId!.Value]))
+            var billings = (await unitOfWork.Billing.GetAllAsync(b => sourceBillingIds.Contains(b.MsapBillingId)
+                || b.BasicBillingId.HasValue && sourceBillingIds.Contains(b.BasicBillingId.Value), ct))
+                .Where(b => b.CollectionId.HasValue).ToList();
+            if (billings.Count == 0)
             {
-                var tickets = group.OrderBy(t => t.BillingId).ThenBy(t => t.DispatchTicketId).ToList();
-                var collection = collections[group.Key];
-                var totalWeight = tickets.Sum(t => Math.Max(t.TotalBilling, 0m));
-                decimal cumulativeWeight = 0m, previousAmount = 0m, previousEwt = 0m;
-                foreach (var ticket in tickets)
+                return (shares, collectionsByTicket);
+            }
+
+            var collectionIds = billings.Select(b => b.CollectionId!.Value).Distinct().ToArray();
+            // Keep bills outside the report filter in each receipt's allocation denominator.
+            billings = (await unitOfWork.Billing.GetAllAsync(b => b.CollectionId.HasValue
+                && collectionIds.Contains(b.CollectionId.Value), ct)).ToList();
+            var collections = (await unitOfWork.Collection.GetAllAsync(c => collectionIds.Contains(c.MsapCollectionId), ct))
+                .ToDictionary(c => c.MsapCollectionId);
+            var relatedBillingIds = billings.Select(b => b.BasicBillingId ?? b.MsapBillingId).Distinct().ToArray();
+            var allTickets = await unitOfWork.DispatchTicket.GetAllAsync(
+                t => t.BillingId.HasValue && relatedBillingIds.Contains(t.BillingId.Value), ct);
+            var ticketsByBilling = allTickets.GroupBy(t => t.BillingId!.Value).ToDictionary(g => g.Key, g => g.ToList());
+            foreach (var group in billings.GroupBy(b => b.CollectionId!.Value).OrderBy(g => g.Key))
+            {
+                if (!collections.TryGetValue(group.Key, out var collection))
                 {
-                    cumulativeWeight += totalWeight > 0m ? Math.Max(ticket.TotalBilling, 0m) : 1m;
+                    continue;
+                }
+
+                var ticketWeights = new Dictionary<int, decimal>();
+                foreach (var billing in group)
+                {
+                    var sourceBillingId = billing.BasicBillingId ?? billing.MsapBillingId;
+                    if (!ticketsByBilling.TryGetValue(sourceBillingId, out var billingTickets))
+                    {
+                        continue;
+                    }
+
+                    foreach (var ticket in billingTickets)
+                    {
+                        var weight = billing.BasicBillingId.HasValue ? ticket.BAFNetRevenue
+                            : billing.BafBilling != null ? ticket.DispatchNetRevenue
+                            : ticket.DispatchNetRevenue + ticket.BAFNetRevenue;
+                        ticketWeights[ticket.DispatchTicketId] = ticketWeights.GetValueOrDefault(ticket.DispatchTicketId) + Math.Max(weight, 0m);
+                    }
+                }
+
+                if (ticketWeights.Count == 0)
+                {
+                    continue;
+                }
+
+                var tickets = ticketWeights.OrderBy(p => p.Key).ToList();
+                var totalWeight = ticketWeights.Values.Sum();
+                decimal cumulativeWeight = 0m, previousAmount = 0m, previousEwt = 0m;
+                foreach (var (ticketId, weight) in tickets)
+                {
+                    cumulativeWeight += totalWeight > 0m ? weight : 1m;
                     var denominator = totalWeight > 0m ? totalWeight : tickets.Count;
                     var amount = Math.Round(collection.Amount * cumulativeWeight / denominator, 2, MidpointRounding.AwayFromZero);
                     var ewt = Math.Round(collection.EWT * cumulativeWeight / denominator, 2, MidpointRounding.AwayFromZero);
-                    shares[ticket.DispatchTicketId] = (amount - previousAmount, ewt - previousEwt);
+                    var oldShare = shares.GetValueOrDefault(ticketId);
+                    shares[ticketId] = (oldShare.Amount + amount - previousAmount, oldShare.Ewt + ewt - previousEwt);
+                    if (!collectionsByTicket.TryGetValue(ticketId, out var ticketCollections))
+                    {
+                        ticketCollections = [];
+                        collectionsByTicket[ticketId] = ticketCollections;
+                    }
+                    ticketCollections.Add(collection);
                     previousAmount = amount;
                     previousEwt = ewt;
                 }
             }
 
-            return shares;
+            return (shares, collectionsByTicket);
+        }
+
+        private static string? JoinCollectionValues(IEnumerable<Collection> collections, Func<Collection, string?> valueSelector)
+        {
+            var values = collections.Select(valueSelector).Where(value => !string.IsNullOrWhiteSpace(value)).Distinct().ToList();
+            return values.Count == 0 ? null : string.Join(", ", values);
         }
 
         private static decimal? NullIfZero(decimal val) => val == 0 ? null : val;

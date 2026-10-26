@@ -1,10 +1,13 @@
 using IBS.Models.MSAP;
 using IBS.Services.MSAP;
+using IBS.Utility.MSAP.Constants;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IBSWeb.Areas.MSAP.Controllers
 {
     [Area("MSAP")]
+    [Authorize(Policy = MsapRoles.AdminPolicy)]
     public class AuditTrailController(IAuditTrailService auditTrailService, CustomerOrderSlipService customerOrderSlipService, ILogger<AuditTrailController> logger): Controller
     {
         public async Task<IActionResult> Index(CancellationToken cancellationToken)

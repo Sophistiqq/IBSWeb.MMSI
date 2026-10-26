@@ -305,6 +305,11 @@ namespace IBS.Services.MSAP
                     }
 
                     var allocations = await GetSettlementAllocationsAsync(viewModel, cancellationToken);
+                    var oldCollectionNumber = currentModel.MsapCollectionNumber;
+                    var newCollectionNumber = !viewModel.IsUndocumented
+                        ? viewModel.MsapCollectionNumber ?? oldCollectionNumber
+                        : oldCollectionNumber;
+                    currentModel.MsapCollectionNumber = newCollectionNumber;
 
                     // Revert old allocations
                     var oldBillings = await unitOfWork.Billing.GetAllAsync(b => b.CollectionId == currentModel.MsapCollectionId, cancellationToken);
@@ -324,24 +329,23 @@ namespace IBS.Services.MSAP
                             if (billing != null)
                             {
                                 billing.CollectionId = currentModel.MsapCollectionId;
-                                billing.CollectionNumber = currentModel.MsapCollectionNumber;
+                                billing.CollectionNumber = newCollectionNumber;
                                 await unitOfWork.Collection.UpdateBillingPayment(payment.BillingId, allocations[payment.BillingId], cancellationToken);
                             }
                         }
                     }
 
                     // Track changes for audit
-                    var audit = new AuditTrail(username, $"Edit collection #{currentModel.MsapCollectionNumber}", "Collection", currentModel.MsapCollectionId, currentModel.MsapCollectionNumber);
+                    var activity = oldCollectionNumber == newCollectionNumber
+                        ? $"Edit collection #{newCollectionNumber}"
+                        : $"Edit collection #{oldCollectionNumber} to #{newCollectionNumber}";
+                    var audit = new AuditTrail(username, activity, "Collection", currentModel.MsapCollectionId, newCollectionNumber);
                     await unitOfWork.AuditTrail.AddAsync(audit, cancellationToken);
 
                     // Update entity
                     currentModel.Date = viewModel.Date;
                     currentModel.CustomerId = viewModel.CustomerId;
                     currentModel.IsUndocumented = viewModel.IsUndocumented;
-                    if (!currentModel.IsUndocumented)
-                    {
-                        currentModel.MsapCollectionNumber = viewModel.MsapCollectionNumber ?? currentModel.MsapCollectionNumber;
-                    }
                     currentModel.ReferenceNo = viewModel.ReferenceNo;
                     currentModel.Remarks = viewModel.Remarks;
                     currentModel.CashAmount = viewModel.CashAmount;

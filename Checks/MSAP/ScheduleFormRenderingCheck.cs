@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.RegularExpressions;
 using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.ViewModels;
@@ -206,6 +207,21 @@ namespace Checks.MSAP
             Check(cosOutput.ToString().Contains("id=\"cosServices\"", StringComparison.Ordinal)
                 && cosOutput.ToString().Contains("expectedServiceEntryId=12", StringComparison.Ordinal)
                 && cosOutput.ToString().Contains("Awaiting ticket", StringComparison.Ordinal), "COS omitted pending service requirements or their actual-entry links.");
+            Check(!cosOutput.ToString().Contains("id=\"timelineAccordion\"", StringComparison.Ordinal),
+                "COS audit history must be hidden without a current administrator role.");
+            foreach (var role in new[] { MsapRoles.User, MsapRoles.Admin, MsapRoles.SuperAdmin })
+            {
+                http.User = new ClaimsPrincipal(new ClaimsIdentity([
+                    new Claim(ClaimTypes.NameIdentifier, role),
+                    new Claim(MsapRoles.ClaimType, role == MsapRoles.User ? MsapRoles.Admin : MsapRoles.User)], "check"));
+                var roleView = engine.GetView(null, "/Areas/MSAP/Views/CustomerOrderSlip/Details.cshtml", false).View!;
+                using var roleOutput = new StringWriter();
+                await roleView.RenderAsync(new ViewContext(cosContext, roleView, cosData,
+                    services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), roleOutput, new HtmlHelperOptions()));
+                Check(roleOutput.ToString().Contains("id=\"timelineAccordion\"", StringComparison.Ordinal)
+                    == (role is MsapRoles.Admin or MsapRoles.SuperAdmin),
+                    $"COS audit history visibility is incorrect for {role}.");
+            }
             Console.WriteLine("PASS: full schedule/revision review renders tug services, manual/zero rates, encoded details, current approval stage and protected approval actions.");
         }
 

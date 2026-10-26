@@ -40,6 +40,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(TerminalViewModel model, CancellationToken cancellationToken = default)
         {
+            if (!ModelState.IsValid)
+            {
+                await terminalService.PopulateSelectListsAsync(model, cancellationToken);
+                return View(model);
+            }
+
             var result = await terminalService.CreateAsync(model, userManager.GetUserName(User)!, cancellationToken);
 
             if (result.IsSuccess)
@@ -71,6 +77,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(TerminalViewModel model, CancellationToken cancellationToken)
         {
+            if (!ModelState.IsValid)
+            {
+                await terminalService.PopulateSelectListsAsync(model, cancellationToken);
+                return View(model);
+            }
+
             var result = await terminalService.UpdateAsync(model, userManager.GetUserName(User)!, cancellationToken);
 
             if (result.IsSuccess)
@@ -84,6 +96,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
             return View(model);
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
         {
             var result = await terminalService.DeleteAsync(id, userManager.GetUserName(User)!, cancellationToken);

@@ -44,6 +44,8 @@
     </main>
 </div>
 
+<form id="deleteForm" method="post" asp-antiforgery="false" hidden>@Html.AntiForgeryToken()</form>
+
 @section Scripts {
     <script>
         $(document).ready(function () {
@@ -57,7 +59,7 @@
                     { data: "principalNumber" },
                     {
                         data: "principalName",
-                        render: (data) => `<span class="font-bold uppercase">${data}</span>`
+                        render: (data, type) => type === 'display' ? `<span class="font-bold uppercase">${ModernTable.render.text(data)}</span>` : data
                     },
                     { data: "tin", defaultContent: "-" },
                     {
@@ -92,7 +94,9 @@
                 cancelText: 'Cancel'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    window.location.href = url;
+                    const form = document.getElementById('deleteForm');
+                    form.action = url;
+                    form.submit();
                 }
             });
         }

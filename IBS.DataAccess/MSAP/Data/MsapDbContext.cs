@@ -158,7 +158,7 @@ namespace IBS.DataAccess.MSAP.Data
                 c.ToTable(table => table.HasCheckConstraint("ck_customers_default_cos_discount_percent",
                     "default_cos_discount_percent BETWEEN 0 AND 100"));
                 c.Property(x => x.DefaultCosDiscountPercent).HasDefaultValue(0m);
-                c.HasIndex(c => c.CustomerCode);
+                c.HasIndex(c => c.CustomerCode).IsUnique();
                 c.HasIndex(c => c.CustomerName);
             });
 
