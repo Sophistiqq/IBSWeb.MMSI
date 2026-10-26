@@ -354,6 +354,8 @@ namespace IBSWeb.Areas.Filpride.Controllers
                     model.DebitAmount = model.Amount ?? 0;
                 }
 
+                await _unitOfWork.FilprideDebitMemo.CalculateTaxAmountsAsync(model, cancellationToken);
+
                 #region --Audit Trail Recording
 
                 FilprideAuditTrail auditTrailBook = new(model.CreatedBy!, $"Create new debit memo# {model.DebitMemoNo}", "Debit Memo");
@@ -767,6 +769,8 @@ namespace IBSWeb.Areas.Filpride.Controllers
                         existingDm.DebitAmount = model.Amount ?? 0;
                         break;
                 }
+
+                await _unitOfWork.FilprideDebitMemo.CalculateTaxAmountsAsync(existingDm, cancellationToken);
 
                 if (existingDm.Status == nameof(DmCmStatus.ForPosting))
                 {
@@ -1232,14 +1236,6 @@ namespace IBSWeb.Areas.Filpride.Controllers
 
                 #endregion -- Service Invoice Export --
 
-                //Set password in Excel
-                foreach (var excelWorkSheet in package.Workbook.Worksheets)
-                {
-                    excelWorkSheet.Protection.SetPassword("mis123");
-                }
-
-                package.Workbook.Protection.SetPassword("mis123");
-
                 // Convert the Excel package to a byte array
                 var excelBytes = await package.GetAsByteArrayAsync();
 
@@ -1488,13 +1484,8 @@ namespace IBSWeb.Areas.Filpride.Controllers
                     ? _unitOfWork.FilprideCreditMemo.ComputeVatAmount(netOfVatAmount)
                     : 0m;
 
-                var withHoldingTaxAmount = model.SalesInvoice.CustomerOrderSlip!.HasEWT
-                    ? _unitOfWork.FilprideCreditMemo.ComputeEwtAmount(netOfVatAmount, model.SalesInvoice.DeliveryReceipt!.CwtPercent)
-                    : 0m;
-
-                var withHoldingVatAmount = model.SalesInvoice.CustomerOrderSlip!.HasWVAT
-                    ? _unitOfWork.FilprideCreditMemo.ComputeEwtAmount(netOfVatAmount, model.SalesInvoice.DeliveryReceipt!.CwvPercent)
-                    : 0m;
+                var withHoldingTaxAmount = model.CwtAmount;
+                var withHoldingVatAmount = model.CwVatAmount;
 
                 var ledgers = new List<FilprideGeneralLedgerBook>
                 {
@@ -1512,7 +1503,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                         CreatedBy = model.PostedBy,
                         CreatedDate = DateTimeHelper.GetCurrentPhilippineTime(),
                         SubAccountType = SubAccountType.Customer,
-                        SubAccountId = model.SalesInvoice.CustomerOrderSlip.CustomerId,
+                        SubAccountId = model.SalesInvoice.CustomerOrderSlip!.CustomerId,
                         SubAccountName = model.SalesInvoice.CustomerOrderSlip.CustomerName,
                         ModuleType = nameof(ModuleType.DebitMemo)
                     }
@@ -1619,12 +1610,8 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 var vatAmount = model.ServiceInvoice.VatType == SD.VatType_Vatable
                     ? _unitOfWork.FilprideServiceInvoice.ComputeVatAmount(netOfVatAmount)
                     : 0m;
-                var ewt = model.ServiceInvoice.HasEwt
-                    ? _unitOfWork.FilprideDebitMemo.ComputeEwtAmount(netOfVatAmount, existingSv.ServicePercent / 100m)
-                    : 0m;
-                var wvat = model.ServiceInvoice.HasWvat
-                    ? _unitOfWork.FilprideDebitMemo.ComputeEwtAmount(netOfVatAmount, 0.05m)
-                    : 0m;
+                var ewt = model.CwtAmount;
+                var wvat = model.CwVatAmount;
 
                 var ledgers = new List<FilprideGeneralLedgerBook>
                 {

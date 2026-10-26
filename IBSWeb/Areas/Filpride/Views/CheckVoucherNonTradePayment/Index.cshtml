@@ -47,6 +47,7 @@
                     <th class="text-start">Payee</th>
                     <th class="text-start">INV#</th>
                     <th class="text-start">Check#</th>
+                    <th class="text-start">Check Amount</th>
                     <th class="text-start">Total</th>
                     <th class="text-start">Status</th>
                     <th class="text-center" style="width: 100px;">Actions</th>
@@ -62,6 +63,7 @@
                     <td class="text-end py-3">
                         <span class="text-uppercase">Grand Total:</span>
                     </td>
+                    <td class="text-start py-3" id="totalCheckAmount"></td>
                     <td class="text-start py-3" id="totalAmount"></td>
                     <td class="py-3"></td>
                     <td class="py-3"></td>
@@ -270,6 +272,13 @@
                     },
                     { "data": "checkNo" },
                     {
+                        "data": "checkAmount",
+                        "render": function (data, type, row) {
+                            var amount = $.fn.dataTable.render.number(',', '.', 2).display(data);
+                            return `<span class="d-block fw-medium">${amount}</span>`;
+                        }
+                    },
+                    {
                         "data": "total",
                         "render": function (data, type, row) {
                             var amount = $.fn.dataTable.render.number(',', '.', 2).display(row.total);
@@ -347,14 +356,17 @@
                 "footerCallback": function (row, data, start, end, display) {
                     // Initialize totals
                     var totalAmount = 0;
+                    var totalCheckAmount = 0;
 
                     // Sum up columns
                     data.forEach(function (row) {
                         totalAmount += row.total;
+                        totalCheckAmount += row.checkAmount;
                     });
 
                     // Update footer with totals
-                    $(this.api().column(6).footer()).html(formatNumber(totalAmount));
+                    $(this.api().column(6).footer()).html(formatNumber(totalCheckAmount));
+                    $(this.api().column(7).footer()).html(formatNumber(totalAmount));
                 }
             });
 

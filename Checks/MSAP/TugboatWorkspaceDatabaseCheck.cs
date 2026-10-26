@@ -208,12 +208,14 @@ namespace Checks.MSAP
             });
             await db.SaveChangesAsync();
             workspace.Select(null, "MMSI");
-            await new StartOfTheMonthService(work, NullLogger<StartOfTheMonthService>.Instance, db).Execute(null!);
+            await close.CloseAsync(firstMonth, "Workspace check");
             WorkspaceAssertions.Check(await db.FilprideJournalVoucherHeaders
                 .Where(x => x.Particulars == jobReference && x.CreatedBy == "SYSTEM GENERATED")
                 .AllAsync(x => x.WorkspaceTugboatId == tugs[0]), "Recurring journal lost its source ownership.");
             WorkspaceAssertions.Check(await db.FilprideJournalVoucherHeaders.CountAsync(x => x.Particulars == jobReference) == 2,
-                "Recurring job did not create its journal.");
+                "Monthly closure did not create its recurring journal.");
+            WorkspaceAssertions.Check(await db.FilprideGeneralLedgerBooks.CountAsync(x => x.Reference == sourceJournal.JournalVoucherHeaderNo
+                && x.Date == firstMonth.AddMonths(1)) == 2, "Monthly closure did not create the next-period reversal.");
             WorkspaceAssertions.Check(await db.FilprideGeneralLedgerBooks.Where(x => x.Reference == sourceJournal.JournalVoucherHeaderNo)
                 .AllAsync(x => x.WorkspaceTugboatId == tugs[0]), "Automatic journal reversal lost its source ownership.");
 

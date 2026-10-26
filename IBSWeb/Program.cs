@@ -9,6 +9,7 @@ using IBS.Services;
 using IBS.Services.Attributes;
 using IBS.Utility;
 using IBS.Utility.Helpers;
+using IBSWeb.Api;
 using IBSWeb.MSAP;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -134,21 +135,8 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-app.MapPost("/jobs/start-of-the-month-service",
-    async (StartOfTheMonthService service) =>
-    {
-        await service.Execute(null!);
-        return Results.Ok("StartOfTheMonthService job executed.");
-    })
-    .AllowAnonymous();
-
-app.MapPost("/jobs/daily-service",
-    async (DailyService service) =>
-    {
-        await service.Execute(null!);
-        return Results.Ok("DailyService job executed.");
-    })
-    .AllowAnonymous();
+app.MapStartOfTheMonthApi();
+app.MapDailyApi();
 
 app.MapGet("/health", () => Results.Ok("Healthy")).AllowAnonymous();
 

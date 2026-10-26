@@ -3913,14 +3913,6 @@ namespace IBSWeb.Areas.Filpride.Controllers
 
                 #endregion -- Collection Receipt Export (Multiple SI)--
 
-                //Set password in Excel
-                foreach (var excelWorkSheet in package.Workbook.Worksheets)
-                {
-                    excelWorkSheet.Protection.SetPassword("mis123");
-                }
-
-                package.Workbook.Protection.SetPassword("mis123");
-
                 // Convert the Excel package to a byte array
                 var excelBytes = await package.GetAsByteArrayAsync();
 

@@ -15,7 +15,6 @@
 
     <ItemGroup>
       <PackageReference Include="Google.Apis.Drive.v3" Version="1.77.0.4276" />
-      <PackageReference Include="Quartz.Extensions.Hosting" Version="3.18.0" />
     </ItemGroup>
 
 </Project>

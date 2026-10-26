@@ -185,6 +185,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                     .Where(s =>
                         s.CheckVoucherHeaderNo!.ToLower().Contains(searchValue) == true ||
                         s.Total.ToString().Contains(searchValue) ||
+                        s.CheckAmount.ToString().Contains(searchValue) ||
                         s.Payee!.ToLower().Contains(searchValue) == true ||
                         (hasDate && s.Date == date) ||
                         s.Reference!.ToLower().Contains(searchValue) == true ||
@@ -223,6 +224,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                         x.Reference,
                         x.CheckNo,
                         x.Total,
+                        x.CheckAmount,
                         x.Status,
                         x.VoidedBy,
                         x.CanceledBy,
@@ -769,7 +771,8 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 {
                     cv.CheckVoucherHeaderId,
                     cv.InvoiceAmount,
-                    cv.AmountPaid
+                    cv.AmountPaid,
+                    cv.Type
                 })
                 .ToDictionaryAsync(x => x.CheckVoucherHeaderId, cancellationToken);
 
@@ -815,6 +818,15 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 if (existingHeaderModel == null)
                 {
                     return NotFound();
+                }
+
+                if (cvHeaders.Values.Any(invoice => invoice.Type != existingHeaderModel.Type))
+                {
+                    ModelState.AddModelError(
+                        nameof(viewModel.MultipleCvId),
+                        $"Selected invoice vouchers must have the same document type as this payment ({existingHeaderModel.Type}). To change the document type, cancel this payment and create a new one.");
+                    await PopulatePaymentViewModelAsync(viewModel, cancellationToken);
+                    return View(viewModel);
                 }
 
                 var getCVs = await _dbContext.FilprideMultipleCheckVoucherPayments

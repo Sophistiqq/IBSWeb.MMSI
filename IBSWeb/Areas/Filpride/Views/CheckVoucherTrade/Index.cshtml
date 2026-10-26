@@ -31,6 +31,7 @@
                     <th class="text-start">Date</th>
                     <th class="text-start">Supplier</th>
                     <th class="text-start">Check#</th>
+                    <th class="text-start">Check Amount</th>
                     <th class="text-start">Total</th>
                     <th class="text-start">Created By</th>
                     <th class="text-start">Status</th>
@@ -206,6 +207,13 @@
                 },
                 { "data": "supplierName" },
                 { "data": "checkNo" },
+                {
+                    "data": "checkAmount",
+                    "render": function (data, type, row) {
+                        var amount = $.fn.dataTable.render.number(',', '.', 2).display(data);
+                        return `<span class="d-block fw-medium">${amount}</span>`;
+                    }
+                },
                 {
                     "data": "total",
                     "render": function (data, type, row) {

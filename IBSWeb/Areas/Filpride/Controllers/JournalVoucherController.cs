@@ -1325,6 +1325,77 @@ namespace IBSWeb.Areas.Filpride.Controllers
 
                 #endregion -- Check Voucher Header Export (Non-Trade Payment or Trade Payment)--
 
+                #region -- Check Voucher Header Export (Payment) --
+
+                var cvReference = selectedList.Select(item => item.CheckVoucherHeader!.Reference).ToList();
+
+                var checkVoucherInvoice = (await _unitOfWork.FilprideCheckVoucher
+                        .GetAllAsync(cvh => cvh.CheckVoucherHeaderNo != null))
+                    .Where(cvh => cvh.CheckVoucherHeaderNo != null &&
+                                  cvh.CheckVoucherHeaderNo
+                                      .Split(',', StringSplitOptions.TrimEntries)
+                                      .Any(r => cvReference.Contains(r)))
+                    .ToList();
+
+                var currentCvPayment = "";
+                foreach (var item in checkVoucherInvoice)
+                {
+                    if (item.CheckVoucherHeaderNo == currentCvPayment)
+                    {
+                        continue;
+                    }
+
+                    currentCvPayment = item.CheckVoucherHeaderNo;
+                    worksheet5.Cells[cvhRow, 1].Value = item.Date.ToString("yyyy-MM-dd");
+                    if (item.RRNo != null && !item.RRNo.Contains(null))
+                    {
+                        worksheet5.Cells[cvhRow, 2].Value = string.Join(", ", item.RRNo.Select(rrNo => rrNo.ToString()));
+                    }
+                    if (item.SINo != null && !item.SINo.Contains(null))
+                    {
+                        worksheet5.Cells[cvhRow, 3].Value = string.Join(", ", item.SINo.Select(siNo => siNo.ToString()));
+                    }
+                    if (item.PONo != null && !item.PONo.Contains(null))
+                    {
+                        worksheet5.Cells[cvhRow, 4].Value = string.Join(", ", item.PONo.Select(poNo => poNo.ToString()));
+                    }
+
+                    worksheet5.Cells[cvhRow, 5].Value = item.Particulars;
+                    worksheet5.Cells[cvhRow, 6].Value = item.CheckNo;
+                    worksheet5.Cells[cvhRow, 7].Value = item.Category;
+                    worksheet5.Cells[cvhRow, 8].Value = item.Payee;
+                    worksheet5.Cells[cvhRow, 9].Value = item.CheckDate?.ToString("yyyy-MM-dd");
+                    worksheet5.Cells[cvhRow, 18].Value = item.Reference;
+                    worksheet5.Cells[cvhRow, 19].Value = item.CreatedBy;
+                    worksheet5.Cells[cvhRow, 20].Value = item.CreatedDate.ToString("yyyy-MM-dd HH:mm:ss.ffffff");
+                    worksheet5.Cells[cvhRow, 21].Value = item.Total;
+                    if (item.Amount != null)
+                    {
+                        worksheet5.Cells[cvhRow, 22].Value = string.Join(" ", item.Amount.Select(amount => amount.ToString("N4")));
+                    }
+                    worksheet5.Cells[cvhRow, 23].Value = item.CheckAmount;
+                    worksheet5.Cells[cvhRow, 24].Value = item.CvType;
+                    worksheet5.Cells[cvhRow, 25].Value = item.AmountPaid;
+                    worksheet5.Cells[cvhRow, 26].Value = item.IsPaid;
+                    worksheet5.Cells[cvhRow, 27].Value = item.CancellationRemarks;
+                    worksheet5.Cells[cvhRow, 28].Value = item.BankId;
+                    worksheet5.Cells[cvhRow, 29].Value = item.CheckVoucherHeaderNo;
+                    worksheet5.Cells[cvhRow, 30].Value = item.SupplierId;
+                    worksheet5.Cells[cvhRow, 31].Value = item.CheckVoucherHeaderId;
+                    worksheet5.Cells[cvhRow, 32].Value = item.PostedBy;
+                    worksheet5.Cells[cvhRow, 33].Value = item.PostedDate?.ToString("yyyy-MM-dd HH:mm:ss.ffffff") ?? null;
+                    worksheet5.Cells[cvhRow, 34].Value = item.EditedBy;
+                    worksheet5.Cells[cvhRow, 35].Value = item.EditedDate?.ToString("yyyy-MM-dd HH:mm:ss.ffffff") ?? null;
+                    worksheet5.Cells[cvhRow, 36].Value = item.CanceledBy;
+                    worksheet5.Cells[cvhRow, 37].Value = item.CanceledDate?.ToString("yyyy-MM-dd HH:mm:ss.ffffff") ?? null;
+                    worksheet5.Cells[cvhRow, 38].Value = item.VoidedBy;
+                    worksheet5.Cells[cvhRow, 39].Value = item.VoidedDate?.ToString("yyyy-MM-dd HH:mm:ss.ffffff") ?? null;
+
+                    cvhRow++;
+                }
+
+                #endregion -- Check Voucher Header Export (Payment) --
+
                 #region -- Get Check Voucher Multiple Payment --
 
                 var cvNos = selectedList.Select(item => item.CheckVoucherHeader!.CheckVoucherHeaderNo).ToList();
@@ -1403,6 +1474,34 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 }
 
                 #endregion -- Check Voucher Details Export (Non-Trade or Trade Payment) --
+
+                #region -- Check Voucher Details Export (Payment) --
+
+                var getCvPaymentDetails = await _dbContext.FilprideCheckVoucherDetails
+                    .Where(cvd => checkVoucherInvoice.Select(cvh => cvh.CheckVoucherHeaderNo).Contains(cvd.TransactionNo))
+                    .OrderBy(cvd => cvd.CheckVoucherHeaderId)
+                    .ToListAsync();
+
+                foreach (var item in getCvPaymentDetails)
+                {
+                    worksheet6.Cells[cvdRow, 1].Value = item.AccountNo;
+                    worksheet6.Cells[cvdRow, 2].Value = item.AccountName;
+                    worksheet6.Cells[cvdRow, 3].Value = item.TransactionNo;
+                    worksheet6.Cells[cvdRow, 4].Value = item.Debit;
+                    worksheet6.Cells[cvdRow, 5].Value = item.Credit;
+                    worksheet6.Cells[cvdRow, 6].Value = item.CheckVoucherHeaderId;
+                    worksheet6.Cells[cvdRow, 7].Value = item.CheckVoucherDetailId;
+                    worksheet6.Cells[cvdRow, 8].Value = item.Amount;
+                    worksheet6.Cells[cvdRow, 9].Value = item.AmountPaid;
+                    worksheet6.Cells[cvdRow, 10].Value = item.SubAccountId;
+                    worksheet6.Cells[cvdRow, 11].Value = item.EwtPercent;
+                    worksheet6.Cells[cvdRow, 12].Value = item.IsUserSelected;
+                    worksheet6.Cells[cvdRow, 13].Value = item.IsVatable;
+
+                    cvdRow++;
+                }
+
+                #endregion -- Check Voucher Details Export (Payment) --
 
                 #region -- Receving Report Export --
 
@@ -1510,14 +1609,6 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 }
 
                 #endregion -- Purchase Order Export --
-
-                //Set password in Excel
-                foreach (var excelWorkSheet in package.Workbook.Worksheets)
-                {
-                    excelWorkSheet.Protection.SetPassword("mis123");
-                }
-
-                package.Workbook.Protection.SetPassword("mis123");
 
                 // Convert the Excel package to a byte array
                 var excelBytes = await package.GetAsByteArrayAsync();
