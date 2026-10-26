@@ -35,20 +35,10 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             await _db.MsapSalesBooks.AddAsync(entry, ct);
         }
 
-        public async Task<bool> HasSalesBookAsync(int billingId, CancellationToken ct)
+        public async Task<List<int>> GetBillingIdsWithSalesBookAsync(List<int> billingIds, CancellationToken ct)
         {
-            return await _db.MsapSalesBooks.AnyAsync(b => b.DocumentId == billingId, ct);
-        }
-
-        public async Task VoidSalesBookAsync(int billingId, string actor, string? reason, DateTime voidedAt, CancellationToken ct)
-        {
-            var entries = await _db.MsapSalesBooks.Where(b => b.DocumentId == billingId && b.VoidedAt == null).ToListAsync(ct);
-            foreach (var entry in entries)
-            {
-                entry.VoidedAt = voidedAt;
-                entry.VoidedBy = actor;
-                entry.VoidReason = reason;
-            }
+            return await _db.MsapSalesBooks.Where(b => b.DocumentId.HasValue && billingIds.Contains(b.DocumentId.Value))
+                .Select(b => b.DocumentId!.Value).Distinct().ToListAsync(ct);
         }
 
         public async Task SaveAsync(CancellationToken cancellationToken)
@@ -293,6 +283,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Include(b => b.Customer)
                 .Include(b => b.Terminal).ThenInclude(b => b.Port)
                 .Include(b => b.Vessel)
+                .Include(b => b.BasicBilling)
                 .Include(b => b.BafBilling);
 
             if (customerOrderSlipId.HasValue)

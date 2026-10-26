@@ -93,7 +93,7 @@ namespace Checks.MSAP
             first.Status = second.Status = "For Billing";
             job.Status = MsapConstants.CustomerOrderSlipStatus.Open;
             Check(JobProgressCalculator.Calculate(job, schedule, [first, second], [bill, split]).Stage == 6
-                && schedule.Status == MsapConstants.VesselScheduleStatus.Completed, "Reversal must return progress to Posting without reopening vessel service.");
+                && schedule.Status == MsapConstants.VesselScheduleStatus.Completed, "Draft billing must remain at final review without reopening vessel service.");
             Check(JobProgressCalculator.Calculate(job, null, [deleted], [bill]).Stage == 6, "Terminal tickets must not block existing billing progression.");
             first.Status = "Unknown";
             Check(JobProgressCalculator.Calculate(job, null, [first], []).Stopped, "Unknown statuses must block progression.");
@@ -116,7 +116,7 @@ namespace Checks.MSAP
             printGate.ApprovedRevision = 1;
             printGate.Revision = 2;
             Check(!BillingService.CanPrint(printGate), "A stale approved revision must not be printable.");
-            Console.WriteLine("PASS: Job Progress covers planning, mixed tickets, deleted tickets, actual times, rejection, approval, billing, split posting, partial collection, deposit, clearing, returned checks, multiple receipts, reversal and cancellation.");
+            Console.WriteLine("PASS: Job Progress covers planning, mixed tickets, deleted tickets, actual times, rejection, approval, billing, split posting, partial collection, deposit, clearing, returned checks, multiple receipts, draft review and cancellation.");
         }
 
         private static DispatchTicket Ticket(int id, string status)

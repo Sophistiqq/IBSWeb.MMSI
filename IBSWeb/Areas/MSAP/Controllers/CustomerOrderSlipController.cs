@@ -338,22 +338,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         /// <summary>
-        /// Retrieves detailed information for a specific Dispatch Ticket.
-        /// </summary>
-        [HttpGet]
-        [RequireAccess(ProcedureEnum.ViewOperations)]
-        public async Task<IActionResult> GetTicketDetails(int id, CancellationToken cancellationToken)
-        {
-            var details = await dispatchTicketService.GetTicketDetailsAsync(id, cancellationToken);
-            if (details == null)
-            {
-                return NotFound();
-            }
-
-            return Json(details);
-        }
-
-        /// <summary>
         /// Searches for customers matching a search term.
         /// </summary>
         [HttpGet]
@@ -362,28 +346,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
         {
             var result = await unitOfWork.Customer.SearchCustomersDtoAsync(term ?? string.Empty, 10, cancellationToken);
             return Json(result);
-        }
-
-        /// <summary>
-        /// Assigns a preferred tugboat to a COS.
-        /// </summary>
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.EditCustomerOrderSlip)]
-        public async Task<IActionResult> AssignTugboat(int customerOrderSlipId, int tugboatId, CancellationToken cancellationToken)
-        {
-            return await HandleTugboatAssignmentAsync(customerOrderSlipId, tugboatId, true, cancellationToken);
-        }
-
-        /// <summary>
-        /// Unassigns a tugboat from a COS.
-        /// </summary>
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [RequireAnyAccess("Access denied.", ProcedureEnum.EditCustomerOrderSlip)]
-        public async Task<IActionResult> UnassignTugboat(int customerOrderSlipId, int tugboatId, CancellationToken cancellationToken)
-        {
-            return await HandleTugboatAssignmentAsync(customerOrderSlipId, tugboatId, false, cancellationToken);
         }
 
         #endregion
@@ -406,18 +368,5 @@ namespace IBSWeb.Areas.MSAP.Controllers
             };
         }
 
-        private async Task<IActionResult> HandleTugboatAssignmentAsync(int customerOrderSlipId, int tugboatId, bool isAssign, CancellationToken cancellationToken)
-        {
-            var result = isAssign
-                ? await customerOrderSlipService.AssignTugboatAsync(customerOrderSlipId, tugboatId, User.Identity?.Name ?? "Unknown", cancellationToken)
-                : await customerOrderSlipService.UnassignTugboatAsync(customerOrderSlipId, tugboatId, User.Identity?.Name ?? "Unknown", cancellationToken);
-
-            if (result.IsSuccess)
-            {
-                return Json(new { success = true });
-            }
-
-            return Json(new { success = false, message = result.Message });
-        }
     }
 }

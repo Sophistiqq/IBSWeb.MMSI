@@ -41,30 +41,5 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
         }
 
-        [HttpGet]
-        public async Task<IActionResult> SearchCustomerOrderSlips(string term, CancellationToken cancellationToken)
-        {
-            if (string.IsNullOrWhiteSpace(term))
-            {
-                return Json(new List<object>());
-            }
-
-            var parameters = new DataTablesParameters
-            {
-                Search = new DataTablesSearch { Value = term },
-                Length = 10,
-                Start = 0
-            };
-
-            (IEnumerable<CustomerOrderSlip> data, _, _) = await customerOrderSlipService.GetPagedCustomerOrderSlipsAsync(parameters, cancellationToken);
-
-            var result = data.Select(jo => new
-            {
-                id = jo.CustomerOrderSlipId,
-                text = $"{jo.CustomerOrderSlipNumber} - {jo.Vessel.VesselName}"
-            });
-
-            return Json(result);
-        }
     }
 }

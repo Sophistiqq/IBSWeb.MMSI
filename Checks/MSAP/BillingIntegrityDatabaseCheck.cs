@@ -48,6 +48,21 @@ namespace Checks.MSAP
                 && preview.Data.All(x => x.COSNumber == job.CustomerOrderSlipNumber)
                 && tickets.All(x => x.BillingId == null), "Split preparation lost canonical COS, duplicated amounts or changed actual tickets.");
 
+            var splitCreated = await billing.CreateBillingAsync(split, "Billing check", "MMSI", default);
+            Check(splitCreated.IsSuccess, splitCreated.Message ?? "Split preparation failed.");
+            int basicId = splitCreated.Data;
+            int bafId = await db.MsapBillings.Where(x => x.BasicBillingId == basicId).Select(x => x.MsapBillingId).SingleAsync();
+            Check((await billing.DeleteBillingAsync(bafId, "Billing check", default)).IsSuccess, "A split draft could not be discarded from its BAF bill.");
+            db.ChangeTracker.Clear();
+            Check(!await db.MsapBillings.AnyAsync(x => x.MsapBillingId == basicId || x.MsapBillingId == bafId)
+                && await db.MsapDispatchTickets.Where(x => x.CustomerOrderSlipId == cosId).AllAsync(x => x.BillingId == null && x.Status == MsapConstants.DispatchTicketStatus.ForBilling)
+                && await db.MsapDispatchTickets.Where(x => x.CustomerOrderSlipId == cosId).SumAsync(x => x.TotalNetRevenue) == total
+                && await db.AuditTrails.CountAsync(x => x.DocumentType == "Billing" && (x.RecordId == basicId || x.RecordId == bafId) && x.Activity.StartsWith("Discarded draft billing #")) == 2,
+                "Split discard lost actual charges, left a draft/ticket link or omitted an audit.");
+            Check(await db.AuditTrails.AnyAsync(x => x.DocumentType == "COS" && x.RecordId == cosId
+                && x.Activity.Contains("#" + number) && x.Activity.StartsWith("Discarded draft billing preparation")),
+                "Discard disappeared from the COS timeline after removing the billing records.");
+
             var requested = new Billing
             {
                 MsapBillingNumber = number, Date = split.Date, CustomerId = job.CustomerId,
@@ -61,53 +76,22 @@ namespace Checks.MSAP
             Check(saved.COSNumber == job.CustomerOrderSlipNumber && saved.Amount == total && saved.Balance == total,
                 "Billing creation trusted submitted COS/amounts instead of saved actual tickets.");
 
-            Billing Edit()
-            {
-                return new Billing
-                {
-                    MsapBillingId = id, Date = saved.Date, CustomerId = job.CustomerId, CustomerOrderSlipId = cosId,
-                    BilledTo = "LOCAL", COSNumber = "Forged COS", VesselId = int.MaxValue,
-                    PortId = int.MaxValue, TerminalId = int.MaxValue, VoyageNumber = "Forged voyage",
-                    ToBillDispatchTickets = tickets.Select(x => x.DispatchTicketId.ToString()).ToList()
-                };
-            }
-            var undated = Edit();
-            undated.Date = default;
-            Check(!(await billing.UpdateBillingAsync(undated, "Billing check", default)).IsSuccess, "A billing edit without a date was accepted.");
-            var partial = Edit();
-            partial.ToBillDispatchTickets = [tickets[0].DispatchTicketId.ToString()];
-            Check(!(await billing.UpdateBillingAsync(partial, "Billing check", default)).IsSuccess, "Partial billing edit was accepted.");
-            var moved = Edit();
-            moved.CustomerOrderSlipId = int.MaxValue;
-            Check(!(await billing.UpdateBillingAsync(moved, "Billing check", default)).IsSuccess, "Billing moved to a supplied COS.");
-            var invalidPrincipal = Edit();
-            invalidPrincipal.BilledTo = "PRINCIPAL";
-            invalidPrincipal.PrincipalId = int.MaxValue;
-            Check(!(await billing.UpdateBillingAsync(invalidPrincipal, "Billing check", default)).IsSuccess, "An unrelated or nonexistent principal was accepted.");
-            var valid = Edit();
-            valid.Date = saved.Date.AddDays(1);
-            Check((await billing.UpdateBillingAsync(valid, "Billing check", default)).IsSuccess, "A valid whole-COS billing edit failed.");
+            Check((await billing.DeleteBillingAsync(id, "Billing check", default)).IsSuccess, "An unapproved single preparation could not be discarded.");
+            db.ChangeTracker.Clear();
+            Check(!await db.MsapBillings.AnyAsync(x => x.MsapBillingId == id)
+                && await db.MsapDispatchTickets.Where(x => x.CustomerOrderSlipId == cosId).AllAsync(x => x.BillingId == null),
+                "Discard retained the single draft or its ticket links.");
+            created = await billing.CreateBillingAsync(requested, "Billing check", "MMSI", default);
+            Check(created.IsSuccess, created.Message ?? "Discarded tickets/billing number could not be prepared again.");
+            id = created.Data;
             db.ChangeTracker.Clear();
             saved = await db.MsapBillings.SingleAsync(x => x.MsapBillingId == id);
-            Check(saved.COSNumber == job.CustomerOrderSlipNumber && saved.VesselId == job.VesselId && saved.PortId == job.PortId
-                && saved.TerminalId == job.TerminalId && saved.VoyageNumber == job.VoyageNumber && saved.Amount == total,
-                "Billing edit accepted supplied booking identity or changed saved amounts.");
-            string terms = (await db.Customers.SingleAsync(x => x.CustomerId == job.CustomerId)).CustomerTerms ?? "COD";
-            Check(saved.Terms == terms && saved.DueDate == await work.Terms.ComputeDueDateAsync(terms, saved.Date, default),
-                "Billing edit left stale terms or due date after changing its billing date.");
             int revision = saved.Revision;
-            var changedBaf = Edit();
-            changedBaf.BafRates = new Dictionary<int, decimal> { [tickets[0].DispatchTicketId] = 999m };
-            Check(!(await billing.UpdateBillingAsync(changedBaf, "Billing check", default)).IsSuccess,
-                "Billing edited charges from an approved scheduled ticket.");
-            Check(await db.MsapBillings.Where(x => x.MsapBillingId == id).Select(x => x.Revision).SingleAsync() == revision,
-                "Rejected billing changes partially committed a revision.");
 
             var closed = new MsapPostedPeriod { Year = saved.Date.Year, Month = saved.Date.Month, IsClosed = true, ClosedBy = "Billing check" };
             db.Add(closed);
             await db.SaveChangesAsync();
-            Check(!(await billing.UpdateBillingAsync(Edit(), "Billing check", default)).IsSuccess
-                && !(await billing.PostBillingAsync(id, "Billing check", default, actor, revision)).IsSuccess,
+            Check(!(await billing.PostBillingAsync(id, "Billing check", default, actor, revision)).IsSuccess,
                 "Billing ignored an actual closed-period record.");
             db.ChangeTracker.Clear();
             db.Remove(await db.MsapPostedPeriods.SingleAsync(x => x.Id == closed.Id));
@@ -132,23 +116,19 @@ namespace Checks.MSAP
             ticketEdit.FromEntity(tickets[0]);
             Check(!(await dispatch.UpdateDispatchTicketAsync(ticketEdit, null, null, "Billing check", default)).IsSuccess,
                 "A billed ticket was editable.");
-            var reversed = await billing.ReverseBillingAsync(id, "Billing check", "Fixture correction", default);
-            Check(reversed.IsSuccess, reversed.Message ?? "Billing reversal failed.");
+            Check(!(await billing.DeleteBillingAsync(id, "Billing check", default)).IsSuccess,
+                "An approved billing was discarded.");
             db.ChangeTracker.Clear();
             saved = await db.MsapBillings.SingleAsync(x => x.MsapBillingId == id);
-            Check(saved.Revision == revision + 1 && saved.ApprovedRevision == null && saved.UnpostedDate?.Kind == DateTimeKind.Utc
-                && await db.MsapSalesBooks.AnyAsync(x => x.DocumentId == id && x.VoidedAt != null),
-                "Reversal lost its historical snapshot or retained final approval.");
-            Check((await billing.PostBillingAsync(id, "Billing check", default, actor, saved.Revision)).IsSuccess,
-                "Corrected revision could not be approved again.");
-            Check(await db.MsapSalesBooks.CountAsync(x => x.DocumentId == id) == 2
-                && await db.MsapSalesBooks.CountAsync(x => x.DocumentId == id && x.VoidedAt == null) == 1,
-                "Reapproval did not preserve one historical and one active snapshot.");
+            Check(saved.ApprovedRevision == revision && saved.Status == MsapConstants.BillingStatus.ForCollection
+                && await db.MsapSalesBooks.CountAsync(x => x.DocumentId == id && x.VoidedAt == null) == 1
+                && await db.MsapDispatchTickets.Where(x => x.CustomerOrderSlipId == cosId).AllAsync(x => x.BillingId == id && x.Status == MsapConstants.DispatchTicketStatus.Billed),
+                "Rejected discard changed the approved billing, Sales Book or ticket links.");
             Check(sbma.OrderBy(x => x.Key).SequenceEqual((await db.MsapDispatchTickets.Where(x => x.CustomerOrderSlipId == cosId)
                     .ToDictionaryAsync(x => x.DispatchTicketId, x => x.SbmaShareAmount)).OrderBy(x => x.Key))
                 && await shared.FilprideGeneralLedgerBooks.CountAsync() == ledgerCount,
                 "Billing recalculated stored SBMA or introduced unapproved IBS GL recognition.");
-            Console.WriteLine("PASS: billing uses saved ticket amounts/canonical COS; partial/moved/forged edits, charge overrides, closed periods, denied/stale/repeated approvals rejected; actual Sales Book posting, reversal/reapproval and immutable SBMA verified.");
+            Console.WriteLine("PASS: billing uses saved ticket amounts/canonical COS; closed periods and denied/stale/repeated approvals rejected; single/split discard and reprepare, actual Sales Book posting, approved-bill retention and immutable SBMA verified.");
             Console.WriteLine($"Billing browser fixture: COS {cosId}, bill {id}, number {number} (test database only).");
         }
 

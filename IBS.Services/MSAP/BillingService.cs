@@ -237,43 +237,6 @@ namespace IBS.Services.MSAP
             model.PrintWht = model.Customer.WithHoldingTax;
         }
 
-        private async Task ApplyBafRateAsync(DispatchTicket dt, decimal newRate, string? chargeType, string username, CancellationToken cancellationToken)
-        {
-            var rateChanged = dt.BAFRate != newRate;
-            var typeChanged = !string.IsNullOrWhiteSpace(chargeType) && dt.BAFChargeType != chargeType;
-            if (!rateChanged && !typeChanged)
-            {
-                return;
-            }
-            if (dt.VesselScheduleServiceEntryId.HasValue)
-            {
-                throw new InvalidOperationException("Scheduled ticket charges must follow approved COS terms and cannot be changed during billing.");
-            }
-
-            var oldRate = dt.BAFRate;
-            if (typeChanged)
-            {
-                dt.BAFChargeType = chargeType;
-            }
-
-            var hours = Math.Round(dt.TotalHours, 2);
-            var discountAmount = newRate * (dt.BAFDiscount / 100);
-            var perHour = dt.BAFChargeType == "Per hour";
-            var bafBilling = perHour ? newRate * hours : newRate;
-            var bafRevenue = perHour ? (newRate - discountAmount) * hours : newRate - discountAmount;
-
-            dt.BAFRate = Math.Round(newRate, 2);
-            dt.BAFBillingAmount = Math.Round(bafBilling, 2);
-            dt.BAFNetRevenue = Math.Round(bafRevenue, 2);
-            dt.TotalBilling = Math.Round(dt.DispatchBillingAmount + dt.BAFBillingAmount, 2);
-            dt.TotalNetRevenue = Math.Round(dt.DispatchNetRevenue + dt.BAFNetRevenue, 2);
-
-            var typeDesc = typeChanged ? $" ({dt.BAFChargeType})" : string.Empty;
-            await unitOfWork.AuditTrail.AddAsync(
-                new AuditTrail(username, $"BAF rate adjusted during billing on #{dt.DispatchNumber}: {oldRate:N2} → {newRate:N2}{typeDesc}", "Dispatch Ticket", dt.DispatchTicketId, dt.DispatchNumber),
-                cancellationToken);
-        }
-
         public async Task<ServiceResult> PostBillingAsync(int id, string username, CancellationToken cancellationToken, string approverUserId, int reviewedRevision)
         {
             try
@@ -301,7 +264,8 @@ namespace IBS.Services.MSAP
                     var related = billing.BasicBilling ?? billing.BafBilling;
                     foreach (int billingId in new[] { billing.MsapBillingId, related?.MsapBillingId ?? billing.MsapBillingId }.Distinct().OrderBy(value => value))
                     {
-                        await unitOfWork.Billing.GetForUpdateAsync(billingId, cancellationToken);
+                        _ = await unitOfWork.Billing.GetForUpdateAsync(billingId, cancellationToken)
+                            ?? throw new InvalidOperationException("This billing preparation no longer exists.");
                     }
                     var model = billing;
                     if (string.IsNullOrEmpty(approverUserId) || !await accessControl.HasAccessAsync(approverUserId, ProcedureEnum.ApproveFinalBilling))
@@ -377,214 +341,6 @@ namespace IBS.Services.MSAP
             }
         }
 
-        public async Task<ServiceResult> UpdateBillingAsync(Billing model, string username, CancellationToken cancellationToken)
-        {
-            ServiceResult result = ServiceResult.Failure("Unable to update billing.");
-            try
-            {
-                await unitOfWork.ExecuteInTransactionAsync(async () =>
-                {
-                    await unitOfWork.Billing.GetForUpdateAsync(model.MsapBillingId, cancellationToken);
-                    result = await UpdateBillingCoreAsync(model, username, cancellationToken);
-                    if (!result.IsSuccess)
-                    {
-                        throw new InvalidOperationException(result.Message);
-                    }
-                }, cancellationToken);
-                return result;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to update billing {BillingId}", model.MsapBillingId);
-                return ServiceResult.Failure(ExceptionHelper.GetErrorMessage(ex));
-            }
-        }
-
-        private async Task<ServiceResult> UpdateBillingCoreAsync(Billing model, string username, CancellationToken cancellationToken)
-        {
-            try
-            {
-                var currentModel = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == model.MsapBillingId, cancellationToken);
-                if (currentModel == null)
-                {
-                    return ServiceResult.Failure("Billing not found.", ServiceResultStatus.NotFound);
-                }
-
-                // shortcut: use delete/reprepare until the editor can revise both split components together.
-                if (currentModel.BasicBillingId.HasValue || currentModel.BafBilling != null)
-                {
-                    return ServiceResult.Failure("Split billings must be corrected together. Delete the unposted preparation and prepare it again.");
-                }
-                var guard = await GuardClosedPeriodAsync(currentModel.Date, cancellationToken);
-                if (guard != null)
-                {
-                    return guard;
-                }
-
-                if (currentModel.Status != MsapConstants.BillingStatus.ForPosting)
-                {
-                    return ServiceResult.Failure("Only billings with 'For Posting' status can be edited.");
-                }
-
-                if (model.Date == default)
-                {
-                    return ServiceResult.Failure("Billing date is required.");
-                }
-                var customer = await unitOfWork.Customer.GetAsync(c => c.CustomerId == model.CustomerId, cancellationToken);
-                if (customer == null || !customer.IsActive || customer.Company != currentModel.Company)
-                {
-                    return ServiceResult.Failure("Customer is unavailable for this company.");
-                }
-
-                if (currentModel.CustomerOrderSlipId is not > 0
-                    || model.CustomerOrderSlipId.HasValue && model.CustomerOrderSlipId != currentModel.CustomerOrderSlipId)
-                {
-                    return ServiceResult.Failure("Billing must retain its original COS.");
-                }
-                var job = await unitOfWork.CustomerOrderSlip.GetCustomerOrderSlipWithDetailsAsync(currentModel.CustomerOrderSlipId.Value, cancellationToken);
-                if (job == null || job.CustomerId != customer.CustomerId)
-                {
-                    return ServiceResult.Failure("The customer must match the original COS.");
-                }
-                if (model.ToBillDispatchTickets != null)
-                {
-                    var selected = new HashSet<int>();
-                    foreach (string value in model.ToBillDispatchTickets)
-                    {
-                        if (!int.TryParse(value, out int id) || !selected.Add(id))
-                        {
-                            return ServiceResult.Failure("Select each COS ticket once.");
-                        }
-                    }
-                    if (!selected.SetEquals(job.DispatchTickets.Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted)
-                        .Select(t => t.DispatchTicketId)))
-                    {
-                        return ServiceResult.Failure("All COS tickets must stay together. Partial or mixed-COS billing is not allowed.");
-                    }
-                }
-                var principal = model.BilledTo == "PRINCIPAL"
-                    ? await unitOfWork.Principal.GetAsync(p => p.PrincipalId == model.PrincipalId && p.CustomerId == customer.CustomerId && p.IsActive, cancellationToken)
-                    : null;
-                if (model.BilledTo == "PRINCIPAL" && principal == null)
-                {
-                    return ServiceResult.Failure("Select an active principal belonging to the service customer.");
-                }
-
-                string? progressBlocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, currentModel.CustomerOrderSlipId, JobProgressCalculator.BillingStage, cancellationToken);
-                if (progressBlocker != null)
-                {
-                    return ServiceResult.Failure(progressBlocker);
-                }
-                if (model.ToBillDispatchTickets != null)
-                {
-                    foreach (var ticketId in model.ToBillDispatchTickets)
-                    {
-                        var ticket = await unitOfWork.DispatchTicket.GetAsync(t => t.DispatchTicketId == int.Parse(ticketId), cancellationToken);
-                        string? blocker = await JobProgressCalculator.GetBlockerAsync(unitOfWork, ticket?.CustomerOrderSlipId, JobProgressCalculator.BillingStage, cancellationToken);
-                        if (blocker != null)
-                        {
-                            return ServiceResult.Failure(blocker);
-                        }
-                    }
-                }
-
-                var requestedPeriodGuard = await GuardClosedPeriodAsync(model.Date, cancellationToken);
-                if (requestedPeriodGuard != null)
-                {
-                    return requestedPeriodGuard;
-                }
-
-                // Update ticket billing references only when ticket selection was submitted
-                if (model.ToBillDispatchTickets != null)
-                {
-                    var oldTickets = await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.BillingId == model.MsapBillingId, cancellationToken);
-                    foreach (var dt in oldTickets)
-                    {
-                        dt.BillingId = null;
-                    }
-                }
-
-                // Update properties
-                currentModel.Customer = customer;
-                ApplyCustomerTaxSettings(currentModel);
-                currentModel.CustomerId = model.CustomerId;
-                currentModel.Principal = principal;
-                currentModel.PrincipalId = principal?.PrincipalId;
-                currentModel.IsPrincipal = principal != null;
-                currentModel.VoyageNumber = job.VoyageNumber;
-                currentModel.COSNumber = job.CustomerOrderSlipNumber;
-                currentModel.Date = model.Date;
-                currentModel.Terms = (principal?.Terms ?? customer.CustomerTerms) ?? "COD";
-                currentModel.DueDate = await unitOfWork.Terms.ComputeDueDateAsync(currentModel.Terms, model.Date, cancellationToken);
-                currentModel.Year = model.Date.Year;
-                currentModel.PortId = job.PortId;
-                currentModel.TerminalId = job.TerminalId;
-                currentModel.VesselId = job.VesselId;
-                currentModel.BilledTo = principal != null ? "PRINCIPAL" : "LOCAL";
-
-                if (model.ToBillDispatchTickets != null)
-                {
-                    decimal total = 0, dispatch = 0, baf = 0;
-                    var selectedIds = new HashSet<int>();
-                    foreach (var ticketIdStr in model.ToBillDispatchTickets)
-                    {
-                        var ticketId = int.Parse(ticketIdStr);
-                        if (!selectedIds.Add(ticketId))
-                        {
-                            return ServiceResult.Failure($"Dispatch ticket #{ticketId} was selected more than once.");
-                        }
-
-                        var dt = await unitOfWork.DispatchTicket.GetAsync(t => t.DispatchTicketId == ticketId, cancellationToken);
-                        if (dt == null)
-                        {
-                            return ServiceResult.Failure($"Dispatch ticket #{ticketIdStr} not found.");
-                        }
-
-                        if (dt.Status != MsapConstants.DispatchTicketStatus.ForBilling ||
-                            (dt.BillingId.HasValue && dt.BillingId != currentModel.MsapBillingId))
-                        {
-                            return ServiceResult.Failure($"Ticket #{dt.DispatchNumber} is not available for billing.");
-                        }
-
-                        if (dt.CustomerId != model.CustomerId)
-                        {
-                            return ServiceResult.Failure($"Ticket #{dt.DispatchNumber} does not belong to the selected customer.");
-                        }
-
-                        if (model.BafRates != null && model.BafRates.TryGetValue(dt.DispatchTicketId, out var bafRate))
-                        {
-                            await ApplyBafRateAsync(dt, bafRate, null, username, cancellationToken);
-                        }
-
-                        total += dt.TotalNetRevenue;
-                        dispatch += dt.DispatchNetRevenue;
-                        baf += dt.BAFNetRevenue;
-
-                        dt.BillingId = currentModel.MsapBillingId;
-                        dt.Billing = currentModel;
-                    }
-
-                    currentModel.Amount = currentModel.Balance = currentModel is { IsVatable: true, IsVatInclusive: false } ? total * VatMultiplier : total;
-                    currentModel.DispatchAmount = dispatch;
-                    currentModel.BAFAmount = baf;
-                }
-
-                currentModel.Revision++;
-                currentModel.ApprovedRevision = null;
-                currentModel.ApprovedByUserId = null;
-                currentModel.ApprovedAt = null;
-                await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Edit billing #{currentModel.MsapBillingNumber}", "Billing", currentModel.MsapBillingId, currentModel.MsapBillingNumber), cancellationToken);
-                await unitOfWork.SaveAsync(cancellationToken);
-
-                return ServiceResult.Success("Entry edited successfully!");
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to edit billing");
-                return ServiceResult.Failure($"Failed to edit billing: {ExceptionHelper.GetErrorMessage(ex)}");
-            }
-        }
-
         public async Task<ServiceResult> DeleteBillingAsync(int id, string username, CancellationToken cancellationToken)
         {
             try
@@ -601,20 +357,21 @@ namespace IBS.Services.MSAP
                     }
                     foreach (var bill in pair.OrderBy(b => b.MsapBillingId))
                     {
-                        await unitOfWork.Billing.GetForUpdateAsync(bill.MsapBillingId, cancellationToken);
-                        if (bill.Status != MsapConstants.BillingStatus.ForPosting || bill.AmountPaid != 0 || bill.CollectionId.HasValue)
+                        _ = await unitOfWork.Billing.GetForUpdateAsync(bill.MsapBillingId, cancellationToken)
+                            ?? throw new InvalidOperationException("This billing preparation no longer exists.");
+                        if (!IsUnapprovedDraft(bill))
                         {
-                            throw new InvalidOperationException("Only unposted, unpaid billings can be deleted. Both split components must qualify.");
-                        }
-                        if (await unitOfWork.Billing.HasSalesBookAsync(bill.MsapBillingId, cancellationToken))
-                        {
-                            throw new InvalidOperationException("This billing has Sales Book history and cannot be deleted. Revise and resubmit the reversed bill instead.");
+                            throw new InvalidOperationException("Only unapproved, unpaid drafts can be discarded. Both Basic and BAF bills must qualify.");
                         }
                         var guard = await GuardClosedPeriodAsync(bill.Date, cancellationToken);
                         if (guard != null)
                         {
                             throw new InvalidOperationException(guard.Message);
                         }
+                    }
+                    if ((await unitOfWork.Billing.GetBillingIdsWithSalesBookAsync(pair.Select(b => b.MsapBillingId).ToList(), cancellationToken)).Count > 0)
+                    {
+                        throw new InvalidOperationException("This preparation has Sales Book history and cannot be discarded. Approved bills must be retained.");
                     }
                     var tickets = await unitOfWork.DispatchTicket.GetAllAsync(t => t.BillingId == basic.MsapBillingId, cancellationToken);
                     foreach (var ticket in tickets)
@@ -626,126 +383,49 @@ namespace IBS.Services.MSAP
                     foreach (var bill in pair.AsEnumerable().Reverse())
                     {
                         await unitOfWork.Billing.RemoveAsync(bill, cancellationToken);
-                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Deleted Billing #{bill.MsapBillingNumber}", "Billing", bill.MsapBillingId, bill.MsapBillingNumber), cancellationToken);
+                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Discarded draft billing #{bill.MsapBillingNumber}", "Billing", bill.MsapBillingId, bill.MsapBillingNumber), cancellationToken);
                     }
                     if (basic.CustomerOrderSlipId.HasValue)
                     {
                         var job = await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == basic.CustomerOrderSlipId.Value, cancellationToken);
-                        if (job?.Status == MsapConstants.CustomerOrderSlipStatus.Closed)
+                        if (job != null)
                         {
-                            job.Status = MsapConstants.CustomerOrderSlipStatus.Open;
+                            if (job.Status == MsapConstants.CustomerOrderSlipStatus.Closed)
+                            {
+                                job.Status = MsapConstants.CustomerOrderSlipStatus.Open;
+                            }
+                            await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
+                                $"Discarded draft billing preparation {string.Join(", ", pair.Select(b => $"#{b.MsapBillingNumber}"))}; actual service tickets retained.",
+                                "COS", job.CustomerOrderSlipId, job.CustomerOrderSlipNumber), cancellationToken);
                         }
                     }
                     await unitOfWork.SaveAsync(cancellationToken);
                 }, cancellationToken);
-                return ServiceResult.Success("Billing preparation deleted. Actual service tickets are available for billing again.");
+                return ServiceResult.Success("Draft billing preparation discarded. Actual service tickets are available for billing again.");
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to delete billing");
+                logger.LogError(ex, "Failed to discard draft billing");
                 return ServiceResult.Failure(ExceptionHelper.GetErrorMessage(ex));
-            }
-        }
-        public async Task<ServiceResult> ReverseBillingAsync(int id, string username, string? remarks, CancellationToken cancellationToken)
-        {
-            try
-            {
-                var billing = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == id, cancellationToken);
-                if (billing == null)
-                {
-                    return ServiceResult.Failure("Billing not found.", ServiceResultStatus.NotFound);
-                }
-
-                var guard = await GuardClosedPeriodAsync(billing.Date, cancellationToken);
-                if (guard != null)
-                {
-                    return guard;
-                }
-
-                string billingNumber = billing.MsapBillingNumber;
-
-                await unitOfWork.ExecuteInTransactionAsync(async () =>
-                {
-                    var partner = billing.BasicBilling ?? billing.BafBilling;
-                    foreach (int billingId in new[] { id, partner?.MsapBillingId ?? id }.Distinct().OrderBy(value => value))
-                    {
-                        await unitOfWork.Billing.GetForUpdateAsync(billingId, cancellationToken);
-                    }
-                    billing = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == id, cancellationToken);
-                    billingNumber = billing!.MsapBillingNumber;
-
-                    if (billing.Status != MsapConstants.BillingStatus.ForCollection)
-                    {
-                        throw new InvalidOperationException($"Only billings with '{MsapConstants.BillingStatus.ForCollection}' status can be reversed.");
-                    }
-
-                    if (billing.CollectionId.HasValue || billing.AmountPaid != 0)
-                    {
-                        throw new InvalidOperationException($"Billing #{billingNumber} cannot be reversed because it is linked to a Collection (CR#{billing.CollectionNumber}).");
-                    }
-
-                    int sourceId = billing.BasicBillingId ?? billing.MsapBillingId;
-                    var linkedTickets = await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.BillingId == sourceId, cancellationToken);
-                    foreach (var dt in linkedTickets)
-                    {
-                        dt.Status = MsapConstants.DispatchTicketStatus.ForBilling;
-                    }
-
-                    billing.Status = MsapConstants.BillingStatus.ForPosting;
-                    billing.Revision++;
-                    billing.ApprovedRevision = null;
-                    billing.ApprovedByUserId = null;
-                    billing.ApprovedAt = null;
-                    billing.UnpostedBy = username;
-                    billing.UnpostedDate = DateTime.UtcNow;
-                    billing.UnpostRemarks = remarks;
-
-                    await unitOfWork.Billing.VoidSalesBookAsync(billing.MsapBillingId, username, remarks,
-                        DateTimeHelper.GetCurrentPhilippineTime(), cancellationToken);
-
-                    await unitOfWork.AuditTrail.AddAsync(
-                        new AuditTrail(username, $"Reversed (unposted) Billing #{billingNumber}", "Billing", billing.MsapBillingId, billingNumber),
-                        cancellationToken);
-
-                    if (billing.CustomerOrderSlipId.HasValue)
-                    {
-                        var customerOrderSlip = await unitOfWork.CustomerOrderSlip.GetAsync(jo => jo.CustomerOrderSlipId == billing.CustomerOrderSlipId, cancellationToken);
-                        if (customerOrderSlip is { Status: MsapConstants.CustomerOrderSlipStatus.Closed })
-                        {
-                            customerOrderSlip.Status = MsapConstants.CustomerOrderSlipStatus.Open;
-                        }
-                    }
-
-                    await unitOfWork.SaveAsync(cancellationToken);
-                }, cancellationToken);
-
-                return ServiceResult.Success($"Billing #{billingNumber} reversed successfully and is back to '{MsapConstants.BillingStatus.ForPosting}'.");
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to reverse billing {BillingId}", id);
-                return ServiceResult.Failure($"Failed to reverse billing: {ExceptionHelper.GetErrorMessage(ex)}");
             }
         }
 
         public async Task<(IEnumerable<Billing> Data, int RecordsFiltered, int TotalRecords)> GetPagedBillingsAsync(DataTablesParameters parameters, CancellationToken cancellationToken, int? customerOrderSlipId = null)
         {
-            return await unitOfWork.Billing.GetPagedBillingsAsync(parameters, cancellationToken, customerOrderSlipId);
-        }
-
-        public async Task<List<object>> SearchPrincipalsAsync(string? term, int customerId, CancellationToken cancellationToken)
-        {
-            var result = await unitOfWork.Principal.SearchPrincipalsAsync(term ?? string.Empty, customerId, 10, cancellationToken);
-
-            return result.Select(p => (object)new
+            var (data, filtered, total) = await unitOfWork.Billing.GetPagedBillingsAsync(parameters, cancellationToken, customerOrderSlipId);
+            List<Billing> billings = data.ToList();
+            List<int> preparationIds = billings
+                .SelectMany(b => new[] { b.MsapBillingId, b.BasicBillingId ?? b.MsapBillingId, b.BafBilling?.MsapBillingId ?? b.MsapBillingId })
+                .Distinct().ToList();
+            List<int> history = await unitOfWork.Billing.GetBillingIdsWithSalesBookAsync(preparationIds, cancellationToken);
+            foreach (Billing bill in billings)
             {
-                value = p.PrincipalId,
-                name = p.PrincipalName,
-                address = p.Address,
-                tinNo = p.TIN,
-                businessStyle = p.BusinessType,
-                terms = p.Terms
-            }).ToList();
+                Billing basic = bill.BasicBilling ?? bill;
+                Billing? baf = basic.BafBilling;
+                bill.CanDiscard = IsUnapprovedDraft(basic) && !history.Contains(basic.MsapBillingId)
+                    && (baf == null || (IsUnapprovedDraft(baf) && !history.Contains(baf.MsapBillingId)));
+            }
+            return (billings, filtered, total);
         }
 
         public async Task<List<object>> GetBillableCustomerOrderSlipsAsync(int customerId, CancellationToken cancellationToken)
@@ -823,70 +503,6 @@ namespace IBS.Services.MSAP
             });
         }
 
-        public async Task<ServiceResult<CustomerOrderSlipBillingDto>> GetDispatchTicketsByCustomerAsync(int customerId, CancellationToken cancellationToken)
-        {
-            var tickets = await unitOfWork.DispatchTicket.GetAllAsync(t =>
-                t.CustomerId == customerId &&
-                t.Status == MsapConstants.DispatchTicketStatus.ForBilling &&
-                t.BillingId == null &&
-                t.CustomerOrderSlipId == null,
-                cancellationToken);
-
-            var ticketDtos = tickets.Select(t => new CustomerOrderSlipTicketDto
-            {
-                DispatchTicketId = t.DispatchTicketId,
-                DispatchNo = t.DispatchNumber,
-                Tugboat = t.Tugboat.TugboatName,
-                Service = t.Service.ServiceName,
-                Duration = t.TotalHours,
-                ActualHours = t.RawDurationHours,
-                IsCompanyOwned = t.Tugboat.IsCompanyOwned,
-                IsManualTariffRate = t.IsManualTariffRate,
-                IsManualBafRate = t.IsManualBafRate,
-                DispatchRate = t.DispatchRate,
-                DispatchNetAmount = t.DispatchNetRevenue,
-                DispatchAmount = t.DispatchBillingAmount,
-                BAFRate = t.BAFRate,
-                BAFDiscount = t.BAFDiscount,
-                BAFChargeType = t.BAFChargeType ?? string.Empty,
-                BafNetAmount = t.BAFNetRevenue,
-                BAFAmount = t.BAFBillingAmount,
-                TotalAmount = t.TotalBilling,
-                Port = t.Terminal?.Port?.PortName,
-                Terminal = t.Terminal?.TerminalName
-            }).ToList();
-
-            return ServiceResult<CustomerOrderSlipBillingDto>.Success(new CustomerOrderSlipBillingDto
-            {
-                Header = new CustomerOrderSlipHeaderDto(),
-                Tickets = ticketDtos
-            });
-        }
-
-        public async Task<List<SelectListItem>?> GetPrincipalsSelectListAsync(int customerId, CancellationToken cancellationToken)
-        {
-            var principals = await unitOfWork.Principal.GetAllAsync(t => t.CustomerId == customerId, cancellationToken);
-            return principals.Select(t => new SelectListItem
-            {
-                Value = t.PrincipalId.ToString(),
-                Text = t.PrincipalName
-            }).ToList();
-        }
-
-        public async Task<List<SelectListItem>?> GetEditTicketsSelectListAsync(int? customerId, int billingId, CancellationToken cancellationToken)
-        {
-            var list = await unitOfWork.Billing.GetMsapUnbilledTicketsByCustomer(customerId, cancellationToken);
-            if (billingId != 0)
-            {
-                var billedTickets = await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.BillingId == billingId, cancellationToken);
-                if (billedTickets.Any() && billedTickets.First().CustomerId == customerId)
-                {
-                    list?.AddRange(await unitOfWork.Billing.GetMsapBilledTicketsById(billingId, cancellationToken));
-                }
-            }
-            return list;
-        }
-
         public async Task<Billing> PopulateTicketListsAsync(Billing model, CancellationToken cancellationToken)
         {
             model.ToBillDispatchTickets = await unitOfWork.Billing
@@ -900,12 +516,6 @@ namespace IBS.Services.MSAP
 
             unitOfWork.Billing.ProcessAddress(model, cancellationToken);
             return model;
-        }
-
-        public async Task<IEnumerable<DispatchTicket>> GetDispatchTicketsByIdsAsync(List<int> dispatchTicketIds, CancellationToken cancellationToken)
-        {
-            return await unitOfWork.DispatchTicket
-                .GetAllAsync(t => dispatchTicketIds.Contains(t.DispatchTicketId), cancellationToken);
         }
 
         public async Task<Billing> PopulateBillingSelectListsAsync(Billing model, CancellationToken cancellationToken)
@@ -961,6 +571,14 @@ namespace IBS.Services.MSAP
                 businessStyle = p.BusinessType,
                 terms = p.Terms
             }).ToList();
+        }
+
+        private static bool IsUnapprovedDraft(Billing bill)
+        {
+            return bill.Status == MsapConstants.BillingStatus.ForPosting && bill.AmountPaid == 0 && !bill.IsPaid
+                && !bill.CollectionId.HasValue && !bill.ApprovedRevision.HasValue
+                && !bill.ApprovedAt.HasValue && string.IsNullOrEmpty(bill.ApprovedByUserId)
+                && !bill.UnpostedDate.HasValue && string.IsNullOrEmpty(bill.UnpostedBy);
         }
 
         private async Task<ServiceResult?> GuardClosedPeriodAsync(DateOnly date, CancellationToken ct)

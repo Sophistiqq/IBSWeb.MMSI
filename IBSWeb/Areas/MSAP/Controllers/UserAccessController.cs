@@ -68,7 +68,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("UserId,CanCreateCustomerOrderSlip,CanEditCustomerOrderSlip,CanApproveSchedule,CanCreateDispatchTicket,CanEditDispatchTicket,CanViewRates,CanManageRates,CanApproveRateUpload,CanCreateBilling,CanEditBilling,CanDeleteBilling,CanApproveFinalBilling,CanCreateCollection,CanAccessTreasury,CanManageOtherTugCharges,CanConfirmOtherTugCharges,CanManageCustomerMasterFile,CanManageServiceMasterFile,CanManagePortMasterFile,CanManageTerminalMasterFile,CanManageVesselMasterFile,CanManageTugboatMasterFile,CanManageTugboatOwnerMasterFile,CanManageTugMasterMasterFile,CanManagePrincipalMasterFile,CanManageBankAccountMasterFile,CanViewMaritimeReport")] UserAccess model, CancellationToken cancellationToken = default)
+        public async Task<IActionResult> Create([Bind("UserId,CanCreateCustomerOrderSlip,CanEditCustomerOrderSlip,CanApproveSchedule,CanCreateDispatchTicket,CanEditDispatchTicket,CanViewRates,CanManageRates,CanApproveRateUpload,CanCreateBilling,CanDeleteBilling,CanApproveFinalBilling,CanCreateCollection,CanAccessTreasury,CanManageOtherTugCharges,CanConfirmOtherTugCharges,CanManageCustomerMasterFile,CanManageServiceMasterFile,CanManagePortMasterFile,CanManageTerminalMasterFile,CanManageVesselMasterFile,CanManageTugboatMasterFile,CanManageTugboatOwnerMasterFile,CanManageTugMasterMasterFile,CanManagePrincipalMasterFile,CanManageBankAccountMasterFile,CanViewMaritimeReport")] UserAccess model, CancellationToken cancellationToken = default)
         {
             ApplicationUser? actor = await userManager.GetUserAsync(User);
             if (actor == null)
@@ -109,7 +109,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit([Bind("Id,UserId,CanCreateCustomerOrderSlip,CanEditCustomerOrderSlip,CanApproveSchedule,CanCreateDispatchTicket,CanEditDispatchTicket,CanViewRates,CanManageRates,CanApproveRateUpload,CanCreateBilling,CanEditBilling,CanDeleteBilling,CanApproveFinalBilling,CanCreateCollection,CanAccessTreasury,CanManageOtherTugCharges,CanConfirmOtherTugCharges,CanManageCustomerMasterFile,CanManageServiceMasterFile,CanManagePortMasterFile,CanManageTerminalMasterFile,CanManageVesselMasterFile,CanManageTugboatMasterFile,CanManageTugboatOwnerMasterFile,CanManageTugMasterMasterFile,CanManagePrincipalMasterFile,CanManageBankAccountMasterFile,CanViewMaritimeReport")] UserAccess model, CancellationToken cancellationToken = default)
+        public async Task<IActionResult> Edit([Bind("Id,UserId,CanCreateCustomerOrderSlip,CanEditCustomerOrderSlip,CanApproveSchedule,CanCreateDispatchTicket,CanEditDispatchTicket,CanViewRates,CanManageRates,CanApproveRateUpload,CanCreateBilling,CanDeleteBilling,CanApproveFinalBilling,CanCreateCollection,CanAccessTreasury,CanManageOtherTugCharges,CanConfirmOtherTugCharges,CanManageCustomerMasterFile,CanManageServiceMasterFile,CanManagePortMasterFile,CanManageTerminalMasterFile,CanManageVesselMasterFile,CanManageTugboatMasterFile,CanManageTugboatOwnerMasterFile,CanManageTugMasterMasterFile,CanManagePrincipalMasterFile,CanManageBankAccountMasterFile,CanViewMaritimeReport")] UserAccess model, CancellationToken cancellationToken = default)
         {
             ApplicationUser? actor = await userManager.GetUserAsync(User);
             if (actor == null)

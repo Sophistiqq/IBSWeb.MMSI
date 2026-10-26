@@ -4,6 +4,9 @@ const vm = require('node:vm');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
+const billingList = read('IBSWeb/Areas/MSAP/Views/Billing/Index.cshtml');
+assert(billingList.includes("label: 'Discard draft'") && billingList.includes('condition: row.canDiscard && canDelete'), 'Only eligible drafts may offer discard.');
+assert(!billingList.includes("label: 'Delete'") && billingList.includes("confirmText: 'Discard draft'"), 'Billing actions must use discard wording.');
 const progressView = read('IBSWeb/Areas/MSAP/Views/Shared/_JobProgress.cshtml');
 assert(progressView.includes('ProcedureEnum.ViewCollections'), 'Collection navigation must check preview access.');
 assert(progressView.includes('step.Stage == JobProgressCalculator.CollectionStage && canViewCollections && collectionIds.Count > 0'),
@@ -23,14 +26,7 @@ for (const view of ['Billing/Create', 'Collection/Create', 'Collection/Edit']) {
     assert(source.includes('~/msap/js/job-progress.js'), `${view} must load the progress script.`);
 }
 (async () => {
-    const billingEdit = read('IBSWeb/Areas/MSAP/Views/Billing/Edit.cshtml');
-    const billingFormStart = billingEdit.indexOf('<form id="myForm"');
-    const billingTotals = billingEdit.indexOf('id="OverallTotal"');
-    const billingSave = billingEdit.indexOf('id="submitButton"');
-    assert(billingTotals >= 0 && billingSave > billingTotals, 'Billing save must follow the statement totals.');
-    assert(billingEdit.indexOf('data-tour-step="12"') > billingTotals, 'Billing save tour step must follow the totals.');
-    assert(billingFormStart >= 0 && billingSave > billingFormStart && billingSave < billingEdit.indexOf('</form>', billingFormStart),
-        'Billing save must remain inside the form.');
+    assert(!fs.existsSync(path.join(root, 'IBSWeb/Areas/MSAP/Views/Billing/Edit.cshtml')), 'The retired billing editor must remain removed.');
 
     const window = {};
     const pending = [];

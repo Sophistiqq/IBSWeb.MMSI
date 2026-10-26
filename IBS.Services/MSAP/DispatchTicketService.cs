@@ -1391,50 +1391,6 @@ namespace IBS.Services.MSAP
             return viewModel;
         }
 
-        public async Task<IEnumerable<DispatchTicket>> GetDispatchTicketsByFilterAsync(string status, CancellationToken cancellationToken)
-        {
-            return status == "All"
-                ? await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.Status != "For Posting", cancellationToken)
-                : await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.Status == status, cancellationToken);
-        }
-
-        public async Task<object?> GetTicketDetailsAsync(int id, CancellationToken cancellationToken)
-        {
-            var ticket = await unitOfWork.DispatchTicket.GetDispatchTicketWithDetailsAsync(id, cancellationToken);
-            if (ticket == null)
-            {
-                return null;
-            }
-
-            return new
-            {
-                id = ticket.DispatchTicketId,
-                dispatchNumber = ticket.DispatchNumber,
-                date = ticket.Date.ToString("MMM dd, yyyy"),
-                serviceName = ticket.Service.ServiceName,
-                tugboatName = ticket.Tugboat.TugboatName,
-                tugMasterName = ticket.TugMaster?.TugMasterName,
-                location = $"{ticket.Terminal.Port.PortName} - {ticket.Terminal.TerminalName}",
-                timeStart = ticket is { DateLeft: not null, TimeLeft: not null }
-                    ? $"{ticket.DateLeft.Value:MMM dd, yyyy} {ticket.TimeLeft.Value:HH:mm}"
-                    : "-",
-                timeEnd = ticket is { DateArrived: not null, TimeArrived: not null }
-                    ? $"{ticket.DateArrived.Value:MMM dd, yyyy} {ticket.TimeArrived.Value:HH:mm}"
-                    : "-",
-                remarks = ticket.Remarks ?? "No remarks",
-                status = ticket.Status,
-                totalHours = ticket.TotalHours.ToString("N2"),
-                dispatchRate = ticket.DispatchRate.ToString("N2"),
-                dispatchDiscount = ticket.DispatchDiscount.ToString("N2"),
-                dispatchBilling = ticket.DispatchBillingAmount.ToString("N2"),
-                bafRate = ticket.BAFRate.ToString("N2"),
-                bafDiscount = ticket.BAFDiscount.ToString("N2"),
-                bafBilling = ticket.BAFBillingAmount.ToString("N2"),
-                totalBilling = ticket.TotalBilling.ToString("N2"),
-                totalNetRevenue = ticket.TotalNetRevenue.ToString("N2")
-            };
-        }
-
         private async Task<string?> ValidateReadyAsync(DispatchTicketViewModel model, CancellationToken ct)
         {
             var results = new List<ValidationResult>();
