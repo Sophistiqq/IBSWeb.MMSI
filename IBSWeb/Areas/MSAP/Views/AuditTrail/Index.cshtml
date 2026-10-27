@@ -157,7 +157,7 @@
                         data: 'referenceNumber',
                         name: 'referenceNumber',
                         render: function(data) {
-                            return data || '-';
+                            return ModernTable.render.text(data || '-');
                         }
                     },
                     { data: 'activity', name: 'activity', render: data => escapeHtml(data ?? '') },
@@ -168,7 +168,7 @@
                         className: 'text-center',
                         render: function(data, type, row) {
                             if (row.documentType === "COS" && row.recordId) {
-                                return `<button type="button" class="modern-btn-primary" style="padding: 4px 12px; font-size: 11px;" onclick="loadTrace(${row.recordId}, '${row.referenceNumber}')">
+                                return `<button type="button" class="modern-btn-primary audit-trace" style="padding: 4px 12px; font-size: 11px;" data-trace-id="${ModernTable.render.text(row.recordId)}" data-trace-reference="${ModernTable.render.text(row.referenceNumber)}">
                                             <span class="material-symbols-outlined" style="font-size: 16px;">account_tree</span> TRACE
                                         </button>`;
                             }
@@ -179,6 +179,10 @@
                 order: [[0, 'desc']],
                 pageLength: 25
             }));
+
+            $('#auditTable').on('click', '.audit-trace', function() {
+                loadTrace(this.dataset.traceId, this.dataset.traceReference);
+            });
 
             // Filter button handlers
             $('.modern-btn-secondary[id^="filter"]').on('click', function() {
@@ -256,7 +260,7 @@
                 })
                 .fail(function(xhr) {
                     const errorMsg = xhr.responseText || 'Failed to load timeline.';
-                    $('#traceTimeline').html(`<div class="text-center py-5 text-danger"><span class="material-symbols-outlined" style="font-size:32px">error</span><p class="modern-label mt-2 ui-label">${errorMsg}</p></div>`);
+                    $('#traceTimeline').html(`<div class="text-center py-5 text-danger"><span class="material-symbols-outlined" style="font-size:32px">error</span><p class="modern-label mt-2 ui-label">${ModernTable.render.text(errorMsg)}</p></div>`);
                 })
                 .always(function() {
                     $('#traceLoading').addClass('hidden');

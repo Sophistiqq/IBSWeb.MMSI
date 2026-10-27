@@ -3,6 +3,7 @@ using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.MasterFile;
+using IBS.Services.MSAP;
 using IBS.Services.MSAP.Attributes;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
@@ -433,8 +434,8 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     [19] = "GROSS SALES - NET OF VAT, rounded to 2 decimals.",
                     [20] = "NET OF VAT x 2% when withholding tax is enabled on the billing; otherwise zero.",
                     [25] = "NET OF VAT when allocated EWT is nonzero and the billing is vatable; otherwise zero.",
-                    [26] = "Receipt EWT allocated by each ticket's share of charges after discounts (Basic and/or BAF). Includes tickets outside the report period; equal shares if all charges are zero. Rounded to cents with remainder distributed.",
-                    [27] = "Receipt amount allocated by each ticket's share of charges after discounts (Basic and/or BAF). Includes tickets outside the report period; equal shares if all charges are zero. Rounded to cents with remainder distributed.",
+                    [26] = "Receipt EWT allocated to each bill using its rounded settlement, then to its tickets by charges after discounts (Basic and/or BAF). Includes tickets outside the report period; equal ticket shares if all charges are zero. Rounded to cents with remainder distributed.",
+                    [27] = "Receipt amount allocated to each bill using its rounded net settlement, then to its tickets by charges after discounts (Basic and/or BAF). Includes tickets outside the report period; equal ticket shares if all charges are zero. Rounded to cents with remainder distributed.",
                     [28] = "Saved SBMA share: actual service minutes x 87.50 when SBMA is enabled, rounded and allocated per COS/tugboat. Uses actual time, not minimum billable hours.",
                     [29] = "Currently zero in this export.",
                     [30] = "Currently zero in this export.",
@@ -1283,7 +1284,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     continue;
                 }
 
-                var ticketWeights = new Dictionary<int, decimal>();
+                var billingAmounts = CollectionService.GetCollectedBillingAmounts(collection, group);
                 foreach (var billing in group)
                 {
                     var sourceBillingId = billing.BasicBillingId ?? billing.MsapBillingId;
@@ -1292,39 +1293,38 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                         continue;
                     }
 
-                    foreach (var ticket in billingTickets)
+                    var tickets = billingTickets.OrderBy(t => t.DispatchTicketId).Select(ticket => new
                     {
-                        var weight = billing.BasicBillingId.HasValue ? ticket.BAFNetRevenue
+                        ticket.DispatchTicketId,
+                        Weight = Math.Max(billing.BasicBillingId.HasValue ? ticket.BAFNetRevenue
                             : billing.BafBilling != null ? ticket.DispatchNetRevenue
-                            : ticket.DispatchNetRevenue + ticket.BAFNetRevenue;
-                        ticketWeights[ticket.DispatchTicketId] = ticketWeights.GetValueOrDefault(ticket.DispatchTicketId) + Math.Max(weight, 0m);
-                    }
-                }
-
-                if (ticketWeights.Count == 0)
-                {
-                    continue;
-                }
-
-                var tickets = ticketWeights.OrderBy(p => p.Key).ToList();
-                var totalWeight = ticketWeights.Values.Sum();
-                decimal cumulativeWeight = 0m, previousAmount = 0m, previousEwt = 0m;
-                foreach (var (ticketId, weight) in tickets)
-                {
-                    cumulativeWeight += totalWeight > 0m ? weight : 1m;
-                    var denominator = totalWeight > 0m ? totalWeight : tickets.Count;
-                    var amount = Math.Round(collection.Amount * cumulativeWeight / denominator, 2, MidpointRounding.AwayFromZero);
-                    var ewt = Math.Round(collection.EWT * cumulativeWeight / denominator, 2, MidpointRounding.AwayFromZero);
-                    var oldShare = shares.GetValueOrDefault(ticketId);
-                    shares[ticketId] = (oldShare.Amount + amount - previousAmount, oldShare.Ewt + ewt - previousEwt);
-                    if (!collectionsByTicket.TryGetValue(ticketId, out var ticketCollections))
+                            : ticket.DispatchNetRevenue + ticket.BAFNetRevenue, 0m)
+                    }).ToList();
+                    var totalWeight = tickets.Sum(t => t.Weight);
+                    var settled = billingAmounts[billing.MsapBillingId];
+                    var cumulativeWeight = 0m;
+                    var previousAmount = 0m;
+                    var previousEwt = 0m;
+                    foreach (var ticket in tickets)
                     {
-                        ticketCollections = [];
-                        collectionsByTicket[ticketId] = ticketCollections;
+                        cumulativeWeight += totalWeight > 0m ? ticket.Weight : 1m;
+                        var denominator = totalWeight > 0m ? totalWeight : tickets.Count;
+                        var amount = Math.Round((settled.Amount * cumulativeWeight) / denominator, 2, MidpointRounding.AwayFromZero);
+                        var ewt = Math.Round((settled.Ewt * cumulativeWeight) / denominator, 2, MidpointRounding.AwayFromZero);
+                        var oldShare = shares.GetValueOrDefault(ticket.DispatchTicketId);
+                        shares[ticket.DispatchTicketId] = ((oldShare.Amount + amount) - previousAmount, (oldShare.Ewt + ewt) - previousEwt);
+                        if (!collectionsByTicket.TryGetValue(ticket.DispatchTicketId, out var ticketCollections))
+                        {
+                            ticketCollections = [];
+                            collectionsByTicket[ticket.DispatchTicketId] = ticketCollections;
+                        }
+                        if (!ticketCollections.Any(c => c.MsapCollectionId == collection.MsapCollectionId))
+                        {
+                            ticketCollections.Add(collection);
+                        }
+                        previousAmount = amount;
+                        previousEwt = ewt;
                     }
-                    ticketCollections.Add(collection);
-                    previousAmount = amount;
-                    previousEwt = ewt;
                 }
             }
 

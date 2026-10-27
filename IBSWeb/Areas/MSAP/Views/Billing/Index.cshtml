@@ -137,7 +137,7 @@
                         render: (data, type, row) => {
                             const portName = row.terminal?.port?.portName ?? "";
                             const terminalName = row.terminal?.terminalName ?? "";
-                            return portName || terminalName ? `${portName} - ${terminalName}` : "";
+                            return portName || terminalName ? `${ModernTable.render.text(portName)} - ${ModernTable.render.text(terminalName)}` : "";
                         }
                     },
                     { data: "vessel.vesselName", defaultContent: "" },
@@ -146,8 +146,8 @@
                         render: (data, type, row) => {
                             if (!data) return "";
                             const parts = data.split(", ");
-                            if (parts.length <= 3) return data;
-                            return `<span title="${data.replace(/"/g, '&quot;')}">${parts.slice(0, 3).join(", ")} +${parts.length - 3} more</span>`;
+                            if (parts.length <= 3) return ModernTable.render.text(data);
+                            return `<span title="${ModernTable.render.text(data)}">${ModernTable.render.text(parts.slice(0, 3).join(", "))} +${parts.length - 3} more</span>`;
                         }
                     },
                     {

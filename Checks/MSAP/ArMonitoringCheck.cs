@@ -125,8 +125,10 @@ namespace Checks.MSAP
             }
 
             var receipt = new Collection { MsapCollectionId = 3, MsapCollectionNumber = "BAF-R", Date = new DateOnly(2026, 10, 2), Amount = 198m, EWT = 3.60m };
-            var bafBilling = new Billing { MsapBillingId = 11, BasicBillingId = 10, CollectionId = 3, Amount = 201.60m, AmountPaid = 201.60m };
-            var basicBilling = new Billing { MsapBillingId = 10, IsVatable = true, IsVatInclusive = true, PrintWht = true, BafBilling = bafBilling };
+            var bafBilling = new Billing { MsapBillingId = 11, BasicBillingId = 10, CollectionId = 3, Amount = 201.60m, AmountPaid = 201.60m,
+                BilledTo = MsapConstants.BilledToLocal, IsVatable = true };
+            var basicBilling = new Billing { MsapBillingId = 10, AmountPaid = 1008m, BilledTo = MsapConstants.BilledToLocal,
+                IsVatable = true, IsVatInclusive = true, PrintWht = true, BafBilling = bafBilling };
             var billedTicket = new DispatchTicket
             {
                 DispatchTicketId = 5, DispatchNumber = "T-5", Date = new DateOnly(2026, 10, 1), BillingId = 10,
@@ -134,7 +136,7 @@ namespace Checks.MSAP
                 DispatchBillingAmount = 1120m, DispatchNetRevenue = 1008m, BAFBillingAmount = 224m, BAFNetRevenue = 201.60m,
                 Customer = new Customer { CustomerName = "Customer", VatType = MsapConstants.VatType_Vatable },
                 Vessel = new Vessel { VesselName = "Vessel" }, Tugboat = tug, Service = new Service { ServiceName = "Docking" },
-                Billing = basicBilling
+                Billing = basicBilling, Terminal = new Terminal { Port = new Port() }
             };
             billings = [basicBilling, bafBilling];
             billedTickets = [billedTicket];
@@ -149,6 +151,7 @@ namespace Checks.MSAP
             {
                 throw new InvalidOperationException($"BAF-only receipt values: receipt={bafOnlySheet.Cells[7, 23].Text}, EWT={bafOnlySheet.Cells[7, 26].Value}, cash={bafOnlySheet.Cells[7, 27].Value}.");
             }
+            await AssertReceiptAsync(billedTicket.DispatchNumber, "BAF-R", 198m, 3.60m);
 
             var basicReceipt = new Collection { MsapCollectionId = 4, MsapCollectionNumber = "BASIC-R", Date = new DateOnly(2026, 10, 2), Amount = 990m, EWT = 18m };
             basicBilling.CollectionId = 4;
@@ -165,6 +168,7 @@ namespace Checks.MSAP
             {
                 throw new InvalidOperationException($"Split receipt values: receipts={splitReceiptsSheet.Cells[7, 23].Text}, EWT={splitReceiptsSheet.Cells[7, 26].Value}, cash={splitReceiptsSheet.Cells[7, 27].Value}.");
             }
+            await AssertReceiptAsync(billedTicket.DispatchNumber, "BAF-R, BASIC-R", 1188m, 21.60m);
 
             var combinedReceipt = new Collection { MsapCollectionId = 5, MsapCollectionNumber = "BOTH-R", Date = new DateOnly(2026, 10, 2), Amount = 1188m, EWT = 21.60m };
             basicBilling.CollectionId = 5;
@@ -181,13 +185,14 @@ namespace Checks.MSAP
             {
                 throw new InvalidOperationException($"Combined receipt values: receipt={combinedReceiptSheet.Cells[7, 23].Text}, EWT={combinedReceiptSheet.Cells[7, 26].Value}, cash={combinedReceiptSheet.Cells[7, 27].Value}.");
             }
+            await AssertReceiptAsync(billedTicket.DispatchNumber, "BOTH-R", 1188m, 21.60m);
 
             basicBilling.CollectionId = 4;
             bafBilling.CollectionId = null;
             collections = [basicReceipt];
             await AssertReceiptAsync(billedTicket.DispatchNumber, "BASIC-R", 990m, 18m);
 
-            var otherBilling = new Billing { MsapBillingId = 20, CollectionId = 5, Amount = 1344m,
+            var otherBilling = new Billing { MsapBillingId = 20, CollectionId = 5, Amount = 1344m, AmountPaid = 1344m, BilledTo = MsapConstants.BilledToLocal,
                 IsVatable = true, IsVatInclusive = true, PrintWht = true };
             var otherTicket = new DispatchTicket
             {
@@ -195,7 +200,7 @@ namespace Checks.MSAP
                 CustomerOrderSlipId = 2, Status = MsapConstants.DispatchTicketStatus.Billed,
                 DispatchBillingAmount = 1120m, DispatchNetRevenue = 1120m, BAFBillingAmount = 224m, BAFNetRevenue = 224m,
                 TotalBilling = 1344m, TotalNetRevenue = 1344m, Customer = billedTicket.Customer,
-                Vessel = billedTicket.Vessel, Tugboat = tug, Service = billedTicket.Service, Billing = otherBilling
+                Vessel = billedTicket.Vessel, Tugboat = tug, Service = billedTicket.Service, Billing = otherBilling, Terminal = billedTicket.Terminal
             };
             billedTicket.CustomerOrderSlipId = 1;
             basicBilling.CollectionId = bafBilling.CollectionId = 5;
@@ -210,22 +215,91 @@ namespace Checks.MSAP
             await AssertReceiptAsync(billedTicket.DispatchNumber, "BOTH-R", 1188m, 21.60m);
             await AssertReceiptAsync(otherTicket.DispatchNumber, "BOTH-R", 1320m, 24m);
 
-            Console.WriteLine("PASS: AR discounts, separate Basic/BAF receipts and filtered multi-COS settlement reconcile (no database).");
+            billings = [];
+            billedTickets = [];
+            combinedReceipt.Amount = 295.23m;
+            combinedReceipt.EWT = 6.03m;
+            foreach (var (id, gross) in new[] { (30, 100.26m), (31, 100.26m), (32, 100.74m) })
+            {
+                var billing = new Billing { MsapBillingId = id, CollectionId = 5, Amount = gross, AmountPaid = gross, BilledTo = MsapConstants.BilledToLocal };
+                var ticket = new DispatchTicket
+                {
+                    DispatchTicketId = id, DispatchNumber = $"ROUND-{id}", Date = billedTicket.Date, BillingId = id,
+                    Status = MsapConstants.DispatchTicketStatus.Billed, DispatchNetRevenue = gross, TotalNetRevenue = gross,
+                    Customer = billedTicket.Customer, Vessel = billedTicket.Vessel, Tugboat = tug, Service = billedTicket.Service,
+                    Billing = billing, Terminal = billedTicket.Terminal
+                };
+                billings.Add(billing);
+                billedTickets.Add(ticket);
+            }
+            tickets = billedTickets.ToList();
+            await AssertReceiptAsync("ROUND-30", "BOTH-R", 98.25m, 2.01m);
+            await AssertReceiptAsync("ROUND-31", "BOTH-R", 98.25m, 2.01m);
+            await AssertReceiptAsync("ROUND-32", "BOTH-R", 98.73m, 2.01m);
+            tickets = [billedTickets[1]];
+            await AssertReceiptAsync("ROUND-31", "BOTH-R", 98.25m, 2.01m);
+
+            var splitTicket = new DispatchTicket
+            {
+                DispatchTicketId = 33, DispatchNumber = "ROUND-33", Date = billedTicket.Date, BillingId = 31,
+                Status = MsapConstants.DispatchTicketStatus.Billed, DispatchNetRevenue = 50.13m, TotalNetRevenue = 50.13m,
+                Customer = billedTicket.Customer, Vessel = billedTicket.Vessel, Tugboat = tug, Service = billedTicket.Service,
+                Billing = billings[1], Terminal = billedTicket.Terminal
+            };
+            billedTickets[1].DispatchNetRevenue = 50.13m;
+            billedTickets.Add(splitTicket);
+            tickets = [billedTickets[1], splitTicket];
+            await AssertReceiptAsync("ROUND-31", "BOTH-R", 49.13m, 1.01m);
+            await AssertReceiptAsync("ROUND-33", "BOTH-R", 49.12m, 1m);
+            billedTickets[1].DispatchNetRevenue = splitTicket.DispatchNetRevenue = 0m;
+            await AssertReceiptAsync("ROUND-31", "BOTH-R", 49.13m, 1.01m);
+            await AssertReceiptAsync("ROUND-33", "BOTH-R", 49.12m, 1m);
+            billedTickets.Remove(splitTicket);
+            billedTickets[1].DispatchNetRevenue = 100.26m;
+
+            billings[0].IsVatable = true;
+            billings[0].Amount = billings[0].AmountPaid = billedTickets[0].DispatchNetRevenue = 112.28m;
+            billings[2].IsVatable = true;
+            billings[2].BilledTo = "FOREIGN";
+            billings[2].Amount = billings[2].AmountPaid = billedTickets[2].DispatchNetRevenue = 112.28m;
+            combinedReceipt.Amount = 315.80m;
+            combinedReceipt.EWT = 4.01m;
+            combinedReceipt.WVAT = 5.01m;
+            tickets = billedTickets.ToList();
+            await AssertReceiptAsync("ROUND-30", "BOTH-R", 105.27m, 2m);
+            await AssertReceiptAsync("ROUND-31", "BOTH-R", 98.25m, 2.01m);
+            await AssertReceiptAsync("ROUND-32", "BOTH-R", 112.28m, 0m);
+            tickets = [billedTickets[2]];
+            await AssertReceiptAsync("ROUND-32", "BOTH-R", 112.28m, 0m);
+
+            Console.WriteLine("PASS: AR and dispatch exports reconcile split receipts, filtered COS, per-bill rounding and mixed VAT/withholding (no database).");
 
             async Task AssertReceiptAsync(string dispatchNumber, string receiptNumber, decimal cash, decimal ewt)
             {
-                var export = await controller.SalesSummary(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31), default);
-                using var exportStream = new MemoryStream(((FileContentResult)export).FileContents);
-                using var exportPackage = new ExcelPackage(exportStream);
-                var exportSheet = exportPackage.Workbook.Worksheets[0];
-                var row = Enumerable.Range(7, exportSheet.Dimension.End.Row - 6)
-                    .Single(index => exportSheet.Cells[index, 2].Text == dispatchNumber);
-                if (exportSheet.Cells[row, 23].Text != receiptNumber
-                    || exportSheet.Cells[row, 26].GetValue<decimal>() != ewt
-                    || exportSheet.Cells[row, 27].GetValue<decimal>() != cash)
+                foreach (var dispatchSummary in new[] { false, true })
                 {
-                    throw new InvalidOperationException($"Receipt allocation for {dispatchNumber}: expected cash={cash}, EWT={ewt}; "
-                        + $"actual cash={exportSheet.Cells[row, 27].Value}, EWT={exportSheet.Cells[row, 26].Value}.");
+                    var export = dispatchSummary
+                        ? await controller.DispatchTicketSummary(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31), default)
+                        : await controller.SalesSummary(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31), default);
+                    if (export is not FileContentResult exportedFile)
+                    {
+                        throw new InvalidOperationException($"Export failed: {controller.TempData["error"]}");
+                    }
+                    using var exportStream = new MemoryStream(exportedFile.FileContents);
+                    using var exportPackage = new ExcelPackage(exportStream);
+                    var exportSheet = exportPackage.Workbook.Worksheets[0];
+                    var row = Enumerable.Range(7, exportSheet.Dimension.End.Row - 6)
+                        .Single(index => exportSheet.Cells[index, 2].Text == dispatchNumber);
+                    var receiptColumn = dispatchSummary ? 30 : 23;
+                    var ewtColumn = dispatchSummary ? 35 : 26;
+                    var cashColumn = dispatchSummary ? 34 : 27;
+                    if (exportSheet.Cells[row, receiptColumn].Text != receiptNumber
+                        || exportSheet.Cells[row, ewtColumn].GetValue<decimal>() != ewt
+                        || exportSheet.Cells[row, cashColumn].GetValue<decimal>() != cash)
+                    {
+                        throw new InvalidOperationException($"Receipt allocation for {dispatchNumber} in {exportSheet.Name}: expected cash={cash}, EWT={ewt}; "
+                            + $"actual cash={exportSheet.Cells[row, cashColumn].Value}, EWT={exportSheet.Cells[row, ewtColumn].Value}.");
+                    }
                 }
             }
         }

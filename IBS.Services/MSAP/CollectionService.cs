@@ -120,13 +120,42 @@ namespace IBS.Services.MSAP
             }
         }
 
-        private static (decimal Ewt, decimal Wvat, decimal Net) GetSettlementAmounts(Billing billing, Customer customer, decimal gross)
+        public static Dictionary<int, (decimal Amount, decimal Ewt)> GetCollectedBillingAmounts(Collection collection, IEnumerable<Billing> billings)
         {
-            decimal ewt = customer.WithHoldingTax && billing.BilledTo == MsapConstants.BilledToLocal
-                ? Math.Round(billing.IsVatable ? gross / VatMultiplier * EwtRate : gross * EwtRate, 2) : 0;
-            decimal wvat = customer.WithHoldingVat && billing.BilledTo == MsapConstants.BilledToLocal && billing.IsVatable
-                ? Math.Round(gross / VatMultiplier * WvatRate, 2) : 0;
-            return (ewt, wvat, Math.Round(gross - ewt - wvat, 2));
+            // Use the receipt's recorded withholding, not the customer's current master-file settings.
+            // shortcut: bills store gross paid only; persist per-bill tax if settled billing terms become editable.
+            var settlements = billings.OrderBy(b => b.MsapBillingId).Select(b => new
+            {
+                b.MsapBillingId,
+                Amounts = GetSettlementAmounts(b, collection.EWT > 0m, collection.WVAT > 0m, b.AmountPaid)
+            }).ToList();
+            var totalNet = settlements.Sum(b => b.Amounts.Net);
+            var totalEwt = settlements.Sum(b => b.Amounts.Ewt);
+            var cumulativeNet = 0m;
+            var cumulativeEwt = 0m;
+            var previousAmount = 0m;
+            var previousEwt = 0m;
+            var result = new Dictionary<int, (decimal Amount, decimal Ewt)>();
+            foreach (var settlement in settlements)
+            {
+                cumulativeNet += totalNet > 0m ? settlement.Amounts.Net : 1m;
+                cumulativeEwt += totalEwt > 0m ? settlement.Amounts.Ewt : 1m;
+                var amount = Math.Round((collection.Amount * cumulativeNet) / (totalNet > 0m ? totalNet : settlements.Count), 2, MidpointRounding.AwayFromZero);
+                var ewt = Math.Round((collection.EWT * cumulativeEwt) / (totalEwt > 0m ? totalEwt : settlements.Count), 2, MidpointRounding.AwayFromZero);
+                result[settlement.MsapBillingId] = (amount - previousAmount, ewt - previousEwt);
+                previousAmount = amount;
+                previousEwt = ewt;
+            }
+            return result;
+        }
+
+        private static (decimal Ewt, decimal Wvat, decimal Net) GetSettlementAmounts(Billing billing, bool withHoldingTax, bool withHoldingVat, decimal gross)
+        {
+            var ewt = withHoldingTax && billing.BilledTo == MsapConstants.BilledToLocal
+                ? Math.Round(billing.IsVatable ? (gross / VatMultiplier) * EwtRate : gross * EwtRate, 2) : 0;
+            var wvat = withHoldingVat && billing.BilledTo == MsapConstants.BilledToLocal && billing.IsVatable
+                ? Math.Round((gross / VatMultiplier) * WvatRate, 2) : 0;
+            return (ewt, wvat, Math.Round((gross - ewt) - wvat, 2));
         }
 
         private async Task<Dictionary<int, decimal>> GetSettlementAllocationsAsync(CreateCollectionViewModel model, CancellationToken ct)
@@ -190,7 +219,7 @@ namespace IBS.Services.MSAP
                     throw new InvalidOperationException(blocker);
                 }
                 decimal available = billing.Balance + (billing.CollectionId.HasValue ? billing.AmountPaid : 0);
-                var due = GetSettlementAmounts(billing, customer, available);
+                var due = GetSettlementAmounts(billing, customer.WithHoldingTax, customer.WithHoldingVat, available);
                 if (available <= 0 || payment.AmountToPay <= 0 || payment.AmountToPay != due.Net)
                 {
                     throw new InvalidOperationException($"Billing #{billing.MsapBillingNumber} must be paid in full at its remaining net balance ({due.Net:N2}). Partial payments are not supported.");
@@ -431,7 +460,7 @@ namespace IBS.Services.MSAP
                 {
                     bool selected = collectionId.HasValue && b.CollectionId == collectionId;
                     decimal available = b.Balance + (selected ? b.AmountPaid : 0);
-                    var settlement = GetSettlementAmounts(b, customer, available);
+                    var settlement = GetSettlementAmounts(b, customer.WithHoldingTax, customer.WithHoldingVat, available);
                     string? blocker = !BillingService.CanPrint(b) ? "Awaiting current final approval"
                         : b.CollectionId.HasValue && !selected ? "Already allocated; review the existing receipt"
                         : await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, b, JobProgressCalculator.CollectionStage, cancellationToken);
@@ -451,7 +480,7 @@ namespace IBS.Services.MSAP
                         wvat = settlement.Wvat,
                         net = settlement.Net,
                         isSelected = selected,
-                        paymentAmount = selected ? GetSettlementAmounts(b, customer, b.AmountPaid).Net : settlement.Net,
+                        paymentAmount = selected ? GetSettlementAmounts(b, customer.WithHoldingTax, customer.WithHoldingVat, b.AmountPaid).Net : settlement.Net,
                         eligible = blocker == null && available > 0 && settlement.Net > 0,
                         reason = blocker
                     });

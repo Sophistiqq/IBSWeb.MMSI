@@ -141,13 +141,13 @@
                         render: (data, type, row) => {
                             const portName = row.terminal?.port?.portName ?? "";
                             const terminalName = row.terminal?.terminalName ?? "";
-                            return portName || terminalName ? `${portName} - ${terminalName}` : "";
+                            return portName || terminalName ? `${ModernTable.render.text(portName)} - ${ModernTable.render.text(terminalName)}` : "";
                         }
                     },
                     { data: "tugboat.tugboatName", defaultContent: "" },
                     {
                         data: "customer.customerName",
-                        render: (data, type, row) => row.customerId ? data : `<span class="italic text-xs opacity-60">(For Customer Assigning)</span>`
+                        render: (data, type, row) => row.customerId ? ModernTable.render.text(data) : `<span class="italic text-xs opacity-60">(For Customer Assigning)</span>`
                     },
                     { data: "vessel.vesselName", defaultContent: "" },
                     {
