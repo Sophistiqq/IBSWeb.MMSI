@@ -29,7 +29,12 @@ namespace Checks.MSAP
                 ApOtherTugs = id == 3 ? 112m : 0m,
                 OtherTugChargeLine = id == 2 ? new OtherTugChargeLine { Charge = new OtherTugCharge { ConfirmedAt = new DateTime(2026, 10, 1) } } : null
             }).ToList();
-            var report = Proxy<IReportRepository>((_, _) => Task.FromResult(tickets));
+            var report = Proxy<IReportRepository>((method, arguments) => method.Name switch
+            {
+                nameof(IReportRepository.GetFinalSalesReportAsync) => Task.FromResult<byte[]?>(null),
+                nameof(IReportRepository.SaveFinalSalesReportAsync) => Task.FromResult((byte[])arguments![2]!),
+                _ => Task.FromResult(tickets)
+            });
             var tugs = Proxy<ITugboatRepository>((_, _) => Task.FromResult<IEnumerable<Tugboat>>([]));
             var owners = Proxy<ITugboatOwnerRepository>((_, _) => Task.FromResult<IEnumerable<TugboatOwner>>([]));
             var customers = Proxy<ICustomerRepository>((_, _) => Task.FromResult<IEnumerable<Customer>>([]));
@@ -74,12 +79,14 @@ namespace Checks.MSAP
             {
                 throw new InvalidOperationException("AR header notes must stop before the P&L columns.");
             }
-            if (sheet.Cells[7, 33].Text != "Pending" || sheet.Cells[7, 35].Value != null
+            if (sheet.Cells[7, 16, 7, 32].Any(cell => cell.Value != null)
+                || sheet.Cells[7, 33].Text != "Awaiting AP Confirmation" || sheet.Cells[7, 34, 7, 35].Any(cell => cell.Value != null)
                 || sheet.Cells[8, 33].GetValue<decimal>() != 0m
                 || sheet.Cells[10, 33].GetValue<decimal>() != 112m || sheet.Cells[10, 35].GetValue<decimal>() != 1900m)
             {
                 throw new InvalidOperationException($"AR export values: pending={sheet.Cells[7, 33].Text}, pending net={sheet.Cells[7, 35].Value ?? "null"}, confirmed zero={sheet.Cells[8, 33].Value}, AP total={sheet.Cells[10, 33].Value}, known net={sheet.Cells[10, 35].Value}.");
             }
+            tug = new Tugboat { TugboatName = "Company tug", IsCompanyOwned = true };
             tickets.Clear();
             tickets.Add(new DispatchTicket
             {
@@ -88,7 +95,7 @@ namespace Checks.MSAP
                 DispatchBillingAmount = 1120m, DispatchNetRevenue = 1008m,
                 Customer = new Customer { CustomerName = "Customer", VatType = MsapConstants.VatType_Vatable },
                 Vessel = new Vessel { VesselName = "Vessel" }, Tugboat = tug, Service = new Service { ServiceName = "Docking" },
-                Billing = new Billing { IsVatable = true, IsVatInclusive = true, PrintWht = true }
+                Billing = new Billing { Date = new DateOnly(2026, 10, 1), IsVatable = true, IsVatInclusive = true, PrintWht = true }
             });
             result = await controller.SalesSummary(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31), default);
             using var discountedStream = new MemoryStream(((FileContentResult)result).FileContents);
@@ -125,9 +132,9 @@ namespace Checks.MSAP
             }
 
             var receipt = new Collection { MsapCollectionId = 3, MsapCollectionNumber = "BAF-R", Date = new DateOnly(2026, 10, 2), Amount = 198m, EWT = 3.60m };
-            var bafBilling = new Billing { MsapBillingId = 11, BasicBillingId = 10, CollectionId = 3, Amount = 201.60m, AmountPaid = 201.60m,
+            var bafBilling = new Billing { Date = new DateOnly(2026, 10, 1), MsapBillingId = 11, BasicBillingId = 10, CollectionId = 3, Amount = 201.60m, AmountPaid = 201.60m,
                 BilledTo = MsapConstants.BilledToLocal, IsVatable = true };
-            var basicBilling = new Billing { MsapBillingId = 10, AmountPaid = 1008m, BilledTo = MsapConstants.BilledToLocal,
+            var basicBilling = new Billing { Date = new DateOnly(2026, 10, 1), MsapBillingId = 10, AmountPaid = 1008m, BilledTo = MsapConstants.BilledToLocal,
                 IsVatable = true, IsVatInclusive = true, PrintWht = true, BafBilling = bafBilling };
             var billedTicket = new DispatchTicket
             {
@@ -192,7 +199,7 @@ namespace Checks.MSAP
             collections = [basicReceipt];
             await AssertReceiptAsync(billedTicket.DispatchNumber, "BASIC-R", 990m, 18m);
 
-            var otherBilling = new Billing { MsapBillingId = 20, CollectionId = 5, Amount = 1344m, AmountPaid = 1344m, BilledTo = MsapConstants.BilledToLocal,
+            var otherBilling = new Billing { Date = new DateOnly(2026, 10, 1), MsapBillingId = 20, CollectionId = 5, Amount = 1344m, AmountPaid = 1344m, BilledTo = MsapConstants.BilledToLocal,
                 IsVatable = true, IsVatInclusive = true, PrintWht = true };
             var otherTicket = new DispatchTicket
             {
@@ -221,7 +228,7 @@ namespace Checks.MSAP
             combinedReceipt.EWT = 6.03m;
             foreach (var (id, gross) in new[] { (30, 100.26m), (31, 100.26m), (32, 100.74m) })
             {
-                var billing = new Billing { MsapBillingId = id, CollectionId = 5, Amount = gross, AmountPaid = gross, BilledTo = MsapConstants.BilledToLocal };
+                var billing = new Billing { Date = new DateOnly(2026, 10, 1), MsapBillingId = id, CollectionId = 5, Amount = gross, AmountPaid = gross, BilledTo = MsapConstants.BilledToLocal };
                 var ticket = new DispatchTicket
                 {
                     DispatchTicketId = id, DispatchNumber = $"ROUND-{id}", Date = billedTicket.Date, BillingId = id,

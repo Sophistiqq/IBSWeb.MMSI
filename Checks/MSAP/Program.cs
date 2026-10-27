@@ -108,6 +108,7 @@ if (args.Contains("--workflow-access-only", StringComparer.Ordinal))
 if (args.Contains("--ar-monitoring-only", StringComparer.Ordinal))
 {
     await Checks.MSAP.ArMonitoringCheck.RunAsync();
+    await Checks.MSAP.SalesReportRecognitionCheck.RunAsync();
     return;
 }
 

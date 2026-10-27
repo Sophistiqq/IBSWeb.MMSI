@@ -8,6 +8,19 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 {
     public class ReportRepository(MsapDbContext db): IReportRepository
     {
+        public async Task<byte[]?> GetFinalSalesReportAsync(DateOnly from, DateOnly to, CancellationToken ct)
+        {
+            return await db.MsapFinalSalesReports.AsNoTracking()
+                .Where(r => r.DateFrom == from && r.DateTo == to).Select(r => r.Content).SingleOrDefaultAsync(ct);
+        }
+
+        public async Task<byte[]> SaveFinalSalesReportAsync(DateOnly from, DateOnly to, byte[] content, DateTime generatedAt, CancellationToken ct)
+        {
+            // Concurrent downloads must return the same first finalized export.
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO msap.mmsi_final_sales_reports (date_from, date_to, generated_at, content) VALUES ({from}, {to}, {generatedAt}, {content}) ON CONFLICT (date_from, date_to) DO NOTHING", ct);
+            return (await GetFinalSalesReportAsync(from, to, ct))!;
+        }
+
         public async Task<List<IBS.Models.MSAP.Books.SalesBook>> GetSalesBookAsync(DateOnly from, DateOnly to, CancellationToken ct)
         {
             return await db.MsapSalesBooks.AsNoTracking().Where(b => b.Company == MsapConstants.Company_MMSI
@@ -28,9 +41,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
             if (filterByBillingDate)
             {
-                query = query.Where(dt =>
-                    (dt.BillingId != null && db.MsapBillings.Any(b => b.MsapBillingId == dt.BillingId && b.Date >= dateFrom && b.Date <= dateTo))
-                    || (dt.BillingId == null && dt.Date >= dateFrom && dt.Date <= dateTo && dt.CustomerId != 0));
+                query = FilterSalesReportTickets(query, dateFrom, dateTo);
             }
             else
             {
@@ -94,6 +105,22 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             }
 
             return tickets;
+        }
+
+        private IQueryable<DispatchTicket> FilterSalesReportTickets(IQueryable<DispatchTicket> query, DateOnly dateFrom, DateOnly dateTo)
+        {
+            var from = dateFrom.ToDateTime(TimeOnly.MinValue);
+            var to = dateTo.ToDateTime(TimeOnly.MinValue);
+            return query.Where(dt =>
+                (dt.Tugboat.IsCompanyOwned
+                    && ((dt.BillingId != null && db.MsapBillings.Any(b => b.MsapBillingId == dt.BillingId && b.Date >= dateFrom && b.Date <= dateTo))
+                        || (dt.BillingId == null && dt.Date >= dateFrom && dt.Date <= dateTo && dt.CustomerId != 0)))
+                || (!dt.Tugboat.IsCompanyOwned && dt.CustomerId != 0
+                    && ((dt.Date >= dateFrom && dt.Date <= dateTo)
+                        || (dt.OtherTugChargeLine != null && dt.Date <= dateTo
+                            && dt.OtherTugChargeLine.Charge.ConfirmedAt.HasValue
+                            && dt.OtherTugChargeLine.Charge.ConfirmedAt.Value.Date >= from
+                            && dt.OtherTugChargeLine.Charge.ConfirmedAt.Value.Date <= to))));
         }
     }
 }

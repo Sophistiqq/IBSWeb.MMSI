@@ -1385,6 +1385,31 @@ namespace IBS.DataAccess.MSAP.Migrations
                         });
                 });
 
+            modelBuilder.Entity("IBS.Models.MSAP.FinalSalesReport", b =>
+                {
+                    b.Property<DateOnly>("DateFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("date_from");
+
+                    b.Property<DateOnly>("DateTo")
+                        .HasColumnType("date")
+                        .HasColumnName("date_to");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("content");
+
+                    b.Property<DateTime>("GeneratedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("generated_at");
+
+                    b.HasKey("DateFrom", "DateTo")
+                        .HasName("pk_mmsi_final_sales_reports");
+
+                    b.ToTable("mmsi_final_sales_reports", "msap");
+                });
+
             modelBuilder.Entity("IBS.Models.MSAP.MasterFile.BankAccount", b =>
                 {
                     b.Property<int>("BankAccountId")

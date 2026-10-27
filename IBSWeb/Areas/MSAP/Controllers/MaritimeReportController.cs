@@ -311,13 +311,21 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
         {
             try
             {
-                if (!ModelState.IsValid || dateFrom == default || dateTo == default)
+                if (!ModelState.IsValid || dateFrom == default || dateTo == default || dateFrom > dateTo)
                 {
                     TempData["error"] = "Please select valid From and To dates.";
                     return RedirectToAction(nameof(Index));
                 }
 
-                // Includes billed records by billing date and qualifying unbilled records by dispatch date.
+                var generatedAt = DateTimeHelper.GetCurrentPhilippineTime();
+                var isFinalReport = dateTo < new DateOnly(generatedAt.Year, generatedAt.Month, 1);
+                var fileName = $"Sales_Summary_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                if (isFinalReport && await unitOfWork.Report.GetFinalSalesReportAsync(dateFrom, dateTo, ct) is { } savedReport)
+                {
+                    return File(savedReport, contentType, fileName);
+                }
+
                 var data = await unitOfWork.Report.GetDispatchReportData(dateFrom, dateTo, ct, filterByBillingDate: true);
                 var (collectionShares, collectionsByTicket) = await AllocateCollectionsByTicketAsync(data, ct);
                 var sbmaShares = data.ToDictionary(t => t.DispatchTicketId, t => t.SbmaShareAmount);
@@ -349,7 +357,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 var ws = pkg.Workbook.Worksheets.Add("AR Monitoring");
 
                 WriteCompanyHeader(ws);
-                ws.Cells["A2"].Value = $"AR MONITORING AS OF {DateTimeHelper.GetCurrentPhilippineTime():MM/dd/yyyy}";
+                ws.Cells["A2"].Value = $"{(isFinalReport ? "FINAL SALES SUMMARY" : "SALES SUMMARY")} AS OF {generatedAt:MM/dd/yyyy}";
                 ws.Cells["A2"].Style.Font.Size = 14;
                 ws.Cells["A2"].Style.Font.Bold = true;
                 ws.Cells["A3"].Value = $"Period: {dateFrom:MM/dd/yyyy} - {dateTo:MM/dd/yyyy}";
@@ -397,7 +405,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 // Row 5: Section 0 (DETAILS) spans the 35 fixed Sales Report columns.
                 PaintSectionHeader(1, 35, 0);
 
-                // Row 5: Dynamic Sections (starts at Col 30: FOR PNL USE)
+                // Row 5: Dynamic Sections (starts at Col 36: FOR PNL USE)
                 int currentSection = -1;
                 int sectionStart = -1;
                 for (int c = 36; c <= totalCols; c++)
@@ -427,7 +435,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
 
                 var headerNotes = new Dictionary<int, string>
                 {
-                    [15] = "Saved billable hours, rounded to 2 decimals; minimum 1 hour.",
+                    [15] = "Saved billable hours in the original ticket period. Settlement-only rows do not count hours or services again.",
                     [16] = "Same amount as GROSS SALES; this is the total service charge, not an hourly rate.",
                     [17] = "Saved dispatch charge + BAF charge after discounts. Add 12% VAT for VAT-exclusive vatable billings; otherwise use the saved charges.",
                     [18] = "GROSS SALES / 1.12 for VAT-inclusive vatable billings, or unbilled local vessels. Otherwise, saved dispatch + BAF charges after discounts. Rounded to 2 decimals.",
@@ -441,9 +449,9 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     [30] = "Currently zero in this export.",
                     [31] = "Currently zero in this export.",
                     [32] = "NET OF VAT - SBMA SHARE - OVERPAYMENT - AGENCY INCENTIVE - AGENT COMMISSION. Collections and withholding taxes are not deducted here.",
-                    [33] = "Saved provider charge. Pending means the cost is not confirmed, not zero; excluded from known AP and net-sales totals.",
-                    [34] = "AP OTHER TUGS / 1.12 when the provider charge includes VAT; otherwise AP OTHER TUGS. Rounded to 2 decimals; blank while pending.",
-                    [35] = "BALANCE - AP OTHER TUGS(NET OF VAT). Blank while provider cost is pending; totals include known amounts only."
+                    [33] = "Confirmed provider charge. Text indicates financial amounts are deferred and excluded from this period's totals; confirmed amounts appear in the confirmation period.",
+                    [34] = "AP OTHER TUGS / 1.12 when the provider charge includes VAT; otherwise AP OTHER TUGS. Rounded to 2 decimals.",
+                    [35] = "BALANCE - AP OTHER TUGS(NET OF VAT). Financial amounts are blank outside the Other Tug confirmation period."
                 };
                 foreach (var (column, note) in headerNotes)
                 {
@@ -589,10 +597,12 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 int row = 7;
                 foreach (var t in data)
                 {
+                    var includesService = SalesReportRecognition.IncludesService(t, dateFrom, dateTo);
+                    var includesAmounts = SalesReportRecognition.IncludesAmounts(t, dateFrom, dateTo);
                     ws.Cells[row, 1, row, totalCols].Style.Font.Size = 11;
 
                     // Fixed Sales Report columns 1..35
-                    ws.Cells[row, 1].Value = (t.Billing?.Date ?? t.Date).ToString("MM/dd/yyyy");
+                    ws.Cells[row, 1].Value = (t.Tugboat.IsCompanyOwned ? t.Billing?.Date ?? t.Date : t.Date).ToString("MM/dd/yyyy");
                     ws.Cells[row, 2].Value = t.DispatchNumber?.Trim();
                     ws.Cells[row, 3].Value = t.Billing?.MsapBillingNumber?.Trim();
                     ws.Cells[row, 4].Value = t.Customer.CustomerName;
@@ -606,7 +616,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     ws.Cells[row, 12].Value = t.Service?.ServiceName ?? "";
                     ws.Cells[row, 13].Value = FormatLegacyDateTime(t.DateLeft, t.TimeLeft);
                     ws.Cells[row, 14].Value = FormatLegacyDateTime(t.DateArrived, t.TimeArrived);
-                    ws.Cells[row, 15].Value = Math.Round(t.TotalHours, 2);
+                    ws.Cells[row, 15].Value = includesService ? Math.Round(t.TotalHours, 2) : null;
 
                     var ticketCharges = t.DispatchNetRevenue + t.BAFNetRevenue;
                     var vatExclusive = t.Billing is { IsVatable: true, IsVatInclusive: false };
@@ -639,13 +649,20 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     ws.Cells[row, 31].Value = 0m;
                     var balance = netOfVat - (decimal)ws.Cells[row, 28].Value - (decimal)ws.Cells[row, 29].Value - (decimal)ws.Cells[row, 30].Value - (decimal)ws.Cells[row, 31].Value;
                     ws.Cells[row, 32].Value = balance;
-                    ws.Cells[row, 33].Value = t.OtherTugCostPending ? "Pending" : t.ApOtherTugs;
+                    ws.Cells[row, 33].Value = t.ApOtherTugs;
                     var apNetOfVat = t.ApOtherTugsIncludesVat ? Math.Round(t.ApOtherTugs / 1.12m, 2) : t.ApOtherTugs;
-                    ws.Cells[row, 34].Value = t.OtherTugCostPending ? null : apNetOfVat;
-                    ws.Cells[row, 35].Value = t.OtherTugCostPending ? null : balance - apNetOfVat;
-                    if (t.OtherTugCostPending)
+                    ws.Cells[row, 34].Value = apNetOfVat;
+                    ws.Cells[row, 35].Value = balance - apNetOfVat;
+                    if (!includesAmounts)
                     {
-                        ws.Cells[row, 33].AddComment("Provider charge pending confirmation. This service is excluded from known net-sales totals until its cost is confirmed.", "MMSI");
+                        ws.Cells[row, 16, row, 35].Value = null;
+                        ws.Cells[row, 33].Value = SalesReportRecognition.GetDeferredApLabel(t);
+                        ws.Cells[row, 33].Style.WrapText = true;
+                        ws.Cells[row, 33].AddComment("Service tracking only. Financial amounts are recognized in the provider invoice confirmation period.", "MMSI");
+                    }
+                    if (!includesService)
+                    {
+                        ws.Cells[row, 2].AddComment("Financial recognition only. This service and its hours were counted in the original ticket period.", "MMSI");
                     }
 
                     // Number formats for detail section
@@ -689,7 +706,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     var ownerName = t.Tugboat.TugboatOwner?.TugboatOwnerName;
                     if (ownerName != null && ownerNameToCol.TryGetValue(ownerName, out var apCol))
                     {
-                        ws.Cells[row, apCol].Value = t.OtherTugCostPending ? null : t.ApOtherTugs;
+                        ws.Cells[row, apCol].Value = includesAmounts ? t.ApOtherTugs : null;
                         ws.Cells[row, apCol].Style.Numberformat.Format = "#,##0.00_);[Red](#,##0.00);";
                     }
 
@@ -702,7 +719,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     }
                     if (arTotalCol > 0 && customerStartCol != -1 && customerEndCol != -1)
                     {
-                        ws.Cells[row, arTotalCol].Value = data[row - 7].DispatchBillingAmount + data[row - 7].BAFBillingAmount;
+                        ws.Cells[row, arTotalCol].Value = includesAmounts ? t.DispatchBillingAmount + t.BAFBillingAmount : null;
                         ws.Cells[row, arTotalCol].Style.Numberformat.Format = "#,##0.00_);[Red](#,##0.00);";
                     }
 
@@ -712,7 +729,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     bool isAssist = !isTending;
 
                     // Section 4: Number of ASSISTS
-                    if (isAssist)
+                    if (includesService && isAssist)
                     {
                         int? assistCol = null;
                         if (isCompanyOwned && tugboatCols.TryGetValue(tugName, out var tcAssist))
@@ -738,7 +755,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     }
 
                     // Section 5 & 6: Number of TENDING & TENDING HOURS
-                    if (isTending)
+                    if (includesService && isTending)
                     {
                         if (isCompanyOwned && tugboatCols.TryGetValue(tugName, out var tcTend))
                         {
@@ -798,13 +815,14 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 ws.Cells[totalRow, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
                 decimal Number(int r, int c)
                 {
-                    object? value = ws.Cells[r, c].Value;
-                    return value is null or "Pending" ? 0m : Convert.ToDecimal(value);
+                    var value = ws.Cells[r, c].Value;
+                    return value is null || (c == 33 && value is string) ? 0m : Convert.ToDecimal(value);
                 }
                 // ponytail: scans report rows for each lower-summary line; group first if exports become slow.
                 void WriteActivity(int targetRow, string? tugName, bool owned, bool? ioc, bool foreign)
                 {
                     var rows = data.Where(t =>
+                        SalesReportRecognition.IncludesService(t, dateFrom, dateTo) &&
                         t.Tugboat.IsCompanyOwned == owned &&
                         (tugName == null || t.Tugboat.TugboatName == tugName) &&
                         (!ioc.HasValue || IsIoc(t) == ioc.Value) &&
@@ -839,11 +857,11 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     }
                 }
 
-                if (data.Any(t => t.OtherTugCostPending))
+                if (data.Any(t => !SalesReportRecognition.IncludesAmounts(t, dateFrom, dateTo)))
                 {
-                    foreach (int column in new[] { 33, 34, 35 })
+                    foreach (var column in new[] { 17, 18, 33, 34, 35 })
                     {
-                        ws.Cells[totalRow, column].AddComment("Known amounts only. Pending provider costs are excluded and are not confirmed zero.", "MMSI");
+                        ws.Cells[totalRow, column].AddComment("Service-only rows contribute no financial amounts. Other Tug amounts are recognized in the invoice confirmation period.", "MMSI");
                     }
                 }
 
@@ -1023,6 +1041,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 ws.Cells[summaryStartRow + 2, 8, currRow, 9].Style.Numberformat.Format = "##0.00_);(##0.00);";
 
                 FinalizeColumns(ws, dataStartRow, lastDataRow, totalCols);
+                ws.Column(33).Width = 38;
                 if (principalCol > 0)
                 {
                     ws.Column(principalCol).Width = 50;
@@ -1042,8 +1061,12 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     }
                 }
 
-                return File(await pkg.GetAsByteArrayAsync(ct), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    $"Sales_Summary_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx");
+                var content = await pkg.GetAsByteArrayAsync(ct);
+                if (isFinalReport)
+                {
+                    content = await unitOfWork.Report.SaveFinalSalesReportAsync(dateFrom, dateTo, content, generatedAt, ct);
+                }
+                return File(content, contentType, fileName);
             }
             catch (Exception ex)
             {
