@@ -62,6 +62,18 @@ namespace Checks.MSAP
             using var stream = new MemoryStream(file.FileContents);
             using var package = new ExcelPackage(stream);
             var sheet = package.Workbook.Worksheets[0];
+            foreach (var column in new[] { 15, 16, 17, 18, 19, 20, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35 })
+            {
+                var note = sheet.Cells[6, column].Comment;
+                if (note is null || string.IsNullOrWhiteSpace(note.Text) || note.Visible)
+                {
+                    throw new InvalidOperationException($"Missing or always-visible AR header note in column {column}.");
+                }
+            }
+            if (sheet.Cells[6, 36, 6, sheet.Dimension.End.Column].Any(cell => cell.Comment is not null))
+            {
+                throw new InvalidOperationException("AR header notes must stop before the P&L columns.");
+            }
             if (sheet.Cells[7, 33].Text != "Pending" || sheet.Cells[7, 35].Value != null
                 || sheet.Cells[8, 33].GetValue<decimal>() != 0m
                 || sheet.Cells[10, 33].GetValue<decimal>() != 112m || sheet.Cells[10, 35].GetValue<decimal>() != 1900m)

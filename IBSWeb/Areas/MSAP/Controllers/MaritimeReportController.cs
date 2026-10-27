@@ -424,6 +424,32 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     ws.Cells[6, i + 1].Value = colInfo[i].label;
                 }
 
+                var headerNotes = new Dictionary<int, string>
+                {
+                    [15] = "Saved billable hours, rounded to 2 decimals; minimum 1 hour.",
+                    [16] = "Same amount as GROSS SALES; this is the total service charge, not an hourly rate.",
+                    [17] = "Saved dispatch charge + BAF charge after discounts. Add 12% VAT for VAT-exclusive vatable billings; otherwise use the saved charges.",
+                    [18] = "GROSS SALES / 1.12 for VAT-inclusive vatable billings, or unbilled local vessels. Otherwise, saved dispatch + BAF charges after discounts. Rounded to 2 decimals.",
+                    [19] = "GROSS SALES - NET OF VAT, rounded to 2 decimals.",
+                    [20] = "NET OF VAT x 2% when withholding tax is enabled on the billing; otherwise zero.",
+                    [25] = "NET OF VAT when allocated EWT is nonzero and the billing is vatable; otherwise zero.",
+                    [26] = "Receipt EWT allocated by each ticket's share of charges after discounts (Basic and/or BAF). Includes tickets outside the report period; equal shares if all charges are zero. Rounded to cents with remainder distributed.",
+                    [27] = "Receipt amount allocated by each ticket's share of charges after discounts (Basic and/or BAF). Includes tickets outside the report period; equal shares if all charges are zero. Rounded to cents with remainder distributed.",
+                    [28] = "Saved SBMA share: actual service minutes x 87.50 when SBMA is enabled, rounded and allocated per COS/tugboat. Uses actual time, not minimum billable hours.",
+                    [29] = "Currently zero in this export.",
+                    [30] = "Currently zero in this export.",
+                    [31] = "Currently zero in this export.",
+                    [32] = "NET OF VAT - SBMA SHARE - OVERPAYMENT - AGENCY INCENTIVE - AGENT COMMISSION. Collections and withholding taxes are not deducted here.",
+                    [33] = "Saved provider charge. Pending means the cost is not confirmed, not zero; excluded from known AP and net-sales totals.",
+                    [34] = "AP OTHER TUGS / 1.12 when the provider charge includes VAT; otherwise AP OTHER TUGS. Rounded to 2 decimals; blank while pending.",
+                    [35] = "BALANCE - AP OTHER TUGS(NET OF VAT). Blank while provider cost is pending; totals include known amounts only."
+                };
+                foreach (var (column, note) in headerNotes)
+                {
+                    var comment = ws.Cells[6, column].AddComment(note, "MMSI");
+                    comment.AutoFit = true;
+                }
+
                 using (var rng = ws.Cells[6, 1, 6, totalCols])
                 {
                     rng.Style.Fill.PatternType = ExcelFillStyle.Solid;
