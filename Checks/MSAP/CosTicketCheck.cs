@@ -41,10 +41,11 @@ namespace Checks.MSAP
                 {
                     TugboatId = tugId, ServiceId = service.ServiceId,
                     TariffBasis = TariffChargeBasis.PerMove, BafMethod = BafCalculationMethod.PerHour,
-                    ManualTariffRate = 0m, ManualBafRate = 35000m
+                    ManualTariffRate = 100m, ManualBafRate = 35000m
                 }).ToList()
             };
-            Check((await schedules.CreateAsync(schedule, "check")).IsSuccess, "Could not prepare COS check.");
+            var created = await schedules.CreateAsync(schedule, "check");
+            Check(created.IsSuccess, $"Could not prepare COS check: {created.Message}");
             await db.Entry(schedule).ReloadAsync();
             var approved = await schedules.ConfirmAsync(schedule.VesselScheduleId, schedule.CreatedDate, "check");
             Check(approved.IsSuccess, approved.Message!);

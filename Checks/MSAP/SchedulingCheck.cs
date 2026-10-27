@@ -174,11 +174,17 @@ namespace Checks.MSAP
                     TariffBasis = TariffChargeBasis.PerHour, BafMethod = BafCalculationMethod.PerMove,
                     ManualTariffRate = 0m, ManualBafRate = 29000m
                 }];
+                var scheduleCount = await db.MsapVesselSchedules.CountAsync();
+                var zeroTariffResult = await schedules.CreateAsync(prepared, "check");
+                Check(!zeroTariffResult.IsSuccess && zeroTariffResult.Message!.Contains("Tariff rate must be greater than zero")
+                    && await db.MsapVesselSchedules.CountAsync() == scheduleCount,
+                    "A zero manual tariff was accepted or persisted a schedule.");
+                prepared.ServiceEntries[0].ManualTariffRate = 100m;
                 var preparedResult = await schedules.CreateAsync(prepared, "check");
                 Check(preparedResult.IsSuccess, $"Could not save schedule commercial settings and expected services: {preparedResult.Message}");
                 var restored = await schedules.GetByIdAsync(prepared.VesselScheduleId);
                 Check(restored!.ServiceEntries.Count == 1 && restored.CosDiscountPercent == 12.5m && restored.SbmaEnabled
-                    && restored.ServiceEntries[0].ManualTariffRate == 0m, "Schedule details lost expected services, a zero manual rate or commercial settings.");
+                    && restored.ServiceEntries[0].ManualTariffRate == 100m, "Schedule details lost expected services, the positive manual rate or commercial settings.");
                 Check(restored.IsIoc == !terminal.IsIoc, "Schedule IOC override was lost during validation or persistence.");
                 int savedEntryId = restored.ServiceEntries[0].VesselScheduleServiceEntryId;
                 var reviewController = new IBSWeb.Areas.MSAP.Controllers.VesselScheduleController(work, schedules, new CheckAccess(ProcedureEnum.ApproveSchedule), new RateUploadService(db, work));
@@ -196,7 +202,7 @@ namespace Checks.MSAP
                 serviceEdit.ServiceEntries = [new VesselScheduleServiceEntry
                 {
                     VesselScheduleServiceEntryId = savedEntryId, TugboatId = tug.TugboatId, ServiceId = serviceType.ServiceId,
-                    TariffBasis = TariffChargeBasis.PerMove, BafMethod = BafCalculationMethod.PerHour, ManualBafRate = 35000m
+                    TariffBasis = TariffChargeBasis.PerMove, BafMethod = BafCalculationMethod.PerHour, ManualTariffRate = 100m, ManualBafRate = 35000m
                 }];
                 Check((await schedules.UpdateAsync(serviceEdit, "check")).IsSuccess, "Could not update an expected service row.");
                 foreach (string invalidCase in new[] { "foreign-row", "duplicate-row", "unknown-service", "unassigned-tug", "invalid-method", "negative-rate" })
@@ -228,7 +234,7 @@ namespace Checks.MSAP
                 db.ChangeTracker.Clear();
                 Check(!(await schedules.GetByIdAsync(prepared.VesselScheduleId))!.ServiceEntries.Any(), "Removed expected services remained saved.");
                 Check((await schedules.DeleteAsync(prepared.VesselScheduleId, "check")).IsSuccess, "Could not remove the tentative check booking.");
-                Console.WriteLine("PASS: schedule commercial settings, zero/manual rates, service-row edits/removal and rejected foreign/duplicate/invalid inputs preserve saved data.");
+                Console.WriteLine("PASS: schedule commercial settings, positive manual tariffs, zero-tariff rejection, service-row edits/removal and rejected foreign/duplicate/invalid inputs preserve saved data.");
 
                 var booking = Booking(1);
                 booking.Status = MsapConstants.VesselScheduleStatus.Confirmed;
@@ -589,10 +595,12 @@ namespace Checks.MSAP
                 {
                     TugboatId = tug.TugboatId, ServiceId = serviceType.ServiceId,
                     TariffBasis = TariffChargeBasis.PerMove, BafMethod = BafCalculationMethod.PerHour,
-                    ManualTariffRate = 0m, ManualBafRate = 0m
+                    ManualTariffRate = 100m, ManualBafRate = 0m
                 }];
                 Check((await schedules.CreateAsync(race, "check")).IsSuccess, "Could not prepare booking race.");
                 race = await Reload(race.VesselScheduleId);
+                Check(await db.MsapVesselScheduleServiceEntries.Where(e => e.VesselScheduleId == race.VesselScheduleId)
+                    .Select(e => e.ManualBafRate).SingleAsync() == 0m, "An explicit zero BAF rate was not preserved.");
                 Check((await schedules.ConfirmAsync(race.VesselScheduleId, race.CreatedDate, "check")).IsSuccess, "Could not confirm booking race.");
                 race = await Reload(race.VesselScheduleId);
                 int raceEntryId = await db.MsapVesselScheduleServiceEntries.Where(e => e.VesselScheduleId == race.VesselScheduleId)

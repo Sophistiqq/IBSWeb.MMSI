@@ -1,6 +1,6 @@
 # MSAP dead-code cleanup record
 
-Candidates recorded 26 October 2026 for [IBS-49](https://linear.app/ibs-msap/issue/IBS-49). The user authorized cleanup on 27 October, after checkpoint 1126bcbf1. The removals below are included in the cleanup checkpoint and await review.
+Candidates recorded 26 October 2026 for [IBS-49](https://linear.app/ibs-msap/issue/IBS-49). The user authorized cleanup on 27 October, after checkpoint 1126bcbf1. The removals below are committed in cleanup checkpoint `4af1917c0` and await review.
 
 | Scope | Reachability evidence | Decision |
 | --- | --- | --- |
@@ -20,4 +20,4 @@ Candidates recorded 26 October 2026 for [IBS-49](https://linear.app/ibs-msap/iss
 
 Solution build, default MSAP checks, workflow access, urgent actual-ticket checks, fresh-clone workspace and ticket/billing integrity checks pass. The code-only Graphify refresh pruned nodes sourced from the removed files; direct caller searches remain the removal evidence because the extractor does not model every Razor/top-level symbol.
 
-The optional full scheduling database diagnostic stops before the cleanup-related fixture changes: it expects a zero manual tariff to save, while the unchanged schedule validator requires a positive tariff. [IBS-59](https://linear.app/ibs-msap/issue/IBS-59) tracks that existing contract/diagnostic mismatch. No scheduling rate policy was changed for this cleanup.
+At cleanup checkpoint `4af1917c0`, the optional full scheduling database diagnostic stopped on a stale zero-tariff fixture before the cleanup-related fixture changes. [IBS-59](https://linear.app/ibs-msap/issue/IBS-59) subsequently repairs the scheduling and linked COS fixtures in local uncommitted changes: history confirms intentional positive tariffs, the full database runner now passes, zero-tariff rejection and zero-BAF persistence are checked. Production rate policy is unchanged.
