@@ -325,7 +325,7 @@
             // Image Preview
             if ($('#viewImage').length) {
                 $('#viewImage').on('click', function () {
-                    ModernAlert.image('@Html.Raw(Model.ImageSignedUrl)', "Dispatch Ticket");
+                    ModernAlert.image(@Json.Serialize(Model.ImageSignedUrl), "Dispatch Ticket");
                 });
             }
 

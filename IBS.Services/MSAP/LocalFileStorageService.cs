@@ -102,7 +102,7 @@ namespace IBS.Services.MSAP
 
             // Return a URL that can be used to access the file
             // In development, this will be a relative path
-            var relativePath = $"/msap-storage/{fileNameToRead.Replace("\\", "/")}";
+            var relativePath = "/msap-storage/" + string.Join("/", fileNameToRead.Replace('\\', '/').Split('/').Select(Uri.EscapeDataString));
             _logger.LogInformation("Local URL generated for file '{FileNameToRead}': {RelativePath}", fileNameToRead, relativePath);
             return Task.FromResult(relativePath);
         }

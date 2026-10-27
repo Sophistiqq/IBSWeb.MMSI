@@ -5,6 +5,7 @@ using IBS.Services.MSAP;
 using IBS.Services.MSAP.AccessControl;
 using IBS.Utility.MSAP;
 using IBS.Utility.MSAP.Constants;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.AspNetCore.Mvc.Authorization;
@@ -77,10 +78,42 @@ namespace IBSWeb.MSAP
                 var storagePath = app.Configuration["MSAP:LocalStoragePath"] ?? "App_Data/MSAP/LocalStorage";
                 var absolutePath = Path.GetFullPath(storagePath, app.Environment.ContentRootPath);
                 Directory.CreateDirectory(absolutePath);
-                app.UseStaticFiles(new StaticFileOptions
+                app.UseWhen(context => context.Request.Path.StartsWithSegments("/msap-storage"), storage =>
                 {
-                    FileProvider = new PhysicalFileProvider(absolutePath),
-                    RequestPath = "/msap-storage"
+                    storage.UseAuthentication();
+                    storage.Use(async (context, next) =>
+                    {
+                        var authorization = context.RequestServices.GetRequiredService<IAuthorizationService>();
+                        var result = await authorization.AuthorizeAsync(context.User, MsapRoles.AccessPolicy);
+                        if (!result.Succeeded)
+                        {
+                            if (context.User.Identity?.IsAuthenticated == true)
+                            {
+                                await context.ForbidAsync();
+                            }
+                            else
+                            {
+                                await context.ChallengeAsync();
+                            }
+                            return;
+                        }
+                        await next(context);
+                    });
+                    storage.UseStaticFiles(new StaticFileOptions
+                    {
+                        FileProvider = new PhysicalFileProvider(absolutePath),
+                        RequestPath = "/msap-storage",
+                        OnPrepareResponse = response =>
+                        {
+                            response.Context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+                            if (response.Context.Response.ContentType is "text/html" or "application/xhtml+xml"
+                                or "image/svg+xml" or "text/xml" or "application/xml")
+                            {
+                                // Uploaded documents must not execute as part of the application origin.
+                                response.Context.Response.Headers["Content-Security-Policy"] = "sandbox";
+                            }
+                        }
+                    });
                 });
             }
 

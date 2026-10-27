@@ -97,6 +97,7 @@ if (args.Contains("--master-import-only", StringComparer.Ordinal))
 
 if (args.Contains("--workflow-access-only", StringComparer.Ordinal))
 {
+    await Checks.MSAP.DevelopmentStorageAccessCheck.RunAsync();
     await Checks.MSAP.WorkflowAccessCheck.RunAsync();
     await Checks.MSAP.BillingDiscardCheck.RunAsync();
     await Checks.MSAP.RateAccessCheck.RunAsync();
@@ -617,6 +618,30 @@ foreach (var area in new[] { "MSAP", "MSAPAdmin", "MSAPSuperAdmin" })
             "SuperAdmin landing page must link to the active workspace without retired editor links.");
     }
 }
+{
+    var descriptor = moduleActions.First(a => a.ControllerName == "DispatchTicket" && a.ActionName == "EditTicket");
+    var http = new DefaultHttpContext { RequestServices = services };
+    var route = new RouteData();
+    route.Values["area"] = "MSAP";
+    route.Values["controller"] = "DispatchTicket";
+    http.SetEndpoint(new Endpoint(_ => Task.CompletedTask, new EndpointMetadataCollection(), "Ticket editor rendering check"));
+    http.Request.RouteValues = route.Values;
+    var action = new ActionContext(http, route, descriptor);
+    var url = "/msap-storage/quote');</script><script>window.attachmentCanary=true</script>.png";
+    var model = new IBS.Models.MSAP.ViewModels.DispatchTicketViewModel { ImageSignedUrl = url, CustomerOrderSlipId = 1 };
+    var view = (RazorView)engine.GetView(null, "/Areas/MSAP/Views/DispatchTicket/EditTicket.cshtml", false).View!;
+    view.RazorPage.Layout = "/Areas/MSAP/Views/Shared/_Layout.cshtml";
+    var data = new ViewDataDictionary<IBS.Models.MSAP.ViewModels.DispatchTicketViewModel>(
+        services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = model };
+    using var output = new StringWriter();
+    await view.RenderAsync(new ViewContext(action, view, data,
+        services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), output, new HtmlHelperOptions()));
+    var html = output.ToString();
+    var argument = Regex.Match(html, "ModernAlert\\.image\\((.+?), \"Dispatch Ticket\"\\);").Groups[1].Value;
+    Check(argument.Length > 0 && !argument.Contains("</script>", StringComparison.Ordinal)
+        && JsonSerializer.Deserialize<string>(argument) == url, "Ticket image URLs must remain a single JSON string in the editor script.");
+}
+Console.WriteLine("PASS: ticket editor JSON-encodes untrusted attachment URLs in script context.");
 var moduleAction = moduleActions.First();
 var result = new JsonResult(new { Amount = 1.235m });
 var filterContext = new ResultExecutingContext(new ActionContext(new DefaultHttpContext(), new RouteData(), moduleAction), [], result, new object());
@@ -657,12 +682,15 @@ foreach (string unsafePath in unsafePaths)
         }
     }
 }
-var fileName = $"checks/{Guid.NewGuid():N}.txt";
+var fileName = $"checks/{Guid.NewGuid():N}-quote' #.txt";
 try
 {
     using var content = new MemoryStream("msap"u8.ToArray());
     await storage.UploadFileAsync(new FormFile(content, 0, content.Length, "check", "check.txt"), fileName);
-    Check((await storage.GetSignedUrlAsync(fileName)).StartsWith("/msap-storage/", StringComparison.Ordinal), "MSAP attachments use the base URL.");
+    var signedUrl = await storage.GetSignedUrlAsync(fileName);
+    Check(signedUrl.StartsWith("/msap-storage/", StringComparison.Ordinal) && signedUrl.Contains("%27%20%23", StringComparison.Ordinal)
+        && Uri.UnescapeDataString(signedUrl["/msap-storage/".Length..]) == fileName,
+        "MSAP attachment URLs must encode special filename characters and retain nested paths.");
     await using var download = await storage.DownloadFileAsync(fileName);
     using var reader = new StreamReader(download);
     Check(await reader.ReadToEndAsync() == "msap", "MSAP attachment round-trip failed.");
@@ -672,6 +700,7 @@ finally
     await storage.DeleteFileAsync(fileName);
 }
 Console.WriteLine("PASS: unsafe storage paths rejected for upload, URL, download and deletion; nested attachment round-trip.");
+await Checks.MSAP.DevelopmentStorageAccessCheck.RunAsync();
 if (args.Contains("--database", StringComparer.Ordinal) || args.Contains("--approval-database", StringComparer.Ordinal)
     || args.Contains("--customer-discount-database", StringComparer.Ordinal) || args.Contains("--ticket-linkage-database", StringComparer.Ordinal))
 {
