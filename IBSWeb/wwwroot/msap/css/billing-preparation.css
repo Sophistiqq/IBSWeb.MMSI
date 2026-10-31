@@ -297,3 +297,98 @@
         grid-row: auto;
     }
 }
+
+.billing-commercial-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+    gap: var(--ui-space-3);
+}
+
+.billing-setting-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--ui-space-2);
+    min-width: 0;
+    min-height: 100px;
+    margin: 0;
+    padding: var(--ui-space-3);
+    border: 1px solid var(--outline-variant);
+    border-radius: 8px;
+    background: var(--surface-container-lowest);
+}
+
+.billing-setting-card:has(input:not([hidden]):checked),
+.billing-setting-card.is-enabled {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 7%, var(--surface-container-lowest));
+    box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.billing-setting-card:has(input:focus-visible),
+.billing-setting-card:has(button:focus-visible) {
+    outline: 2px solid var(--primary);
+    outline-offset: 3px;
+}
+
+.billing-preparation .billing-setting-card input[type="checkbox"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+    overflow: hidden;
+}
+
+.billing-setting-card .ui-label {
+    padding-right: 1.5rem;
+}
+
+.billing-setting-card:has(input:disabled) {
+    cursor: default;
+}
+
+.billing-setting-card:has(input[type="checkbox"]:not(:disabled)) {
+    cursor: pointer;
+}
+
+.billing-setting-toggle {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+.billing-setting-check {
+    position: absolute;
+    top: var(--ui-space-3);
+    right: var(--ui-space-3);
+    border: 1px solid var(--outline-variant);
+    border-radius: 4px;
+    color: transparent;
+    font-size: 12px;
+}
+
+.billing-setting-card:has(input:not([hidden]):checked) .billing-setting-check,
+.billing-setting-card.is-enabled .billing-setting-check {
+    color: var(--on-primary);
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.billing-discount-control {
+    position: relative;
+}
+
+.billing-discount-control input {
+    width: 100%;
+    padding-right: 2.5rem;
+}
+
+.billing-discount-control > span {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+}

@@ -226,6 +226,16 @@ namespace IBS.Models.MSAP
         public bool IsMonthClosed { get; set; }
 
         [NotMapped]
+        [Range(typeof(decimal), "0", "100")]
+        public decimal? CosDiscountPercent { get; set; }
+
+        [NotMapped]
+        public bool SkipCosDiscount { get; set; }
+
+        [NotMapped]
+        public bool? SbmaEnabled { get; set; }
+
+        [NotMapped]
         public bool CanDiscard { get; set; }
 
         [NotMapped]

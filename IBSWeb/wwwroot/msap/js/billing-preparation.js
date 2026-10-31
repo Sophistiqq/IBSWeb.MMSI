@@ -13,6 +13,7 @@ $(function () {
     let cosRequest = 0;
     let saving = false;
     let initialCos = form.dataset.initialCos;
+    let commercialEnabled = false;
     const money = value => Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const date = value => value ? new Date(value + 'T00:00:00').toLocaleDateString('en-PH', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
@@ -31,8 +32,15 @@ $(function () {
     function resetServices() {
         cosRequest++;
         tickets = [];
+        commercialEnabled = false;
+        $('#CosDiscountPercent, #SkipCosDiscount, #SbmaEnabled, #sbmaFalse, #discountToggle').prop('disabled', true);
+        $('#CosDiscountPercent').val('');
+        $('#SkipCosDiscount, #SbmaEnabled').prop('checked', false);
+        $('#discountCard').removeClass('is-enabled');
+        $('#discountToggle').attr('aria-pressed', 'false');
+        $('#discountHelp').text('Select a COS to load its default.');
         $('#completedServices').empty().append($('<tr>').append($('<td colspan="6">').text('Select a COS to view completed services.')));
-        $('#bookingVessel, #bookingLocation, #bookingVoyage, #bookingDates, #bookingDiscount').text('—');
+        $('#bookingVessel, #bookingLocation, #bookingVoyage, #bookingDates, #bookingIoc').text('—');
         $('#billingReadiness').text('Select a COS to load completed services.');
         $('#cosDetailsLink').prop('hidden', true);
         JobProgress.load(document.getElementById('financialJobProgress'), {});
@@ -62,12 +70,37 @@ $(function () {
         $('label[for="BafBillingNumber"]').text(undocumented ? 'BAF billing number · Automatic' : 'BAF billing number *');
         $('#basicSummaryHeading').text('Basic' + (split && $('#MsapBillingNumber').val() ? ' · ' + $('#MsapBillingNumber').val() : ''));
         $('#bafSummaryHeading').text('BAF' + (split && $('#BafBillingNumber').val() ? ' · ' + $('#BafBillingNumber').val() : ''));
-        const basic = tickets.reduce((sum, ticket) => sum + Number(ticket.dispatchNetAmount), 0);
-        const baf = tickets.reduce((sum, ticket) => sum + Number(ticket.bafNetAmount), 0);
+        const basic = tickets.reduce((sum, ticket) => sum + charges(ticket).basic, 0);
+        const baf = tickets.reduce((sum, ticket) => sum + charges(ticket).baf, 0);
         $('#basicCharges').text(money(basic));
         $('#bafCharges').text(money(baf));
         $('#balanceNote').text(split ? 'Payments and remaining balances are tracked separately for each billing number.' : 'The charges are included in one billing balance.');
         $('#preparationNote').text(split ? 'One preparation · Two billing numbers · Separate balances' : 'One preparation · One billing number');
+    }
+
+    function updateDiscount() {
+        const enabled = commercialEnabled && !$('#SkipCosDiscount').is(':checked');
+        $('#CosDiscountPercent').prop('readOnly', !enabled);
+        $('#discountCard').toggleClass('is-enabled', enabled);
+        $('#discountToggle').attr('aria-pressed', String(enabled));
+        $('#discountHelp').text(!commercialEnabled ? 'No linked schedule.' : enabled ? 'Applies to tariff and BAF.' : 'Discount skipped. Click to enable.');
+        renderServices();
+    }
+
+    function charges(ticket) {
+        if (!commercialEnabled) return { basic: Number(ticket.dispatchNetAmount), baf: Number(ticket.bafNetAmount) };
+        const discount = $('#SkipCosDiscount').is(':checked') ? 0 : Number($('#CosDiscountPercent').val());
+        const factor = 1 - discount / 100;
+        const hours = Math.max(Number(ticket.actualHours ?? ticket.duration), 1);
+        const round = amount => {
+            const cents = amount * 100;
+            const floor = Math.floor(cents);
+            return (Math.abs(cents - floor - 0.5) < 1e-8 ? floor + floor % 2 : Math.round(cents)) / 100;
+        };
+        return {
+            basic: round(Number(ticket.dispatchRate) * (ticket.dispatchChargeType === 'Per hour' ? hours : 1) * factor),
+            baf: round(Number(ticket.bafRate) * (ticket.bafChargeType === 'Per hour' ? hours : 1) * factor)
+        };
     }
 
     function renderServices() {
@@ -84,7 +117,7 @@ $(function () {
                 const $row = $('<tr>');
                 $row.append($('<td>').append($('<strong>').text(ticket.service), $('<span class="billing-ticket-number">').text(ticket.dispatchNo)));
                 [ticket.actualHours == null ? '—' : Number(ticket.actualHours).toFixed(2), Number(ticket.duration).toFixed(2),
-                    money(ticket.dispatchNetAmount), money(ticket.bafNetAmount),
+                    money(charges(ticket).basic), money(charges(ticket).baf),
                     (ticket.isManualTariffRate ? 'Manual' : 'Table') + ' / ' + (ticket.isManualBafRate ? 'Manual' : 'Table')]
                     .forEach(value => $row.append($('<td>').text(value)));
                 $body.append($row);
@@ -148,15 +181,25 @@ $(function () {
             $('#bookingLocation').text((header.portName || '—') + ' / ' + (header.terminalName || '—'));
             $('#bookingVoyage').text(header.voyageNumber || '—');
             $('#bookingDates').text(date(header.serviceStart) + ' – ' + date(header.serviceEnd));
-            $('#bookingDiscount').text(header.skipCosDiscount ? 'Skipped' : header.cosDiscountPercent == null ? 'As recorded on tickets' : header.cosDiscountPercent + '% · Not skipped');
+            $('#bookingIoc').text(header.isIoc ? 'IOC' : 'Non-IOC');
+            commercialEnabled = header.hasSchedule;
+            $('#CosDiscountPercent, #SkipCosDiscount, #SbmaEnabled, #sbmaFalse, #discountToggle').prop('disabled', !commercialEnabled);
+            $('#CosDiscountPercent').val(header.cosDiscountPercent ?? 0);
+            $('#SkipCosDiscount').prop('checked', header.skipCosDiscount);
+            $('#SbmaEnabled').prop('checked', !!header.sbmaEnabled);
+            updateDiscount();
             $('#billingReadiness').text(tickets.length ? 'Ready for billing · All required services recorded and charges resolved.' : 'No unbilled services are available.');
-            renderServices();
             enableActions();
         } catch (error) {
             if (request === cosRequest) $('#billingReadiness').text(error.message);
         }
     });
 
+    $('#discountToggle').on('click', function () {
+        $('#SkipCosDiscount').prop('checked', !$('#SkipCosDiscount').is(':checked'));
+        updateDiscount();
+    });
+    $('#CosDiscountPercent').on('input', renderServices);
     $recipient.on('change', updateRecipient);
     $principal.on('change', updateRecipient);
     $('#SeparateBaf, #IsUndocumented').on('change', updateSummary);

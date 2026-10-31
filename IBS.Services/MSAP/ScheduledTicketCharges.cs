@@ -111,7 +111,6 @@ namespace IBS.Services.MSAP
             decimal dispatchRate = ManualTariffForServiceDate(ticket, entry, rate) ?? rate!.Dispatch;
             var bafAmount = ManualBafForServiceDate(ticket, schedule, entry, bafRate) ?? bafRate!.Amount;
             var discount = schedule.SkipCosDiscount ? 0m : schedule.CosDiscountPercent.GetValueOrDefault();
-            var hours = Math.Max(ticket.RawDurationHours.Value, 1m);
             ticket.DispatchChargeType = entry.TariffBasis == TariffChargeBasis.PerHour ? "Per hour" : "Per move";
             ticket.BAFChargeType = entry.BafMethod switch
             {
@@ -125,18 +124,28 @@ namespace IBS.Services.MSAP
             ticket.BAFRate = bafAmount;
             ticket.IsManualTariffRate = ManualTariffForServiceDate(ticket, entry, rate).HasValue;
             ticket.IsManualBafRate = ManualBafForServiceDate(ticket, schedule, entry, bafRate).HasValue;
+            ApplyDiscount(ticket, discount);
+            ticket.Status = MsapConstants.DispatchTicketStatus.ForBilling;
+            return null;
+        }
+
+        public static void ApplyDiscount(DispatchTicket ticket, decimal discount)
+        {
+            if (discount is < 0 or > 100)
+            {
+                throw new ArgumentOutOfRangeException(nameof(discount), "Discount must be between 0% and 100%.");
+            }
+            var hours = Math.Max(ticket.RawDurationHours ?? ticket.TotalHours, 1m);
+            var dispatchGross = ticket.DispatchRate * (ticket.DispatchChargeType == "Per hour" ? hours : 1m);
+            var bafGross = ticket.BAFRate * (ticket.BAFChargeType == "Per hour" ? hours : 1m);
             ticket.DispatchDiscount = discount;
             ticket.BAFDiscount = discount;
-            var dispatchGross = dispatchRate * (entry.TariffBasis == TariffChargeBasis.PerHour ? hours : 1m);
-            var bafGross = bafAmount * (entry.BafMethod == BafCalculationMethod.PerHour ? hours : 1m);
             ticket.DispatchBillingAmount = Math.Round(dispatchGross, 2);
             ticket.BAFBillingAmount = Math.Round(bafGross, 2);
             ticket.DispatchNetRevenue = Math.Round(dispatchGross * (1m - discount / 100m), 2);
             ticket.BAFNetRevenue = Math.Round(bafGross * (1m - discount / 100m), 2);
             ticket.TotalBilling = ticket.DispatchBillingAmount + ticket.BAFBillingAmount;
             ticket.TotalNetRevenue = ticket.DispatchNetRevenue + ticket.BAFNetRevenue;
-            ticket.Status = MsapConstants.DispatchTicketStatus.ForBilling;
-            return null;
         }
 
         public static DateOnly BafCycleStart(DateOnly serviceDate)

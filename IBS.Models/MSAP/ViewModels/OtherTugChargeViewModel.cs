@@ -13,7 +13,7 @@ namespace IBS.Models.MSAP.ViewModels
         public string ProviderReference { get; set; } = "";
         public DateOnly DocumentDate { get; set; }
         [Required]
-        public bool? IncludesVat { get; set; } = false;
+        public bool? IncludesVat { get; set; } = true;
         [MaxLength(500)]
         public string? Remarks { get; set; }
         public List<OtherTugChargeTicketViewModel> Tickets { get; set; } = [];

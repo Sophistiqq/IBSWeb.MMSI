@@ -65,7 +65,10 @@ namespace Checks.MSAP
                 && html.IndexOf("</form>", StringComparison.Ordinal) < footerIndex,
                 "The final action must submit the schedule form exactly once.");
             Check(Regex.IsMatch(html, "<input[^>]*id=\"VoyageNumber\"[^>]*required"), "Voyage number is not required in the form.");
-            Check(Regex.IsMatch(html, "<input(?=[^>]*type=\"hidden\")(?=[^>]*id=\"IsIoc\")(?=[^>]*value=\"True\")[^>]*>"), "Schedule IOC selection was not retained.");
+            Check(!html.Contains("id=\"iocToggle\"", StringComparison.Ordinal)
+                && !html.Contains("id=\"commercialHeading\"", StringComparison.Ordinal)
+                && html.Contains("id=\"summaryIoc\">Non-IOC", StringComparison.Ordinal),
+                "Scheduling must display the terminal classification without commercial editors.");
             Check(Regex.IsMatch(html, "<option(?=[^>]*data-is-ioc=\"false\")(?=[^>]*selected=\"selected\")[^>]*>Terminal</option>"), "Selected terminal lost its IOC default.");
             Check(html.Contains("id=\"RateMode\"", StringComparison.Ordinal), "Rate mode selection is missing from the form.");
             Check(Regex.IsMatch(html, "<input(?=[^>]*id=\"RateMode\")(?![^>]*checked)[^>]*>")
@@ -90,6 +93,22 @@ namespace Checks.MSAP
             Check(html.Contains("2026-10-17T01:00", StringComparison.Ordinal), "Overnight planned end was lost.");
             Check(html.Contains("data-rate-url=\"/MSAP/VesselSchedule/GetTariffRate\"", StringComparison.Ordinal), "Rate lookup left the MSAP area.");
             Console.WriteLine("PASS: schedule form Razor rendering preserves service IDs, zero/manual rates, overnight dates, encoded errors, anti-forgery and module routes.");
+
+            var billingView = engine.GetView(null, "/Areas/MSAP/Views/Billing/Create.cshtml", false);
+            var billingData = new ViewDataDictionary<Billing>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary())
+            {
+                Model = new Billing { Customers = [] }
+            };
+            using var billingOutput = new StringWriter();
+            await billingView.View!.RenderAsync(new ViewContext(context, billingView.View, billingData,
+                services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), billingOutput, new HtmlHelperOptions()));
+            var billingHtml = billingOutput.ToString();
+            Check(billingHtml.Contains("id=\"CosDiscountPercent\"", StringComparison.Ordinal)
+                && billingHtml.Contains("id=\"SbmaEnabled\"", StringComparison.Ordinal)
+                && billingHtml.Contains("id=\"bookingIoc\"", StringComparison.Ordinal)
+                && !billingHtml.Contains("id=\"iocToggle\"", StringComparison.Ordinal),
+                "Billing must render discount/SBMA editors and read-only IOC information.");
+            Console.WriteLine("PASS: Billing renders commercial editors and read-only rate classification.");
 
             var tug = new Tugboat { TugboatId = 1, TugboatName = "Tug <A>", IsCompanyOwned = true };
             var service = new Service { ServiceId = 1, ServiceName = "Docking <review>" };

@@ -66,7 +66,8 @@ namespace IBS.Services.MSAP
                     foreach (var bill in prepared.Data)
                     {
                         await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
-                            $"Created Billing #{bill.MsapBillingNumber}" + (model.SeparateBaf ? " (separate Basic/BAF preparation)" : ""),
+                            $"Created Billing #{bill.MsapBillingNumber}" + (model.SeparateBaf ? " (separate Basic/BAF preparation)" : "")
+                            + $". COS discount: {model.CosDiscountPercent}; skipped: {model.SkipCosDiscount}; SBMA: {model.SbmaEnabled}.",
                             "Billing", bill.MsapBillingId, bill.MsapBillingNumber), cancellationToken);
                     }
                     await unitOfWork.SaveAsync(cancellationToken);
@@ -153,6 +154,41 @@ namespace IBS.Services.MSAP
             if (duplicate != null)
             {
                 return ServiceResult<List<Billing>>.Failure($"Billing number '{duplicate.MsapBillingNumber}' is already used for this year and company.");
+            }
+            if (model.CosDiscountPercent is < 0 or > 100)
+            {
+                return ServiceResult<List<Billing>>.Failure("COS discount must be between 0% and 100%.");
+            }
+            var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == job.CustomerOrderSlipId, cancellationToken);
+            if (schedule == null && (model.CosDiscountPercent.HasValue || model.SbmaEnabled.HasValue))
+            {
+                return ServiceResult<List<Billing>>.Failure("Commercial settings require a linked schedule.");
+            }
+            if (schedule != null && ((model.CosDiscountPercent.HasValue
+                && (model.CosDiscountPercent != schedule.CosDiscountPercent || model.SkipCosDiscount != schedule.SkipCosDiscount))
+                || (model.SbmaEnabled.HasValue && model.SbmaEnabled != schedule.SbmaEnabled)))
+            {
+                foreach (var period in tickets.Select(t => t.Date).Distinct())
+                {
+                    if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(period.Year, period.Month, cancellationToken))
+                    {
+                        return ServiceResult<List<Billing>>.Failure("Cannot change commercial settings for tickets in a closed period.");
+                    }
+                }
+                if (model.CosDiscountPercent.HasValue)
+                {
+                    schedule.CosDiscountPercent = model.CosDiscountPercent;
+                    schedule.SkipCosDiscount = model.SkipCosDiscount;
+                    foreach (var ticket in tickets)
+                    {
+                        ScheduledTicketCharges.ApplyDiscount(ticket, model.SkipCosDiscount ? 0m : model.CosDiscountPercent.Value);
+                    }
+                }
+                if (model.SbmaEnabled.HasValue)
+                {
+                    schedule.SbmaEnabled = model.SbmaEnabled.Value;
+                    SbmaShareCalculator.Apply(tickets, schedule.SbmaEnabled);
+                }
             }
             model.MsapBillingNumber = basicNumber;
             model.BafBillingNumber = bafNumber;
@@ -470,6 +506,7 @@ namespace IBS.Services.MSAP
                     DispatchRate = t.DispatchRate,
                     DispatchNetAmount = t.DispatchNetRevenue,
                     DispatchAmount = t.DispatchBillingAmount,
+                    DispatchChargeType = t.DispatchChargeType ?? string.Empty,
                     BAFRate = t.BAFRate,
                     BAFDiscount = t.BAFDiscount,
                     BAFChargeType = t.BAFChargeType ?? string.Empty,
@@ -493,6 +530,9 @@ namespace IBS.Services.MSAP
                     ServiceEnd = customerOrderSlip.DispatchTickets.Max(t => t.DateArrived),
                     CosDiscountPercent = schedule?.CosDiscountPercent,
                     SkipCosDiscount = schedule?.SkipCosDiscount ?? false,
+                    SbmaEnabled = schedule?.SbmaEnabled,
+                    IsIoc = schedule?.IsIoc ?? customerOrderSlip.Terminal.IsIoc,
+                    HasSchedule = schedule != null,
                     VesselId = customerOrderSlip.VesselId,
                     PortId = customerOrderSlip.PortId,
                     TerminalId = customerOrderSlip.TerminalId,

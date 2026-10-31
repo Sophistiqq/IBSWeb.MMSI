@@ -183,9 +183,9 @@ namespace Checks.MSAP
                 var preparedResult = await schedules.CreateAsync(prepared, "check");
                 Check(preparedResult.IsSuccess, $"Could not save schedule commercial settings and expected services: {preparedResult.Message}");
                 var restored = await schedules.GetByIdAsync(prepared.VesselScheduleId);
-                Check(restored!.ServiceEntries.Count == 1 && restored.CosDiscountPercent == 12.5m && restored.SbmaEnabled
+                Check(restored!.ServiceEntries.Count == 1 && restored.CosDiscountPercent == customer.DefaultCosDiscountPercent && !restored.SbmaEnabled
                     && restored.ServiceEntries[0].ManualTariffRate == 100m, "Schedule details lost expected services, the positive manual rate or commercial settings.");
-                Check(restored.IsIoc == !terminal.IsIoc, "Schedule IOC override was lost during validation or persistence.");
+                Check(restored.IsIoc == terminal.IsIoc, "Schedule must enforce the terminal IOC default.");
                 int savedEntryId = restored.ServiceEntries[0].VesselScheduleServiceEntryId;
                 var reviewController = new IBSWeb.Areas.MSAP.Controllers.VesselScheduleController(work, schedules, new CheckAccess(ProcedureEnum.ApproveSchedule), new RateUploadService(db, work));
                 reviewController.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };

@@ -51,12 +51,15 @@
                             </select>
                         </div>
                         <div class="ui-field"><span class="ui-caption ui-muted">Vessel</span><p id="bookingVessel" class="ui-body">—</p></div>
-                        <div class="ui-field"><span class="ui-caption ui-muted">Port / terminal</span><p id="bookingLocation" class="ui-body">—</p></div>
+                        <div class="ui-field">
+                            <span class="ui-caption ui-muted">Service location</span>
+                            <p id="bookingLocation" class="ui-body">—</p>
+                            <small id="bookingIoc" class="ui-caption ui-muted">—</small>
+                        </div>
                     </div>
                     <div class="billing-booking-facts">
                         <div><span class="ui-caption ui-muted">Voyage</span><p id="bookingVoyage" class="ui-body">—</p></div>
                         <div><span class="ui-caption ui-muted">Service dates</span><p id="bookingDates" class="ui-body">—</p></div>
-                        <div><span class="ui-caption ui-muted">COS discount</span><p id="bookingDiscount" class="ui-body">—</p></div>
                         <div><span class="ui-caption ui-muted">Terms</span><p id="bookingTerms" class="ui-body">—</p></div>
                     </div>
                 </section>
@@ -96,12 +99,45 @@
                                 <option value="">Select principal</option>
                             </select>
                         </div>
-                        <div class="billing-tax-options" aria-label="Tax settings from service customer">
-                            <label class="billing-check"><input type="checkbox" id="customerVat" disabled /> VAT</label>
-                            <label class="billing-check"><input type="checkbox" id="customerVatInclusive" checked disabled /> VAT inclusive</label>
-                            <label class="billing-check"><input type="checkbox" id="customerWithholding" disabled /> Print withholding</label>
-                            <span class="ui-caption ui-muted">From service customer settings</span>
+                    </div>
+                    <div class="billing-commercial-options" aria-label="Commercial and tax settings">
+                        <div class="billing-setting-card" id="discountCard">
+                            <input asp-for="SkipCosDiscount" type="checkbox" hidden disabled />
+                            <button type="button" id="discountToggle" class="billing-setting-toggle" aria-pressed="false" aria-controls="CosDiscountPercent" disabled>
+                                <span class="ui-label">Customer discount</span>
+                                <span class="material-symbols-outlined billing-setting-check" aria-hidden="true">check</span>
+                            </button>
+                            <div class="billing-discount-control">
+                                <input asp-for="CosDiscountPercent" type="number" step="0.0001" min="0" max="100" class="modern-input" aria-label="Customer discount percentage" aria-describedby="discountHelp" disabled required />
+                                <span aria-hidden="true">%</span>
+                            </div>
+                            <span id="discountHelp" class="ui-caption ui-muted">Select a COS to load its default.</span>
                         </div>
+                        <label class="billing-setting-card">
+                            <input type="checkbox" name="SbmaEnabled" id="SbmaEnabled" value="true" disabled />
+                            <span class="material-symbols-outlined billing-setting-check" aria-hidden="true">check</span>
+                            <span class="ui-label">Apply SBMA share</span>
+                            <span class="ui-caption ui-muted">Subic Bay Metropolitan Authority share.</span>
+                        </label>
+                        <input type="hidden" name="SbmaEnabled" id="sbmaFalse" value="false" disabled />
+                        <label class="billing-setting-card">
+                            <input type="checkbox" id="customerVat" disabled />
+                            <span class="material-symbols-outlined billing-setting-check" aria-hidden="true">check</span>
+                            <span class="ui-label">VAT</span>
+                            <span class="ui-caption ui-muted">From service customer settings.</span>
+                        </label>
+                        <label class="billing-setting-card">
+                            <input type="checkbox" id="customerVatInclusive" checked disabled />
+                            <span class="material-symbols-outlined billing-setting-check" aria-hidden="true">check</span>
+                            <span class="ui-label">VAT inclusive</span>
+                            <span class="ui-caption ui-muted">From service customer settings.</span>
+                        </label>
+                        <label class="billing-setting-card">
+                            <input type="checkbox" id="customerWithholding" disabled />
+                            <span class="material-symbols-outlined billing-setting-check" aria-hidden="true">check</span>
+                            <span class="ui-label">Print withholding</span>
+                            <span class="ui-caption ui-muted">From service customer settings.</span>
+                        </label>
                     </div>
                     <div class="billing-recipient">
                         <div><span class="ui-caption ui-muted">Statement address</span><p id="recipientAddress" class="ui-body">—</p></div>

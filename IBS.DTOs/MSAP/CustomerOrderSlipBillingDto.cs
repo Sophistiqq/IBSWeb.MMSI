@@ -26,6 +26,9 @@ namespace IBS.DTOs.MSAP
         public DateOnly? ServiceEnd { get; set; }
         public decimal? CosDiscountPercent { get; set; }
         public bool SkipCosDiscount { get; set; }
+        public bool? SbmaEnabled { get; set; }
+        public bool IsIoc { get; set; }
+        public bool HasSchedule { get; set; }
 
         public bool IsVatable { get; set; }
 
@@ -48,6 +51,7 @@ namespace IBS.DTOs.MSAP
         public bool IsManualTariffRate { get; set; }
         public bool IsManualBafRate { get; set; }
         public decimal DispatchRate { get; set; }
+        public string DispatchChargeType { get; set; } = string.Empty;
         public decimal DispatchAmount { get; set; }
         public decimal BAFRate { get; set; }
         public decimal BAFDiscount { get; set; }

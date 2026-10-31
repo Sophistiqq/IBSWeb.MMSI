@@ -15,7 +15,7 @@ namespace Checks.MSAP
     {
         public static async Task RunAsync()
         {
-            Check(new OtherTugChargeViewModel().IncludesVat == false, "New provider bills must default to non-VAT.");
+            Check(new OtherTugChargeViewModel().IncludesVat == true, "New provider bills must default to VAT-inclusive.");
             var model = new OtherTugChargeViewModel
             {
                 ProviderReference = "BILL-1", DocumentDate = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()), IncludesVat = true,
@@ -66,7 +66,7 @@ namespace Checks.MSAP
                 "Another bill's unrelated allocation was offered.");
             var line = db.Model.FindEntityType(typeof(OtherTugChargeLine))!;
             Check(line.GetIndexes().Any(index => index.IsUnique && index.Properties.Single().Name == nameof(OtherTugChargeLine.DispatchTicketId)), "Ticket allocation uniqueness is missing.");
-            Console.WriteLine("PASS: non-VAT default, COS-scoped allocation choices, existing allocation preservation, provider allocation validation, pending/confirmed zero, document boundaries, company-scoped query translation and unique ticket allocation (no database).");
+            Console.WriteLine("PASS: VAT-inclusive default, COS-scoped allocation choices, existing allocation preservation, provider allocation validation, pending/confirmed zero, document boundaries, company-scoped query translation and unique ticket allocation (no database).");
         }
 
         private static void Check(bool condition, string message)

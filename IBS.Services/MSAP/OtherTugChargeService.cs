@@ -72,7 +72,7 @@ namespace IBS.Services.MSAP
                 Id = charge?.OtherTugChargeId, Revision = charge?.Revision ?? 0, CustomerOrderSlipId = cosId,
                 TugboatOwnerId = ownerId, ProviderName = charge?.ProviderName ?? initial!.Tugboat.TugboatOwner!.TugboatOwnerName,
                 ProviderReference = charge?.ProviderReference ?? "", DocumentDate = charge?.DocumentDate ?? DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()),
-                IncludesVat = charge?.IncludesVat ?? false, Remarks = charge?.Remarks, Charge = charge
+                IncludesVat = charge?.IncludesVat ?? true, Remarks = charge?.Remarks, Charge = charge
             };
             var query = AllocationTickets(cosId, id).AsNoTracking().Where(t => t.Tugboat.TugboatOwnerId == ownerId
                 && (t.OtherTugChargeLine == null || t.OtherTugChargeLine.OtherTugChargeId == id));

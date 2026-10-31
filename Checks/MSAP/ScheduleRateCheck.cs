@@ -17,7 +17,9 @@ namespace Checks.MSAP
         {
             TariffRate? tariff = null;
             BafRate? baf = null;
-            var customer = Proxy<ICustomerRepository>((_, _) => Task.FromResult<Customer?>(new Customer()));
+            var customer = Proxy<ICustomerRepository>((_, _) => Task.FromResult<Customer?>(new Customer { DefaultCosDiscountPercent = 12.5m }));
+            var portName = "Subic Bay";
+            var port = Proxy<IPortRepository>((_, _) => Task.FromResult<Port?>(new Port { PortName = portName }));
             var vessel = Proxy<IVesselRepository>((_, _) => Task.FromResult<Vessel?>(new Vessel { VesselType = "LOCAL" }));
             var terminal = Proxy<ITerminalRepository>((_, _) => Task.FromResult<Terminal?>(new Terminal()));
             var tugs = Proxy<ITugboatRepository>((_, _) => Task.FromResult<IEnumerable<Tugboat>>([new Tugboat { TugboatId = 1 }]));
@@ -26,7 +28,7 @@ namespace Checks.MSAP
             var bafs = Proxy<IBafTableRepository>((_, _) => Task.FromResult(baf));
             var work = Proxy<IUnitOfWork>((method, _) => method.Name switch
             {
-                "get_Customer" => customer, "get_Vessel" => vessel, "get_Terminal" => terminal,
+                "get_Customer" => customer, "get_Vessel" => vessel, "get_Terminal" => terminal, "get_Port" => port,
                 "get_Tugboat" => tugs, "get_Service" => services, "get_TariffTable" => tariffs,
                 "get_BafTable" => bafs, _ => throw new InvalidOperationException(method.Name)
             });
@@ -60,6 +62,39 @@ namespace Checks.MSAP
             entry.ManualTariffRate = null;
             entry.ManualBafRate = 0;
             Check(await Validate() == null && entry.ManualBafRate == 0, "An explicit zero BAF was overwritten.");
+            model.CosDiscountPercent = 99m;
+            model.SkipCosDiscount = true;
+            model.IsIoc = true;
+            model.SbmaEnabled = false;
+            Check(await Validate() == null && model.CosDiscountPercent == 12.5m && !model.SkipCosDiscount
+                && model.IsIoc == false && model.SbmaEnabled, "Scheduling accepted commercial overrides instead of defaults.");
+            portName = "Manila";
+            Check(await Validate() == null && !model.SbmaEnabled, "Changing port did not reset the SBMA default.");
+            var discounted = new DispatchTicket
+            {
+                DispatchRate = 100m, BAFRate = 20m, RawDurationHours = 1.25m,
+                DispatchChargeType = "Per hour", BAFChargeType = "Per move"
+            };
+            foreach (var percentage in new[] { 0m, 12.5m, 100m })
+            {
+                ScheduledTicketCharges.ApplyDiscount(discounted, percentage);
+                Check(discounted.DispatchNetRevenue == Math.Round(125m * (1m - percentage / 100m), 2)
+                    && discounted.BAFNetRevenue == Math.Round(20m * (1m - percentage / 100m), 2)
+                    && discounted.TotalNetRevenue == discounted.DispatchNetRevenue + discounted.BAFNetRevenue,
+                    "Billing discount did not update Basic, BAF and their total consistently.");
+            }
+            foreach (var percentage in new[] { -1m, 101m })
+            {
+                try
+                {
+                    ScheduledTicketCharges.ApplyDiscount(discounted, percentage);
+                    throw new InvalidOperationException("An invalid billing discount was accepted.");
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                }
+            }
+            Console.WriteLine("PASS: Scheduling enforces customer/terminal/port defaults; billing discount updates Basic and BAF and rejects invalid percentages.");
             MethodInfo setOverrides = typeof(VesselScheduleService).GetMethod("SetTariffOverridesAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
             Task SetOverrides(VesselSchedule? previous = null)
             {

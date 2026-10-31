@@ -103,15 +103,6 @@ namespace IBS.Services.MSAP
                 model.ApprovedByUserId = null;
                 model.ApprovedAt = null;
 
-                if (model.CosDiscountPercent == null && !model.SkipCosDiscount && model.CustomerId.HasValue)
-                {
-                    var customer = await unitOfWork.Customer.GetAsync(c => c.CustomerId == model.CustomerId.Value, ct);
-                    if (customer != null && customer.DefaultCosDiscountPercent > 0)
-                    {
-                        model.CosDiscountPercent = customer.DefaultCosDiscountPercent;
-                    }
-                }
-
                 var error = await ValidateAsync(model, allowConflicts, ct);
                 if (error != null) return ServiceResult<int>.Failure(error, ServiceResultStatus.ValidationError);
 
@@ -628,7 +619,9 @@ namespace IBS.Services.MSAP
             {
                 return "Voyage number must be at most 50 characters.";
             }
-            if (model.CustomerId is not > 0 || await unitOfWork.Customer.GetAsync(c => c.CustomerId == model.CustomerId, ct) == null)
+            var customer = model.CustomerId is > 0
+                ? await unitOfWork.Customer.GetAsync(c => c.CustomerId == model.CustomerId, ct) : null;
+            if (model.CustomerId is not > 0 || customer == null)
             {
                 return "Choose a valid customer before saving or confirming the schedule.";
             }
@@ -641,6 +634,16 @@ namespace IBS.Services.MSAP
             if (vessel == null) return "Choose a valid vessel.";
             var terminal = await unitOfWork.Terminal.GetAsync(t => t.TerminalId == model.TerminalId && t.PortId == model.PortId, ct);
             if (terminal == null) return "Choose a terminal belonging to the selected port.";
+            if (!confirming)
+            {
+                var port = await unitOfWork.Port.GetAsync(p => p.PortId == model.PortId, ct);
+                model.CosDiscountPercent = customer.DefaultCosDiscountPercent;
+                model.SkipCosDiscount = false;
+                model.IsIoc = terminal.IsIoc;
+                var portName = port?.PortName.Trim() ?? "";
+                model.SbmaEnabled = portName.Equals("Subic", StringComparison.OrdinalIgnoreCase)
+                    || portName.StartsWith("Subic ", StringComparison.OrdinalIgnoreCase);
+            }
             model.IsIoc ??= terminal.IsIoc;
             model.VesselType = vessel.VesselType == "FOREIGN" ? "Foreign" : "Local";
 

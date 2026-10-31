@@ -84,10 +84,15 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to create Billings.")]
-        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IsUndocumented")] Billing model, CancellationToken cancellationToken)
+        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,SbmaEnabled")] Billing model, CancellationToken cancellationToken)
         {
             try
             {
+                if (ModelState.Any(entry => (entry.Key is nameof(Billing.CosDiscountPercent) or nameof(Billing.SkipCosDiscount) or nameof(Billing.SbmaEnabled))
+                    && entry.Value!.Errors.Count > 0))
+                {
+                    return Json(new { success = false, message = "Check the billing fields and enter a discount between 0% and 100%." });
+                }
                 var username = User.Identity?.Name ?? "System";
                 var company = User.Claims.FirstOrDefault(c => c.Type == "Company")?.Value ?? MsapConstants.Company_MMSI;
 
@@ -111,9 +116,14 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling)]
         public async Task<IActionResult> PreviewPreparation(
-            [Bind("CustomerId,CustomerOrderSlipId,PrincipalId,BilledTo,MsapBillingNumber,Date,SeparateBaf,BafBillingNumber,IsUndocumented")] Billing model,
+            [Bind("CustomerId,CustomerOrderSlipId,PrincipalId,BilledTo,MsapBillingNumber,Date,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,SbmaEnabled")] Billing model,
             CancellationToken cancellationToken)
         {
+            if (ModelState.Any(entry => (entry.Key is nameof(Billing.CosDiscountPercent) or nameof(Billing.SkipCosDiscount) or nameof(Billing.SbmaEnabled))
+                    && entry.Value!.Errors.Count > 0))
+            {
+                return BadRequest("Check the billing fields and enter a discount between 0% and 100%.");
+            }
             var company = User.Claims.FirstOrDefault(c => c.Type == "Company")?.Value ?? MsapConstants.Company_MMSI;
             var result = await billingService.PrepareBillingAsync(model, User.Identity?.Name ?? "System", company, cancellationToken);
             if (!result.IsSuccess || result.Data == null)

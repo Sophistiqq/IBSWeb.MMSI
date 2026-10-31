@@ -110,44 +110,6 @@
                 </div>
             </section>
 
-            <!-- Card 2: Commercial settings -->
-            <section class="schedule-card ui-panel" aria-labelledby="commercialHeading" data-tour-step="15">
-                <div class="schedule-card-header">
-                    <h2 class="schedule-card-title ui-section-title" id="commercialHeading">Commercial settings</h2>
-                </div>
-                <div class="schedule-card-body ui-stack">
-                    <div class="schedule-commercial-cards">
-                        <div class="schedule-option-card schedule-discount-box" id="discountCard">
-                            <input asp-for="SkipCosDiscount" type="checkbox" id="SkipCosDiscount" hidden />
-                            <button type="button" class="schedule-card-toggle" id="discountToggle" aria-pressed="false" aria-controls="CosDiscountPercent">
-                                <span class="schedule-option-title">Customer discount</span>
-                                <span class="material-symbols-outlined schedule-card-check" aria-hidden="true">check</span>
-                            </button>
-                            <div class="schedule-discount-control">
-                                <input asp-for="CosDiscountPercent" type="number" step="0.0001" min="0" max="100" class="modern-input schedule-discount-input" id="CosDiscountPercent" placeholder="0.00" aria-label="Customer discount percentage" aria-describedby="discountHelp" />
-                                <span aria-hidden="true">%</span>
-                            </div>
-                            <p class="ui-caption ui-muted" id="discountHelp" role="status"></p>
-                            <span asp-validation-for="CosDiscountPercent" class="text-error ui-caption"></span>
-                        </div>
-                        <label class="schedule-option-card" id="iocCard">
-                            <input asp-for="IsIoc" type="hidden" id="IsIoc" />
-                            <input type="checkbox" id="iocToggle" aria-label="Use IOC rates" aria-describedby="iocDefault" />
-                            <span class="material-symbols-outlined schedule-card-check" aria-hidden="true">check</span>
-                            <span class="schedule-option-title" id="iocTitle">Non-IOC</span>
-                            <span class="ui-caption ui-muted" id="iocDefault" role="status"></span>
-                            <span asp-validation-for="IsIoc" class="text-error ui-caption"></span>
-                        </label>
-                        <label class="schedule-option-card">
-                            <input asp-for="SbmaEnabled" type="checkbox" id="SbmaEnabled" />
-                            <span class="material-symbols-outlined schedule-card-check" aria-hidden="true">check</span>
-                            <span class="schedule-option-title">Apply SBMA share</span>
-                            <span class="ui-caption ui-muted">Subic Bay Metropolitan Authority share.</span>
-                        </label>
-                    </div>
-                </div>
-            </section>
-
             <!-- Section 3: Tugboats & services -->
             <section class="schedule-services-section" aria-labelledby="tugboatsServicesHeading">
                 <div class="schedule-section-header">
@@ -286,6 +248,7 @@
                 <div class="schedule-summary-group">
                     <div class="schedule-summary-label ui-caption ui-muted">SERVICE LOCATION</div>
                     <div class="schedule-summary-value-lg ui-value" id="summaryLocation">Select port / terminal</div>
+                    <small class="ui-caption ui-muted" id="summaryIoc">@(terminalIocMap.GetValueOrDefault(Model.TerminalId) ? "IOC" : "Non-IOC")</small>
                 </div>
                 <div class="schedule-summary-group">
                     <div class="schedule-summary-label ui-caption ui-muted">PLANNED WINDOW</div>
@@ -301,6 +264,10 @@
                     <div class="schedule-metric-row">
                         <span>Expected services</span>
                         <strong id="summaryServiceCount">@(Model.ServiceEntries?.Count ?? 0)</strong>
+                    </div>
+                    <div class="schedule-metric-row">
+                        <span>SBMA share</span>
+                        <strong id="summarySbma">Port default</strong>
                     </div>
                     <div class="schedule-metric-row">
                         <span>Customer discount</span>
@@ -440,7 +407,6 @@
         { step: 8, title: 'Planned end', text: 'Enter an end later than the start, including the correct date for overnight service. Actual times are recorded on Dispatch Tickets.', required: true, autoAdvance: false },
         { step: 9, title: 'Planning notes', text: 'Add service instructions or coordination notes when needed.', required: false, autoAdvance: false },
         { step: 12, title: 'Add tugboat', text: 'Add tugboats and configure expected services for each assist.', required: false, autoAdvance: false },
-        { step: 14, title: 'Save for reviewing', text: 'Review the booking, commercial options and expected services, then save for reviewing.', interactive: true },
-        { step: 15, title: 'Commercial settings', text: 'Configure customer discount, discount skipping, and SBMA eligibility.', required: false, autoAdvance: false }
+        { step: 14, title: 'Save for reviewing', text: 'Review the booking and expected services, then save for reviewing.', interactive: true }
     ];
 </script>

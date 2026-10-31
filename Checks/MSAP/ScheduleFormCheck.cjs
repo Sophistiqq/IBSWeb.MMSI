@@ -136,31 +136,6 @@ function respond(data) { pending.shift()({ok: true, json: async () => data}); }
     assert(source.includes("$(servicesContainer).on('change'"), 'ModernSelect emits jQuery change events; tug assignments must receive them.');
     console.log('PASS: recurring mode keeps detected rates read-only and out of manual fields; missing matches allow zero/manual entry; stale responses are ignored; failed lookups stay locked; non-recurring keeps every rate editable even when a table rate is found.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
-const iocLogic = source.slice(source.indexOf('    const ioc ='), source.indexOf('    const customer ='));
-{
-    const ioc = {value: 'true'};
-    const title = {textContent: ''};
-    const note = {textContent: ''};
-    const card = {classes: new Set(), classList: {toggle: (name, on) => on ? card.classes.add(name) : card.classes.delete(name)}};
-    const toggle = {checked: false, addEventListener: () => {}};
-    const elements = {IsIoc: ioc, iocToggle: toggle, iocCard: card, iocTitle: title, iocDefault: note};
-    const terminal = {selectedOptions: [{dataset: {isIoc: 'false'}}]};
-    let changed;
-    vm.runInNewContext(iocLogic, {
-        document: {getElementById: id => elements[id]}, terminal,
-        $: () => ({on: (event, callback) => changed = callback}), updateSummary() {}
-    });
-    assert.equal(ioc.value, 'true', 'Loading a saved form must preserve the IOC override.');
-    assert.equal(title.textContent, 'IOC');
-    assert(card.classes.has('schedule-option-override'), 'A saved override must be marked on the IOC card.');
-    terminal.selectedOptions[0].dataset.isIoc = 'true';
-    changed();
-    assert.equal(ioc.value, '', 'Changing terminal must return to its default.');
-    assert.equal(title.textContent, 'IOC');
-    assert.match(note.textContent, /Terminal default/);
-    assert(!card.classes.has('schedule-option-override'));
-    terminal.selectedOptions = [];
-    changed();
-    assert.match(note.textContent, /Select a terminal/);
-}
-console.log('PASS: IOC defaults follow the terminal and saved overrides survive form initialization.');
+assert(!view.includes('id="iocToggle"') && !view.includes('id="commercialHeading"'));
+assert(view.includes('id="summaryIoc"') && view.includes('id="summarySbma"'));
+console.log('PASS: Scheduling shows commercial defaults as summary information without editors.');

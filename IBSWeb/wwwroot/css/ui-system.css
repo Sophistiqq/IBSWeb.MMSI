@@ -186,6 +186,20 @@
     text-decoration: none;
 }
 
+.app-ui .modern-btn-secondary.active,
+.app-ui .modern-btn-secondary.active:hover {
+    color: var(--on-primary);
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.app-ui .modern-btn-secondary.modern-btn-error.active,
+.app-ui .modern-btn-secondary.modern-btn-error.active:hover {
+    color: white;
+    background: var(--error);
+    border-color: var(--error);
+}
+
 .app-ui :is(.ui-input, .modern-input, .ui-select-trigger, .modern-select-trigger):is(:focus-visible, .active) {
     outline: 2px solid var(--ui-muted);
     outline-offset: 2px;
