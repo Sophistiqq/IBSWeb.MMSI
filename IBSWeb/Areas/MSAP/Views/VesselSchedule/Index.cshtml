@@ -164,9 +164,10 @@
     <script src="~/msap/js/vessel-schedule-calendar.js" asp-append-version="true"></script>
     <script>
         window.IBS_TOUR_STEPS = [
+            { selector: '.ui-page-header', title: 'Vessel calendar', text: 'Browse vessel bookings in Philippine time. Use New schedule, when available, to plan a vessel visit, tugboats and expected services.', interactive: false },
             { selector: '.schedule-calendar-filters', title: 'Find a booking', text: 'Filter by port, terminal, vessel, voyage, tugboat or status. These filters stay active while browsing months and days.', interactive: false },
             { selector: '.schedule-stepper', title: 'Browse months', text: 'Move between months or return to this month. Overnight bookings appear on each affected day.', interactive: false },
-            { selector: '.schedule-calendar', title: 'Preview or open', text: 'Hover or focus a vessel for its booking preview, or select it to open the booking. Select a date or more link for the day panel.', interactive: false }
+            { selector: '.schedule-calendar', title: 'Preview or open a booking', text: 'Hover or focus a vessel for its preview, or select it to open schedule details and review actions. Select a date or more link to view the day panel.', interactive: false }
         ];
     </script>
 }

@@ -37,10 +37,10 @@
 @section Scripts {
     <script>
         window.IBS_TOUR_STEPS = [
-            { selector: '#createCollection', title: 'Record collection', text: 'Create a collection to record payment against eligible posted billings.', interactive: false },
+            { selector: '#createCollection', title: 'Record collection', text: 'Record one receipt for eligible approved bills belonging to a service customer. Each selected bill receives full net payment after withholding.', interactive: false },
             { selector: '#dateFilter', title: 'Filter by date', text: 'Choose a collection date to narrow the records.', interactive: false },
-            { selector: '#paginatedTable', title: 'Collection records', text: 'Review payment status, amount, customer, and deposit dates. Open a collection number to inspect its billings and banking progress.', interactive: false }
-        ];
+            { selector: '#paginatedTable', title: 'Collection records', text: 'Review the receipt status, amount, customer and banking dates. Open a receipt number to review its billing allocations and record deposit, clearing or a returned check when allowed.', interactive: false }
+        ].filter(function (step) { return document.querySelector(step.selector); });
     </script>
     <script>
         $(document).ready(function () {

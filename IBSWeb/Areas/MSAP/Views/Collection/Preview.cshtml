@@ -155,10 +155,14 @@
 {
     <script>
         window.IBS_TOUR_STEPS = [
-            { selector: '#receiptDetailsHeading', title: 'Receipt details', text: 'Review the service customer and payment reference.', interactive: false },
-            { selector: '#coveredBillingsHeading', title: 'Covered billings', text: 'Each billing retains its own allocated payment and remaining balance.', interactive: false },
-            { selector: '#checkDetailsHeading', title: 'Check details', text: 'The issuing bank belongs to the payer. The MMSI receiving account is recorded separately at deposit.', interactive: false },
-            { selector: '#depositDetailsHeading', title: 'Deposit and clearing', text: 'Record the receiving account, actual deposit date and clearing date for this receipt.', interactive: false }
-        ];
+            { selector: '[aria-labelledby="receiptDetailsHeading"]', title: 'Receipt details', text: 'Review the service customer, receipt date and payment reference against the received payment.', interactive: false },
+            { selector: '[aria-labelledby="coveredBillingsHeading"]', title: 'Covered billings', text: 'Review the payment and withholding allocated to each bill and its remaining balance. Open a billing number to review that bill separately.', interactive: false },
+            { selector: '[aria-label="Receipt actions"]', title: 'Receipt banking', text: 'Use the available action to record deposit, clearing or a returned check. Banking is recorded once for this receipt and applies to all its covered billings. A returned check can be redeposited.', interactive: false },
+            { selector: '[aria-labelledby="checkDetailsHeading"]', title: 'Check details', text: 'Verify the check amount, date, number and issuing bank. The issuing bank belongs to the payer; the MMSI receiving account is recorded at deposit.', interactive: false },
+            { selector: '[aria-labelledby="depositDetailsHeading"]', title: 'Deposit and clearing details', text: 'Review the recorded receiving account, deposit and clearing dates, and any returned-check information. A paid bill is not cleared until the receipt completes banking.', interactive: false },
+            { selector: '[aria-labelledby="receiptTotalsHeading"]', title: 'Receipt totals', text: 'Compare cash, check and withholding with the receipt total and the allocations to its covered bills.', interactive: false }
+        ].filter(function (step) {
+            return document.querySelector(step.selector);
+        });
     </script>
 }

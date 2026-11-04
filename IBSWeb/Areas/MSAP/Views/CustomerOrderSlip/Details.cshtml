@@ -154,16 +154,16 @@
     <script src="~/msap/js/cos-ticket-entry.js" asp-append-version="true"></script>
     <script>
         window.IBS_TOUR_STEPS = [
-            { selector: '.job-progress-timeline', title: 'Job stages', text: 'Follow COS approval, service tickets, billing, final bill approval, collection, deposit, and clearing. Direct COS records bypass vessel planning and COS approval.', interactive: false },
-            { selector: '.job-progress-next', title: 'Next action', text: 'Read the guidance for the current stage and any blockers before continuing.', interactive: false },
-            { selector: '#cosBookingDetails', title: 'Order details', text: 'Review the customer, vessel, location, references, and planned schedule. Direct orders can be edited here when their status and access allow it.', interactive: false },
-            { selector: '#cosServices', title: 'Dispatch Tickets', text: 'Add service tickets when allowed, then review each ticket’s timeline, tugboat, billing amount, and status. Use View ticket to review saved actual service details.', interactive: false },
-            @if (canViewAuditHistory)
-            {
-                <text>{ selector: '#timelineAccordion', title: 'Activity timeline', text: 'Expand this section to load the COS activity history.', interactive: false },</text>
-            }
-            { selector: '.cos-details-footer', title: 'Order totals', text: 'See the total ticket count and accumulated billing amount for this COS.', interactive: false }
-        ];
+            { selector: '.job-progress', title: 'Follow the job', text: 'Review the current stage and next action, from schedule approval through actual tickets, billing, collection, deposit and clearing. Read any blockers before continuing.', interactive: false },
+            { selector: '#cosBookingDetails', title: 'COS booking details', text: 'Check the customer, vessel, service location, voyage and planned window. Open the linked schedule to review the booking and rates. Direct COS records can be edited only when their state and your access allow it.', interactive: false },
+            { selector: '#cosServices', title: 'Services and actual tickets', text: 'Services are grouped by tugboat. Use the available row action to enter a missing actual ticket or view a saved one. Review actual hours, billable hours and service status. Urgent entry can record actuals before approval; charges and billing remain pending.', interactive: false },
+            { selector: '#actualTicketEntry', title: 'Record or review an actual ticket', text: 'Check the ticket number, master, actual start and end, and supporting files. Service and tugboat come from the planned entry. Hourly charges use a one-hour minimum; SBMA uses actual service time. Save actual ticket or Save changes records your entry; Close ticket returns to the service list.', interactive: false },
+            { selector: '#otherTugCharges', title: 'Provider charges', text: 'Review subcontractor charges separately from customer billing. Record or review a provider charge through the available action. Missing provider costs remain pending; provider payment is handled in IBS.', interactive: false },
+            { selector: '#timelineAccordion', title: 'Workflow activity', text: 'Expand the workflow timeline to load the activity history available to your role.', interactive: false },
+            { selector: '.cos-details-footer', title: 'Ticket totals', text: 'Review the ticket count and calculated billing total. Tickets with unresolved charges are excluded from the calculated total.', interactive: false }
+        ].filter(function (step) {
+            return document.querySelector(step.selector);
+        });
     </script>
     <script>
         const PageConfig = {

@@ -94,12 +94,12 @@
 @section Scripts {
     <script>
         window.IBS_TOUR_STEPS = [
-            { selector: '#filterAll', title: 'Billing stages', text: 'Filter statements awaiting final approval, awaiting collection, or already collected.', interactive: false },
+            { selector: '#filterAll', title: 'Billing stages', text: 'Awaiting approval lists prepared bills needing final approval. For collection lists approved bills awaiting payment. Collected lists paid bills; payment does not by itself mean the receipt has cleared.', interactive: false },
             { selector: '#dateFilter', title: 'Filter by date', text: 'Choose a billing date to narrow the list.', interactive: false },
-            { selector: '#paginatedTable', title: 'Billing list', text: 'Open a billing number to review the statement. Available actions depend on its status, month close, and your access.', interactive: false }
+            { selector: '#paginatedTable', title: 'Billing list', text: 'Open a billing number to review its charges, statement and supporting tickets. Separate Basic and BAF bills have separate numbers, balances and approvals. Available actions depend on the bill’s status and your access.', interactive: false }
         ];
         if (document.querySelector('.flex-stack .modern-btn-primary')) {
-            window.IBS_TOUR_STEPS.unshift({ selector: '.flex-stack .modern-btn-primary', title: 'Create billing', text: 'Create a statement for eligible approved Dispatch Tickets. The saved billing waits for final approval.', interactive: false });
+            window.IBS_TOUR_STEPS.unshift({ selector: '.flex-stack .modern-btn-primary', title: 'Prepare billing', text: 'Select a customer and billable COS, review the completed services, customize discount and Subic SBMA settings, then preview and save for final approval.', interactive: false });
         }
         if (document.querySelector('.financial-job-progress .job-progress')) {
             window.IBS_TOUR_STEPS.unshift({ selector: '.financial-job-progress', title: 'Job progress', text: 'Review the linked COS stage and its next available action before posting or collecting.', interactive: false });

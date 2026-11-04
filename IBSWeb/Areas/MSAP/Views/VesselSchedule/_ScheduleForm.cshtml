@@ -397,16 +397,19 @@
 
 <script>
     window.IBS_TOUR_STEPS = [
-        { step: 1, title: 'Job Progress', text: 'Follow the booking from planning through COS approval, ticket entry, billing, and clearing.', interactive: false },
+        { selector: '.job-progress', title: 'Job Progress', text: 'Follow the booking from planning through COS approval, ticket entry, billing, and clearing.', interactive: false },
         { step: 2, title: 'Customer', text: 'Select the customer requesting this vessel service.', required: true, autoAdvance: true },
         { step: 3, title: 'Vessel', text: 'Choose the vessel for this visit.', required: true, autoAdvance: true },
-        { step: 4, title: 'Voyage number', text: 'Add the voyage reference if one is available.', required: false, autoAdvance: false },
         { step: 5, title: 'Port', text: 'Choose the service port. Changing the port clears the terminal selection.', required: true, autoAdvance: true },
         { step: 6, title: 'Terminal', text: 'Choose a terminal within the selected port, then continue.', required: true, autoAdvance: false },
+        { step: 4, title: 'Voyage number', text: 'Enter the voyage reference for this vessel visit. This is required before saving.', required: true, autoAdvance: false },
         { step: 7, title: 'Planned start', text: 'Enter the expected service start in Philippine time.', required: true, autoAdvance: false },
         { step: 8, title: 'Planned end', text: 'Enter an end later than the start, including the correct date for overnight service. Actual times are recorded on Dispatch Tickets.', required: true, autoAdvance: false },
+        { selector: '.schedule-rate-toggle', title: 'Rate mode', text: 'Recurring uses tariff and BAF tables. Non-recurring lets you enter manual rates. Check the charging method for each service.', interactive: false },
+        { step: 12, title: 'Add tugboats', text: 'Add each tugboat assigned to this booking. You can add more than one tugboat before continuing.', required: false, autoAdvance: false },
+        { selector: '.schedule-services-section', title: 'Expected services and rates', text: 'Add one service entry for each assist the tugboat will perform. Review the tariff and BAF rate and whether each is charged per hour or per move.', interactive: false },
         { step: 9, title: 'Planning notes', text: 'Add service instructions or coordination notes when needed.', required: false, autoAdvance: false },
-        { step: 12, title: 'Add tugboat', text: 'Add tugboats and configure expected services for each assist.', required: false, autoAdvance: false },
+        { selector: '.schedule-summary-sidebar', title: 'Booking summary and defaults', text: 'Review the location, planned window, tugboats and rates. IOC / Non-IOC follows the terminal; discount follows the customer; SBMA follows the port. Discount and SBMA can be customized when preparing billing. Table estimates use the planned date; final rates use actual service start.', interactive: false },
         { step: 14, title: 'Save for reviewing', text: 'Review the booking and expected services, then save for reviewing.', interactive: true }
     ];
 </script>

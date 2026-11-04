@@ -15,7 +15,7 @@
     <main class="cos-details-workspace other-tug-charge-workspace ui-stack">
         <header class="ui-page-header">
             <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId">COS details</a></li><li aria-current="page">Other Tug Charges</li></ol></nav>
-            <h1 class="ui-page-title">@(confirmed ? "Provider charge details" : "Review provider charges")</h1>
+            <h1 class="ui-page-title" data-page-header>@(confirmed ? "Provider charge details" : "Review provider charges")</h1>
             <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-fragment="otherTugCharges" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
             <p class="ui-page-description ui-body ui-muted">@Model.ProviderName · @(confirmed ? "Confirmed" : "For reviewing") · Payment in IBS</p>
         </header>
@@ -81,4 +81,14 @@
         </form>
     </main>
 </div>
-@section Scripts { <script src="~/msap/js/other-tug-charges.js" asp-append-version="true"></script> }
+@section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '.other-tug-charge-workspace .ui-page-header', title: 'Provider charge status', text: 'Check the provider and whether the charges are awaiting review or confirmed. Provider costs are separate from customer billing; payment is handled in IBS.', interactive: false },
+            { selector: '[data-charge-fields]', title: 'Provider bill and VAT', text: 'Enter the provider reference and document date, and attach the supporting document when available. Includes VAT starts enabled for a new charge; check it against the provider document. Saved charges must be opened with Edit before changing them.', interactive: false },
+            { selector: '#otherTugChargeForm > section', title: 'Allocate costs to actual tickets', text: 'Select the covered tickets and enter the provider charge for each. Blank means pending; zero records an explicitly zero charge. Check the allocated total before saving.', interactive: false },
+            { selector: '.cos-entry-footer', title: 'Save, review and confirm', text: 'Save for reviewing stores a draft. An authorized reviewer confirms the saved charges after checking the document and allocations. Draft amounts do not update AP reports, and confirmed charges are locked.', interactive: false }
+        ];
+    </script>
+    <script src="~/msap/js/other-tug-charges.js" asp-append-version="true"></script>
+}

@@ -231,6 +231,18 @@
     </main>
 </div>
 @section Scripts {
+    <script>
+        window.IBS_TOUR_STEPS = [
+            { selector: '.schedule-review-workspace .ui-page-header', title: 'Schedule status', text: 'Check the booking status and revision. Open COS continues ticket entry when a COS is available. Urgent service entry, when available, allows actual tickets before approval; charges and billing wait for approval.', interactive: false },
+            { selector: '[aria-labelledby="reviewBookingTitle"]', title: 'Booking details', text: 'Review the customer, vessel, port, terminal, voyage and planned service window in Philippine time.', interactive: false },
+            { selector: '[aria-labelledby="reviewCommercialTitle"]', title: 'Commercial defaults', text: 'Review the saved customer discount, terminal IOC / Non-IOC and port SBMA settings. Any differences from current defaults are highlighted. Discount and SBMA can be customized during billing preparation.', interactive: false },
+            { selector: '[aria-labelledby="reviewServicesTitle"]', title: 'Tugboats, services and rates', text: 'Review the services for each tugboat, rate sources and charging methods. Table estimates use the planned date; final rates use actual service start. Check any manual rates before approval.', interactive: false },
+            { selector: '.schedule-review-actions', title: 'Available booking actions', text: 'Use the actions available for this booking and your access. Read any conditions before changing or stopping the booking.', interactive: false },
+            { selector: '#confirmSchedule', title: 'Approve this schedule revision', text: 'Approve only after checking the booking, services, rates and any conflicts. Approval creates or retains the linked COS. Reapproval retains the COS and approves the revised schedule.', interactive: false }
+        ].filter(function (step) {
+            return document.querySelector(step.selector);
+        });
+    </script>
     <script src="~/msap/js/schedule-confirmation.js" asp-append-version="true"></script>
     <script src="~/msap/js/schedule-rate-capture.js" asp-append-version="true"></script>
     <script src="~/msap/js/schedule-actions.js" asp-append-version="true"></script>
