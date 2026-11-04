@@ -51,5 +51,4 @@
     <ProjectReference Include="..\IBS.Utility\IBS.Utility.csproj" />
   </ItemGroup>
 
-  <Import Project="MSAP/MSAP.props" />
 </Project>
