@@ -25,7 +25,7 @@
     var selectedEntry = entries.FirstOrDefault(entry => entry.VesselScheduleServiceEntryId == ticketEntry?.VesselScheduleServiceEntryId);
     var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
     var msapRole = userId is not null ? await MsapRoleService.GetUserRoleAsync(userId) : null;
-    var canViewAuditHistory = msapRole is MsapRoles.Admin or MsapRoles.SuperAdmin;
+    var canViewAuditHistory = msapRole == MsapRoles.Admin;
 }
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />

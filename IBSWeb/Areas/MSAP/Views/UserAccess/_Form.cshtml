@@ -18,7 +18,7 @@
             <span asp-validation-for="UserId" class="text-error"></span>
         </div>
     }
-    <p class="ui-caption ui-muted">Permissions apply to active Users. Admin and SuperAdmin can perform all supported workflow actions. Read access to related records follows the assigned work; it does not allow changes. Unchecked actions are denied.</p>
+    <p class="ui-caption ui-muted">Permissions apply to active Users. Admins can perform all supported workflow actions. Read access to related records follows the assigned work; it does not allow changes. Unchecked actions are denied.</p>
     <div class="ui-card-grid">
         <fieldset class="ui-panel ui-stack">
             <legend class="ui-section-title">Schedule and COS</legend>
@@ -61,7 +61,7 @@
         </fieldset>
         <fieldset class="ui-panel ui-stack">
             <legend class="ui-section-title">Master files</legend>
-            <p class="ui-caption ui-muted">Each transit reference file is granted separately. Admins and Super Admins keep full access.</p>
+            <p class="ui-caption ui-muted">Each transit reference file is granted separately. Admins keep full access.</p>
             <div class="grid grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-2 lg:grid-cols-3">
                 <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageCustomerMasterFile" class="form-check-input" /> <span>Customer</span></label>
                 <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageServiceMasterFile" class="form-check-input" /> <span>Activities / Services</span></label>

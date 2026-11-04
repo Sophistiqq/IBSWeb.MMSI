@@ -20,8 +20,7 @@ namespace IBS.Services.MSAP
             IEnumerable<IdentityRole> roles =
             [
                 new(MsapRoles.Admin),
-                new(MsapRoles.User),
-                new(MsapRoles.SuperAdmin)
+                new(MsapRoles.User)
             ];
             return Task.FromResult(roles);
         }

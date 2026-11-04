@@ -7,7 +7,7 @@
     var now = DateTimeHelper.GetCurrentPhilippineTime();
     string? userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
     string? role = userId is not null ? await MsapRoleService.GetUserRoleAsync(userId) : null;
-    bool isAdmin = role is MsapRoles.Admin or MsapRoles.SuperAdmin;
+    var isAdmin = role == MsapRoles.Admin;
 }
 
 <div class="modern-layout app-ui">

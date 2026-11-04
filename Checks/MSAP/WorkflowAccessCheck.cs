@@ -26,6 +26,22 @@ namespace Checks.MSAP
     {
         public static async Task RunAsync()
         {
+            var availableRoles = (await new RoleService(null!).GetAllRolesAsync(default)).Select(role => role.Name).ToArray();
+            Check(availableRoles.Length == 2 && availableRoles.Contains(MsapRoles.Admin) && availableRoles.Contains(MsapRoles.User),
+                "Only Admin and User may be offered for assignment.");
+            Check(!MsapRoles.IsValid("SuperAdmin"), "The retired role can still be assigned.");
+            foreach (var sharedAdmin in new[] { false, true })
+            {
+                Check(MsapRoles.GetRole([new Claim(MsapRoles.ClaimType, "SuperAdmin")], sharedAdmin) == MsapRoles.Admin,
+                    "A legacy assignment did not resolve to ordinary Admin access.");
+                Check(MsapRoles.GetRole([], sharedAdmin) == (sharedAdmin ? MsapRoles.Admin : MsapRoles.User),
+                    "Default role resolution changed.");
+                Check(MsapRoles.GetRole([new Claim(MsapRoles.ClaimType, "Unknown")], sharedAdmin) == null,
+                    "An unknown role granted access.");
+                Check(MsapRoles.GetRole([new Claim(MsapRoles.ClaimType, "SuperAdmin"), new Claim(MsapRoles.ClaimType, MsapRoles.User)], sharedAdmin) == null
+                    && MsapRoles.GetRole([new Claim(MsapRoles.ClaimType, "SuperAdmin"), new Claim(MsapRoles.ClaimType, MsapRoles.Admin)], sharedAdmin) == null,
+                    "Ambiguous legacy roles granted access.");
+            }
             UserAccess? grants = new() { UserId = "access-check" };
             string? role = MsapRoles.User;
             IRoleService roles = DispatchProxy.Create<IRoleService, CollectionCheck.CheckProxy>();
@@ -98,7 +114,7 @@ namespace Checks.MSAP
             }
             async Task AssertEntryAsync(bool expected)
             {
-                var requirement = new ClaimsAuthorizationRequirement(MsapRoles.ClaimType, [MsapRoles.User, MsapRoles.Admin, MsapRoles.SuperAdmin]);
+                var requirement = new ClaimsAuthorizationRequirement(MsapRoles.ClaimType, [MsapRoles.User, MsapRoles.Admin]);
                 var principal = new ClaimsPrincipal(new ClaimsIdentity([
                     new Claim(ClaimTypes.NameIdentifier, "access-check"), new Claim(MsapRoles.ClaimType, MsapRoles.User)], "check"));
                 var context = new AuthorizationHandlerContext([requirement], principal, null);
@@ -153,15 +169,22 @@ namespace Checks.MSAP
                 && !reportDashboard.CanCreateBilling && !reportDashboard.CanApproveBilling && !reportDashboard.CanCreateSchedule,
                 "Reporting visibility granted workflow actions.");
             grants.CanViewMaritimeReport = false;
-            foreach (string adminRole in new[] { MsapRoles.Admin, MsapRoles.SuperAdmin })
+            role = MsapRoles.GetRole([new Claim(MsapRoles.ClaimType, "SuperAdmin")]);
+            foreach (var (allowedRole, expected) in new[] { (MsapRoles.Admin, true), ("SuperAdmin", false) })
             {
-                role = adminRole;
-                var adminDashboard = await DashboardAsync();
-                Check(adminDashboard.ShowDashboard && adminDashboard.CanViewDispatch && adminDashboard.CanViewFinance
-                    && adminDashboard.CanViewBanking && adminDashboard.CanManageOtherTugCharges && adminDashboard.CanConfirmOtherTugCharges,
-                    "Administrator dashboard lost supported sections.");
-                await AssertEntryAsync(true);
+                var requirement = new ClaimsAuthorizationRequirement(MsapRoles.ClaimType, [allowedRole]);
+                var legacyPrincipal = new ClaimsPrincipal(new ClaimsIdentity([
+                    new Claim(ClaimTypes.NameIdentifier, "access-check"), new Claim(MsapRoles.ClaimType, "SuperAdmin")], "check"));
+                var context = new AuthorizationHandlerContext([requirement], legacyPrincipal, null);
+                await requirement.HandleAsync(context);
+                await new MsapRoleHandler(roles, new AccessControlService(null!, access)).HandleAsync(context);
+                Check(context.HasSucceeded == expected, "A legacy cookie must grant only ordinary Admin access.");
             }
+            var adminDashboard = await DashboardAsync();
+            Check(adminDashboard.ShowDashboard && adminDashboard.CanViewDispatch && adminDashboard.CanViewFinance
+                && adminDashboard.CanViewBanking && adminDashboard.CanManageOtherTugCharges && adminDashboard.CanConfirmOtherTugCharges,
+                "Administrator dashboard lost supported sections.");
+            await AssertEntryAsync(true);
             Check(MsapRoles.GetRole([new Claim(MsapRoles.ClaimType, MsapRoles.User)], isSharedAdmin: true) == MsapRoles.Admin,
                 "Shared Admin was downgraded by its MSAP User assignment.");
             role = null;
@@ -233,7 +256,7 @@ namespace Checks.MSAP
             {
                 property.SetValue(grants, true);
             }
-            foreach (string? currentRole in new[] { MsapRoles.User, MsapRoles.Admin, MsapRoles.SuperAdmin, null })
+            foreach (var currentRole in new[] { MsapRoles.User, MsapRoles.Admin, null })
             {
                 role = currentRole;
                 foreach (ProcedureEnum permission in retired)
@@ -320,8 +343,8 @@ namespace Checks.MSAP
             Check(typeof(AuditTrailController).GetCustomAttribute<AuthorizeAttribute>()?.Policy == MsapRoles.AdminPolicy,
                 "MSAP audit history and COS timelines must be Admin-only.");
             Check(typeof(MsapImportController).GetMethods().All(method => method.Name != "Reset"), "Legacy import reset is still exposed.");
-            Check(typeof(DispatchTicketController).Assembly.GetType("IBSWeb.Areas.MSAPSuperAdmin.Controllers.DataController") is null,
-                "The retired raw financial editor must not return.");
+            Check(!typeof(DispatchTicketController).Assembly.GetTypes().Any(type => type.Namespace?.StartsWith("IBSWeb.Areas.MSAPSuperAdmin", StringComparison.Ordinal) == true),
+                "Retired SuperAdmin controllers must not be exposed.");
             foreach (var name in new[] { "SaveTariffAsync", "ApproveTariffAsync", "RevokeTariffApprovalAsync", "DisapproveTariffAsync", "BatchApproveTariffAsync", "BatchSetTariffAsync", "DeleteImageAsync", "DeleteVideoAsync", "CheckForTariffRateAsync", "GetCustomerSelectListAsync" })
             {
                 Check(typeof(DispatchTicketService).GetMethods().All(method => method.Name != name),

@@ -127,7 +127,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 ("billing", "Billing", null),
                 ("collection", "Collection", null),
                 ("master-files", "Master Files", null),
-                ("admin", "Administration", async uid => await roleService.GetUserRoleAsync(uid) is MsapRoles.Admin or MsapRoles.SuperAdmin),
+                ("admin", "Administration", async uid => await roleService.GetUserRoleAsync(uid) == MsapRoles.Admin),
                 ("import-export", "Import & Export", async uid => await accessControl.HasMsapImportAccessAsync(uid)),
                 ("reports", "Reports", async uid => await accessControl.HasMaritimeReportAccessAsync(uid))
             };
@@ -148,7 +148,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var userId = userManager.GetUserId(User)!;
             return fileSlug switch
             {
-                "07-admin" => await roleService.GetUserRoleAsync(userId) is MsapRoles.Admin or MsapRoles.SuperAdmin,
+                "07-admin" => await roleService.GetUserRoleAsync(userId) == MsapRoles.Admin,
                 "08-import-export" => await accessControl.HasMsapImportAccessAsync(userId),
                 "09-reports" => await accessControl.HasMaritimeReportAccessAsync(userId),
                 _ => true

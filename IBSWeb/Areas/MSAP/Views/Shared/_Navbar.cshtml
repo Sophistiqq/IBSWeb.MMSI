@@ -190,7 +190,7 @@
                     </li>
                 }
 
-                @if (msapRole is MsapRoles.Admin or MsapRoles.SuperAdmin || canManageBankAccount)
+                @if (msapRole == MsapRoles.Admin || canManageBankAccount)
                 {
                     <!-- Master File mega menu -->
                     <li class="mnav-item" data-mega role="none">
@@ -264,7 +264,7 @@
                                 <div>
                                     <div class="mnav-section-label">Maritime &amp; MSAP</div>
                                     <div class="mnav-link-list">
-                                        @if (msapRole is IBS.Utility.MSAP.Constants.MsapRoles.Admin or IBS.Utility.MSAP.Constants.MsapRoles.SuperAdmin)
+                                        @if (msapRole == IBS.Utility.MSAP.Constants.MsapRoles.Admin)
                                         {
                                             <a class="mnav-mega-link" asp-area="MSAP" asp-controller="MsapImport" asp-action="Index" role="menuitem">
                                                 <span class="material-symbols-outlined">upload_file</span>

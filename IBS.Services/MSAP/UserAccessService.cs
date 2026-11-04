@@ -29,7 +29,7 @@ namespace IBS.Services.MSAP
             }
 
             string? role = await roleService.GetUserRoleAsync(id);
-            if (role is MsapRoles.Admin or MsapRoles.SuperAdmin)
+            if (role == MsapRoles.Admin)
             {
                 return true;
             }

@@ -93,7 +93,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 return activeUsers.Where(id =>
                 {
                     string? role = MsapRoles.GetRole(claims[id].Select(claim => claim.ToClaim()), sharedAdmins.Contains(id));
-                    return role is MsapRoles.Admin or MsapRoles.SuperAdmin || role == MsapRoles.User && assignedUsers.Contains(id);
+                    return role == MsapRoles.Admin || role == MsapRoles.User && assignedUsers.Contains(id);
                 }).ToList();
             }
 

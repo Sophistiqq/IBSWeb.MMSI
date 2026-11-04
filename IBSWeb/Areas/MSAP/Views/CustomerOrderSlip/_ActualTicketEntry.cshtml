@@ -12,7 +12,7 @@
         && booking?.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled);
     var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
     var role = readOnly || userId == null ? null : await MsapRoleService.GetUserRoleAsync(userId);
-    bool imageRequired = role is not (MsapRoles.Admin or MsapRoles.SuperAdmin) && string.IsNullOrEmpty(Model.ImageName);
+    var imageRequired = role != MsapRoles.Admin && string.IsNullOrEmpty(Model.ImageName);
 }
 <form asp-controller="DispatchTicket" asp-action="@(editing ? "EditTicket" : "Create")" method="post" enctype="multipart/form-data" class="ui-stack" id="@(readOnly ? "cosActualTicketDetails" : "cosActualTicketForm")" onsubmit="@(readOnly ? "return false;" : null)">
     <input name="inlineEntry" type="hidden" value="true" />

@@ -74,7 +74,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         {
             string? userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             string? role = userId is not null ? await roleService.GetUserRoleAsync(userId) : null;
-            if ((imageFile == null || imageFile.Length == 0) && role is not (MsapRoles.Admin or MsapRoles.SuperAdmin))
+            if ((imageFile == null || imageFile.Length == 0) && role != MsapRoles.Admin)
             {
                 if (inlineEntry)
                 {

@@ -279,7 +279,7 @@ Check(expectedMsapControllers.SetEquals(discoveredMsapControllers),
     "MSAP controller inventory mismatch. Missing: " + string.Join(", ", expectedMsapControllers.Except(discoveredMsapControllers).Order())
     + "; unexpected: " + string.Join(", ", discoveredMsapControllers.Except(expectedMsapControllers).Order()));
 Check(!moduleActions.Any(a => a.ControllerName == "Data"), "Retired direct data changes are exposed as endpoints.");
-Check(moduleActions.All(a => a.RouteValues["area"] is "MSAP" or "MSAPAdmin" or "MSAPSuperAdmin"), "An MSAP controller collides with a base area.");
+Check(moduleActions.All(a => a.RouteValues["area"] is "MSAP" or "MSAPAdmin"), "An MSAP controller collides with a base area.");
 Check(moduleActions.All(action => action.FilterDescriptors.Any(filter =>
     filter.Filter is AuthorizeFilter authorize && authorize.AuthorizeData?.Any(data => data.Policy == MsapRoles.AccessPolicy) == true)),
     "An MSAP endpoint lacks the module membership policy.");
@@ -575,7 +575,7 @@ foreach (var grants in new[] { (Manage: false, Confirm: false), (Manage: true, C
 }
 Console.WriteLine("PASS: dashboard AP Other Tugs reminders and entry/review queues render for preparer, confirmer, combined and denied access.");
 
-foreach (var area in new[] { "MSAP", "MSAPAdmin", "MSAPSuperAdmin" })
+foreach (var area in new[] { "MSAP", "MSAPAdmin" })
 {
     foreach (var view in Directory.EnumerateFiles(Path.Combine(webRoot, "Areas", area), "*.cshtml", SearchOption.AllDirectories))
     {
@@ -595,7 +595,7 @@ foreach (var area in new[] { "MSAP", "MSAPAdmin", "MSAPSuperAdmin" })
     }
 }
 Console.WriteLine("PASS: MSAP view assets exist and CDN URLs have no module prefix.");
-foreach (var area in new[] { "MSAP", "MSAPAdmin", "MSAPSuperAdmin" })
+foreach (var area in new[] { "MSAP", "MSAPAdmin" })
 {
     var descriptor = moduleActions.First(a => a.RouteValues["area"] == area);
     var http = new DefaultHttpContext { RequestServices = services };
@@ -604,20 +604,6 @@ foreach (var area in new[] { "MSAP", "MSAPAdmin", "MSAPSuperAdmin" })
     route.Values["controller"] = descriptor.ControllerName;
     var actionContext = new ActionContext(http, route, descriptor);
     Check(engine.FindView(actionContext, "_Layout", false).View?.Path == "/Areas/MSAP/Views/Shared/_Layout.cshtml", "MSAP picked the base layout.");
-    if (area == "MSAPSuperAdmin")
-    {
-        http.SetEndpoint(new Endpoint(_ => Task.CompletedTask, new EndpointMetadataCollection(), "SuperAdmin landing rendering check"));
-        http.Request.RouteValues = route.Values;
-        using var output = new StringWriter();
-        var view = engine.GetView(null, "/Areas/MSAPSuperAdmin/Views/Home/Index.cshtml", false).View!;
-        var data = new ViewDataDictionary(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary());
-        await view.RenderAsync(new ViewContext(actionContext, view, data,
-            services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), output, new HtmlHelperOptions()));
-        var html = output.ToString();
-        Check(html.Contains($"href=\"{links.GetPathByAction("Index", "Home", new { area = "MSAP" })}\"", StringComparison.Ordinal)
-            && !html.Contains("/MSAPSuperAdmin/Data", StringComparison.Ordinal),
-            "SuperAdmin landing page must link to the active workspace without retired editor links.");
-    }
 }
 {
     var descriptor = moduleActions.First(a => a.ControllerName == "DispatchTicket" && a.ActionName == "EditTicket");

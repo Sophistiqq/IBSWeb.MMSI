@@ -16,7 +16,7 @@ namespace IBSWeb.MSAP
         public void OnResultExecuting(ResultExecutingContext context)
         {
             if (context.ActionDescriptor.RouteValues.TryGetValue("area", out var area)
-                && area is "MSAP" or "MSAPAdmin" or "MSAPSuperAdmin"
+                && area is "MSAP" or "MSAPAdmin"
                 && context.Result is JsonResult result)
             {
                 result.SerializerSettings = Options;

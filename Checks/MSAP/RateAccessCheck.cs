@@ -59,15 +59,12 @@ namespace Checks.MSAP
             await CheckAsync(true, false, true);
             access.CanApproveRateUpload = false;
             await CheckAsync(false, false, false);
-            foreach (string adminRole in new[] { MsapRoles.Admin, MsapRoles.SuperAdmin })
+            role = MsapRoles.Admin;
+            await CheckAsync(true, true, true);
+            if (!await service.CheckAccess(access.UserId, ProcedureEnum.ManageOtherTugCharges)
+                || !await service.CheckAccess(access.UserId, ProcedureEnum.ConfirmOtherTugCharges))
             {
-                role = adminRole;
-                await CheckAsync(true, true, true);
-                if (!await service.CheckAccess(access.UserId, ProcedureEnum.ManageOtherTugCharges)
-                    || !await service.CheckAccess(access.UserId, ProcedureEnum.ConfirmOtherTugCharges))
-                {
-                    throw new InvalidOperationException("Administrator provider-charge access was denied.");
-                }
+                throw new InvalidOperationException("Administrator provider-charge access was denied.");
             }
             role = null;
             access.CanViewRates = access.CanManageRates = access.CanApproveRateUpload = true;

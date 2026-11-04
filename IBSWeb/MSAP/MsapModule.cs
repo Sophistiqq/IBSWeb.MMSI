@@ -54,11 +54,9 @@ namespace IBSWeb.MSAP
             services.AddAuthorization(options =>
             {
                 options.AddPolicy(MsapRoles.AccessPolicy, policy => policy.RequireAuthenticatedUser()
-                    .RequireClaim(MsapRoles.ClaimType, MsapRoles.Admin, MsapRoles.User, MsapRoles.SuperAdmin));
+                    .RequireClaim(MsapRoles.ClaimType, MsapRoles.Admin, MsapRoles.User));
                 options.AddPolicy(MsapRoles.AdminPolicy, policy => policy.RequireAuthenticatedUser()
-                    .RequireClaim(MsapRoles.ClaimType, MsapRoles.Admin, MsapRoles.SuperAdmin));
-                options.AddPolicy(MsapRoles.SuperAdminPolicy, policy => policy.RequireAuthenticatedUser()
-                    .RequireClaim(MsapRoles.ClaimType, MsapRoles.SuperAdmin));
+                    .RequireClaim(MsapRoles.ClaimType, MsapRoles.Admin));
             });
             services.AddScoped<IAuditTrailService, AuditTrailService>();
             services.AddScoped<IVesselScheduleService, VesselScheduleService>();
@@ -132,7 +130,7 @@ namespace IBSWeb.MSAP
         public void Apply(ControllerModel controller)
         {
             if (controller.RouteValues.TryGetValue("area", out string? area)
-                && area is "MSAP" or "MSAPAdmin" or "MSAPSuperAdmin")
+                && area is "MSAP" or "MSAPAdmin")
             {
                 controller.Filters.Add(new AuthorizeFilter(MsapRoles.AccessPolicy));
             }
@@ -147,7 +145,7 @@ namespace IBSWeb.MSAP
 
         public IEnumerable<string> ExpandViewLocations(ViewLocationExpanderContext context, IEnumerable<string> locations)
         {
-            if (context.AreaName is "MSAP" or "MSAPAdmin" or "MSAPSuperAdmin")
+            if (context.AreaName is "MSAP" or "MSAPAdmin")
             {
                 return locations.Where(location => !location.StartsWith("/Views/", StringComparison.Ordinal))
                     .Append("/Areas/MSAP/Views/Shared/{0}.cshtml");
