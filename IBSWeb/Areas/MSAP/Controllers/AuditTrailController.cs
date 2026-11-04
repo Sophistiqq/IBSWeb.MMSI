@@ -30,14 +30,20 @@ namespace IBSWeb.Areas.MSAP.Controllers
             });
         }
 
+        [HttpGet]
         public async Task<IActionResult> GetTimeline(int id, CancellationToken cancellationToken)
         {
+            if (!ModelState.IsValid || id <= 0)
+            {
+                return BadRequest("Select a valid COS to load its history.");
+            }
+
             try
             {
                 var timeline = await auditTrailService.GetCustomerOrderSlipTimelineAsync(id, cancellationToken);
                 return PartialView("_Timeline", timeline);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 logger.LogError(ex, "Error fetching timeline for COS {CustomerOrderSlipId}", id);
                 return StatusCode(500, "Internal server error while fetching timeline.");

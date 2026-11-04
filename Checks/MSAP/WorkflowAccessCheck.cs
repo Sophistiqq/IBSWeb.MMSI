@@ -342,6 +342,13 @@ namespace Checks.MSAP
                 "Master-file import must remain Admin-only.");
             Check(typeof(AuditTrailController).GetCustomAttribute<AuthorizeAttribute>()?.Policy == MsapRoles.AdminPolicy,
                 "MSAP audit history and COS timelines must be Admin-only.");
+            var auditController = new AuditTrailController(null!, null!, NullLogger<AuditTrailController>.Instance);
+            Check(await auditController.GetTimeline(0, default) is BadRequestObjectResult
+                && await auditController.GetTimeline(-1, default) is BadRequestObjectResult,
+                "Invalid COS IDs must be rejected before requesting workflow history.");
+            auditController.ModelState.AddModelError("id", "Invalid ID");
+            Check(await auditController.GetTimeline(1, default) is BadRequestObjectResult,
+                "Invalid timeline model binding must be rejected.");
             Check(typeof(MsapImportController).GetMethods().All(method => method.Name != "Reset"), "Legacy import reset is still exposed.");
             Check(!typeof(DispatchTicketController).Assembly.GetTypes().Any(type => type.Namespace?.StartsWith("IBSWeb.Areas.MSAPSuperAdmin", StringComparison.Ordinal) == true),
                 "Retired SuperAdmin controllers must not be exposed.");

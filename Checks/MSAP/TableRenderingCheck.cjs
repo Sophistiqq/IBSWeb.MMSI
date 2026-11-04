@@ -21,7 +21,6 @@ function captureTable(view) {
     vm.createContext(sandbox);
     const helper = fs.readFileSync(path.join(__dirname, '../../IBSWeb/wwwroot/msap/js/modern-table.js'), 'utf8');
     vm.runInContext(helper.split('$(document).ready')[0] + '\nglobalThis.ModernTable = ModernTable;', sandbox);
-    sandbox.escapeHtml = sandbox.ModernTable.render.text;
     const source = fs.readFileSync(path.join(__dirname, `../../IBSWeb/Areas/MSAP/Views/${view}/Index.cshtml`), 'utf8');
     const script = [...source.matchAll(/<script>([\s\S]*?)<\/script>/g)]
         .map(match => match[1]).find(value => value.includes('.DataTable('));
@@ -47,6 +46,8 @@ for (const type of ['display', 'filter']) {
     assert.equal(billing.config.columns[4].render(null, type, row), `${encoded} - ${encoded}`);
     assert.equal(billing.config.columns[6].render(payload, type, row), encoded);
     assert.equal(audit.config.columns[3].render(payload, type, row), encoded);
+    assert.equal(audit.config.columns[1].render(payload, type, row), encoded);
+    assert.equal(audit.config.columns[4].render(payload, type, row), encoded);
 }
 assert.equal(dispatch.config.columns[7].render(null, 'display', {}), '');
 assert.equal(dispatch.config.columns[9].render(null, 'display', { customerId: 1 }), '');

@@ -5,6 +5,7 @@
 
 <div class="modern-layout app-ui">
     <main class="modern-container ui-page">
+        @Html.AntiForgeryToken()
         <!-- Header Section -->
         <div class="flex-stack ui-page-toolbar">
             <div>
@@ -46,7 +47,7 @@
                                     Tracing will show all related dispatch tickets, billings, and collections.
                                 </p>
 
-                                <div id="traceLoading" class="text-center py-4 hidden">
+                                <div id="traceLoading" class="text-center py-4" hidden>
                                     <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
                                     <span class="modern-label ms-2 ui-label">Fetching history...</span>
                                 </div>
@@ -132,6 +133,9 @@
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
     <script>
+        let traceRequest = null;
+        let traceVersion = 0;
+
         $(document).ready(function () {
             let table = $('#auditTable').DataTable(ModernTable.config({
                 serverSide: true,
@@ -145,7 +149,7 @@
                             return moment(data).format('MMM DD, YYYY HH:mm');
                         }
                     },
-                    { data: 'actorName', name: 'actorName', render: data => escapeHtml(data || 'Name unavailable') },
+                    { data: 'actorName', name: 'actorName', render: data => ModernTable.render.text(data || 'Name unavailable') },
                     {
                         data: 'documentType',
                         name: 'documentType',
@@ -160,7 +164,7 @@
                             return ModernTable.render.text(data || '-');
                         }
                     },
-                    { data: 'activity', name: 'activity', render: data => escapeHtml(data ?? '') },
+                    { data: 'activity', name: 'activity', render: data => ModernTable.render.text(data ?? '') },
                     { data: 'machineName', name: 'machineName', className: 'text-xs' },
                     {
                         data: null,
@@ -209,8 +213,9 @@
                 const id = $(this).val();
                 if (id) {
                     const text = $("#joSelect option:selected").text();
-                    console.log('JO Selected via dropdown:', id, text);
                     loadTrace(id, text);
+                } else {
+                    clearTrace();
                 }
             });
 
@@ -240,41 +245,49 @@
         function loadTrace(id, title) {
             if (!id) return;
 
-            // Open accordion if closed
-            const $body = $('#traceAccordionBody');
-            if (!$body.is(':visible')) {
-                toggleTraceAccordion();
-            }
+            const version = ++traceVersion;
+            if (traceRequest) traceRequest.abort();
+            if (!$('#traceAccordionBody').is(':visible')) toggleTraceAccordion();
 
-            console.log('Loading timeline for ID:', id);
             $('#tracePlaceholder').hide();
             $('#traceResult').show();
-            $('#traceLoading').removeClass('hidden');
-            $('#traceTimeline').html('');
+            $('#traceLoading').prop('hidden', false);
+            $('#traceTimeline').html('').attr('aria-busy', 'true');
             $('#traceTitle').text('Tracing: ' + title);
-            $('#traceStatusLabel').text('Trace active: ' + title);
+            $('#traceStatusLabel').text('Fetching history: ' + title);
 
-            $.get('@Url.Action("GetTimeline", "AuditTrail")', { id: id })
-                .done(function(data) {
-                    $('#traceTimeline').html(data);
-                })
-                .fail(function(xhr) {
-                    const errorMsg = xhr.responseText || 'Failed to load timeline.';
-                    $('#traceTimeline').html(`<div class="text-center py-5 text-danger"><span class="material-symbols-outlined" style="font-size:32px">error</span><p class="modern-label mt-2 ui-label">${ModernTable.render.text(errorMsg)}</p></div>`);
-                })
-                .always(function() {
-                    $('#traceLoading').addClass('hidden');
-                });
+            traceRequest = $.ajax({
+                url: '@Url.Action("GetTimeline", "AuditTrail")',
+                data: { id: id },
+                timeout: 30000
+            }).done(function(data) {
+                if (version !== traceVersion) return;
+                $('#traceTimeline').html(data);
+                $('#traceStatusLabel').text('Trace loaded: ' + title);
+            }).fail(function(xhr, status) {
+                if (version !== traceVersion || status === 'abort') return;
+                const message = status === 'timeout'
+                    ? 'Loading history timed out. Select the COS again to retry.'
+                    : 'Unable to load history. Select the COS again to retry.';
+                $('#traceTimeline').text(message);
+                $('#traceStatusLabel').text('Trace failed');
+            }).always(function() {
+                if (version !== traceVersion) return;
+                traceRequest = null;
+                $('#traceLoading').prop('hidden', true);
+                $('#traceTimeline').attr('aria-busy', 'false');
+            });
         }
 
         function clearTrace() {
+            traceVersion++;
+            if (traceRequest) traceRequest.abort();
+            traceRequest = null;
             const $select = $('#joSelect');
-            $select.val('').trigger('change');
-
-            // Manual sync for ModernSelect if needed
-            const $trigger = $select.next('.modern-select-container').find('.selected-text');
-            $trigger.text($select.data('placeholder') || 'Search COS #...');
-
+            $select.val('');
+            refreshModernSelect($select);
+            $('#traceLoading').prop('hidden', true);
+            $('#traceTimeline').html('').attr('aria-busy', 'false');
             $('#traceResult').hide();
             $('#tracePlaceholder').show();
             $('#traceStatusLabel').text('Select a COS to begin');
