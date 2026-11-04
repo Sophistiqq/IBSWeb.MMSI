@@ -299,9 +299,67 @@
 }
 
 .billing-commercial-options {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: var(--ui-space-3);
+}
+
+.billing-commercial-options .billing-setting-card {
+    width: 22rem;
+    max-width: 100%;
+    min-height: 0;
+}
+
+.billing-vat-settings {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
     gap: var(--ui-space-3);
+    padding-top: var(--ui-space-4);
+    border-top: 1px solid var(--outline-variant);
+}
+
+.billing-preparation .billing-vat-settings .billing-setting-card,
+.billing-preparation .billing-vat-settings .billing-setting-card:has(input:checked) {
+    min-height: 0;
+    border-color: var(--outline-variant);
+    background: var(--surface-container-low);
+    box-shadow: none;
+}
+
+.billing-vat-settings .ui-label {
+    color: var(--on-surface-variant);
+}
+
+.billing-vat-settings .billing-setting-check {
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.billing-preparation #discountCard {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 6rem;
+    align-items: center;
+    box-shadow: none;
+}
+
+#discountCard #discountHelp {
+    grid-column: 1 / -1;
+}
+
+#discountCard .billing-setting-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+}
+
+#discountCard .billing-setting-toggle .ui-label {
+    padding-right: 0;
+}
+
+#discountCard .billing-setting-check {
+    position: static;
+    flex-shrink: 0;
 }
 
 .billing-setting-card {
@@ -315,7 +373,7 @@
     margin: 0;
     padding: var(--ui-space-3);
     border: 1px solid var(--outline-variant);
-    border-radius: 8px;
+    border-radius: var(--ui-radius);
     background: var(--surface-container-lowest);
 }
 
@@ -365,9 +423,14 @@
     top: var(--ui-space-3);
     right: var(--ui-space-3);
     border: 1px solid var(--outline-variant);
-    border-radius: 4px;
+    display: grid;
+    place-items: center;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 2px;
     color: transparent;
     font-size: 12px;
+    line-height: 1;
 }
 
 .billing-setting-card:has(input:not([hidden]):checked) .billing-setting-check,
@@ -379,11 +442,13 @@
 
 .billing-discount-control {
     position: relative;
+    width: 100%;
 }
 
-.billing-discount-control input {
+.billing-preparation .billing-discount-control input {
     width: 100%;
     padding-right: 2.5rem;
+    box-shadow: none;
 }
 
 .billing-discount-control > span {
@@ -391,4 +456,18 @@
     right: 1rem;
     top: 50%;
     transform: translateY(-50%);
+}
+
+.billing-preparation .billing-combined-summary {
+    grid-column: 1 / -1;
+}
+
+.billing-preparation .billing-summary-note {
+    color: var(--on-surface-variant);
+    font-size: var(--ui-text-caption);
+}
+
+.billing-preparation .billing-amount strong,
+.billing-preparation .billing-service-table td {
+    font-variant-numeric: tabular-nums;
 }

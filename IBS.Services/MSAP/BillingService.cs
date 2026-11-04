@@ -490,6 +490,8 @@ namespace IBS.Services.MSAP
                 return ServiceResult<CustomerOrderSlipBillingDto>.Failure(blocker);
             }
 
+            var sbmaAmounts = SbmaShareCalculator.Allocate(customerOrderSlip.DispatchTickets
+                .Where(t => t is { Status: MsapConstants.DispatchTicketStatus.ForBilling, BillingId: null }), true);
             var tickets = customerOrderSlip.DispatchTickets
                 .Where(t => t is { Status: MsapConstants.DispatchTicketStatus.ForBilling, BillingId: null })
                 .Select(t => new CustomerOrderSlipTicketDto
@@ -504,6 +506,7 @@ namespace IBS.Services.MSAP
                     IsManualTariffRate = t.IsManualTariffRate,
                     IsManualBafRate = t.IsManualBafRate,
                     DispatchRate = t.DispatchRate,
+                    DispatchDiscount = t.DispatchDiscount,
                     DispatchNetAmount = t.DispatchNetRevenue,
                     DispatchAmount = t.DispatchBillingAmount,
                     DispatchChargeType = t.DispatchChargeType ?? string.Empty,
@@ -513,6 +516,7 @@ namespace IBS.Services.MSAP
                     BafNetAmount = t.BAFNetRevenue,
                     BAFAmount = t.BAFBillingAmount,
                     TotalAmount = t.TotalBilling,
+                    SbmaShareIfEnabled = sbmaAmounts.GetValueOrDefault(t.DispatchTicketId),
                     Port = t.Terminal?.Port?.PortName,
                     Terminal = t.Terminal?.TerminalName
                 }).ToList();

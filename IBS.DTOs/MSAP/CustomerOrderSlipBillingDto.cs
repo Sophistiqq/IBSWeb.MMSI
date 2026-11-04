@@ -51,6 +51,7 @@ namespace IBS.DTOs.MSAP
         public bool IsManualTariffRate { get; set; }
         public bool IsManualBafRate { get; set; }
         public decimal DispatchRate { get; set; }
+        public decimal DispatchDiscount { get; set; }
         public string DispatchChargeType { get; set; } = string.Empty;
         public decimal DispatchAmount { get; set; }
         public decimal BAFRate { get; set; }
@@ -58,6 +59,7 @@ namespace IBS.DTOs.MSAP
         public string BAFChargeType { get; set; } = string.Empty;
         public decimal BAFAmount { get; set; }
         public decimal TotalAmount { get; set; }
+        public decimal SbmaShareIfEnabled { get; set; }
         public string? Port { get; set; }
         public string? Terminal { get; set; }
     }
