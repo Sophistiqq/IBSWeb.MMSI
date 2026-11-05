@@ -117,3 +117,24 @@
     padding: var(--ui-space-3);
     border-radius: var(--ui-radius);
 }
+
+/* Richer MSAP state accents; shared components retain their subtle surface tints. */
+.app-ui .ui-attention {
+    --ui-state-accent: #d38a16;
+    --ui-state-ink: color-mix(in srgb, #a9680b 45%, var(--ui-ink));
+}
+
+.app-ui .ui-critical {
+    --ui-state-accent: #d24b48;
+    --ui-state-ink: color-mix(in srgb, #b82f32 45%, var(--ui-ink));
+}
+
+.app-ui .ui-active {
+    --ui-state-accent: #387fbb;
+    --ui-state-ink: color-mix(in srgb, #24679f 45%, var(--ui-ink));
+}
+
+.app-ui .ui-complete {
+    --ui-state-accent: #398459;
+    --ui-state-ink: color-mix(in srgb, #246b43 45%, var(--ui-ink));
+}
