@@ -3,6 +3,8 @@ using IBS.DataAccess.MSAP.Repository.Msap.IRepository;
 using IBS.Models.MSAP;
 using IBS.Utility.MSAP.Constants;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace IBS.DataAccess.MSAP.Repository.Msap
 {
@@ -17,7 +19,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
         public async Task<byte[]> SaveFinalSalesReportAsync(DateOnly from, DateOnly to, byte[] content, DateTime generatedAt, CancellationToken ct)
         {
             // Concurrent downloads must return the same first finalized export.
-            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO msap.mmsi_final_sales_reports (date_from, date_to, generated_at, content) VALUES ({from}, {to}, {generatedAt}, {content}) ON CONFLICT (date_from, date_to) DO NOTHING", ct);
+            var timestamp = new NpgsqlParameter("generatedAt", NpgsqlDbType.Timestamp) { Value = generatedAt };
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO msap.mmsi_final_sales_reports (date_from, date_to, generated_at, content) VALUES ({from}, {to}, {timestamp}, {content}) ON CONFLICT (date_from, date_to) DO NOTHING", ct);
             return (await GetFinalSalesReportAsync(from, to, ct))!;
         }
 

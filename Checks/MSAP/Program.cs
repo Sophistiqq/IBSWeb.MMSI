@@ -112,6 +112,12 @@ if (args.Contains("--ar-monitoring-only", StringComparer.Ordinal))
     return;
 }
 
+if (args.Contains("--sales-report-database", StringComparer.Ordinal))
+{
+    await Checks.MSAP.SalesReportDatabaseCheck.RunAsync();
+    return;
+}
+
 if (args.Contains("--accounting-gaps-only", StringComparer.Ordinal))
 {
     Checks.MSAP.AccountingGapsCheck.Run();
