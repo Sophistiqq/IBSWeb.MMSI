@@ -38,24 +38,12 @@ namespace Checks.MSAP
                 ApOtherTugsIncludesVat = false
             };
             var tickets = new List<DispatchTicket> { ticket };
-            var savedReports = new Dictionary<(DateOnly, DateOnly), byte[]>();
-            var reportReads = 0;
-            var report = Proxy<IReportRepository>((method, arguments) =>
+            var report = Proxy<IReportRepository>((_, arguments) =>
             {
                 var from = (DateOnly)arguments![0]!;
                 var to = (DateOnly)arguments[1]!;
-                switch (method.Name)
-                {
-                    case nameof(IReportRepository.GetFinalSalesReportAsync):
-                        return Task.FromResult(savedReports.GetValueOrDefault((from, to)));
-                    case nameof(IReportRepository.SaveFinalSalesReportAsync):
-                        savedReports.TryAdd((from, to), (byte[])arguments[2]!);
-                        return Task.FromResult(savedReports[(from, to)]);
-                    default:
-                        reportReads++;
-                        return Task.FromResult(tickets.Where(t => SalesReportRecognition.IncludesService(t, from, to)
-                            || SalesReportRecognition.IncludesAmounts(t, from, to)).ToList());
-                }
+                return Task.FromResult(tickets.Where(t => SalesReportRecognition.IncludesService(t, from, to)
+                    || SalesReportRecognition.IncludesAmounts(t, from, to)).ToList());
             });
             var work = Proxy<IUnitOfWork>((method, _) => method.Name switch
             {
@@ -112,10 +100,6 @@ namespace Checks.MSAP
             Check(SalesReportRecognition.GetDeferredApLabel(ticket) == "Deferred to confirmation month",
                 "A later confirmation was incorrectly shown as recognized in May.");
             Check(SalesReportRecognition.IncludesAmounts(ticket, june, june.AddMonths(1).AddDays(-1)), "Month-end confirmation was excluded.");
-            var readsBeforeReplay = reportReads;
-            var replay = await ExportAsync(may);
-            Check(mayBytes.SequenceEqual(replay) && reportReads == readsBeforeReplay,
-                "A finalized report was regenerated from changed transactions.");
 
             var juneBytes = await ExportAsync(june);
             using (var package = new ExcelPackage(new MemoryStream(juneBytes)))
@@ -145,7 +129,7 @@ namespace Checks.MSAP
             ticket.Tugboat.IsCompanyOwned = true;
             Check(SalesReportRecognition.IncludesAmounts(ticket, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31)),
                 "Company-owned billing-date recognition changed.");
-            Console.WriteLine("PASS: service-only original period, deferred financial totals and ledgers, confirmation cutoff, no duplicate activity, confirmed zero, legacy AP and final export replay (no database).");
+            Console.WriteLine("PASS: service-only original period, deferred financial totals and ledgers, confirmation cutoff, no duplicate activity, confirmed zero and legacy AP (no database).");
 
             async Task<byte[]> ExportAsync(DateOnly month)
             {

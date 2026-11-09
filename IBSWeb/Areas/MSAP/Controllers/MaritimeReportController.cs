@@ -318,13 +318,8 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 }
 
                 var generatedAt = DateTimeHelper.GetCurrentPhilippineTime();
-                var isFinalReport = dateTo < new DateOnly(generatedAt.Year, generatedAt.Month, 1);
                 var fileName = $"Sales_Summary_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
                 const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-                if (isFinalReport && await unitOfWork.Report.GetFinalSalesReportAsync(dateFrom, dateTo, ct) is { } savedReport)
-                {
-                    return File(savedReport, contentType, fileName);
-                }
 
                 var data = await unitOfWork.Report.GetDispatchReportData(dateFrom, dateTo, ct, filterByBillingDate: true);
                 var (collectionShares, collectionsByTicket) = await AllocateCollectionsByTicketAsync(data, ct);
@@ -357,7 +352,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 var ws = pkg.Workbook.Worksheets.Add("AR Monitoring");
 
                 WriteCompanyHeader(ws);
-                ws.Cells["A2"].Value = $"{(isFinalReport ? "FINAL SALES SUMMARY" : "SALES SUMMARY")} AS OF {generatedAt:MM/dd/yyyy}";
+                ws.Cells["A2"].Value = $"SALES SUMMARY AS OF {generatedAt:MM/dd/yyyy}";
                 ws.Cells["A2"].Style.Font.Size = 14;
                 ws.Cells["A2"].Style.Font.Bold = true;
                 ws.Cells["A3"].Value = $"Period: {dateFrom:MM/dd/yyyy} - {dateTo:MM/dd/yyyy}";
@@ -1062,10 +1057,6 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 }
 
                 var content = await pkg.GetAsByteArrayAsync(ct);
-                if (isFinalReport)
-                {
-                    content = await unitOfWork.Report.SaveFinalSalesReportAsync(dateFrom, dateTo, content, generatedAt, ct);
-                }
                 return File(content, contentType, fileName);
             }
             catch (Exception ex)

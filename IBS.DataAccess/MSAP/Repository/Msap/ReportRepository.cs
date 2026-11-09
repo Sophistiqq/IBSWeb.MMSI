@@ -3,27 +3,11 @@ using IBS.DataAccess.MSAP.Repository.Msap.IRepository;
 using IBS.Models.MSAP;
 using IBS.Utility.MSAP.Constants;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
-using NpgsqlTypes;
 
 namespace IBS.DataAccess.MSAP.Repository.Msap
 {
     public class ReportRepository(MsapDbContext db): IReportRepository
     {
-        public async Task<byte[]?> GetFinalSalesReportAsync(DateOnly from, DateOnly to, CancellationToken ct)
-        {
-            return await db.MsapFinalSalesReports.AsNoTracking()
-                .Where(r => r.DateFrom == from && r.DateTo == to).Select(r => r.Content).SingleOrDefaultAsync(ct);
-        }
-
-        public async Task<byte[]> SaveFinalSalesReportAsync(DateOnly from, DateOnly to, byte[] content, DateTime generatedAt, CancellationToken ct)
-        {
-            // Concurrent downloads must return the same first finalized export.
-            var timestamp = new NpgsqlParameter("generatedAt", NpgsqlDbType.Timestamp) { Value = generatedAt };
-            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO msap.mmsi_final_sales_reports (date_from, date_to, generated_at, content) VALUES ({from}, {to}, {timestamp}, {content}) ON CONFLICT (date_from, date_to) DO NOTHING", ct);
-            return (await GetFinalSalesReportAsync(from, to, ct))!;
-        }
-
         public async Task<List<IBS.Models.MSAP.Books.SalesBook>> GetSalesBookAsync(DateOnly from, DateOnly to, CancellationToken ct)
         {
             return await db.MsapSalesBooks.AsNoTracking().Where(b => b.Company == MsapConstants.Company_MMSI

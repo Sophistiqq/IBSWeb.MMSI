@@ -28,12 +28,6 @@ namespace Checks.MSAP
             await using var db = new MsapDbContext(options);
             await db.Database.MigrateAsync();
             Check(!db.Database.HasPendingModelChanges(), "Report migration differs from the model.");
-            var migrations = db.Database.GetMigrations().ToArray();
-            Check(migrations[^1].EndsWith("_AddFinalSalesReports", StringComparison.Ordinal),
-                "Review the rollback boundary before running this check against newer migrations.");
-            await db.GetService<IMigrator>().MigrateAsync(migrations[^2]);
-            await db.Database.MigrateAsync();
-            Console.WriteLine("PASS: final-sales-report migration upgrade and rollback/reapply on guarded clone.");
 
             var january = new DateOnly(1902, 1, 1);
             var february = january.AddMonths(1);
@@ -41,8 +35,7 @@ namespace Checks.MSAP
             var februaryEnd = february.AddMonths(1).AddDays(-1);
             await using (var transaction = await db.Database.BeginTransactionAsync())
             {
-                Check(!await db.MsapDispatchTickets.AnyAsync(t => t.Date.Year == january.Year)
-                    && !await db.MsapFinalSalesReports.AnyAsync(r => r.DateFrom.Year == january.Year),
+                Check(!await db.MsapDispatchTickets.AnyAsync(t => t.Date.Year == january.Year),
                     "Fixture period already contains data; use a fresh clone.");
                 var customer = await db.Customers.FirstAsync(c => c.Company == MsapConstants.Company_MMSI);
                 var vessel = await db.MsapVessels.FirstAsync();
@@ -141,8 +134,13 @@ namespace Checks.MSAP
                 };
                 await db.SaveChangesAsync();
                 db.ChangeTracker.Clear();
-                var replay = await ExportAsync(january, januaryEnd);
-                Check(januaryBytes.SequenceEqual(replay), "Persisted final January XLSX changed after confirmation.");
+                using (var package = new ExcelPackage(new MemoryStream(await ExportAsync(january, januaryEnd))))
+                {
+                    var sheet = package.Workbook.Worksheets[0];
+                    var row = FindRow(sheet, pending.DispatchNumber);
+                    Check(sheet.Cells[row, 33].Text == "Deferred to confirmation month"
+                        && sheet.Cells[row, 16, row, 32].All(c => c.Value == null), "Confirmation backfilled January financial amounts.");
+                }
                 using (var package = new ExcelPackage(new MemoryStream(await ExportAsync(february, februaryEnd))))
                 {
                     var sheet = package.Workbook.Worksheets[0];
@@ -153,10 +151,8 @@ namespace Checks.MSAP
                         && sheet.Cells[row, 15].Value == null, "Confirmation-month amounts or service counts differ.");
                     Check(!sheet.Cells.Any(c => c.Text == second.DispatchNumber), "Owned ticket was recognized again in its service month.");
                 }
-                Check(await db.MsapFinalSalesReports.CountAsync(r => r.DateFrom.Year == january.Year) == 2,
-                    "Final exports were not stored separately by date range.");
                 await transaction.RollbackAsync();
-                Console.WriteLine("PASS: PostgreSQL confirmation cutoff, owned billing-date selection and byte-identical final XLSX replay; fixture transaction rolled back.");
+                Console.WriteLine("PASS: PostgreSQL confirmation cutoff and owned billing-date selection; fixture transaction rolled back.");
 
                 Billing Bill(string suffix, decimal amount)
                 {
@@ -196,22 +192,6 @@ namespace Checks.MSAP
                     return ((FileContentResult)result).FileContents;
                 }
             }
-
-            var range = new DateOnly(1903, 1, 1);
-            Check(!await db.MsapFinalSalesReports.AnyAsync(r => r.DateFrom == range), "Concurrency fixture range is already used.");
-            var candidates = new[] { new byte[] { 1, 2, 3 }, new byte[] { 4, 5, 6 } };
-            var results = await Task.WhenAll(candidates.Select(async content =>
-            {
-                await using var concurrent = new MsapDbContext(options);
-                return await new ReportRepository(concurrent).SaveFinalSalesReportAsync(range, range, content, new DateTime(1903, 1, 2), default);
-            }));
-            Check(results[0].SequenceEqual(results[1]) && candidates.Any(c => c.SequenceEqual(results[0]))
-                && await db.MsapFinalSalesReports.CountAsync(r => r.DateFrom == range) == 1,
-                "Concurrent finalization returned different winners or created duplicate rows.");
-            Check(await db.MsapFinalSalesReports.Where(r => r.DateFrom == range).Select(r => r.GeneratedAt).SingleAsync() == new DateTime(1903, 1, 2),
-                "Finalization changed the local timestamp.");
-            await db.MsapFinalSalesReports.Where(r => r.DateFrom == range).ExecuteDeleteAsync();
-            Console.WriteLine("PASS: competing PostgreSQL finalizations return one immutable winner; concurrency fixture removed.");
         }
 
         private static int FindRow(ExcelWorksheet sheet, string dispatchNumber)

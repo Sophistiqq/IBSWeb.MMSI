@@ -29,12 +29,7 @@ namespace Checks.MSAP
                 ApOtherTugs = id == 3 ? 112m : 0m,
                 OtherTugChargeLine = id == 2 ? new OtherTugChargeLine { Charge = new OtherTugCharge { ConfirmedAt = new DateTime(2026, 10, 1) } } : null
             }).ToList();
-            var report = Proxy<IReportRepository>((method, arguments) => method.Name switch
-            {
-                nameof(IReportRepository.GetFinalSalesReportAsync) => Task.FromResult<byte[]?>(null),
-                nameof(IReportRepository.SaveFinalSalesReportAsync) => Task.FromResult((byte[])arguments![2]!),
-                _ => Task.FromResult(tickets)
-            });
+            var report = Proxy<IReportRepository>((_, _) => Task.FromResult(tickets));
             var tugs = Proxy<ITugboatRepository>((_, _) => Task.FromResult<IEnumerable<Tugboat>>([]));
             var owners = Proxy<ITugboatOwnerRepository>((_, _) => Task.FromResult<IEnumerable<TugboatOwner>>([]));
             var customers = Proxy<ICustomerRepository>((_, _) => Task.FromResult<IEnumerable<Customer>>([]));

@@ -35,7 +35,6 @@ namespace IBS.DataAccess.MSAP.Data
 
         #region --MSAP
         public DbSet<IBS.Models.MSAP.Books.SalesBook> MsapSalesBooks { get; set; }
-        public DbSet<FinalSalesReport> MsapFinalSalesReports { get; set; }
 
         public DbSet<Billing> MsapBillings { get; set; }
         public DbSet<Collection> MsapCollections { get; set; }
@@ -98,12 +97,6 @@ namespace IBS.DataAccess.MSAP.Data
             builder.Entity<Billing>().HasOne(b => b.BasicBilling).WithOne(b => b.BafBilling)
                 .HasForeignKey<Billing>(b => b.BasicBillingId).OnDelete(DeleteBehavior.Restrict);
             builder.Entity<Collection>().ToTable("mmsi_collections");
-            builder.Entity<FinalSalesReport>(report =>
-            {
-                report.ToTable("mmsi_final_sales_reports");
-                report.HasKey(x => new { x.DateFrom, x.DateTo });
-                report.Property(x => x.GeneratedAt).HasColumnType("timestamp without time zone");
-            });
             builder.Entity<OtherTugCharge>(charge =>
             {
                 charge.ToTable("mmsi_other_tug_charges", table => table.HasCheckConstraint("ck_other_tug_charge_confirmation",
