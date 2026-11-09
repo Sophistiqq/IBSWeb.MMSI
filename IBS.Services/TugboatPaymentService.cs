@@ -274,16 +274,36 @@ namespace IBS.Services
                     }
                     owner = source.Owner;
                     List<OtherTugChargeLine> selected = source.Charge.Lines.Where(line => form.AllocationIds.Contains(line.OtherTugChargeLineId)).ToList();
-                    Dictionary<int, (decimal Gross, decimal Withholding)> amounts = AllocationAmounts(source.Charge, Calculate(owner, source.Charge));
+                    var billTotals = Calculate(owner, source.Charge);
+                    Dictionary<int, (decimal Gross, decimal Withholding)> amounts = AllocationAmounts(source.Charge, billTotals);
                     if (selected.Any(line => line.Amount <= 0 || amounts[line.OtherTugChargeLineId].Gross <= 0)
                         || await _db.FilprideTugboatPaymentAllocations.AnyAsync(a => form.AllocationIds.Contains(a.OtherTugChargeLineId) && a.ReleasedAt == null, ct))
                     {
                         throw new InvalidOperationException("A selected ticket has no payable amount or is already reserved by another voucher.");
                     }
+                    int? liabilityId = null;
+                    var liabilitySnapshot = "";
+                    if (selected.Count == source.Charge.Lines.Count)
+                    {
+                        liabilityId = await _db.FilprideJournalVoucherHeaders.AsNoTracking()
+                            .Where(j => j.WorkspaceTugboatId == null && j.Payee == owner.TugboatOwnerName
+                                && j.References == source.Charge.ProviderReference && j.PostedBy != null && j.ApprovedBy != null
+                                && j.CanceledBy == null && j.VoidedBy == null && j.Date <= form.Date
+                                && !_db.FilprideTugboatPayments.Any(p => p.LiabilityJournalVoucherId == j.JournalVoucherHeaderId && p.ReleasedAt == null))
+                            .OrderByDescending(j => j.JournalVoucherHeaderId)
+                            .Select(j => (int?)j.JournalVoucherHeaderId)
+                            .FirstOrDefaultAsync(ct);
+                        if (liabilityId.HasValue)
+                        {
+                            liabilitySnapshot = await ValidateLiabilityAsync(liabilityId.Value, owner.TugboatOwnerName, source.Charge.ProviderReference, billTotals.Gross, form.Date, ct);
+                        }
+                    }
                     payments.Add(new FilprideTugboatPayment
                     {
                         OtherTugChargeId = chargeId,
                         TugboatOwnerId = form.OwnerId,
+                        LiabilityJournalVoucherId = liabilityId,
+                        LiabilitySnapshot = liabilitySnapshot,
                         ChargeRevision = source.Charge.Revision,
                         ProviderReference = source.Charge.ProviderReference,
                         SourceSnapshot = Snapshot(source.Charge),
@@ -342,7 +362,6 @@ namespace IBS.Services
                     TugboatPayments = payments
                 };
                 CheckVoucherDocumentationService.Apply(voucher, form.Documentation);
-                // shortcut: initial AP recognition is deferred by user decision until Finance resolves IBS-8.
                 await AddDetailAsync(voucher, ApAccount, gross, 0, ct);
                 await AddDetailAsync(voucher, CashAccount, 0, voucher.CheckAmount, ct);
                 if (withholding > 0)
@@ -357,7 +376,7 @@ namespace IBS.Services
                     voucher.SupportingFileSavedUrl = await _storage.UploadFileAsync(file, uploaded);
                 }
                 await _db.SaveChangesAsync(ct);
-                await _db.FilprideAuditTrails.AddAsync(new FilprideAuditTrail(actor, $"Created AP Other Tugs voucher {number}; tickets {string.Join(",", form.AllocationIds.Order())}; direct payment; initial recognition deferred", "Check Voucher"), ct);
+                await _db.FilprideAuditTrails.AddAsync(new FilprideAuditTrail(actor, $"Created AP Other Tugs voucher {number}; tickets {string.Join(",", form.AllocationIds.Order())}", "Check Voucher"), ct);
                 await _db.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
                 return voucher.CheckVoucherHeaderId;

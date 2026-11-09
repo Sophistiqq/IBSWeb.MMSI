@@ -66,7 +66,39 @@ namespace Checks.MSAP
                 "Another bill's unrelated allocation was offered.");
             var line = db.Model.FindEntityType(typeof(OtherTugChargeLine))!;
             Check(line.GetIndexes().Any(index => index.IsUnique && index.Properties.Single().Name == nameof(OtherTugChargeLine.DispatchTicketId)), "Ticket allocation uniqueness is missing.");
-            Console.WriteLine("PASS: VAT-inclusive default, COS-scoped allocation choices, existing allocation preservation, provider allocation validation, pending/confirmed zero, document boundaries, company-scoped query translation and unique ticket allocation (no database).");
+            var vatableOwner = new TugboatOwner
+            {
+                TugboatOwnerNumber = "V01",
+                TugboatOwnerName = "Vatable Provider",
+                Address = "Address",
+                Tin = "000-000-000-00000",
+                VatType = "Vatable",
+                TaxType = "Withholding Tax",
+                WithholdingTaxPercent = 0.02m
+            };
+            var exemptOwner = new TugboatOwner
+            {
+                TugboatOwnerNumber = "E01",
+                TugboatOwnerName = "Exempt Provider",
+                Address = "Address",
+                Tin = "000-000-000-00000",
+                VatType = "Exempt",
+                TaxType = "Exempt"
+            };
+            var bill = new OtherTugCharge
+            {
+                IncludesVat = true,
+                Lines = [new OtherTugChargeLine { DispatchTicketId = 1, Amount = 1120m }]
+            };
+            Check(OtherTugChargeService.CalculateRecognition(vatableOwner, bill) == (1120m, 1000m, 120m),
+                "VAT-inclusive recognition split is wrong.");
+            bill.IncludesVat = false;
+            bill.Lines[0].Amount = 1000m;
+            Check(OtherTugChargeService.CalculateRecognition(vatableOwner, bill) == (1120m, 1000m, 120m),
+                "VAT-exclusive recognition split is wrong.");
+            Check(OtherTugChargeService.CalculateRecognition(exemptOwner, bill) == (1000m, 1000m, 0m),
+                "Non-vatable recognition split is wrong.");
+            Console.WriteLine("PASS: VAT-inclusive default, COS-scoped allocation choices, existing allocation preservation, provider allocation validation, recognition VAT split, pending/confirmed zero, document boundaries, company-scoped query translation and unique ticket allocation (no database).");
         }
 
         private static void Check(bool condition, string message)

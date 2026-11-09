@@ -10,6 +10,7 @@ using IBS.Models.Filpride.MasterFile;
 using IBS.Models.Filpride.ViewModels;
 using IBS.Models.MSAP;
 using IBS.Services;
+using IBS.Services.MSAP;
 using IBS.Utility;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -245,6 +246,7 @@ namespace Checks.MSAP
                 && (await service.GetAsync(active, default))!.CanceledBy == null,
                 "A rejected non-trade request changed the provider reservation.");
             await CheckMultipleTicketsAsync();
+            await CheckConfirmedLiabilityRecognitionAsync();
             var workspace = new TugboatWorkspace();
             workspace.Select(await source.MsapTugboats.Where(t => t.IsCompanyOwned).Select(t => t.TugboatId).FirstAsync(), "Check tugboat");
             await using (var scoped = new ApplicationDbContext(options, workspace))
@@ -357,6 +359,77 @@ namespace Checks.MSAP
                 Console.WriteLine("PASS: individual tickets across provider bills, unchecked remainder payment, mixed VAT, cumulative rounding, wrong-owner/forged/duplicate IDs, multi-ticket posting/rebuild/unpost/void/cancel and safe rollback guard.");
             }
 
+            async Task CheckConfirmedLiabilityRecognitionAsync()
+            {
+                if (!await db.FilprideChartOfAccounts.AnyAsync(a => a.AccountNumber == OtherTugChargeService.ContraRevenueAccount))
+                {
+                    db.FilprideChartOfAccounts.Add(new FilprideChartOfAccount
+                    {
+                        AccountNumber = OtherTugChargeService.ContraRevenueAccount,
+                        AccountName = "Services by Other Tugs",
+                        AccountType = "Revenue",
+                        NormalBalance = "Credit",
+                        Level = 4,
+                        FinancialStatementType = "PnL",
+                        CreatedBy = "Payment check"
+                    });
+                    await db.SaveChangesAsync();
+                }
+                var actor = await source.Users.FirstAsync(u => u.IsActive && u.Name != null && u.Name != "");
+                var entry = (VesselScheduleServiceEntry)source.Entry(ticket.ExpectedServiceEntry!).CurrentValues.ToObject();
+                entry.VesselScheduleServiceEntryId = 0;
+                source.Add(entry);
+                await source.SaveChangesAsync();
+                var confirmTicket = (DispatchTicket)source.Entry(ticket).CurrentValues.ToObject();
+                confirmTicket.DispatchTicketId = 0;
+                confirmTicket.AccountingSourceId = Guid.NewGuid();
+                confirmTicket.DispatchNumber = "CF" + Guid.NewGuid().ToString("N")[..16];
+                confirmTicket.VesselScheduleServiceEntryId = entry.VesselScheduleServiceEntryId;
+                source.Add(confirmTicket);
+                await source.SaveChangesAsync();
+                var confirmRef = reference + "-CONF";
+                var draftCharge = new OtherTugCharge
+                {
+                    TugboatOwnerId = owner.TugboatOwnerId,
+                    ProviderName = owner.TugboatOwnerName,
+                    ProviderReference = confirmRef,
+                    DocumentDate = DateOnly.FromDateTime(DateTime.Today),
+                    IncludesVat = true,
+                    Revision = 1,
+                    PreparedByName = actor.Name!,
+                    PreparedByUserId = actor.Id,
+                    UpdatedAt = DateTime.Today,
+                    Lines = [new OtherTugChargeLine { DispatchTicketId = confirmTicket.DispatchTicketId, Amount = 1120m }]
+                };
+                source.Add(draftCharge);
+                await source.SaveChangesAsync();
+                var chargeService = new OtherTugChargeService(source, storage, NullLogger<OtherTugChargeService>.Instance);
+                var confirmed = await chargeService.ConfirmAsync(draftCharge.OtherTugChargeId, 1, actor.Id, default);
+                Check(confirmed.IsSuccess, confirmed.Message ?? "Provider charge confirmation failed.");
+                var jv = await db.FilprideJournalVoucherHeaders.AsNoTracking().Include(j => j.Details)
+                    .SingleOrDefaultAsync(j => j.References == confirmRef && j.Payee == owner.TugboatOwnerName);
+                Check(jv != null && jv.PostedBy != null && jv.ApprovedBy != null && jv.Details!.Count == 3,
+                    "ConfirmAsync did not create and post the contra-revenue/Input VAT/AP recognition journal.");
+                var jvGl = await db.FilprideGeneralLedgerBooks.AsNoTracking().Where(g => g.Reference == jv!.JournalVoucherHeaderNo).ToListAsync();
+                Check(jvGl.Count == 3
+                    && jvGl.Single(g => g.AccountNo == OtherTugChargeService.ContraRevenueAccount).Debit == 1000m
+                    && jvGl.Single(g => g.AccountNo == OtherTugChargeService.InputVatAccount).Debit == 120m
+                    && jvGl.Single(g => g.AccountNo == TugboatPaymentService.ApAccount).Credit == 1120m,
+                    "Recognition journal GL entries did not match 1000 net contra-revenue + 120 Input VAT = 1120 AP.");
+                var linkedForm = Form();
+                linkedForm.AllocationIds = draftCharge.Lines.Select(l => l.OtherTugChargeLineId).ToArray();
+                linkedForm.Date = jv!.Date > linkedForm.Date ? jv.Date : linkedForm.Date;
+                linkedForm.CheckDate = linkedForm.Date;
+                var linkedCvId = await service.CreateAsync(linkedForm, null, "Payment check", default);
+                var linkedCv = (await service.GetAsync(linkedCvId, default))!;
+                Check(linkedCv.TugboatPayments.Single().LiabilityJournalVoucherId == jv.JournalVoucherHeaderId
+                    && !string.IsNullOrEmpty(linkedCv.TugboatPayments.Single().LiabilitySnapshot),
+                    "Payment for a confirmed bill with a recognition JV did not link LiabilityJournalVoucherId and LiabilitySnapshot.");
+                await service.ChangeStatusAsync(linkedCvId, "Post", "Payment check", null, default);
+                await service.ChangeStatusAsync(linkedCvId, "Void", "Payment check", "Cleanup linked recognition check", default);
+                Console.WriteLine("PASS: ConfirmAsync creates and posts contra-revenue/Input VAT/AP recognition JV and links LiabilityJournalVoucherId on payment.");
+            }
+
             ApplicationDbContext Open()
             {
                 return new ApplicationDbContext(options);
@@ -426,7 +499,7 @@ namespace Checks.MSAP
             { throw new InvalidOperationException(message); }
         }
 
-        private sealed class Storage: ICloudStorageService
+        private sealed class Storage: IBS.Services.ICloudStorageService, IBS.Services.MSAP.ICloudStorageService
         {
             public bool Fail { get; set; }
             public bool Deleted { get; private set; }
