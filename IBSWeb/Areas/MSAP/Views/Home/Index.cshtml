@@ -4,11 +4,36 @@
     ViewData["IsFullWidth"] = Model.ShowDashboard;
     var day = Model.UpdatedAt.Date;
     var dateValue = day.ToString("yyyy-MM-dd");
-    bool hasReviews = Model.CanApproveSchedule || Model.CanApproveRates || Model.CanApproveBilling
-        || Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges;
+
+    int opsActionCount = (Model.CanApproveSchedule ? Model.ScheduleReviews : 0)
+        + (Model.CanFollowUpTickets ? Model.MissingTicketCount : 0);
+
+    int billingActionCount = (Model.CanApproveBilling ? Model.ForPosting : 0)
+        + (Model.CanApproveRates ? Model.RateUploadReviews : 0)
+        + (Model.CanReviewCalculations ? Model.PendingCalculationCount : 0)
+        + (Model.CanViewBanking ? Model.BankingCounts.GetValueOrDefault("Returned") : 0);
+
+    int approvalsActionCount = (Model.CanApproveSchedule ? Model.ScheduleReviews : 0)
+        + (Model.CanApproveBilling ? Model.ForPosting : 0)
+        + (Model.CanApproveRates ? Model.RateUploadReviews : 0)
+        + ((Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges) ? Model.OtherTugChargeReviewCount : 0);
+
+    int apActionCount = ((Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges) ? Model.OtherTugChargeReviewCount : 0)
+        + (Model.CanManageOtherTugCharges ? Model.MissingOtherTugTicketCount : 0);
+
+    int totalActionCount = 0;
+    if (Model.CanApproveSchedule) totalActionCount += Model.ScheduleReviews;
+    if (Model.CanApproveBilling) totalActionCount += Model.ForPosting;
+    if (Model.CanApproveRates) totalActionCount += Model.RateUploadReviews;
+    if (Model.CanFollowUpTickets) totalActionCount += Model.MissingTicketCount;
+    if (Model.CanReviewCalculations) totalActionCount += Model.PendingCalculationCount;
+    if (Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges) totalActionCount += Model.OtherTugChargeReviewCount;
+    if (Model.CanManageOtherTugCharges) totalActionCount += Model.MissingOtherTugTicketCount;
+    if (Model.CanViewBanking) totalActionCount += Model.BankingCounts.GetValueOrDefault("Returned");
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/modern-dashboard.css" asp-append-version="true" />
+
 @if (!Model.ShowDashboard)
 {
     <div class="container text-center my-5">
@@ -21,373 +46,713 @@ else
 {
     <div class="modern-layout">
         <main class="app-ui dashboard-workspace ui-stack">
+            <!-- PAGE HEADER -->
             <header class="ui-page-header dashboard-header">
                 <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Dashboard</li></ol></nav>
-                <h1 class="ui-page-title" data-page-header>Maritime dashboard</h1>
-                @if (Model.CanViewDispatch || Model.CanCreateSchedule || Model.CanViewBilling || Model.CanViewCollections)
-                {
-                    <div class="ui-page-action dashboard-actions ui-actions">
-                        @if (Model.CanViewDispatch)
-                        {
-                            <a asp-controller="VesselSchedule" asp-action="Index" asp-route-date="@dateValue" class="modern-btn-secondary ui-button">Open calendar</a>
-                        }
-                        @if (Model.CanCreateSchedule)
-                        {
-                            <a asp-controller="VesselSchedule" asp-action="Create" asp-route-date="@dateValue" class="modern-btn-primary ui-button ui-button--primary">+ Create schedule</a>
-                        }
-                        @if (Model.CanViewBilling)
-                        {
-                            <a asp-controller="Billing" asp-action="Index" class="modern-btn-secondary ui-button">Open billing</a>
-                        }
-                        @if (Model.CanViewCollections)
-                        {
-                            <a asp-controller="Collection" asp-action="Index" class="modern-btn-secondary ui-button">Open collections</a>
-                        }
-                    </div>
-                }
+                <h1 class="ui-page-title" data-page-header>Maritime Dashboard</h1>
+                <div class="ui-page-action dashboard-actions ui-actions">
+                    @if (Model.CanCreateSchedule)
+                    {
+                        <a asp-controller="VesselSchedule" asp-action="Create" asp-route-date="@dateValue" class="modern-btn-primary ui-button ui-button--primary"><span class="material-symbols-outlined">add</span> Create schedule</a>
+                    }
+                    @if (Model.CanViewDispatch)
+                    {
+                        <a asp-controller="VesselSchedule" asp-action="Index" asp-route-date="@dateValue" class="modern-btn-secondary ui-button">Open calendar</a>
+                    }
+                    @if (Model.CanCreateBilling)
+                    {
+                        <a asp-controller="Billing" asp-action="Create" class="modern-btn-secondary ui-button"><span class="material-symbols-outlined">add</span> Create bill</a>
+                    }
+                    @if (Model.CanViewBilling)
+                    {
+                        <a asp-controller="Billing" asp-action="Index" class="modern-btn-secondary ui-button">Open billing</a>
+                    }
+                    @if (Model.CanCreateCollection)
+                    {
+                        <a asp-controller="Collection" asp-action="Create" class="modern-btn-secondary ui-button"><span class="material-symbols-outlined">add</span> Record collection</a>
+                    }
+                    @if (Model.CanViewCollections)
+                    {
+                        <a asp-controller="Collection" asp-action="Index" class="modern-btn-secondary ui-button">Open collections</a>
+                    }
+                </div>
                 <p class="ui-page-description ui-caption ui-muted"><span class="dashboard-status">MMSI</span> @day.ToString("dddd, dd MMM yyyy") · Philippine time · Updated @Model.UpdatedAt.ToString("HH:mm") <a asp-action="Index">Refresh</a></p>
             </header>
 
-            <p class="dashboard-state-key ui-caption" aria-label="Workflow color guide"><span class="ui-status ui-attention">Follow-up / review</span><span class="ui-status ui-critical">Blocked / conflict</span><span class="ui-muted">Open a record to see its next action.</span></p>
-            @if (Model.CanViewRates)
-            {
-                <section class="ui-panel dashboard-rate ui-row" aria-label="Rate updates">
-                    <div><h2 class="ui-section-title">Tariff / BAF rate maintenance</h2><p class="ui-caption ui-muted">@(Model.CanManageRates ? "Rates apply by service date. Edit tariff and BAF separately, then submit selected changes for approval." : Model.CanApproveRates ? "Review submitted rate changes and their effective dates before approval." : "View applicable tariff and BAF rates, dated history and exports.")</p></div>
-                    <a asp-controller="RateUpload" asp-action="Index" class="modern-btn-secondary ui-button">View rate updates</a>
-                </section>
-            }
             @if (Model.DataError != null)
             {
                 <p class="ui-panel dashboard-notice ui-critical" role="alert">@Model.DataError</p>
             }
-            else if (hasReviews)
-            {
-                <section class="dashboard-approvals" aria-label="Follow-ups and approvals across all dates">
-                    @if (Model.CanManageOtherTugCharges)
-                    {
-                        <article class="ui-panel dashboard-metric @(Model.MissingOtherTugTicketCount > 0 ? "ui-attention" : "")">
-                            <h2 class="ui-section-title">AP Other Tugs · Missing inputs</h2><strong>@Model.MissingOtherTugTicketCount.ToString("N0")</strong>
-                            <p class="ui-caption ui-muted">Actual tickets needing provider costs · All dates</p>
-                            <a href="#missing-provider-costs" class="modern-btn-secondary ui-button">Record AP Other Tugs</a>
-                        </article>
-                    }
-                    @if (Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges)
-                    {
-                        <article class="ui-panel dashboard-metric @(Model.OtherTugChargeReviewCount > 0 ? "ui-attention" : "")">
-                            <h2 class="ui-section-title">AP Other Tugs · For confirmation</h2><strong>@Model.OtherTugChargeReviewCount.ToString("N0")</strong>
-                            <p class="ui-caption ui-muted">Provider bills awaiting confirmation · All dates</p>
-                            <a href="#provider-charge-reviews" class="modern-btn-secondary ui-button">@(Model.CanConfirmOtherTugCharges ? "Review AP Other Tugs" : "Open AP Other Tugs drafts")</a>
-                        </article>
-                    }
-                    @if (Model.CanApproveSchedule)
-                    {
-                        <article class="ui-panel dashboard-metric @(Model.ScheduleReviews > 0 ? "ui-attention" : "")">
-                            <h2 class="ui-section-title">Schedule / COS approvals</h2><strong>@Model.ScheduleReviews.ToString("N0")</strong>
-                            <p class="ui-caption ui-muted">Includes @Model.ScheduleReapprovals reapprovals · All open reviews</p>
-                            <a href="#schedule-reviews" class="modern-btn-secondary ui-button">Review schedules</a>
-                        </article>
-                    }
-                    @if (Model.CanApproveRates)
-                    {
-                        <article class="ui-panel dashboard-metric @(Model.RateUploadReviews > 0 ? "ui-attention" : "")">
-                            <h2 class="ui-section-title">Rate updates for review</h2><strong>@Model.RateUploadReviews.ToString("N0")</strong>
-                            <p class="ui-caption ui-muted">Submitted comparisons · All dates</p>
-                            <a asp-controller="RateUpload" asp-action="Index" asp-route-awaitingReview="true" class="modern-btn-secondary ui-button">Review rate updates</a>
-                        </article>
-                    }
-                    @if (Model.CanApproveBilling)
-                    {
-                        <article class="ui-panel dashboard-metric @(Model.ForPosting > 0 ? "ui-attention" : "")">
-                            <h2 class="ui-section-title">Final bill approvals</h2><strong>@Model.ForPosting.ToString("N0")</strong>
-                            <p class="ui-caption ui-muted">Numbered bills awaiting review · All dates</p>
-                            <a href="#billing-reviews" class="modern-btn-secondary ui-button">Review bills</a>
-                        </article>
-                    }
-                </section>
-            }
 
-            @if (Model.CanViewDispatch)
-            {
-            <section class="ui-stack" aria-labelledby="operations-heading">
-                <div class="dashboard-heading ui-row"><h2 id="operations-heading" class="ui-section-title">Operations · Today</h2><span class="ui-caption ui-muted">@day.ToString("dd MMM yyyy")</span></div>
-                @if (Model.ScheduleError != null)
-                {
-                    <p class="ui-panel dashboard-notice ui-critical" role="alert">@Model.ScheduleError</p>
-                }
-                else
-                {
-                    <div class="dashboard-stats">
-                        <article class="ui-panel dashboard-stat"><h3>Scheduled today</h3><strong>@Model.ScheduleCount</strong><p>@Model.ConfirmedToday confirmed / in service / completed · @(Model.ScheduleCount - Model.ConfirmedToday) awaiting review</p></article>
-                        <article class="ui-panel dashboard-stat @(Model.NeedingTugs > 0 ? "ui-attention" : "")"><h3>Bookings needing tugs</h3><strong>@Model.NeedingTugs</strong><p>Within today's active plans</p></article>
-                        @if (Model.CanFollowUpTickets && Model.DataError == null)
-                        {
-                            <article class="ui-panel dashboard-stat @(Model.MissingTicketCount > 0 ? "ui-attention" : "")"><h3>COS with missing tickets</h3><strong>@Model.MissingTicketCount</strong><p>Open services started by now</p></article>
-                        }
-                        <article class="ui-panel dashboard-stat @(Model.DueBookings > 0 ? "ui-attention" : "")"><h3>Bookings due awaiting review</h3><strong>@Model.DueBookings</strong><p>Within today's plans</p></article>
+            <!-- TWO-COLUMN WORKSPACE: ACTION SIDEBAR + MAIN OPERATIONAL WORKSPACE -->
+            <div class="dashboard-layout-grid">
+                <!-- LEFT COLUMN: ACTION SIDEBAR / NEXT ACTIONS -->
+                <aside class="dashboard-sidebar ui-stack" aria-labelledby="sidebar-actions-heading">
+                    <div class="dashboard-sidebar-header">
+                        <h2 id="sidebar-actions-heading" class="dashboard-sidebar-title">Next Actions</h2>
+                        <span class="dashboard-sidebar-badge">@totalActionCount</span>
                     </div>
-                }
-                <div class="dashboard-main">
-                    <section class="ui-panel ui-stack" aria-labelledby="vessel-heading">
-                        <h2 id="vessel-heading" class="ui-section-title">Today's vessel schedules</h2>
-                        @if (Model.ScheduleError != null)
-                        {
-                            <p class="ui-caption ui-muted">Schedule information is unavailable.</p>
-                        }
-                        else if (Model.Schedules.Count == 0)
-                        {
-                            <p class="dashboard-empty">No vessel schedules for today.</p>
-                        }
-                        else
-                        {
-                            <div class="dashboard-table-wrap">
-                                <table class="dashboard-table">
-                                    <caption class="visually-hidden">Up to six schedules overlapping today, Philippine time</caption>
-                                    <thead><tr><th scope="col">Planned time</th><th scope="col">Vessel / location</th><th scope="col">Status</th><th scope="col">Tugs</th><th scope="col">Action</th></tr></thead>
-                                    <tbody>
-                                    @foreach (var schedule in Model.Schedules)
-                                    {
-                                        <tr class="@(Model.ConflictingScheduleIds.Contains(schedule.VesselScheduleId) ? "ui-critical" : schedule.Status != MsapConstants.VesselScheduleStatus.Completed && (schedule.Status == MsapConstants.VesselScheduleStatus.Tentative || Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) < schedule.RequiredTugCount) ? "ui-attention" : "")">
-                                            <td class="dashboard-window">@schedule.PlannedStart.ToString(schedule.PlannedStart.Date == day ? "HH:mm" : "dd MMM HH:mm") – @schedule.PlannedEnd.ToString(schedule.PlannedEnd.Date == day ? "HH:mm" : "dd MMM HH:mm")</td>
-                                            <td>@schedule.Vessel.VesselName<small>@schedule.Port.PortName · @schedule.Terminal.TerminalName</small></td>
-                                            <td><span class="dashboard-status">@(schedule.Status == MsapConstants.VesselScheduleStatus.Tentative ? "Awaiting review" : MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status))</span>@if (Model.ConflictingScheduleIds.Contains(schedule.VesselScheduleId)) { <small><span class="ui-status ui-critical">Overlap · needs review</span></small> }</td>
-                                            <td>@Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.RequiredTugCount</td>
-                                            <td><a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId" aria-label="Open @schedule.Vessel.VesselName schedule">Open</a></td>
-                                        </tr>
-                                    }
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div class="dashboard-heading ui-row ui-caption"><span class="ui-muted">Showing @Model.Schedules.Count of @Model.ScheduleCount plans · @Model.ConflictingScheduleIds.Count with overlaps</span><a asp-controller="VesselSchedule" asp-action="Index" asp-route-date="@dateValue">View day in calendar</a></div>
-                        }
-                    </section>
-                    <section class="ui-panel ui-stack" aria-labelledby="upcoming-heading">
-                        <h2 id="upcoming-heading" class="ui-section-title">Upcoming vessels · Next 7 days</h2>
-                        @if (Model.ScheduleError != null)
-                        {
-                            <p class="ui-caption ui-muted">Schedule information is unavailable.</p>
-                        }
-                        else if (Model.UpcomingSchedules.Count == 0)
-                        {
-                            <p class="dashboard-empty">No upcoming vessels in the next seven days.</p>
-                        }
-                        else
-                        {
-                            <ul class="dashboard-upcoming">
-                                @foreach (var schedule in Model.UpcomingSchedules)
-                                {
-                                    <li><span class="ui-caption ui-muted">@schedule.PlannedStart.ToString("ddd dd MMM · HH:mm")</span><div class="dashboard-heading ui-row"><a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId">@schedule.Vessel.VesselName · @schedule.Terminal.TerminalName</a><span class="ui-caption ui-muted">@Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.RequiredTugCount tugs</span></div></li>
-                                }
-                            </ul>
-                        }
-                        <a asp-controller="VesselSchedule" asp-action="Index" class="dashboard-end-link">Open schedule calendar</a>
-                    </section>
-                </div>
-            </section>
 
-            }
-            @if (Model.CanViewFinance && Model.DataError == null)
-            {
-                <section class="ui-stack" aria-labelledby="finance-heading">
-                    <div class="dashboard-heading ui-row"><h2 id="finance-heading" class="ui-section-title">Finance overview</h2><span class="ui-caption ui-muted">@day.ToString("MMMM yyyy") · Month to date / All open</span></div>
-                    <div class="dashboard-stats">
-                        @if (Model.CanViewBilling)
+                    <!-- Redesigned Segmented Filter Tabs -->
+                    <div class="dashboard-filter-tabs" role="tablist" aria-label="Action categories">
+                        <button type="button" class="dashboard-filter-tab active" data-sidebar-filter="all" role="tab" aria-selected="true">
+                            All <span class="dashboard-filter-badge">@totalActionCount</span>
+                        </button>
+                        @if (opsActionCount > 0 || Model.CanViewDispatch)
                         {
-                            <article class="ui-panel dashboard-stat"><h3>Billed this month</h3><strong>@Model.BilledMonth.ToString("N2")</strong><p>PHP · Posted bills · 1–@day.Day @day.ToString("MMM")</p></article>
-                            <article class="ui-panel dashboard-stat"><h3>Known unbilled service charges</h3><strong>@Model.KnownUnbilledCharges.ToString("N2")</strong><p>PHP · All open calculated tickets · Calculated ticket amounts after discounts</p></article>
+                            <button type="button" class="dashboard-filter-tab" data-sidebar-filter="ops" role="tab" aria-selected="false">
+                                Operations <span class="dashboard-filter-badge">@opsActionCount</span>
+                            </button>
                         }
-                        @if (Model.CanViewCollections)
+                        @if (billingActionCount > 0 || Model.CanViewBilling)
                         {
-                            <article class="ui-panel dashboard-stat"><h3>Received this month</h3><strong>@Model.ReceivedMonth.ToString("N2")</strong><p>PHP · Cash / check receipts · Excludes withholding · Includes uncleared checks</p></article>
+                            <button type="button" class="dashboard-filter-tab" data-sidebar-filter="billing" role="tab" aria-selected="false">
+                                Billing <span class="dashboard-filter-badge">@billingActionCount</span>
+                            </button>
                         }
-                        <article class="ui-panel dashboard-stat"><h3>Outstanding gross balance</h3><strong>@Model.OutstandingBalance.ToString("N2")</strong><p>PHP · All posted bills · Current stored balances</p></article>
+                        @if (approvalsActionCount > 0 || Model.CanApproveSchedule || Model.CanApproveBilling)
+                        {
+                            <button type="button" class="dashboard-filter-tab" data-sidebar-filter="approvals" role="tab" aria-selected="false">
+                                Approvals <span class="dashboard-filter-badge">@approvalsActionCount</span>
+                            </button>
+                        }
+                        @if (apActionCount > 0 || Model.CanManageOtherTugCharges)
+                        {
+                            <button type="button" class="dashboard-filter-tab" data-sidebar-filter="aptugs" role="tab" aria-selected="false">
+                                AP Tugs <span class="dashboard-filter-badge">@apActionCount</span>
+                            </button>
+                        }
                     </div>
-                    @if (Model.CanViewBanking)
-                    {
-                        <div class="ui-panel dashboard-banking">
-                            @foreach (var item in new[] { (Key: "Deposit", Label: "For deposit"), (Key: "Clearing", Label: "Awaiting clearing"), (Key: "Returned", Label: "Returned checks") })
+
+                    <!-- Action Items List (Separated Individual Items with Hover Details) -->
+                    <div class="dashboard-action-list">
+                        @* 1. Schedule Review Items *@
+                        @if (Model.CanApproveSchedule)
+                        {
+                            @foreach (var schedule in Model.ScheduleReviewItems)
                             {
-                                <div class="@(Model.BankingCounts.GetValueOrDefault(item.Key) > 0 ? item.Key == "Returned" ? "ui-critical" : "ui-attention" : "")"><span class="ui-caption ui-muted">@item.Label</span><strong>@Model.BankingCounts.GetValueOrDefault(item.Key) receipts · PHP @Model.BankingAmounts.GetValueOrDefault(item.Key).ToString("N2")</strong></div>
+                                <article class="dashboard-action-item ui-attention" data-categories="ops approvals" data-hover-id="hover-schedule-@schedule.VesselScheduleId">
+                                    <div class="dashboard-action-item-header">
+                                        <span class="dashboard-action-item-ref">Booking #@schedule.VesselScheduleId</span>
+                                        <span class="dashboard-action-item-badge">@(schedule.ApprovedRevision.HasValue ? "Reapproval" : "Tentative")</span>
+                                    </div>
+                                    <div class="dashboard-action-item-main">
+                                        <div class="dashboard-action-item-title">@(schedule.Vessel?.VesselName ?? $"Booking #{schedule.VesselScheduleId}")</div>
+                                    </div>
+                                    <div class="dashboard-action-item-meta">
+                                        @(schedule.Customer?.CustomerName ?? "Customer pending")@(schedule.Port != null ? $" · {schedule.Port.PortName}" : "")
+                                    </div>
+                                    <div class="dashboard-action-item-footer">
+                                        <span class="dashboard-action-item-hint">@schedule.PlannedStart.ToString("dd MMM HH:mm") · @Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId)/@schedule.RequiredTugCount tugs</span>
+                                        <a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId" class="dashboard-action-item-btn">Review &rarr;</a>
+                                    </div>
+                                </article>
                             }
-                        </div>
-                        <a asp-controller="Collection" asp-action="Index" class="ui-caption">Open banking follow-up</a>
-                    }
-                    @if (Model.CanViewBilling)
-                    {
-                        <p class="ui-caption ui-muted">Pending calculations are excluded from known unbilled charges; pending amounts are never presented as zero.</p>
-                    }
-                </section>
-            }
+                        }
 
-            @if (hasReviews && Model.DataError == null)
-            {
-                <section class="ui-panel ui-stack" aria-labelledby="review-heading">
-                    <h2 id="review-heading" class="ui-section-title">Awaiting your review</h2>
-                    @if (Model.CanApproveSchedule)
-                    {
-                        <div id="schedule-reviews" class="ui-stack dashboard-review">
-                            <div class="dashboard-heading ui-row"><h3 class="ui-label">Schedules / COS (@Model.ScheduleReviews)</h3><a asp-controller="VesselSchedule" asp-action="Index" asp-route-status="@MsapConstants.VesselScheduleStatus.Tentative" class="ui-caption">All schedule reviews</a></div>
-                            <div class="dashboard-table-wrap">
-                                <table class="dashboard-table">
-                                    <thead><tr><th scope="col">Reference</th><th scope="col">Customer / vessel</th><th scope="col">Requested review</th><th scope="col">Submitted / updated</th><th scope="col">Action</th></tr></thead>
-                                    <tbody>
-                                    @foreach (var schedule in Model.ScheduleReviewItems)
-                                    {
-                                        <tr class="ui-attention"><td>Booking #@schedule.VesselScheduleId</td><td>@(schedule.Customer?.CustomerName ?? "Customer pending")<small>@schedule.Vessel.VesselName</small></td><td>@(schedule.ApprovedRevision.HasValue ? "COS reapproval" : schedule.CustomerOrderSlipId.HasValue ? "Urgent · Awaiting approval" : "New booking")</td><td>@((schedule.EditedDate ?? schedule.CreatedDate).ToString("dd MMM, HH:mm"))</td><td><a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId">Review</a></td></tr>
-                                    }
-                                    @if (Model.ScheduleReviewItems.Count == 0) { <tr><td colspan="5" class="dashboard-empty">No schedules awaiting your review.</td></tr> }
-                                    </tbody>
-                                </table>
-                            </div>
-                            <p class="ui-caption ui-muted">Showing @Model.ScheduleReviewItems.Count of @Model.ScheduleReviews open reviews.</p>
+                        @* 2. Final Bill Review Items *@
+                        @if (Model.CanApproveBilling)
+                        {
+                            @foreach (var bill in Model.BillingReviewItems)
+                            {
+                                <article class="dashboard-action-item ui-attention" data-categories="billing approvals" data-hover-id="hover-bill-@bill.MsapBillingId">
+                                    <div class="dashboard-action-item-header">
+                                        <span class="dashboard-action-item-ref">Bill @bill.MsapBillingNumber</span>
+                                        <span class="dashboard-action-item-badge">For Posting</span>
+                                    </div>
+                                    <div class="dashboard-action-item-main">
+                                        <div class="dashboard-action-item-title">@(bill.Customer?.CustomerName ?? "Customer pending")</div>
+                                    </div>
+                                    <div class="dashboard-action-item-meta">
+                                        @(bill.Vessel?.VesselName ?? "Vessel pending") · @(bill.BasicBillingId.HasValue ? "BAF" : bill.BafBilling != null ? "Basic" : "Combined")
+                                    </div>
+                                    <div class="dashboard-action-item-footer">
+                                        <span class="dashboard-action-item-hint">₱@bill.Amount.ToString("N2") · @bill.Date.ToString("dd MMM")</span>
+                                        <a asp-controller="Billing" asp-action="Review" asp-route-id="@bill.MsapBillingId" class="dashboard-action-item-btn">Review &rarr;</a>
+                                    </div>
+                                </article>
+                            }
+                        }
+
+                        @* 3. Rate Upload Reviews (if any) *@
+                        @if (Model.CanApproveRates && Model.RateUploadReviews > 0)
+                        {
+                            <article class="dashboard-action-item ui-attention" data-categories="billing approvals" data-hover-id="hover-rates">
+                                <div class="dashboard-action-item-header">
+                                    <span class="dashboard-action-item-ref">Tariff / BAF</span>
+                                    <span class="dashboard-action-item-badge">@Model.RateUploadReviews Review@(Model.RateUploadReviews > 1 ? "s" : "")</span>
+                                </div>
+                                <div class="dashboard-action-item-main">
+                                    <div class="dashboard-action-item-title">Rate Revisions Submitted</div>
+                                </div>
+                                <div class="dashboard-action-item-meta">
+                                    Effective date comparisons awaiting approval
+                                </div>
+                                <div class="dashboard-action-item-footer">
+                                    <span class="dashboard-action-item-hint">MMSI Rate Tables</span>
+                                    <a asp-controller="RateUpload" asp-action="Index" asp-route-awaitingReview="true" class="dashboard-action-item-btn">Review &rarr;</a>
+                                </div>
+                            </article>
+                        }
+
+                        @* 4. COS Missing Ticket Logs *@
+                        @if (Model.CanFollowUpTickets)
+                        {
+                            @foreach (var schedule in Model.MissingTicketSchedules)
+                            {
+                                <article class="dashboard-action-item ui-attention" data-categories="ops" data-hover-id="hover-cos-@schedule.VesselScheduleId">
+                                    <div class="dashboard-action-item-header">
+                                        <span class="dashboard-action-item-ref">@(schedule.CustomerOrderSlip?.CustomerOrderSlipNumber ?? $"COS #{schedule.CustomerOrderSlipId}")</span>
+                                        <span class="dashboard-action-item-badge">Missing Logs</span>
+                                    </div>
+                                    <div class="dashboard-action-item-main">
+                                        <div class="dashboard-action-item-title">@(schedule.Vessel?.VesselName ?? "Vessel pending")</div>
+                                    </div>
+                                    <div class="dashboard-action-item-meta">
+                                        @(schedule.Customer?.CustomerName ?? "Customer pending") · Commenced @schedule.PlannedStart.ToString("dd MMM HH:mm")
+                                    </div>
+                                    <div class="dashboard-action-item-footer">
+                                        <span class="dashboard-action-item-hint">@Model.CompleteTicketsBySchedule.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.ServiceEntries.Count(e => !e.CancelledAt.HasValue) tickets logged</span>
+                                        <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@schedule.CustomerOrderSlipId" class="dashboard-action-item-btn">Follow up &rarr;</a>
+                                    </div>
+                                </article>
+                            }
+                        }
+
+                        @* 5. Tickets Pending Rate Calculation *@
+                        @if (Model.CanReviewCalculations)
+                        {
+                            @foreach (var ticket in Model.PendingCalculationTickets)
+                            {
+                                <article class="dashboard-action-item ui-critical" data-categories="ops billing" data-hover-id="hover-calc-@ticket.DispatchTicketId">
+                                    <div class="dashboard-action-item-header">
+                                        <span class="dashboard-action-item-ref">Ticket #@ticket.DispatchNumber</span>
+                                        <span class="dashboard-action-item-badge">Rate Pending</span>
+                                    </div>
+                                    <div class="dashboard-action-item-main">
+                                        <div class="dashboard-action-item-title">@(ticket.Customer?.CustomerName ?? "Customer pending")</div>
+                                    </div>
+                                    <div class="dashboard-action-item-meta">
+                                        @(ticket.Service?.ServiceName ?? "Towage") · @(ticket.Terminal?.TerminalName ?? "Terminal pending")
+                                    </div>
+                                    <div class="dashboard-action-item-footer">
+                                        <span class="dashboard-action-item-hint">@ticket.DateLeft?.ToString("dd MMM yyyy") · Rate lookup pending</span>
+                                        @if (ticket.CustomerOrderSlipId.HasValue && Model.CanReadCos)
+                                        {
+                                            <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@ticket.CustomerOrderSlipId" class="dashboard-action-item-btn">Inspect &rarr;</a>
+                                        }
+                                        else
+                                        {
+                                            <a asp-controller="DispatchTicket" asp-action="Index" asp-route-status="@MsapConstants.DispatchTicketStatus.CalculationPending" class="dashboard-action-item-btn">Inspect &rarr;</a>
+                                        }
+                                    </div>
+                                </article>
+                            }
+                        }
+
+                        @* 6. Provider Bills Awaiting Confirmation *@
+                        @if (Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges)
+                        {
+                            @foreach (var charge in Model.OtherTugChargeReviews)
+                            {
+                                var cosId = charge.Lines.Select(line => line.Ticket?.CustomerOrderSlipId).FirstOrDefault(id => id.HasValue);
+                                <article class="dashboard-action-item ui-attention" data-categories="aptugs approvals" data-hover-id="hover-provider-@charge.OtherTugChargeId">
+                                    <div class="dashboard-action-item-header">
+                                        <span class="dashboard-action-item-ref">@charge.ProviderName</span>
+                                        <span class="dashboard-action-item-badge">For Confirmation</span>
+                                    </div>
+                                    <div class="dashboard-action-item-main">
+                                        <div class="dashboard-action-item-title">Ref #@charge.ProviderReference</div>
+                                    </div>
+                                    <div class="dashboard-action-item-meta">
+                                        @charge.DocumentDate.ToString("dd MMM yyyy") · @charge.Lines.Count tug dispatch lines
+                                    </div>
+                                    <div class="dashboard-action-item-footer">
+                                        <span class="dashboard-action-item-hint">Outside provider draft invoice</span>
+                                        <a asp-controller="OtherTugCharge" asp-action="Editor" asp-route-customerOrderSlipId="@cosId" asp-route-id="@charge.OtherTugChargeId" class="dashboard-action-item-btn">@(Model.CanConfirmOtherTugCharges ? "Review \u2192" : "Draft \u2192")</a>
+                                    </div>
+                                </article>
+                            }
+                        }
+
+                        @* 7. Outside Tug Dispatches Awaiting Supplier Bills (Separated Individual Dispatches) *@
+                        @if (Model.CanManageOtherTugCharges)
+                        {
+                            @foreach (var ticket in Model.MissingOtherTugTickets)
+                            {
+                                <article class="dashboard-action-item ui-passive" data-categories="aptugs" data-hover-id="hover-missingtug-@ticket.DispatchTicketId">
+                                    <div class="dashboard-action-item-header">
+                                        <span class="dashboard-action-item-ref">Ticket #@ticket.DispatchNumber</span>
+                                        <span class="dashboard-action-item-badge">Pending Vendor</span>
+                                    </div>
+                                    <div class="dashboard-action-item-main">
+                                        <div class="dashboard-action-item-title">@(ticket.Tugboat?.TugboatName ?? $"Tug #{ticket.TugBoatId}")</div>
+                                    </div>
+                                    <div class="dashboard-action-item-meta">
+                                        @(ticket.Customer?.CustomerName ?? "Customer pending") · Service: @ticket.DateLeft?.ToString("dd MMM yyyy")
+                                    </div>
+                                    <div class="dashboard-action-item-footer">
+                                        <span class="dashboard-action-item-hint">Awaiting supplier invoice</span>
+                                        <a asp-controller="OtherTugCharge" asp-action="Editor" asp-route-customerOrderSlipId="@ticket.CustomerOrderSlipId" asp-route-id="" asp-route-ticketId="@ticket.DispatchTicketId" class="dashboard-action-item-btn">Record &rarr;</a>
+                                    </div>
+                                </article>
+                            }
+                        }
+
+                        @* 8. Returned Checks *@
+                        @if (Model.CanViewBanking && Model.BankingCounts.GetValueOrDefault("Returned") > 0)
+                        {
+                            <article class="dashboard-action-item ui-critical" data-categories="billing" data-hover-id="hover-returned-checks">
+                                <div class="dashboard-action-item-header">
+                                    <span class="dashboard-action-item-ref">Banking Alert</span>
+                                    <span class="dashboard-action-item-badge">Action Required</span>
+                                </div>
+                                <div class="dashboard-action-item-main">
+                                    <div class="dashboard-action-item-title">Returned Checks (@Model.BankingCounts.GetValueOrDefault("Returned"))</div>
+                                </div>
+                                <div class="dashboard-action-item-meta">
+                                    Receipts requiring banking reconciliation
+                                </div>
+                                <div class="dashboard-action-item-footer">
+                                    <span class="dashboard-action-item-hint">PHP @Model.BankingAmounts.GetValueOrDefault("Returned").ToString("N2")</span>
+                                    <a asp-controller="Collection" asp-action="Index" class="dashboard-action-item-btn">Banking &rarr;</a>
+                                </div>
+                            </article>
+                        }
+
+                        <!-- Empty State in Sidebar -->
+                        <div class="dashboard-sidebar-empty" style="display: @(totalActionCount == 0 ? "flex" : "none");">
+                            <span class="material-symbols-outlined">check_circle</span>
+                            <p>No pending actions in this category.</p>
                         </div>
-                    }
-                    @if (Model.CanApproveRates)
-                    {
-                        <div class="dashboard-review"><h3 class="ui-label">Rate updates (@Model.RateUploadReviews)</h3><a asp-controller="RateUpload" asp-action="Index" asp-route-awaitingReview="true" class="ui-caption">Open submitted comparisons</a></div>
-                    }
-                    @if (Model.CanApproveBilling)
-                    {
-                        <div id="billing-reviews" class="ui-stack dashboard-review">
-                            <div class="dashboard-heading ui-row"><h3 class="ui-label">Final billing (@Model.ForPosting)</h3><a asp-controller="Billing" asp-action="Index" asp-route-status="@MsapConstants.BillingStatus.ForPosting" class="ui-caption">All final bill reviews</a></div>
-                            <div class="dashboard-table-wrap">
-                                <table class="dashboard-table">
-                                    <thead><tr><th scope="col">Billing number</th><th scope="col">Customer / vessel</th><th scope="col">Component</th><th scope="col">Billing date</th><th scope="col">Action</th></tr></thead>
-                                    <tbody>
-                                    @foreach (var bill in Model.BillingReviewItems)
-                                    {
-                                        <tr class="ui-attention"><td>@bill.MsapBillingNumber</td><td>@bill.Customer.CustomerName<small>@bill.Vessel.VesselName</small></td><td>@(bill.BasicBillingId.HasValue ? "BAF" : bill.BafBilling != null ? "Basic" : "Combined")</td><td>@bill.Date.ToString("dd MMM yyyy")</td><td><a asp-controller="Billing" asp-action="Review" asp-route-id="@bill.MsapBillingId">Review</a></td></tr>
-                                    }
-                                    @if (Model.BillingReviewItems.Count == 0) { <tr><td colspan="5" class="dashboard-empty">No final bills awaiting your review.</td></tr> }
-                                    </tbody>
-                                </table>
-                            </div>
-                            <p class="ui-caption ui-muted">Showing @Model.BillingReviewItems.Count of @Model.ForPosting numbered bills. Split components have separate approvals.</p>
+                    </div>
+                </aside>
+
+                <!-- RIGHT COLUMN: MAIN WORKSPACE (OPERATIONS, FINANCE, TOOLS) -->
+                <div class="dashboard-main-content ui-stack">
+                    <!-- 1. OPERATIONS · TODAY (Always visible for all MSAP users as shared operational context) -->
+                    <section class="ui-stack" aria-labelledby="operations-heading">
+                        <div class="dashboard-heading ui-row">
+                            <h2 id="operations-heading" class="ui-section-title">Operations · Today</h2>
+                            <span class="ui-caption ui-muted">@day.ToString("dd MMM yyyy")</span>
                         </div>
-                    }
-                </section>
-            }
-            @if (Model.DataError == null && (Model.CanFollowUpTickets || Model.CanReviewCalculations))
-            {
-                <div class="dashboard-main">
-                    @if (Model.CanFollowUpTickets)
-                    {
-                        <section class="ui-panel ui-stack @(Model.MissingTicketCount > 0 ? "ui-attention" : "")" aria-labelledby="missing-heading">
-                            <h2 id="missing-heading" class="ui-section-title">Missing-ticket follow-up · @Model.MissingTicketCount COS</h2>
-                            <div class="dashboard-table-wrap">
-                                <table class="dashboard-table">
-                                    <thead><tr><th scope="col">COS</th><th scope="col">Customer / vessel</th><th scope="col">Tickets</th><th scope="col">Action</th></tr></thead>
-                                    <tbody>
-                                    @foreach (var schedule in Model.MissingTicketSchedules)
-                                    {
-                                        <tr class="ui-attention"><td>@(schedule.CustomerOrderSlip!.CustomerOrderSlipNumber)</td><td>@(schedule.Customer!.CustomerName)<small>@schedule.Vessel.VesselName</small></td><td>@Model.CompleteTicketsBySchedule.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.ServiceEntries.Count(e => !e.CancelledAt.HasValue) complete</td><td><a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@schedule.CustomerOrderSlipId">Open COS</a></td></tr>
-                                    }
-                                    @if (Model.MissingTicketSchedules.Count == 0) { <tr><td colspan="4" class="dashboard-empty">No missing tickets for services started by now.</td></tr> }
-                                    </tbody>
-                                </table>
+                        @if (Model.ScheduleError != null)
+                        {
+                            <p class="ui-panel dashboard-notice ui-critical" role="alert">@Model.ScheduleError</p>
+                        }
+                        else
+                        {
+                            <div class="dashboard-stats">
+                                <article class="ui-panel dashboard-stat">
+                                    <h3>Scheduled today</h3>
+                                    <strong>@Model.ScheduleCount</strong>
+                                    <p>@Model.ConfirmedToday confirmed or in service · @(Model.ScheduleCount - Model.ConfirmedToday) awaiting review</p>
+                                </article>
+                                <article class="ui-panel dashboard-stat @(Model.NeedingTugs > 0 ? "ui-attention" : "")">
+                                    <h3>Bookings needing tugs</h3>
+                                    <strong>@Model.NeedingTugs</strong>
+                                    <p>@(Model.NeedingTugs > 0 ? "Tug assignments incomplete" : "All bookings have required tugs")</p>
+                                </article>
+                                <article class="ui-panel dashboard-stat @(Model.ConflictingScheduleIds.Count > 0 ? "ui-critical" : "")">
+                                    <h3>Overlaps / conflicts</h3>
+                                    <strong>@Model.ConflictingScheduleIds.Count</strong>
+                                    <p>@(Model.ConflictingScheduleIds.Count > 0 ? "Potential resource clashes" : "No schedule conflicts detected")</p>
+                                </article>
+                                <article class="ui-panel dashboard-stat">
+                                    <h3>Upcoming (7 days)</h3>
+                                    <strong>@Model.UpcomingSchedules.Count</strong>
+                                    <p>Vessels arriving in the next 7 days</p>
+                                </article>
                             </div>
-                            <p class="ui-caption ui-muted">Showing @Model.MissingTicketSchedules.Count of @Model.MissingTicketCount COS · Oldest planned services first.</p>
+
+                            <div class="dashboard-main">
+                                <section class="ui-panel ui-stack" aria-labelledby="vessel-heading">
+                                    <div class="dashboard-heading ui-row">
+                                        <h3 id="vessel-heading" class="ui-section-title">Today's vessel movements</h3>
+                                        @if (Model.CanViewDispatch)
+                                        {
+                                            <a asp-controller="VesselSchedule" asp-action="Index" asp-route-date="@dateValue" class="ui-caption">View calendar</a>
+                                        }
+                                    </div>
+                                    @if (Model.Schedules.Count == 0)
+                                    {
+                                        <p class="dashboard-empty">No vessel schedules recorded for today.</p>
+                                    }
+                                    else
+                                    {
+                                        <div class="dashboard-table-wrap">
+                                            <table class="dashboard-table">
+                                                <caption class="visually-hidden">Vessel schedules for today, Philippine time</caption>
+                                                <thead><tr><th scope="col">Time window</th><th scope="col">Vessel / location</th><th scope="col">Status</th><th scope="col">Tugs assigned</th><th scope="col">Action</th></tr></thead>
+                                                <tbody>
+                                                @foreach (var schedule in Model.Schedules)
+                                                {
+                                                    <tr class="@(Model.ConflictingScheduleIds.Contains(schedule.VesselScheduleId) ? "ui-critical" : schedule.Status != MsapConstants.VesselScheduleStatus.Completed && (schedule.Status == MsapConstants.VesselScheduleStatus.Tentative || Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) < schedule.RequiredTugCount) ? "ui-attention" : "")">
+                                                        <td class="dashboard-window">@schedule.PlannedStart.ToString(schedule.PlannedStart.Date == day ? "HH:mm" : "dd MMM HH:mm") – @schedule.PlannedEnd.ToString(schedule.PlannedEnd.Date == day ? "HH:mm" : "dd MMM HH:mm")</td>
+                                                        <td>@(schedule.Vessel?.VesselName ?? $"Schedule #{schedule.VesselScheduleId}")<small>@(schedule.Port?.PortName ?? "Port") · @(schedule.Terminal?.TerminalName ?? "Terminal")</small></td>
+                                                        <td><span class="dashboard-status">@(schedule.Status == MsapConstants.VesselScheduleStatus.Tentative ? "Awaiting review" : MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status))</span>@if (Model.ConflictingScheduleIds.Contains(schedule.VesselScheduleId)) { <small><span class="ui-status ui-critical">Overlap · needs review</span></small> }</td>
+                                                        <td>@Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.RequiredTugCount</td>
+                                                        <td><a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId" aria-label="Open @(schedule.Vessel?.VesselName ?? "vessel") schedule">Open</a></td>
+                                                    </tr>
+                                                }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    }
+                                </section>
+
+                                <section class="ui-panel ui-stack" aria-labelledby="upcoming-heading">
+                                    <h3 id="upcoming-heading" class="ui-section-title">Upcoming vessels · Next 7 days</h3>
+                                    @if (Model.UpcomingSchedules.Count == 0)
+                                    {
+                                        <p class="dashboard-empty">No upcoming vessels scheduled in the next 7 days.</p>
+                                    }
+                                    else
+                                    {
+                                        <ul class="dashboard-upcoming">
+                                            @foreach (var schedule in Model.UpcomingSchedules)
+                                            {
+                                                <li>
+                                                    <span class="ui-caption ui-muted">@schedule.PlannedStart.ToString("ddd dd MMM · HH:mm")</span>
+                                                    <div class="dashboard-heading ui-row">
+                                                        <a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId">@(schedule.Vessel?.VesselName ?? $"Schedule #{schedule.VesselScheduleId}") · @(schedule.Terminal?.TerminalName ?? "Terminal")</a>
+                                                        <span class="ui-caption ui-muted">@Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.RequiredTugCount tugs</span>
+                                                    </div>
+                                                </li>
+                                            }
+                                        </ul>
+                                    }
+                                    @if (Model.CanViewDispatch)
+                                    {
+                                        <a asp-controller="VesselSchedule" asp-action="Index" class="dashboard-end-link">Open schedule calendar</a>
+                                    }
+                                </section>
+                            </div>
+                        }
+                    </section>
+
+                    <!-- 2. FINANCE & CASH FLOW OVERVIEW -->
+                    @if (Model.CanViewFinance && Model.DataError == null)
+                    {
+                        <section class="ui-stack" aria-labelledby="finance-heading">
+                            <div class="dashboard-heading ui-row">
+                                <h2 id="finance-heading" class="ui-section-title">Finance Overview</h2>
+                                <span class="ui-caption ui-muted">@day.ToString("MMMM yyyy") · Month to date</span>
+                            </div>
+                            <div class="dashboard-stats">
+                                @if (Model.CanViewBilling)
+                                {
+                                    <article class="ui-panel dashboard-stat">
+                                        <h3>Billed this month</h3>
+                                        <strong>₱@Model.BilledMonth.ToString("N2")</strong>
+                                        <p>Posted invoices · 1–@day.Day @day.ToString("MMM")</p>
+                                    </article>
+                                    <article class="ui-panel dashboard-stat">
+                                        <h3>Unbilled completed services</h3>
+                                        <strong>₱@Model.KnownUnbilledCharges.ToString("N2")</strong>
+                                        <p>Completed actual tickets ready for billing</p>
+                                    </article>
+                                }
+                                @if (Model.CanViewCollections)
+                                {
+                                    <article class="ui-panel dashboard-stat">
+                                        <h3>Collections this month</h3>
+                                        <strong>₱@Model.ReceivedMonth.ToString("N2")</strong>
+                                        <p>Cash &amp; check receipts recorded</p>
+                                    </article>
+                                }
+                                <article class="ui-panel dashboard-stat">
+                                    <h3>Outstanding AR balance</h3>
+                                    <strong>₱@Model.OutstandingBalance.ToString("N2")</strong>
+                                    <p>Total open posted invoice receivables</p>
+                                </article>
+                            </div>
+
+                            @if (Model.CanViewBanking)
+                            {
+                                <div class="ui-panel dashboard-banking">
+                                    @foreach (var item in new[] { (Key: "Deposit", Label: "For deposit"), (Key: "Clearing", Label: "Awaiting clearing"), (Key: "Returned", Label: "Returned checks") })
+                                    {
+                                        <div class="@(Model.BankingCounts.GetValueOrDefault(item.Key) > 0 ? item.Key == "Returned" ? "ui-critical" : "ui-attention" : "")">
+                                            <span class="ui-caption ui-muted">@item.Label</span>
+                                            <strong>@Model.BankingCounts.GetValueOrDefault(item.Key) receipts · ₱@Model.BankingAmounts.GetValueOrDefault(item.Key).ToString("N2")</strong>
+                                        </div>
+                                    }
+                                </div>
+                                @if (Model.CanViewCollections)
+                                {
+                                    <div class="text-end">
+                                        <a asp-controller="Collection" asp-action="Index" class="ui-caption">Open banking follow-up &rarr;</a>
+                                    </div>
+                                }
+                            }
                         </section>
                     }
-                    @if (Model.CanReviewCalculations)
+
+                    <!-- 3. TOOLS & REFERENCES (Quiet Footer Grid) -->
+                    @if (Model.CanViewRates || Model.CanManageReferences || Model.CanViewReports || Model.CanViewDispatch)
                     {
-                        <section class="ui-panel ui-stack @(Model.PendingCalculationCount > 0 ? "ui-critical" : "")" aria-labelledby="pending-heading">
-                            <h2 id="pending-heading" class="ui-section-title">Pending amounts · @Model.PendingCalculationCount COS</h2>
-                            @if (Model.PendingCalculationTickets.Count == 0)
+                        <section class="ui-stack" aria-labelledby="tools-heading">
+                            <h2 id="tools-heading" class="visually-hidden">Quick Tools and References</h2>
+                            <div class="dashboard-tools-grid">
+                                @if (Model.CanViewRates)
+                                {
+                                    <div class="dashboard-tool-card">
+                                        <div>
+                                            <h3>Tariff &amp; BAF Rates</h3>
+                                            <p>Applicable maritime tariffs, bunker adjustment factors (BAF), and dated rates.</p>
+                                        </div>
+                                        <div class="dashboard-tool-actions">
+                                            <a asp-controller="RateUpload" asp-action="Index" class="modern-btn-secondary ui-button">View rate tables</a>
+                                            @if (Model.CanManageRates)
+                                            {
+                                                <a asp-controller="RateUpload" asp-action="Editor" class="modern-btn-secondary ui-button">Rate editor</a>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+
+                                @if (Model.CanManageReferences)
+                                {
+                                    <div class="dashboard-tool-card">
+                                        <div>
+                                            <h3>Maritime Master Files</h3>
+                                            <p>Manage customer directory, vessel profiles, tugboat registry, and port terminals.</p>
+                                        </div>
+                                        <div class="dashboard-tool-actions">
+                                            <a asp-controller="Customer" asp-action="Index" class="modern-btn-secondary ui-button">Customers</a>
+                                            <a asp-controller="Vessel" asp-action="Index" class="modern-btn-secondary ui-button">Vessels</a>
+                                            <a asp-controller="Tugboat" asp-action="Index" class="modern-btn-secondary ui-button">Tugboats</a>
+                                        </div>
+                                    </div>
+                                }
+
+                                @if (Model.CanViewReports || Model.CanViewDispatch)
+                                {
+                                    <div class="dashboard-tool-card">
+                                        <div>
+                                            <h3>Operational Activity (MTD)</h3>
+                                            <p><strong>@Model.DispatchesMonth.ToString("N0")</strong> actual dispatches · <strong>@Model.VesselsMonth.ToString("N0")</strong> distinct vessels served this month.</p>
+                                        </div>
+                                        <div class="dashboard-tool-actions">
+                                            @if (Model.CanViewReports)
+                                            {
+                                                <a asp-controller="MaritimeReport" asp-action="Index" class="modern-btn-secondary ui-button">View reports</a>
+                                            }
+                                            @if (Model.CanViewDispatch)
+                                            {
+                                                <a asp-controller="DispatchTicket" asp-action="Index" class="modern-btn-secondary ui-button">Dispatch registry</a>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </section>
+                    }
+                </div>
+            </div>
+
+            <!-- HOVER DETAIL CARDS (Native Popover API) -->
+            @if (Model.CanApproveSchedule)
+            {
+                @foreach (var schedule in Model.ScheduleReviewItems)
+                {
+                    <div id="hover-schedule-@schedule.VesselScheduleId" class="dashboard-hover-card" popover="manual" role="dialog" aria-label="@(schedule.Vessel?.VesselName ?? $"Booking #{schedule.VesselScheduleId}") review preview">
+                        <div class="dashboard-hover-card-header">
+                            <h4>@(schedule.Vessel?.VesselName ?? $"Booking #{schedule.VesselScheduleId}")</h4>
+                            <span class="dashboard-hover-card-status">@(schedule.ApprovedRevision.HasValue ? "COS Reapproval" : "Awaiting Approval")</span>
+                        </div>
+                        <dl>
+                            <dt>Customer</dt>
+                            <dd>@(schedule.Customer?.CustomerName ?? "Customer pending")</dd>
+                            <dt>Location</dt>
+                            <dd>@(schedule.Port != null ? $"{schedule.Port.PortName}{(schedule.Terminal != null ? $" · {schedule.Terminal.TerminalName}" : "")}" : (schedule.Customer?.CustomerName ?? "Port pending"))</dd>
+                            <dt>Planned Window (Philippine Time)</dt>
+                            <dd>@schedule.PlannedStart.ToString("d MMM yyyy, HH:mm") – @schedule.PlannedEnd.ToString("HH:mm")</dd>
+                            <dt>Tugboat Assignments</dt>
+                            <dd>@Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.RequiredTugCount tugs assigned</dd>
+                        </dl>
+                        <div class="dashboard-hover-card-footer">
+                            <a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId">Open booking details &rarr;</a>
+                        </div>
+                    </div>
+                }
+            }
+
+            @if (Model.CanApproveBilling)
+            {
+                @foreach (var bill in Model.BillingReviewItems)
+                {
+                    <div id="hover-bill-@bill.MsapBillingId" class="dashboard-hover-card" popover="manual" role="dialog" aria-label="Bill #@bill.MsapBillingNumber preview">
+                        <div class="dashboard-hover-card-header">
+                            <h4>Bill #@bill.MsapBillingNumber</h4>
+                            <span class="dashboard-hover-card-status">For Posting</span>
+                        </div>
+                        <dl>
+                            <dt>Customer</dt>
+                            <dd>@(bill.Customer?.CustomerName ?? "Customer pending")</dd>
+                            <dt>Vessel</dt>
+                            <dd>@(bill.Vessel?.VesselName ?? "Vessel pending")</dd>
+                            <dt>Billing Date</dt>
+                            <dd>@bill.Date.ToString("dd MMMM yyyy")</dd>
+                            <dt>Component</dt>
+                            <dd>@(bill.BasicBillingId.HasValue ? "BAF Component" : bill.BafBilling != null ? "Basic Component" : "Combined Bill")</dd>
+                            <dt>Gross Amount</dt>
+                            <dd>₱@bill.Amount.ToString("N2")</dd>
+                        </dl>
+                        <div class="dashboard-hover-card-footer">
+                            <a asp-controller="Billing" asp-action="Review" asp-route-id="@bill.MsapBillingId">Open bill review &rarr;</a>
+                        </div>
+                    </div>
+                }
+            }
+
+            @if (Model.CanApproveRates && Model.RateUploadReviews > 0)
+            {
+                <div id="hover-rates" class="dashboard-hover-card" popover="manual" role="dialog" aria-label="Rate updates preview">
+                    <div class="dashboard-hover-card-header">
+                        <h4>Tariff &amp; BAF Revisions</h4>
+                        <span class="dashboard-hover-card-status">@Model.RateUploadReviews Awaiting Review</span>
+                    </div>
+                    <dl>
+                        <dt>Scope</dt>
+                        <dd>Submitted rate update files ready for comparison and approval.</dd>
+                        <dt>Impact</dt>
+                        <dd>Tariff and BAF changes apply automatically by service date once approved.</dd>
+                    </dl>
+                    <div class="dashboard-hover-card-footer">
+                        <a asp-controller="RateUpload" asp-action="Index" asp-route-awaitingReview="true">Open submitted comparisons &rarr;</a>
+                    </div>
+                </div>
+            }
+
+            @if (Model.CanFollowUpTickets)
+            {
+                @foreach (var schedule in Model.MissingTicketSchedules)
+                {
+                    <div id="hover-cos-@schedule.VesselScheduleId" class="dashboard-hover-card" popover="manual" role="dialog" aria-label="COS @(schedule.CustomerOrderSlip?.CustomerOrderSlipNumber ?? schedule.VesselScheduleId.ToString()) preview">
+                        <div class="dashboard-hover-card-header">
+                            <h4>@(schedule.CustomerOrderSlip?.CustomerOrderSlipNumber ?? $"COS #{schedule.CustomerOrderSlipId}")</h4>
+                            <span class="dashboard-hover-card-status">Missing Logs</span>
+                        </div>
+                        <dl>
+                            <dt>Vessel</dt>
+                            <dd>@(schedule.Vessel?.VesselName ?? "Vessel pending")</dd>
+                            <dt>Customer</dt>
+                            <dd>@(schedule.Customer?.CustomerName ?? "Customer pending")</dd>
+                            <dt>Planned Start</dt>
+                            <dd>@schedule.PlannedStart.ToString("d MMM yyyy, HH:mm")</dd>
+                            <dt>Logged Tickets</dt>
+                            <dd>@Model.CompleteTicketsBySchedule.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.ServiceEntries.Count(e => !e.CancelledAt.HasValue) tickets complete</dd>
+                        </dl>
+                        <div class="dashboard-hover-card-footer">
+                            <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@schedule.CustomerOrderSlipId">Open COS &rarr;</a>
+                        </div>
+                    </div>
+                }
+            }
+
+            @if (Model.CanReviewCalculations)
+            {
+                @foreach (var ticket in Model.PendingCalculationTickets)
+                {
+                    <div id="hover-calc-@ticket.DispatchTicketId" class="dashboard-hover-card" popover="manual" role="dialog" aria-label="Ticket #@ticket.DispatchNumber calculation preview">
+                        <div class="dashboard-hover-card-header">
+                            <h4>Ticket #@ticket.DispatchNumber</h4>
+                            <span class="dashboard-hover-card-status">Rate Pending</span>
+                        </div>
+                        <dl>
+                            <dt>Customer</dt>
+                            <dd>@(ticket.Customer?.CustomerName ?? "Customer pending")</dd>
+                            <dt>Terminal / Service</dt>
+                            <dd>@(ticket.Terminal?.TerminalName ?? "Terminal pending") · @(ticket.Service?.ServiceName ?? "Towage")</dd>
+                            <dt>Service Date</dt>
+                            <dd>@ticket.DateLeft?.ToString("dd MMMM yyyy")</dd>
+                            <dt>Block</dt>
+                            <dd>Applicable rate or terms lookup pending; ticket excluded from billing.</dd>
+                        </dl>
+                        <div class="dashboard-hover-card-footer">
+                            @if (ticket.CustomerOrderSlipId.HasValue && Model.CanReadCos)
                             {
-                                <p class="dashboard-empty">No recorded tickets awaiting calculation.</p>
+                                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@ticket.CustomerOrderSlipId">Open COS &rarr;</a>
                             }
                             else
                             {
-                                <ul class="dashboard-upcoming">
-                                    @foreach (var ticket in Model.PendingCalculationTickets)
-                                    {
-                                        <li><div class="dashboard-heading ui-row"><span>@(ticket.CustomerOrderSlip?.CustomerOrderSlipNumber ?? ticket.DispatchNumber)</span><span class="ui-caption ui-muted">Rate / terms calculation pending</span></div>
-                                            <p class="ui-caption ui-muted">@ticket.Customer.CustomerName · @ticket.Terminal.TerminalName · @ticket.Service?.ServiceName · @ticket.DateLeft?.ToString("dd MMM yyyy")</p>
-                                            @if (ticket.CustomerOrderSlipId.HasValue && Model.CanReadCos) { <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@ticket.CustomerOrderSlipId" class="ui-caption">Open COS · Ticket @ticket.DispatchNumber</a> }
-                                            @if ((Model.CanManageRates || Model.CanApproveRates) && ticket.DateLeft.HasValue)
-                                            {
-                                                <a asp-controller="RateUpload" asp-action="Editor" asp-route-asOfDate="@ticket.DateLeft?.ToString("yyyy-MM-dd")" class="ui-caption">Review service-date rates</a>
-                                            }
-                                        </li>
-                                    }
-                                </ul>
+                                <a asp-controller="DispatchTicket" asp-action="Index" asp-route-status="@MsapConstants.DispatchTicketStatus.CalculationPending">Open dispatch registry &rarr;</a>
                             }
-                            <p class="ui-caption ui-muted">Up to 6 affected tickets. Excluded from known unbilled charges; pending amounts are never presented as zero.</p>
-                        </section>
-                    }
+                        </div>
+                    </div>
+                }
+            }
+
+            @if (Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges)
+            {
+                @foreach (var charge in Model.OtherTugChargeReviews)
+                {
+                    var cosId = charge.Lines.Select(line => line.Ticket?.CustomerOrderSlipId).FirstOrDefault(id => id.HasValue);
+                    <div id="hover-provider-@charge.OtherTugChargeId" class="dashboard-hover-card" popover="manual" role="dialog" aria-label="Provider @charge.ProviderName preview">
+                        <div class="dashboard-hover-card-header">
+                            <h4>@charge.ProviderName</h4>
+                            <span class="dashboard-hover-card-status">For Confirmation</span>
+                        </div>
+                        <dl>
+                            <dt>Provider Reference</dt>
+                            <dd>@charge.ProviderReference</dd>
+                            <dt>Document Date</dt>
+                            <dd>@charge.DocumentDate.ToString("dd MMMM yyyy")</dd>
+                            <dt>Associated Dispatches</dt>
+                            <dd>@charge.Lines.Count tug dispatch lines recorded</dd>
+                        </dl>
+                        <div class="dashboard-hover-card-footer">
+                            <a asp-controller="OtherTugCharge" asp-action="Editor" asp-route-customerOrderSlipId="@cosId" asp-route-id="@charge.OtherTugChargeId">Review provider bill &rarr;</a>
+                        </div>
+                    </div>
+                }
+            }
+
+            @if (Model.CanManageOtherTugCharges)
+            {
+                @foreach (var ticket in Model.MissingOtherTugTickets)
+                {
+                    <div id="hover-missingtug-@ticket.DispatchTicketId" class="dashboard-hover-card" popover="manual" role="dialog" aria-label="Tug @(ticket.Tugboat?.TugboatName ?? ticket.DispatchNumber) dispatch preview">
+                        <div class="dashboard-hover-card-header">
+                            <h4>@(ticket.Tugboat?.TugboatName ?? $"Tug #{ticket.TugBoatId}")</h4>
+                            <span class="dashboard-hover-card-status">Pending Vendor</span>
+                        </div>
+                        <dl>
+                            <dt>Dispatch Ticket</dt>
+                            <dd>#@ticket.DispatchNumber</dd>
+                            <dt>Service Date</dt>
+                            <dd>@ticket.DateLeft?.ToString("dd MMMM yyyy")</dd>
+                            <dt>Status</dt>
+                            <dd>Subcontracted tugboat dispatch completed. Waiting for provider's monthly billing statement.</dd>
+                        </dl>
+                        <div class="dashboard-hover-card-footer">
+                            <a asp-controller="OtherTugCharge" asp-action="Editor" asp-route-customerOrderSlipId="@ticket.CustomerOrderSlipId" asp-route-id="" asp-route-ticketId="@ticket.DispatchTicketId">Record charges when received &rarr;</a>
+                        </div>
+                    </div>
+                }
+            }
+
+            @if (Model.CanViewBanking && Model.BankingCounts.GetValueOrDefault("Returned") > 0)
+            {
+                <div id="hover-returned-checks" class="dashboard-hover-card" popover="manual" role="dialog" aria-label="Returned checks preview">
+                    <div class="dashboard-hover-card-header">
+                        <h4>Returned Checks</h4>
+                        <span class="dashboard-hover-card-status">Critical Action</span>
+                    </div>
+                    <dl>
+                        <dt>Count</dt>
+                        <dd>@Model.BankingCounts.GetValueOrDefault("Returned") returned checks</dd>
+                        <dt>Total Amount</dt>
+                        <dd>₱@Model.BankingAmounts.GetValueOrDefault("Returned").ToString("N2")</dd>
+                        <dt>Action Required</dt>
+                        <dd>Check return notification from deposit bank. Reversal or replacement check needed.</dd>
+                    </dl>
+                    <div class="dashboard-hover-card-footer">
+                        <a asp-controller="Collection" asp-action="Index">Open collection banking &rarr;</a>
+                    </div>
                 </div>
-            }
-            @if ((Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges) && Model.DataError == null)
-            {
-                <section class="ui-panel ui-stack" aria-labelledby="provider-heading">
-                    <h2 id="provider-heading" class="ui-section-title">AP Other Tugs</h2>
-                    <p class="ui-caption ui-muted">Provider costs are recorded and confirmed here. Payments remain a separate IBS responsibility.</p>
-                    @if (Model.CanManageOtherTugCharges)
-                    {
-                        <div class="ui-stack" id="missing-provider-costs">
-                            <h3 id="missing-provider-heading" class="ui-label">Missing provider costs · @Model.MissingOtherTugTicketCount tickets</h3>
-                            <div class="dashboard-table-wrap">
-                                <table class="dashboard-table" aria-labelledby="missing-provider-heading">
-                                    <thead><tr><th scope="col">COS</th><th scope="col">Ticket</th><th scope="col">Tugboat</th><th scope="col">Service date</th><th scope="col">Action</th></tr></thead>
-                                    <tbody>
-                                    @foreach (var ticket in Model.MissingOtherTugTickets)
-                                    {
-                                        <tr class="ui-attention">
-                                            <td>@ticket.CustomerOrderSlip?.CustomerOrderSlipNumber</td>
-                                            <td>@ticket.DispatchNumber</td>
-                                            <td>@ticket.Tugboat.TugboatName</td>
-                                            <td>@ticket.DateLeft?.ToString("dd MMM yyyy")</td>
-                                            <td><a asp-controller="OtherTugCharge" asp-action="Editor" asp-route-customerOrderSlipId="@ticket.CustomerOrderSlipId" asp-route-id="" asp-route-ticketId="@ticket.DispatchTicketId">Record charges</a></td>
-                                        </tr>
-                                    }
-                                    @if (Model.MissingOtherTugTicketCount == 0) { <tr><td colspan="5" class="dashboard-empty">No actual tickets missing provider cost entries.</td></tr> }
-                                    </tbody>
-                                </table>
-                            </div>
-                            <p class="ui-caption ui-muted">Showing @Model.MissingOtherTugTickets.Count of @Model.MissingOtherTugTicketCount tickets. Missing costs do not block operational ticket recording or customer billing.</p>
-                        </div>
-                    }
-                    <div class="ui-stack" id="provider-charge-reviews">
-                        <h3 id="provider-review-heading" class="ui-label">@(Model.CanConfirmOtherTugCharges ? "Awaiting confirmation" : "Draft provider charges") · @Model.OtherTugChargeReviewCount documents</h3>
-                        <div class="dashboard-table-wrap">
-                            <table class="dashboard-table" aria-labelledby="provider-review-heading">
-                                <thead><tr><th scope="col">Provider</th><th scope="col">Reference</th><th scope="col">Document date</th><th scope="col">Action</th></tr></thead>
-                                <tbody>
-                                @foreach (var charge in Model.OtherTugChargeReviews)
-                                {
-                                    var cosId = charge.Lines.Select(line => line.Ticket.CustomerOrderSlipId).FirstOrDefault(id => id.HasValue);
-                                    <tr class="ui-attention">
-                                        <td>@charge.ProviderName</td>
-                                        <td>@charge.ProviderReference</td>
-                                        <td>@charge.DocumentDate.ToString("dd MMM yyyy")</td>
-                                        <td><a asp-controller="OtherTugCharge" asp-action="Editor" asp-route-customerOrderSlipId="@cosId" asp-route-id="@charge.OtherTugChargeId">@(Model.CanConfirmOtherTugCharges ? "Review charges" : "Open draft")</a></td>
-                                    </tr>
-                                }
-                                @if (Model.OtherTugChargeReviewCount == 0) { <tr><td colspan="4" class="dashboard-empty">No provider charges awaiting confirmation.</td></tr> }
-                                </tbody>
-                            </table>
-                        </div>
-                        <p class="ui-caption ui-muted">Showing @Model.OtherTugChargeReviews.Count of @Model.OtherTugChargeReviewCount documents. Confirmation remains a separate action on the review page.</p>
-                    </div>
-                </section>
-            }
-            @if (Model.CanManageReferences)
-            {
-                <section class="ui-panel dashboard-rate ui-row" aria-label="Master files">
-                    <div><h2 class="ui-section-title">Maritime master files</h2><p class="ui-caption ui-muted">Maintain customers, vessels, tugboats and service references through MSAP References.</p></div>
-                    <a asp-controller="Customer" asp-action="Index" class="ui-button">Open customers</a>
-                </section>
-            }
-            @if ((Model.CanViewDispatch || Model.CanViewReports) && Model.DataError == null)
-            {
-                <footer class="ui-panel dashboard-footer">
-                    <div><span class="ui-caption ui-muted">Dispatches this month</span><strong>@Model.DispatchesMonth.ToString("N0") valid actual tickets</strong><span class="ui-caption ui-muted">By actual service start date</span></div>
-                    <div><span class="ui-caption ui-muted">Vessels served this month</span><strong>@Model.VesselsMonth.ToString("N0") distinct vessels</strong></div>
-                    <div class="dashboard-actions ui-actions">
-                        @if (Model.CanViewReports) { <a asp-controller="MaritimeReport" asp-action="Index" class="modern-btn-secondary ui-button">View maritime reports</a> }
-                        @if (Model.CanViewCollections) { <a asp-controller="Collection" asp-action="Index" class="modern-btn-secondary ui-button">Open collections</a> }
-                    </div>
-                </footer>
             }
         </main>
     </div>
@@ -396,17 +761,118 @@ else
     @if (Model.ShowDashboard)
     {
         <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                // Segmented Filter Tabs
+                var tabs = document.querySelectorAll('.dashboard-filter-tab');
+                var items = document.querySelectorAll('.dashboard-action-item');
+                var emptyState = document.querySelector('.dashboard-sidebar-empty');
+
+                tabs.forEach(function (tab) {
+                    tab.addEventListener('click', function () {
+                        tabs.forEach(function (t) {
+                            t.classList.remove('active');
+                            t.setAttribute('aria-selected', 'false');
+                        });
+                        tab.classList.add('active');
+                        tab.setAttribute('aria-selected', 'true');
+
+                        var filter = tab.getAttribute('data-sidebar-filter');
+                        var visibleCount = 0;
+
+                        items.forEach(function (item) {
+                            var categories = (item.getAttribute('data-categories') || '').split(' ');
+                            if (filter === 'all' || categories.indexOf(filter) !== -1) {
+                                item.style.display = 'flex';
+                                visibleCount++;
+                            } else {
+                                item.style.display = 'none';
+                            }
+                        });
+
+                        if (emptyState) {
+                            emptyState.style.display = visibleCount === 0 ? 'flex' : 'none';
+                        }
+                    });
+                });
+
+                // Hover Detail Card Positioning (Popovers)
+                var activeHoverCard = null;
+                var hoverTimer = null;
+
+                function closeActiveHover() {
+                    if (activeHoverCard && activeHoverCard.matches(':popover-open')) {
+                        activeHoverCard.hidePopover();
+                    }
+                    activeHoverCard = null;
+                }
+
+                function positionCard(trigger, card) {
+                    var rect = trigger.getBoundingClientRect();
+                    var cardWidth = card.offsetWidth || 380;
+                    var cardHeight = card.offsetHeight || 260;
+
+                    // Prefer positioning to the right of trigger (adjacent to sidebar)
+                    var left = rect.right + 12;
+                    if (left + cardWidth > window.innerWidth - 12) {
+                        left = rect.left - cardWidth - 12;
+                    }
+                    if (left < 12) {
+                        left = 12;
+                    }
+
+                    var top = rect.top;
+                    if (top + cardHeight > window.innerHeight - 12) {
+                        top = Math.max(12, window.innerHeight - cardHeight - 12);
+                    }
+
+                    card.style.left = left + 'px';
+                    card.style.top = top + 'px';
+                }
+
+                document.querySelectorAll('[data-hover-id]').forEach(function (trigger) {
+                    var cardId = trigger.getAttribute('data-hover-id');
+                    var card = document.getElementById(cardId);
+                    if (!card) return;
+
+                    function openHover() {
+                        clearTimeout(hoverTimer);
+                        if (activeHoverCard && activeHoverCard !== card) {
+                            closeActiveHover();
+                        }
+                        activeHoverCard = card;
+                        if (!card.matches(':popover-open')) {
+                            card.showPopover();
+                        }
+                        positionCard(trigger, card);
+                    }
+
+                    function queueClose() {
+                        hoverTimer = setTimeout(function () {
+                            closeActiveHover();
+                        }, 180);
+                    }
+
+                    trigger.addEventListener('pointerenter', function (e) {
+                        if (e.pointerType !== 'touch') openHover();
+                    });
+                    trigger.addEventListener('pointerleave', queueClose);
+                    trigger.addEventListener('focus', openHover);
+                    trigger.addEventListener('blur', queueClose);
+
+                    card.addEventListener('pointerenter', function () {
+                        clearTimeout(hoverTimer);
+                    });
+                    card.addEventListener('pointerleave', queueClose);
+                });
+            });
+
             window.IBS_TOUR_STEPS = [
-                { selector: '.dashboard-header', title: 'Maritime dashboard', text: 'Your dashboard shows the work available to your account. All dates and times use Philippine time.', interactive: false }
+                { selector: '.dashboard-header', title: 'Maritime dashboard', text: 'Overview of operations, actionable queues, and financial summary for your role.', interactive: false },
+                { selector: '.dashboard-sidebar', title: 'Next Actions', text: 'Separated task queue with detailed hover cards and segmented filtering.', interactive: false },
+                { selector: '[aria-labelledby="operations-heading"]', title: 'Daily operations', text: 'Today’s vessel movements, tug assignments, overlaps, and upcoming arrivals.', interactive: false }
             ];
-            if (document.querySelector('[aria-labelledby="operations-heading"]')) {
-                window.IBS_TOUR_STEPS.push({ selector: '[aria-labelledby="operations-heading"]', title: 'Daily operations', text: 'Review today’s plans, tug assignment gaps, overlaps and upcoming vessels.', interactive: false });
-            }
-            if (document.querySelector('[aria-labelledby="review-heading"]')) {
-                window.IBS_TOUR_STEPS.push({ selector: '[aria-labelledby="review-heading"]', title: 'Awaiting your review', text: 'Review the schedule and final bill queues available to your account. Open a record to continue its workflow.', interactive: false });
-            }
             if (document.querySelector('[aria-labelledby="finance-heading"]')) {
-                window.IBS_TOUR_STEPS.push({ selector: '[aria-labelledby="finance-heading"]', title: 'Finance overview', text: 'Review the billing, receipt and banking information available to your account. Each figure states its scope.', interactive: false });
+                window.IBS_TOUR_STEPS.push({ selector: '[aria-labelledby="finance-heading"]', title: 'Finance overview', text: 'Billing totals, unbilled completed services, collections, and banking queue.', interactive: false });
             }
         </script>
     }

@@ -205,11 +205,7 @@ namespace IBS.Services.MSAP
                 model.DataError = "Workflow and financial data could not be loaded. Refresh to try again.";
             }
 
-            if (!model.CanViewDispatch)
-            {
-                return;
-            }
-
+            // Load vessel schedule operations for all authenticated MSAP dashboard users
             try
             {
                 var day = model.UpdatedAt.Date;
