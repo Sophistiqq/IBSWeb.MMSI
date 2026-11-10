@@ -33,7 +33,7 @@
                         <tr>
                             <th>Owner #</th>
                             <th>Owner / Company Name</th>
-                            <th>Fixed Rate</th>
+                            <th class="text-center">Tugboats</th>
                             <th class="text-center">Actions</th>
                         </tr>
                     </thead>
@@ -50,6 +50,7 @@
         $(document).ready(function () {
             const editUrl = '@Url.Action("Edit", "TugboatOwner", new { area = "MSAP" })';
             const deleteUrl = '@Url.Action("Delete", "TugboatOwner", new { area = "MSAP" })';
+            const tugboatsUrl = '@Url.Action("Index", "Tugboat", new { area = "MSAP" })';
 
             let table = $('#tugboatOwnersTable').DataTable(ModernTable.config({
                 serverSide: false,
@@ -61,14 +62,24 @@
                         render: (data, type) => type === 'display' ? `<span class="font-bold uppercase">${ModernTable.render.text(data)}</span>` : data
                     },
                     {
-                        data: "fixedRate",
-                        render: (data) => ModernTable.render.currency(data)
+                        data: null,
+                        orderable: false,
+                        className: "text-center",
+                        render: (data, type, row) => `
+                            <a href="${tugboatsUrl}?ownerId=${row.tugboatOwnerId}" 
+                               class="modern-badge-sm ui-status hover:underline inline-flex items-center gap-1"
+                               style="text-decoration: none;"
+                               title="View tugboats for ${ModernTable.render.text(row.tugboatOwnerName)}">
+                                <span class="material-symbols-outlined" style="font-size: 14px;">directions_boat</span>
+                                <span>View Tugboats</span>
+                            </a>`
                     },
                     {
                         data: null,
                         orderable: false,
                         className: "text-center",
                         render: (data, type, row) => ModernTable.render.dropdown([
+                            { label: 'View Tugboats', icon: 'directions_boat', url: `${tugboatsUrl}?ownerId=${row.tugboatOwnerId}` },
                             { label: 'Edit Owner', icon: 'edit', url: `${editUrl}?id=${row.tugboatOwnerId}` },
                             {
                                 label: 'Delete Owner',

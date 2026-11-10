@@ -232,7 +232,7 @@
     background: var(--ui-surface);
 }
 
-.app-ui :is(.ui-button:not(.ui-button--primary):not(.ui-button--complete):not(.ui-button--warning):not(.ui-button--error), .modern-btn-secondary):hover {
+.app-ui :is(.ui-button:not(.ui-button--primary):not(.ui-button--complete):not(.ui-button--warning):not(.ui-button--error):not(.active), .modern-btn-secondary:not(.active)):hover {
     background: var(--ui-surface-muted);
 }
 
@@ -241,10 +241,19 @@
 }
 
 .app-ui .modern-btn-secondary.active,
-.app-ui .modern-btn-secondary.active:hover {
+.app-ui .ui-button.active,
+.modern-btn-secondary.active {
     color: var(--on-primary);
     background: var(--primary);
     border-color: var(--primary);
+}
+
+.app-ui .modern-btn-secondary.active:hover,
+.app-ui .ui-button.active:hover,
+.modern-btn-secondary.active:hover {
+    color: var(--on-primary);
+    background: color-mix(in srgb, var(--primary) 88%, #000000);
+    border-color: color-mix(in srgb, var(--primary) 88%, #000000);
 }
 
 .app-ui .modern-btn-secondary.modern-btn-error.active,

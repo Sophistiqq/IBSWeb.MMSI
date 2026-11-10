@@ -19,12 +19,35 @@
             </div>
         </div>
 
+        <!-- Filter Tabs -->
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+            <button id="filterOwnershipAll" class="modern-btn-secondary active" type="button">ALL</button>
+            <button id="filterOwnershipCompany" class="modern-btn-secondary" type="button">COMPANY OWNED</button>
+            <button id="filterOwnershipChartered" class="modern-btn-secondary" type="button">CHARTERED / 3RD PARTY</button>
+        </div>
+
         <!-- Table Card -->
         <div class="modern-card ui-card">
-            <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
+            <div class="modern-card-header-action flex flex-wrap justify-between items-center gap-2 w-full ui-card-header">
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-primary">directions_boat</span>
                     <h2 class="modern-headline-md ui-section-title">Tugboat List</h2>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <div style="min-width: 220px;">
+                        <select id="ownerFilter" class="js-modern-select" data-placeholder="All Owners / Companies">
+                            <option value="">-- All Owners / Companies --</option>
+                        </select>
+                    </div>
+                    <div style="min-width: 170px;">
+                        <select id="portFilter" class="js-modern-select" data-placeholder="All Ports">
+                            <option value="">-- All Ports --</option>
+                        </select>
+                    </div>
+                    <button id="btnClearFilters" type="button" class="modern-btn-secondary" style="min-height: 38px; padding: 0 12px; font-size: 0.8125rem;" title="Reset all filters" hidden>
+                        <span class="material-symbols-outlined" style="font-size: 16px;">filter_alt_off</span>
+                        Reset
+                    </button>
                 </div>
             </div>
             <div class="modern-card-body ui-card-body">
@@ -53,9 +76,83 @@
             const editUrl = '@Url.Action("Edit", "Tugboat", new { area = "MSAP" })';
             const deleteUrl = '@Url.Action("Delete", "Tugboat", new { area = "MSAP" })';
 
+            let currentOwnership = 'ALL';
+            let currentOwnerId = '';
+            let currentPort = '';
+
+            // Register custom client-side search for the tugboats table
+            $.fn.dataTable.ext.search = $.fn.dataTable.ext.search.filter(fn => fn._tugboatsFilter !== true);
+            const tugboatCustomFilter = function(settings, data, dataIndex, rowData) {
+                if (settings.nTable.id !== 'tugboatsTable') return true;
+
+                if (currentOwnership === 'COMPANY' && !rowData.isCompanyOwned) return false;
+                if (currentOwnership === 'CHARTERED' && rowData.isCompanyOwned) return false;
+
+                if (currentOwnerId !== '') {
+                    if (String(rowData.tugboatOwnerId ?? '') !== String(currentOwnerId)) return false;
+                }
+
+                if (currentPort !== '') {
+                    const portName = rowData.port?.portName ?? '';
+                    if (portName !== currentPort) return false;
+                }
+
+                return true;
+            };
+            tugboatCustomFilter._tugboatsFilter = true;
+            $.fn.dataTable.ext.search.push(tugboatCustomFilter);
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const initialOwnerId = urlParams.get('ownerId') || '';
+
             let table = $('#tugboatsTable').DataTable(ModernTable.config({
                 serverSide: false,
                 ajax: ModernTable.ajax("@Url.Action("GetTugboatList", "Tugboat", new { area = "MSAP" })"),
+                stateLoadParams: function(settings, data) {
+                    if (initialOwnerId) {
+                        data.search.search = '';
+                        data.columns.forEach(column => column.search.search = '');
+                    }
+                },
+                initComplete: function(settings, json) {
+                    const api = this.api();
+                    const rows = api.rows().data().toArray();
+
+                    const ownerMap = new Map();
+                    const portSet = new Set();
+
+                    rows.forEach(r => {
+                        if (r.tugboatOwner && r.tugboatOwner.tugboatOwnerId) {
+                            ownerMap.set(String(r.tugboatOwner.tugboatOwnerId), r.tugboatOwner.tugboatOwnerName);
+                        }
+                        if (r.port && r.port.portName) {
+                            portSet.add(r.port.portName);
+                        }
+                    });
+
+                    const $ownerSelect = $('#ownerFilter');
+                    Array.from(ownerMap.entries())
+                        .sort((a, b) => a[1].localeCompare(b[1]))
+                        .forEach(([id, name]) => {
+                            $ownerSelect.append(new Option(name, id));
+                        });
+                    if (window.refreshModernSelect) window.refreshModernSelect($ownerSelect);
+
+                    const $portSelect = $('#portFilter');
+                    Array.from(portSet)
+                        .sort((a, b) => a.localeCompare(b))
+                        .forEach(port => {
+                            $portSelect.append(new Option(port, port));
+                        });
+                    if (window.refreshModernSelect) window.refreshModernSelect($portSelect);
+
+                    if (initialOwnerId) {
+                        currentOwnerId = initialOwnerId;
+                        $ownerSelect.val(initialOwnerId).trigger('change');
+                        updateFilterUi();
+                        api.draw();
+                    }
+                },
                 columns: [
                     { data: "tugboatNumber" },
                     {
@@ -65,7 +162,19 @@
                     { data: "port.portName" },
                     {
                         data: "tugboatOwner.tugboatOwnerName",
-                        defaultContent: '<span class="text-muted italic">None</span>'
+                        defaultContent: '<span class="text-muted italic">None</span>',
+                        render: (data, type, row) => {
+                            if (!data || !row.tugboatOwnerId) return '<span class="text-muted italic">None</span>';
+                            if (type === 'display') {
+                                return `<button type="button" class="btn-filter-owner hover:underline text-left cursor-pointer font-medium" 
+                                            data-owner-id="${row.tugboatOwnerId}" 
+                                            style="background:none; border:none; padding:0; color:var(--primary);"
+                                            title="Filter tugboats by ${ModernTable.render.text(data)}">
+                                            ${ModernTable.render.text(data)}
+                                        </button>`;
+                            }
+                            return data;
+                        }
                     },
                     {
                         data: "isCompanyOwned",
@@ -88,6 +197,85 @@
                     }
                 ]
             }));
+
+            // Click owner name in table
+            $('#tugboatsTable').on('click', '.btn-filter-owner', function (e) {
+                e.preventDefault();
+                const ownerId = String($(this).data('owner-id'));
+                $('#ownerFilter').val(ownerId).trigger('change');
+            });
+
+            // Ownership tabs
+            $('#filterOwnershipAll, #filterOwnershipCompany, #filterOwnershipChartered').on('click', function () {
+                $('#filterOwnershipAll, #filterOwnershipCompany, #filterOwnershipChartered').removeClass('active');
+                $(this).addClass('active');
+
+                if (this.id === 'filterOwnershipCompany') {
+                    currentOwnership = 'COMPANY';
+                    if (currentOwnerId) {
+                        currentOwnerId = '';
+                        $('#ownerFilter').val('');
+                        updateUrlParam('ownerId', null);
+                    }
+                } else if (this.id === 'filterOwnershipChartered') {
+                    currentOwnership = 'CHARTERED';
+                } else {
+                    currentOwnership = 'ALL';
+                }
+
+                updateFilterUi();
+                table.draw();
+            });
+
+            // Owner dropdown change
+            $('#ownerFilter').on('change', function () {
+                currentOwnerId = $(this).val();
+                if (currentOwnerId && currentOwnership === 'COMPANY') {
+                    currentOwnership = 'ALL';
+                    $('#filterOwnershipAll, #filterOwnershipCompany, #filterOwnershipChartered').removeClass('active');
+                    $('#filterOwnershipAll').addClass('active');
+                }
+                updateUrlParam('ownerId', currentOwnerId);
+                updateFilterUi();
+                table.draw();
+            });
+
+            // Port dropdown change
+            $('#portFilter').on('change', function () {
+                currentPort = $(this).val();
+                updateFilterUi();
+                table.draw();
+            });
+
+            // Reset filters
+            $('#btnClearFilters').on('click', function () {
+                currentOwnership = 'ALL';
+                currentOwnerId = '';
+                currentPort = '';
+                $('#ownerFilter').val('').trigger('change');
+                $('#portFilter').val('').trigger('change');
+                $('#filterOwnershipAll, #filterOwnershipCompany, #filterOwnershipChartered').removeClass('active');
+                $('#filterOwnershipAll').addClass('active');
+                updateUrlParam('ownerId', null);
+                updateFilterUi();
+                table.draw();
+            });
+
+            function updateFilterUi() {
+                const hasActive = currentOwnership !== 'ALL' || currentOwnerId !== '' || currentPort !== '';
+                if (hasActive) {
+                    $('#btnClearFilters').removeAttr('hidden');
+                } else {
+                    $('#btnClearFilters').attr('hidden', true);
+                }
+            }
+
+            function updateUrlParam(key, val) {
+                const url = new URL(window.location);
+                if (val) url.searchParams.set(key, val);
+                else url.searchParams.delete(key);
+                window.history.replaceState({}, '', url);
+            }
         });
 
         function confirmDelete(url) {

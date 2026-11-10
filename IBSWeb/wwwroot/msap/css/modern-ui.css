@@ -270,9 +270,21 @@ textarea.form-control {
     text-decoration: none;
 }
 
-.modern-btn-secondary:hover {
+.modern-btn-secondary:not(.active):hover {
     background-color: var(--surface-container-high);
     color: var(--on-surface);
+}
+
+.modern-btn-secondary.active {
+    background-color: var(--primary);
+    color: var(--on-primary);
+    border-color: var(--primary);
+}
+
+.modern-btn-secondary.active:hover {
+    background-color: color-mix(in srgb, var(--primary) 88%, #000000);
+    color: var(--on-primary);
+    border-color: color-mix(in srgb, var(--primary) 88%, #000000);
 }
 
 .modern-btn-error {
