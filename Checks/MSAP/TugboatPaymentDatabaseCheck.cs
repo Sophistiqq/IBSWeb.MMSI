@@ -406,28 +406,25 @@ namespace Checks.MSAP
                 var chargeService = new OtherTugChargeService(source, storage, NullLogger<OtherTugChargeService>.Instance);
                 var confirmed = await chargeService.ConfirmAsync(draftCharge.OtherTugChargeId, 1, actor.Id, default);
                 Check(confirmed.IsSuccess, confirmed.Message ?? "Provider charge confirmation failed.");
-                var jv = await db.FilprideJournalVoucherHeaders.AsNoTracking().Include(j => j.Details)
-                    .SingleOrDefaultAsync(j => j.References == confirmRef && j.Payee == owner.TugboatOwnerName);
-                Check(jv != null && jv.PostedBy != null && jv.ApprovedBy != null && jv.Details!.Count == 3,
-                    "ConfirmAsync did not create and post the contra-revenue/Input VAT/AP recognition journal.");
-                var jvGl = await db.FilprideGeneralLedgerBooks.AsNoTracking().Where(g => g.Reference == jv!.JournalVoucherHeaderNo).ToListAsync();
+                Check(!await db.FilprideJournalVoucherHeaders.AnyAsync(j => j.References == confirmRef),
+                    "Direct GL recognition should not create a synthetic Journal Voucher header.");
+                var jvGl = await db.FilprideGeneralLedgerBooks.AsNoTracking().Where(g => g.Reference == confirmRef).ToListAsync();
                 Check(jvGl.Count == 3
                     && jvGl.Single(g => g.AccountNo == OtherTugChargeService.ContraRevenueAccount).Debit == 1000m
                     && jvGl.Single(g => g.AccountNo == OtherTugChargeService.InputVatAccount).Debit == 120m
                     && jvGl.Single(g => g.AccountNo == TugboatPaymentService.ApAccount).Credit == 1120m,
-                    "Recognition journal GL entries did not match 1000 net contra-revenue + 120 Input VAT = 1120 AP.");
+                    "Recognition GL entries did not match 1000 net contra-revenue + 120 Input VAT = 1120 AP.");
                 var linkedForm = Form();
                 linkedForm.AllocationIds = draftCharge.Lines.Select(l => l.OtherTugChargeLineId).ToArray();
-                linkedForm.Date = jv!.Date > linkedForm.Date ? jv.Date : linkedForm.Date;
+                linkedForm.Date = draftCharge.DocumentDate > linkedForm.Date ? draftCharge.DocumentDate : linkedForm.Date;
                 linkedForm.CheckDate = linkedForm.Date;
                 var linkedCvId = await service.CreateAsync(linkedForm, null, "Payment check", default);
                 var linkedCv = (await service.GetAsync(linkedCvId, default))!;
-                Check(linkedCv.TugboatPayments.Single().LiabilityJournalVoucherId == jv.JournalVoucherHeaderId
-                    && !string.IsNullOrEmpty(linkedCv.TugboatPayments.Single().LiabilitySnapshot),
-                    "Payment for a confirmed bill with a recognition JV did not link LiabilityJournalVoucherId and LiabilitySnapshot.");
+                Check(linkedCv.TugboatPayments.Single().LiabilityJournalVoucherId == null,
+                    "Payment should not require or set LiabilityJournalVoucherId.");
                 await service.ChangeStatusAsync(linkedCvId, "Post", "Payment check", null, default);
                 await service.ChangeStatusAsync(linkedCvId, "Void", "Payment check", "Cleanup linked recognition check", default);
-                Console.WriteLine("PASS: ConfirmAsync creates and posts contra-revenue/Input VAT/AP recognition JV and links LiabilityJournalVoucherId on payment.");
+                Console.WriteLine("PASS: ConfirmAsync directly posts contra-revenue/Input VAT/AP to GL without a synthetic JV, and payment settles directly.");
             }
 
             ApplicationDbContext Open()

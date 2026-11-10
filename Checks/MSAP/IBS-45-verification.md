@@ -7,12 +7,12 @@ local `ibs_dev` database into `ibs_workspace_check_9bb6f8c25e52` and `ibs_worksp
 
 1. **Removed first-download Sales Summary freeze (`a5f6bacff`):**
    - Removed `FinalSalesReport` (`msap.mmsi_final_sales_reports`) and the unapplied `20261027075022_AddFinalSalesReports` migration per user decision so `MaritimeReportController.SalesSummary` always generates live from current billings, collections, and confirmation timestamps without locking out subsequent collection/billing updates.
-2. **Provisional AP Other Tugs contra-revenue recognition (`f1e016812`, IBS-8):**
+2. **Direct AP Other Tugs contra-revenue recognition (IBS-8, Filpride pattern):**
    - Registered provisional contra-revenue account `401020400` (*Services by Other Tugs*, Level 4 under `401020000 Sales`) alongside `201020500` (*AP - Trade - Other Tugs*) and `101060200` (*Vat - Input*) in `ibs_dev`.
-   - `OtherTugChargeService.ConfirmAsync` now creates and posts a company-level Journal Voucher and General Ledger entries (`Dr 401020400` net, `Dr 101060200` Input VAT, `Cr 201020500` gross payable) dated to the customer billing month (or current open period as an adjustment if closed).
-   - `TugboatPaymentService.CreateAsync` links `LiabilityJournalVoucherId` and `LiabilitySnapshot` when paying a full bill with an unreserved recognition JV.
-3. **Management workbook inspection (`MMSI PNL 202605 by Mgt.xlsx`):**
-   - Confirmed `MAY 2026 SALES FINAL` treats AP Other Tugs as contra-revenue (`Less: Services by Other Tugs -11,271,129.33`), pools external tug margin into `INCOME FROM OTHER TUGS` (`6,540,686.19`) without attributing cost to owned tugs, keys rows by customer billing statement date (carrying `2,485,696.43` of March–April subcon costs billed in May), and records prior-period AP differences on standalone adjustment lines (`+86,986.66` Venus Marine, `-77,870.55` MTSC; net `+9,116.11`).
+   - `OtherTugChargeService.ConfirmAsync` posts direct General Ledger entries (`Dr 401020400` net contra-revenue, `Dr 101060200` Input VAT, `Cr 201020500` gross payable) with `Reference = charge.ProviderReference` dated to the customer billing month (or current open period as an adjustment if closed), mirroring the Filpride Delivery Receipt pattern without creating a synthetic Journal Voucher header.
+   - `TugboatPaymentService.CreateAsync` disburses payments directly against the confirmed charge and liquidates `201020500` without requiring an intermediate `LiabilityJournalVoucherId`.
+3. **Management workbook inspection (`MMSI PNL 202605 by Mgt.xlsx` and `PNL SEPT 2026`):**
+   - Confirmed both May and September management P&Ls treat AP Other Tugs as contra-revenue (`Less: Services by Other Tugs`), pools external tug margin into `INCOME FROM OTHER TUGS` without attributing cost to owned tugs, keys rows by customer billing statement date, and displays Gross Sales and Services by Other Tugs on distinct lines to preserve top-line gross revenue visibility.
 
 ## Verification results
 

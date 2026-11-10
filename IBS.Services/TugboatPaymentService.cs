@@ -281,29 +281,12 @@ namespace IBS.Services
                     {
                         throw new InvalidOperationException("A selected ticket has no payable amount or is already reserved by another voucher.");
                     }
-                    int? liabilityId = null;
-                    var liabilitySnapshot = "";
-                    if (selected.Count == source.Charge.Lines.Count)
-                    {
-                        liabilityId = await _db.FilprideJournalVoucherHeaders.AsNoTracking()
-                            .Where(j => j.WorkspaceTugboatId == null && j.Payee == owner.TugboatOwnerName
-                                && j.References == source.Charge.ProviderReference && j.PostedBy != null && j.ApprovedBy != null
-                                && j.CanceledBy == null && j.VoidedBy == null && j.Date <= form.Date
-                                && !_db.FilprideTugboatPayments.Any(p => p.LiabilityJournalVoucherId == j.JournalVoucherHeaderId && p.ReleasedAt == null))
-                            .OrderByDescending(j => j.JournalVoucherHeaderId)
-                            .Select(j => (int?)j.JournalVoucherHeaderId)
-                            .FirstOrDefaultAsync(ct);
-                        if (liabilityId.HasValue)
-                        {
-                            liabilitySnapshot = await ValidateLiabilityAsync(liabilityId.Value, owner.TugboatOwnerName, source.Charge.ProviderReference, billTotals.Gross, form.Date, ct);
-                        }
-                    }
                     payments.Add(new FilprideTugboatPayment
                     {
                         OtherTugChargeId = chargeId,
                         TugboatOwnerId = form.OwnerId,
-                        LiabilityJournalVoucherId = liabilityId,
-                        LiabilitySnapshot = liabilitySnapshot,
+                        LiabilityJournalVoucherId = null,
+                        LiabilitySnapshot = "",
                         ChargeRevision = source.Charge.Revision,
                         ProviderReference = source.Charge.ProviderReference,
                         SourceSnapshot = Snapshot(source.Charge),

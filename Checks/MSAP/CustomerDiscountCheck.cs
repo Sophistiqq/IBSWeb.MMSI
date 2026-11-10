@@ -4,6 +4,7 @@ using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models;
 using IBS.Models.MSAP.MasterFile;
+using IBS.Services;
 using IBSWeb.Areas.MSAP.Controllers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -27,7 +28,7 @@ namespace Checks.MSAP
                 User = new ClaimsPrincipal(new ClaimsIdentity([
                     new Claim(ClaimTypes.NameIdentifier, "shared-check"), new Claim(ClaimTypes.Name, "Discount check")], "check"))
             };
-            var controller = new CustomerController(work, NullLogger<CustomerController>.Instance, users, db)
+            var controller = new CustomerController(work, NullLogger<CustomerController>.Instance, users)
             {
                 ControllerContext = new ControllerContext { HttpContext = http },
                 TempData = tempData.GetTempData(http)

@@ -341,15 +341,14 @@ namespace IBS.Services.MSAP
             charge.ConfirmedAt = DateTimeHelper.GetCurrentPhilippineTime();
             charge.ConfirmedByUserId = userId;
             charge.ConfirmedByName = actor.Name.Trim();
-            var jvNumber = totalAmount > 0m
-                ? await RecognizeLiabilityAsync(owner, charge, tickets, actor.Name.Trim(), ct)
-                : null;
-            _db.AuditTrails.Add(new AuditTrail(actor.UserName ?? userId, $"Confirmed provider charge {charge.ProviderReference}: {Snapshot(charge)}.{(jvNumber != null ? $" Recognized AP journal {jvNumber}." : "")}",
+            var recognized = totalAmount > 0m
+                && await RecognizeLiabilityAsync(owner, charge, tickets, actor.Name.Trim(), ct);
+            _db.AuditTrails.Add(new AuditTrail(actor.UserName ?? userId, $"Confirmed provider charge {charge.ProviderReference}: {Snapshot(charge)}.{(recognized ? $" Recognized AP Other Tugs in GL for {charge.ProviderReference}." : "")}",
                 "Other Tug Charges", id, charge.ProviderReference) { UserId = userId, ActorName = actor.Name.Trim() });
             await _db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
-            return ServiceResult.Success(jvNumber != null
-                ? $"Provider charges confirmed and recognized in AP Other Tugs ({jvNumber})."
+            return ServiceResult.Success(recognized
+                ? $"Provider charges confirmed and recognized in AP Other Tugs ({charge.ProviderReference})."
                 : "Provider charges confirmed and applied to AP Other Tugs reporting.");
         }
 
@@ -362,7 +361,7 @@ namespace IBS.Services.MSAP
             return (gross, net, inputVat);
         }
 
-        private async Task<string> RecognizeLiabilityAsync(TugboatOwner owner, OtherTugCharge charge, List<DispatchTicket> tickets, string actor, CancellationToken ct)
+        private async Task<bool> RecognizeLiabilityAsync(TugboatOwner owner, OtherTugCharge charge, List<DispatchTicket> tickets, string actor, CancellationToken ct)
         {
             await using var accounting = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseNpgsql(_db.Database.GetDbConnection()).Options);
@@ -375,120 +374,103 @@ namespace IBS.Services.MSAP
             var billingDate = tickets.Where(t => t.Billing != null).Select(t => t.Billing!.Date).DefaultIfEmpty(charge.DocumentDate).Max();
             var recognitionDate = billingDate;
             var closedPeriodAdjustment = false;
-            if (await work.IsPeriodPostedAsync(Module.JournalVoucher, recognitionDate, ct))
+            if (await work.IsPeriodPostedAsync(Module.ReceivingReport, recognitionDate, ct))
             {
                 closedPeriodAdjustment = true;
                 var today = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime());
-                var minOpenDate = DateOnly.FromDateTime(await work.GetMinimumPeriodBasedOnThePostedPeriods(Module.JournalVoucher, ct));
+                var minOpenDate = DateOnly.FromDateTime(await work.GetMinimumPeriodBasedOnThePostedPeriods(Module.ReceivingReport, ct));
                 recognitionDate = today >= minOpenDate ? today : minOpenDate;
                 if (recognitionDate > charge.DocumentDate)
                 {
                     recognitionDate = charge.DocumentDate >= minOpenDate ? charge.DocumentDate : recognitionDate;
                 }
             }
-            var existing = await accounting.FilprideJournalVoucherHeaders.IgnoreQueryFilters(["TugboatWorkspace"])
-                .Where(j => j.WorkspaceTugboatId == null && j.Payee == owner.TugboatOwnerName && j.References == charge.ProviderReference
-                    && j.CanceledBy == null && j.VoidedBy == null)
-                .OrderByDescending(j => j.JournalVoucherHeaderId)
-                .FirstOrDefaultAsync(ct);
-            if (existing != null)
+            var existing = await accounting.FilprideGeneralLedgerBooks.IgnoreQueryFilters(["TugboatWorkspace"])
+                .AnyAsync(g => g.WorkspaceTugboatId == null && g.Reference == charge.ProviderReference
+                    && g.CounterpartyId == owner.TugboatOwnerId, ct);
+            if (existing)
             {
-                return existing.JournalVoucherHeaderNo!;
+                return true;
             }
             var contraAccount = await accounting.FilprideChartOfAccounts.SingleOrDefaultAsync(a => a.AccountNumber == ContraRevenueAccount && !a.IsMain && !a.IsHidden, ct)
                 ?? throw new InvalidOperationException("Required posting account is unavailable: " + ContraRevenueAccount);
             var apAccount = await accounting.FilprideChartOfAccounts.SingleOrDefaultAsync(a => a.AccountNumber == TugboatPaymentService.ApAccount && !a.IsMain && !a.IsHidden, ct)
                 ?? throw new InvalidOperationException("Required posting account is unavailable: " + TugboatPaymentService.ApAccount);
-            await accounting.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(20771010)", ct);
-            var jvNo = await work.FilprideJournalVoucher.GenerateCodeAsync(nameof(DocumentType.Documented), ct);
             var now = DateTimeHelper.GetCurrentPhilippineTime();
             var particulars = closedPeriodAdjustment
                 ? $"ADJUSTMENT ON SET UP A/P OTHER TUGS - {owner.TugboatOwnerName} ({charge.ProviderReference}; BILLING DATE {billingDate:MMM dd, yyyy})"
                 : $"SET UP A/P OTHER TUGS - {owner.TugboatOwnerName} ({charge.ProviderReference})";
-            var details = new List<FilprideJournalVoucherDetail>
+
+            var ledgers = new List<FilprideGeneralLedgerBook>
             {
                 new()
                 {
+                    WorkspaceTugboatId = null,
+                    Date = recognitionDate,
+                    Reference = charge.ProviderReference,
+                    Description = particulars,
+                    AccountId = contraAccount.AccountId,
                     AccountNo = ContraRevenueAccount,
-                    AccountName = contraAccount.AccountName,
-                    TransactionNo = jvNo,
+                    AccountTitle = contraAccount.AccountName,
                     Debit = net,
-                    Credit = 0m
+                    Credit = 0m,
+                    CreatedBy = actor,
+                    CreatedDate = now,
+                    IsPosted = true,
+                    ModuleType = nameof(ModuleType.Purchase),
+                    CounterpartyType = CounterpartyType.TugboatOwner,
+                    CounterpartyId = owner.TugboatOwnerId,
+                    CounterpartyName = owner.TugboatOwnerName
                 }
             };
             if (inputVat > 0m)
             {
                 var vatAccount = await accounting.FilprideChartOfAccounts.SingleOrDefaultAsync(a => a.AccountNumber == InputVatAccount && !a.IsMain && !a.IsHidden, ct)
                     ?? throw new InvalidOperationException("Required posting account is unavailable: " + InputVatAccount);
-                details.Add(new FilprideJournalVoucherDetail
-                {
-                    AccountNo = InputVatAccount,
-                    AccountName = vatAccount.AccountName,
-                    TransactionNo = jvNo,
-                    Debit = inputVat,
-                    Credit = 0m
-                });
-            }
-            details.Add(new FilprideJournalVoucherDetail
-            {
-                AccountNo = TugboatPaymentService.ApAccount,
-                AccountName = apAccount.AccountName,
-                TransactionNo = jvNo,
-                Debit = 0m,
-                Credit = gross
-            });
-            var header = new FilprideJournalVoucherHeader
-            {
-                WorkspaceTugboatId = null,
-                Type = nameof(DocumentType.Documented),
-                JvType = nameof(JvType.Accrual),
-                JournalVoucherHeaderNo = jvNo,
-                Date = recognitionDate,
-                References = charge.ProviderReference,
-                Payee = owner.TugboatOwnerName,
-                Particulars = particulars,
-                JVReason = closedPeriodAdjustment ? "Prior-period AP Other Tugs adjustment" : "AP Other Tugs recognition on confirmation",
-                CreatedBy = actor,
-                CreatedDate = now,
-                ApprovedBy = actor,
-                ApprovedDate = now,
-                PostedBy = actor,
-                PostedDate = now,
-                Status = nameof(JvStatus.Posted),
-                AutoReverseNextMonth = false,
-                Details = details
-            };
-            accounting.FilprideJournalVoucherHeaders.Add(header);
-            var ledgers = details.Select(detail =>
-            {
-                var accountId = detail.AccountNo == ContraRevenueAccount ? contraAccount.AccountId
-                    : detail.AccountNo == TugboatPaymentService.ApAccount ? apAccount.AccountId
-                    : accounting.FilprideChartOfAccounts.Local.Single(a => a.AccountNumber == InputVatAccount).AccountId;
-                return new FilprideGeneralLedgerBook
+                ledgers.Add(new FilprideGeneralLedgerBook
                 {
                     WorkspaceTugboatId = null,
                     Date = recognitionDate,
-                    Reference = jvNo,
+                    Reference = charge.ProviderReference,
                     Description = particulars,
-                    AccountId = accountId,
-                    AccountNo = detail.AccountNo,
-                    AccountTitle = detail.AccountName,
-                    Debit = detail.Debit,
-                    Credit = detail.Credit,
+                    AccountId = vatAccount.AccountId,
+                    AccountNo = InputVatAccount,
+                    AccountTitle = vatAccount.AccountName,
+                    Debit = inputVat,
+                    Credit = 0m,
                     CreatedBy = actor,
                     CreatedDate = now,
                     IsPosted = true,
-                    ModuleType = nameof(ModuleType.Journal),
+                    ModuleType = nameof(ModuleType.Purchase),
                     CounterpartyType = CounterpartyType.TugboatOwner,
                     CounterpartyId = owner.TugboatOwnerId,
                     CounterpartyName = owner.TugboatOwnerName
-                };
-            }).ToList();
+                });
+            }
+            ledgers.Add(new FilprideGeneralLedgerBook
+            {
+                WorkspaceTugboatId = null,
+                Date = recognitionDate,
+                Reference = charge.ProviderReference,
+                Description = particulars,
+                AccountId = apAccount.AccountId,
+                AccountNo = TugboatPaymentService.ApAccount,
+                AccountTitle = apAccount.AccountName,
+                Debit = 0m,
+                Credit = gross,
+                CreatedBy = actor,
+                CreatedDate = now,
+                IsPosted = true,
+                ModuleType = nameof(ModuleType.Purchase),
+                CounterpartyType = CounterpartyType.TugboatOwner,
+                CounterpartyId = owner.TugboatOwnerId,
+                CounterpartyName = owner.TugboatOwnerName
+            });
             await accounting.FilprideGeneralLedgerBooks.AddRangeAsync(ledgers, ct);
             await accounting.FilprideAuditTrails.AddAsync(new FilprideAuditTrail(actor,
-                $"Posted AP Other Tugs recognition journal {jvNo} for {charge.ProviderReference}", "Journal Voucher"), ct);
+                $"Posted AP Other Tugs direct GL entries for {charge.ProviderReference}", "Other Tug Charges"), ct);
             await accounting.SaveChangesAsync(ct);
-            return jvNo;
+            return true;
         }
 
         private async Task<OtherTugCharge?> LockAsync(int id, CancellationToken ct)
