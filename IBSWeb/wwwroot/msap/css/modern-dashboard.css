@@ -24,11 +24,79 @@
 
 .dashboard-workspace .dashboard-actions {
     padding: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
-.dashboard-header .dashboard-actions > a {
-    min-height: 2.75rem;
-    min-width: 10rem;
+.dashboard-header .dashboard-actions > a,
+.dashboard-header .dashboard-actions > .dropdown > .dropdown-toggle {
+    min-height: 2.5rem;
+    white-space: nowrap;
+}
+
+.dashboard-actions .dropdown {
+    position: relative;
+}
+
+.dashboard-actions .dropdown-menu {
+    border-radius: var(--radius-xl, 0.75rem);
+    border: 1px solid var(--outline-variant);
+    background-color: var(--surface-container-lowest, #ffffff);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    padding: 0.375rem 0;
+    min-width: 13rem;
+    z-index: 1050;
+}
+
+[data-bs-theme="dark"] .dashboard-actions .dropdown-menu {
+    background-color: #1e2625;
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dashboard-actions .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--on-surface);
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.dashboard-actions .dropdown-item:hover,
+.dashboard-actions .dropdown-item:focus {
+    background-color: var(--surface-container-low, #f0f4f4);
+    color: var(--primary, #0b514d);
+}
+
+[data-bs-theme="dark"] .dashboard-actions .dropdown-item:hover,
+[data-bs-theme="dark"] .dashboard-actions .dropdown-item:focus {
+    background-color: #273130;
+    color: #64c4bb;
+}
+
+.dashboard-actions .dropdown-item .material-symbols-outlined {
+    font-size: 1.125rem;
+    color: var(--on-surface-variant);
+}
+
+.dashboard-actions .dropdown-item:hover .material-symbols-outlined {
+    color: var(--primary, #0b514d);
+}
+
+[data-bs-theme="dark"] .dashboard-actions .dropdown-item:hover .material-symbols-outlined {
+    color: #64c4bb;
+}
+
+.dashboard-actions .dropdown-divider {
+    border-top: 1px solid var(--outline-variant);
+    opacity: 0.6;
+    margin: 0.25rem 0;
 }
 
 .dashboard-rate {
@@ -226,8 +294,10 @@
 
 @media (max-width: 767px) {
     .app-ui.dashboard-workspace { padding: var(--ui-space-2); }
-    .dashboard-workspace .dashboard-actions { justify-self: stretch; }
-    .dashboard-header .dashboard-actions > a { flex: 1; }
+    .dashboard-workspace .dashboard-actions { justify-self: stretch; width: 100%; }
+    .dashboard-header .dashboard-actions > a,
+    .dashboard-header .dashboard-actions > .dropdown { flex: 1; }
+    .dashboard-header .dashboard-actions > .dropdown > .dropdown-toggle { width: 100%; justify-content: center; }
     .dashboard-banking, .dashboard-footer { grid-template-columns: minmax(0, 1fr); }
     .dashboard-table { min-width: 36rem; }
 }
@@ -328,11 +398,23 @@
     border-bottom: 2px solid var(--outline-variant);
     margin-bottom: var(--ui-space-3);
     overflow-x: auto;
-    scrollbar-width: none;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--outline-variant) transparent;
+    -webkit-overflow-scrolling: touch;
 }
 
 .dashboard-filter-tabs::-webkit-scrollbar {
-    display: none;
+    height: 4px;
+}
+
+.dashboard-filter-tabs::-webkit-scrollbar-thumb {
+    background: var(--outline-variant);
+    border-radius: 4px;
+}
+
+.dashboard-filter-tabs::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .dashboard-filter-tab {
@@ -340,8 +422,8 @@
     appearance: none;
     background: transparent;
     border: none;
-    padding: var(--ui-space-2) var(--ui-space-3);
-    font-size: 0.8rem;
+    padding: var(--ui-space-2) var(--ui-space-2);
+    font-size: 0.775rem;
     font-weight: 500;
     color: var(--on-surface-variant);
     cursor: pointer;
@@ -352,6 +434,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+    flex-shrink: 0;
 }
 
 .dashboard-filter-tab:hover {

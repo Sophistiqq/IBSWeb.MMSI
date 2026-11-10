@@ -53,27 +53,77 @@ else
                 <div class="ui-page-action dashboard-actions ui-actions">
                     @if (Model.CanCreateSchedule)
                     {
-                        <a asp-controller="VesselSchedule" asp-action="Create" asp-route-date="@dateValue" class="modern-btn-primary ui-button ui-button--primary"><span class="material-symbols-outlined">add</span> Create schedule</a>
+                        <a asp-controller="VesselSchedule" asp-action="Create" asp-route-date="@dateValue" class="modern-btn-primary ui-button ui-button--primary">
+                            <span class="material-symbols-outlined">add</span> Create schedule
+                        </a>
                     }
-                    @if (Model.CanViewDispatch)
-                    {
-                        <a asp-controller="VesselSchedule" asp-action="Index" asp-route-date="@dateValue" class="modern-btn-secondary ui-button">Open calendar</a>
+                    @{
+                        bool hasOtherActions = Model.CanViewDispatch || Model.CanCreateBilling || Model.CanViewBilling || Model.CanCreateCollection || Model.CanViewCollections;
                     }
-                    @if (Model.CanCreateBilling)
+                    @if (hasOtherActions)
                     {
-                        <a asp-controller="Billing" asp-action="Create" class="modern-btn-secondary ui-button"><span class="material-symbols-outlined">add</span> Create bill</a>
-                    }
-                    @if (Model.CanViewBilling)
-                    {
-                        <a asp-controller="Billing" asp-action="Index" class="modern-btn-secondary ui-button">Open billing</a>
-                    }
-                    @if (Model.CanCreateCollection)
-                    {
-                        <a asp-controller="Collection" asp-action="Create" class="modern-btn-secondary ui-button"><span class="material-symbols-outlined">add</span> Record collection</a>
-                    }
-                    @if (Model.CanViewCollections)
-                    {
-                        <a asp-controller="Collection" asp-action="Index" class="modern-btn-secondary ui-button">Open collections</a>
+                        <div class="dropdown">
+                            <button type="button" class="modern-btn-secondary ui-button dropdown-toggle flex items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span class="material-symbols-outlined">more_horiz</span>
+                                <span>Quick actions</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                @if (Model.CanViewDispatch)
+                                {
+                                    <li>
+                                        <a asp-controller="VesselSchedule" asp-action="Index" asp-route-date="@dateValue" class="dropdown-item">
+                                            <span class="material-symbols-outlined">calendar_month</span> Open calendar
+                                        </a>
+                                    </li>
+                                }
+                                @if (Model.CanCreateBilling || Model.CanViewBilling)
+                                {
+                                    @if (Model.CanViewDispatch)
+                                    {
+                                        <li><hr class="dropdown-divider"></li>
+                                    }
+                                    @if (Model.CanCreateBilling)
+                                    {
+                                        <li>
+                                            <a asp-controller="Billing" asp-action="Create" class="dropdown-item">
+                                                <span class="material-symbols-outlined">receipt_long</span> Create bill
+                                            </a>
+                                        </li>
+                                    }
+                                    @if (Model.CanViewBilling)
+                                    {
+                                        <li>
+                                            <a asp-controller="Billing" asp-action="Index" class="dropdown-item">
+                                                <span class="material-symbols-outlined">receipt</span> Open billing
+                                            </a>
+                                        </li>
+                                    }
+                                }
+                                @if (Model.CanCreateCollection || Model.CanViewCollections)
+                                {
+                                    @if (Model.CanViewDispatch || Model.CanCreateBilling || Model.CanViewBilling)
+                                    {
+                                        <li><hr class="dropdown-divider"></li>
+                                    }
+                                    @if (Model.CanCreateCollection)
+                                    {
+                                        <li>
+                                            <a asp-controller="Collection" asp-action="Create" class="dropdown-item">
+                                                <span class="material-symbols-outlined">payments</span> Record collection
+                                            </a>
+                                        </li>
+                                    }
+                                    @if (Model.CanViewCollections)
+                                    {
+                                        <li>
+                                            <a asp-controller="Collection" asp-action="Index" class="dropdown-item">
+                                                <span class="material-symbols-outlined">account_balance_wallet</span> Open collections
+                                            </a>
+                                        </li>
+                                    }
+                                }
+                            </ul>
+                        </div>
                     }
                 </div>
                 <p class="ui-page-description ui-caption ui-muted"><span class="dashboard-status">MMSI</span> @day.ToString("dddd, dd MMM yyyy") · Philippine time · Updated @Model.UpdatedAt.ToString("HH:mm") <a asp-action="Index">Refresh</a></p>
@@ -763,9 +813,20 @@ else
         <script>
             document.addEventListener('DOMContentLoaded', function () {
                 // Segmented Filter Tabs
+                var tabsContainer = document.querySelector('.dashboard-filter-tabs');
                 var tabs = document.querySelectorAll('.dashboard-filter-tab');
                 var items = document.querySelectorAll('.dashboard-action-item');
                 var emptyState = document.querySelector('.dashboard-sidebar-empty');
+
+                // Enable horizontal scroll with normal mouse wheel (no Shift key required)
+                if (tabsContainer) {
+                    tabsContainer.addEventListener('wheel', function (e) {
+                        if (e.deltaY !== 0 && tabsContainer.scrollWidth > tabsContainer.clientWidth) {
+                            e.preventDefault();
+                            tabsContainer.scrollLeft += e.deltaY;
+                        }
+                    }, { passive: false });
+                }
 
                 tabs.forEach(function (tab) {
                     tab.addEventListener('click', function () {
@@ -775,6 +836,7 @@ else
                         });
                         tab.classList.add('active');
                         tab.setAttribute('aria-selected', 'true');
+                        tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
 
                         var filter = tab.getAttribute('data-sidebar-filter');
                         var visibleCount = 0;
