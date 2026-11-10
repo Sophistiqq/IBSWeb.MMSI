@@ -140,7 +140,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<(IEnumerable<DispatchTicket> Data, int RecordsFiltered, int TotalRecords)> GetPagedDispatchTicketsAsync(DataTablesParameters parameters, string filterType, CancellationToken cancellationToken = default)
         {
-            var query = dbSet
+            var query = dbSet.AsNoTracking()
                 .Include(dt => dt.Service)
                 .Include(dt => dt.Terminal).ThenInclude(dt => dt.Port)
                 .Include(dt => dt.Tugboat)

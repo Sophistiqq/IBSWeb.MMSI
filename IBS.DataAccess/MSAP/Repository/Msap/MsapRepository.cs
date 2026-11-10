@@ -9,19 +9,14 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
     {
         public async Task<List<SelectListItem>> GetMsapUsersSelectListById(CancellationToken cancellationToken = default)
         {
-            var existingUserIds = await db.MsapUserAccesses
-                .Select(ua => ua.UserId)
-                .ToListAsync(cancellationToken);
-
-            var list = await db.Users
-                .Where(u => !existingUserIds.Contains(u.Id))
-                .OrderBy(dt => dt.Name).Select(s => new SelectListItem
+            return await db.Users.AsNoTracking()
+                .Where(u => !db.MsapUserAccesses.Any(ua => ua.UserId == u.Id))
+                .OrderBy(dt => dt.Name)
+                .Select(s => new SelectListItem
                 {
                     Value = s.Id.ToString(),
                     Text = s.Name ?? "Name unavailable"
                 }).ToListAsync(cancellationToken);
-
-            return list;
         }
     }
 }

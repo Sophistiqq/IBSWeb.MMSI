@@ -12,7 +12,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<IEnumerable<CustomerOrderSlip>> GetAllCustomerOrderSlipsWithDetailsAsync(CancellationToken cancellationToken)
         {
-            return await _db.MsapCustomerOrderSlips
+            return await _db.MsapCustomerOrderSlips.AsNoTracking()
                 .Include(j => j.Customer)
                 .Include(j => j.Vessel)
                 .Include(j => j.Port)
@@ -24,7 +24,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<IEnumerable<CustomerOrderSlip>> GetCustomerOrderSlipsWithDetailsAsync(DateTime start, DateTime end, CancellationToken cancellationToken)
         {
-            return await _db.MsapCustomerOrderSlips
+            return await _db.MsapCustomerOrderSlips.AsNoTracking()
                 .Include(j => j.Customer)
                 .Include(j => j.Vessel)
                 .Include(j => j.Port)

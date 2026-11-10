@@ -1,6 +1,5 @@
 using System.Linq.Dynamic.Core;
 using System.Security.Claims;
-using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.Enums;
@@ -20,8 +19,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
     public class CustomerController(
         IUnitOfWork unitOfWork,
         ILogger<CustomerController> logger,
-        UserManager<ApplicationUser> userManager,
-        MsapDbContext dbContext)
+        UserManager<ApplicationUser> userManager)
         : Controller
     {
         private string GetUserFullName()
@@ -106,32 +104,32 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return View(model);
             }
 
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
             try
             {
-                model.Company = companyClaims;
-                model.CustomerCode = await unitOfWork.Customer.GenerateCodeAsync(model.CustomerType, cancellationToken);
-                model.CreatedBy = GetUserFullName();
-                await unitOfWork.Customer.AddAsync(model, cancellationToken);
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    model.Company = companyClaims;
+                    model.CustomerCode = await unitOfWork.Customer.GenerateCodeAsync(model.CustomerType, cancellationToken);
+                    model.CreatedBy = GetUserFullName();
+                    await unitOfWork.Customer.AddAsync(model, cancellationToken);
 
-                #region -- Audit Trail Recording
+                    #region -- Audit Trail Recording
 
-                AuditTrail auditTrailBook = new(model.CreatedBy!,
-                    $"Created new Customer #{model.CustomerCode}; default COS discount: {model.DefaultCosDiscountPercent}%", "Customer");
-                await unitOfWork.AuditTrail.AddAsync(auditTrailBook, cancellationToken);
+                    AuditTrail auditTrailBook = new(model.CreatedBy!,
+                        $"Created new Customer #{model.CustomerCode}; default COS discount: {model.DefaultCosDiscountPercent}%", "Customer");
+                    await unitOfWork.AuditTrail.AddAsync(auditTrailBook, cancellationToken);
 
-                #endregion -- Audit Trail Recording --
+                    #endregion -- Audit Trail Recording --
 
-                await unitOfWork.SaveAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                    await unitOfWork.SaveAsync(cancellationToken);
+                }, cancellationToken);
+
                 TempData["success"] = "Customer created successfully";
                 return RedirectToAction(nameof(Index));
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to create customer master file. Created by: {UserName}", userManager.GetUserName(User));
-                await transaction.RollbackAsync(cancellationToken);
                 TempData["error"] = ex.Message;
                 return View(model);
             }
@@ -181,29 +179,29 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return View(model);
             }
 
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
             try
             {
-                model.EditedBy = GetUserFullName();
-                await unitOfWork.Customer.UpdateAsync(model, cancellationToken);
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    model.EditedBy = GetUserFullName();
+                    await unitOfWork.Customer.UpdateAsync(model, cancellationToken);
 
-                #region --Audit Trail Recording
+                    #region --Audit Trail Recording
 
-                AuditTrail auditTrailBook = new (model.EditedBy,
-                    $"Edited Customer #{model.CustomerCode}; default COS discount: {model.DefaultCosDiscountPercent}%", "Customer" );
-                await unitOfWork.AuditTrail.AddAsync(auditTrailBook, cancellationToken);
+                    AuditTrail auditTrailBook = new (model.EditedBy,
+                        $"Edited Customer #{model.CustomerCode}; default COS discount: {model.DefaultCosDiscountPercent}%", "Customer" );
+                    await unitOfWork.AuditTrail.AddAsync(auditTrailBook, cancellationToken);
 
-                #endregion --Audit Trail Recording
+                    #endregion --Audit Trail Recording
 
-                await unitOfWork.SaveAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                    await unitOfWork.SaveAsync(cancellationToken);
+                }, cancellationToken);
+
                 TempData["success"] = "Customer updated successfully";
                 return RedirectToAction(nameof(Index));
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync(cancellationToken);
                 logger.LogError(ex, "Failed to edit customer master file. Created by: {UserName}", userManager.GetUserName(User));
                 TempData["error"] = $"Error: '{ex.Message}'";
                 return View(model);
@@ -311,32 +309,31 @@ namespace IBSWeb.Areas.MSAP.Controllers
             customer.PaymentTerms = await unitOfWork.Terms
                 .GetFilprideTermsListAsyncByCode(cancellationToken);
 
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
             try
             {
-                customer.IsActive = true;
-                await unitOfWork.SaveAsync(cancellationToken);
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    customer.IsActive = true;
 
-                #region --Audit Trail Recording
+                    #region --Audit Trail Recording
 
-                var user = GetUserFullName();
-                AuditTrail auditTrailBook = new(
-                    user, $"Activated Customer #{customer.CustomerCode}",
-                    "Customer");
-                await unitOfWork.AuditTrail.AddAsync(auditTrailBook, cancellationToken);
+                    var user = GetUserFullName();
+                    AuditTrail auditTrailBook = new(
+                        user, $"Activated Customer #{customer.CustomerCode}",
+                        "Customer");
+                    await unitOfWork.AuditTrail.AddAsync(auditTrailBook, cancellationToken);
 
-                #endregion --Audit Trail Recording
+                    #endregion --Audit Trail Recording
 
-                await unitOfWork.SaveAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                    await unitOfWork.SaveAsync(cancellationToken);
+                }, cancellationToken);
+
                 TempData["success"] = "Customer has been activated";
                 return RedirectToAction(nameof(Index));
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to activate customer master file. Activated by: {UserName}", userManager.GetUserName(User));
-                await transaction.RollbackAsync(cancellationToken);
                 TempData["error"] = ex.Message;
                 return RedirectToAction(nameof(Activate), new { id });
             }
@@ -386,30 +383,29 @@ namespace IBSWeb.Areas.MSAP.Controllers
             customer.PaymentTerms = await unitOfWork.Terms
                 .GetFilprideTermsListAsyncByCode(cancellationToken);
 
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
             try
             {
-                customer.IsActive = false;
-                await unitOfWork.SaveAsync(cancellationToken);
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    customer.IsActive = false;
 
-                #region -- Audit Trail Recording --
+                    #region -- Audit Trail Recording --
 
-                AuditTrail auditTrailBook = new(GetUserFullName(),
-                    $"Deactivated Customer #{customer.CustomerCode}", "Customer");
-                await unitOfWork.AuditTrail.AddAsync(auditTrailBook, cancellationToken);
+                    AuditTrail auditTrailBook = new(GetUserFullName(),
+                        $"Deactivated Customer #{customer.CustomerCode}", "Customer");
+                    await unitOfWork.AuditTrail.AddAsync(auditTrailBook, cancellationToken);
 
-                #endregion -- Audit Trail Recording --
+                    #endregion -- Audit Trail Recording --
 
-                await unitOfWork.SaveAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                    await unitOfWork.SaveAsync(cancellationToken);
+                }, cancellationToken);
+
                 TempData["success"] = "Customer has been deactivated";
                 return RedirectToAction(nameof(Index));
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to deactivate customer master file. Deactivated by: {UserName}", userManager.GetUserName(User));
-                await transaction.RollbackAsync(cancellationToken);
                 TempData["error"] = ex.Message;
                 return RedirectToAction(nameof(Deactivate), new { id });
             }

@@ -7,9 +7,10 @@ using Microsoft.AspNetCore.Mvc;
 namespace IBSWeb.Areas.MSAP.Controllers
 {
     [Area("MSAP")]
-    [Authorize(Policy = MsapRoles.AdminPolicy)]
+    [Authorize]
     public class AuditTrailController(IAuditTrailService auditTrailService, CustomerOrderSlipService customerOrderSlipService, ILogger<AuditTrailController> logger): Controller
     {
+        [Authorize(Policy = MsapRoles.AdminPolicy)]
         public async Task<IActionResult> Index(CancellationToken cancellationToken)
         {
             ViewBag.CustomerOrderSlips = await customerOrderSlipService.GetCustomerOrderSlipSelectListAsync(cancellationToken);
@@ -18,6 +19,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [Authorize(Policy = MsapRoles.AdminPolicy)]
         public async Task<IActionResult> GetPagedAuditTrails([FromForm] DataTablesParameters parameters, CancellationToken cancellationToken)
         {
             var (data, filtered, total) = await auditTrailService.GetPagedAuditTrailsAsync(parameters, cancellationToken);

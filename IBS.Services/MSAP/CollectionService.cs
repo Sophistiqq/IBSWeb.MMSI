@@ -271,14 +271,23 @@ namespace IBS.Services.MSAP
                     if (viewModel.BillingPayments != null)
                     {
                         model.PaidBills = [];
+                        var billingIds = viewModel.BillingPayments.Select(p => p.BillingId).Distinct().ToList();
+                        var billings = (await unitOfWork.Billing.GetAllAsync(b => billingIds.Contains(b.MsapBillingId), cancellationToken))
+                            .ToDictionary(b => b.MsapBillingId);
+
                         foreach (var payment in viewModel.BillingPayments)
                         {
-                            var billing = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == payment.BillingId, cancellationToken);
-                            if (billing != null)
+                            if (billings.TryGetValue(payment.BillingId, out var billing))
                             {
                                 billing.CollectionId = model.MsapCollectionId;
                                 billing.CollectionNumber = model.MsapCollectionNumber;
-                                await unitOfWork.Collection.UpdateBillingPayment(payment.BillingId, allocations[payment.BillingId], cancellationToken);
+                                billing.AmountPaid += allocations[payment.BillingId];
+                                billing.Balance = billing.Amount - billing.AmountPaid;
+                                if (billing.Balance <= 0)
+                                {
+                                    billing.IsPaid = true;
+                                    billing.Status = MsapConstants.BillingStatus.Collected;
+                                }
                                 model.PaidBills.Add(billing);
                             }
                         }
@@ -352,14 +361,23 @@ namespace IBS.Services.MSAP
 
                     if (viewModel.BillingPayments != null)
                     {
+                        var billingIds = viewModel.BillingPayments.Select(p => p.BillingId).Distinct().ToList();
+                        var billings = (await unitOfWork.Billing.GetAllAsync(b => billingIds.Contains(b.MsapBillingId), cancellationToken))
+                            .ToDictionary(b => b.MsapBillingId);
+
                         foreach (var payment in viewModel.BillingPayments)
                         {
-                            var billing = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == payment.BillingId, cancellationToken);
-                            if (billing != null)
+                            if (billings.TryGetValue(payment.BillingId, out var billing))
                             {
                                 billing.CollectionId = currentModel.MsapCollectionId;
                                 billing.CollectionNumber = newCollectionNumber;
-                                await unitOfWork.Collection.UpdateBillingPayment(payment.BillingId, allocations[payment.BillingId], cancellationToken);
+                                billing.AmountPaid += allocations[payment.BillingId];
+                                billing.Balance = billing.Amount - billing.AmountPaid;
+                                if (billing.Balance <= 0)
+                                {
+                                    billing.IsPaid = true;
+                                    billing.Status = MsapConstants.BillingStatus.Collected;
+                                }
                             }
                         }
                     }

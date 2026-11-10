@@ -39,9 +39,9 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<TariffRate?> GetApplicableRateAsync(int customerId, int terminalId, int serviceId, DateOnly serviceDate, CancellationToken cancellationToken)
         {
-            return await dbSet
+            return await dbSet.AsNoTracking()
                 .Where(t => t.CustomerId == customerId && t.TerminalId == terminalId && t.ServiceId == serviceId
-                            && t.PortId == t.Terminal.PortId && t.AsOfDate <= serviceDate)
+                            && t.PortId == t.Terminal.PortId && t.ApprovedAt != null && t.AsOfDate <= serviceDate)
                 .OrderByDescending(t => t.AsOfDate)
                 .ThenByDescending(t => t.TariffRateId)
                 .FirstOrDefaultAsync(cancellationToken);

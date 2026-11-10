@@ -22,7 +22,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 throw new ArgumentException("Date From must not be later than Date To.");
             }
 
-            var query = db.MsapDispatchTickets.Where(dt =>
+            var query = db.MsapDispatchTickets.AsNoTracking().Where(dt =>
                 dt.Status == MsapConstants.DispatchTicketStatus.ForBilling ||
                 dt.Status == MsapConstants.DispatchTicketStatus.Billed);
 
@@ -70,7 +70,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             var billingIds = tickets.Where(t => t.BillingId.HasValue).Select(t => t.BillingId!.Value).Distinct().ToList();
             if (billingIds.Count != 0)
             {
-                var billings = await db.MsapBillings
+                var billings = await db.MsapBillings.AsNoTracking()
                     .Where(b => billingIds.Contains(b.MsapBillingId))
                     .Include(b => b.Customer)
                     .Include(b => b.Principal)
@@ -78,7 +78,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
                 var collectionIds = billings.Where(b => b.CollectionId.HasValue).Select(b => b.CollectionId!.Value).Distinct().ToList();
                 var collections = collectionIds.Count != 0
-                    ? await db.MsapCollections.Where(c => collectionIds.Contains(c.MsapCollectionId)).ToListAsync(cancellationToken)
+                    ? await db.MsapCollections.AsNoTracking().Where(c => collectionIds.Contains(c.MsapCollectionId)).ToListAsync(cancellationToken)
                     : [];
 
                 foreach (var ticket in tickets.Where(t => t.BillingId.HasValue))

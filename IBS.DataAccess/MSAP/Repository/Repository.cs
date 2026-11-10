@@ -10,8 +10,6 @@ namespace IBS.DataAccess.MSAP.Repository
         private readonly MsapDbContext _db;
         internal DbSet<T> dbSet;
 
-        private const decimal VatRate = 0.12m;
-
         public Repository(MsapDbContext db)
         {
             _db = db;
@@ -71,31 +69,6 @@ namespace IBS.DataAccess.MSAP.Repository
         public async Task RemoveAsync(T entity, CancellationToken cancellationToken = default)
         {
             dbSet.Remove(entity);
-        }
-
-        public decimal ComputeNetOfVat(decimal grossAmount)
-        {
-            if (grossAmount == 0)
-            {
-                return grossAmount;
-            }
-
-            return grossAmount / (1 + VatRate);
-        }
-
-        public decimal ComputeVatAmount(decimal netOfVatAmount)
-        {
-            return netOfVatAmount * VatRate;
-        }
-
-        public decimal ComputeEwtAmount(decimal netOfVatAmount, decimal percent)
-        {
-            return netOfVatAmount * percent;
-        }
-
-        public decimal ComputeNetOfEwt(decimal grossAmount, decimal ewtAmount)
-        {
-            return grossAmount - ewtAmount;
         }
     }
 }

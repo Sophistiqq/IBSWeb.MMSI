@@ -22,8 +22,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
         {
             try
             {
-                var queried = await unitOfWork.Terms
+                var terms = await unitOfWork.Terms
                     .GetAllAsync(null, cancellationToken);
+                var totalRecords = terms.Count();
+                var queried = terms.AsQueryable();
 
                 // Global search
                 if (!string.IsNullOrEmpty(parameters.Search.Value))
@@ -35,7 +37,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                         s.TermsCode.ToLower().Contains(searchValue) ||
                         s.NumberOfDays.ToString("N0").Contains(searchValue) ||
                         s.NumberOfMonths.ToString("N0").Contains(searchValue)
-                        ).ToList();
+                        );
                 }
 
                 // Sorting
@@ -45,11 +47,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     var columnName = parameters.Columns[orderColumn.Column].Data;
                     var sortDirection = orderColumn.Dir.ToLower() == "asc" ? "ascending" : "descending";
                     queried = queried
-                        .AsQueryable()
                         .OrderBy($"{columnName} {sortDirection}");
                 }
 
-                var totalRecords = queried.Count();
+                var recordsFiltered = queried.Count();
                 var pagedData = queried
                     .Skip(parameters.Start)
                     .Take(parameters.Length)
@@ -59,15 +60,20 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 {
                     draw = parameters.Draw,
                     recordsTotal = totalRecords,
-                    recordsFiltered = totalRecords,
+                    recordsFiltered,
                     data = pagedData
                 });
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to get suppliers");
-                TempData["error"] = ex.Message;
-                return RedirectToAction(nameof(Index));
+                logger.LogError(ex, "Failed to get payment terms");
+                return Json(new
+                {
+                    draw = parameters.Draw,
+                    recordsTotal = 0,
+                    recordsFiltered = 0,
+                    error = "Failed to fetch payment terms."
+                });
             }
         }
     }

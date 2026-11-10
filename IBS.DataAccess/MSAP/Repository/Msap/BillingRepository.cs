@@ -136,19 +136,10 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<List<SelectListItem>?> GetMsapCustomersWithBillablesSelectList(int? currentCustomerId, string type, CancellationToken cancellationToken = default)
         {
-            var dispatchToBeBilled = await _db.MsapDispatchTickets
-                .Where(t => t.Status == IBS.Utility.MSAP.Constants.MsapConstants.DispatchTicketStatus.ForBilling || (currentCustomerId.GetValueOrDefault() != 0 && t.CustomerId == currentCustomerId))
-                .Include(t => t.Customer)
-                .ToListAsync(cancellationToken);
-
-            var listOfCustomerWithBillableTickets = dispatchToBeBilled
-                .Where(t => t.Customer != null)
-                .Select(t => t.Customer.CustomerId)
-                .Distinct()
-                .ToList();
-
-            return await _db.Customers
-                .Where(c => listOfCustomerWithBillableTickets.Contains(c.CustomerId) &&
+            return await _db.Customers.AsNoTracking()
+                .Where(c => _db.MsapDispatchTickets.Any(t =>
+                                (t.Status == IBS.Utility.MSAP.Constants.MsapConstants.DispatchTicketStatus.ForBilling || (currentCustomerId.GetValueOrDefault() != 0 && t.CustomerId == currentCustomerId))
+                                && t.CustomerId == c.CustomerId) &&
                             (string.IsNullOrEmpty(type) || c.Type == type) &&
                             c.IsActive)
                 .OrderBy(s => s.CustomerName)
@@ -206,10 +197,12 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<string> GenerateBillingNumber(int year, CancellationToken cancellationToken = default)
         {
+            await _db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(20771002)", cancellationToken);
             var lastRecord = await _db.MsapBillings
                 .Where(b => b.Year == year)
                 .Where(b => !string.IsNullOrEmpty(b.MsapBillingNumber) && b.MsapBillingNumber.StartsWith("B"))
-                .OrderByDescending(b => b.MsapBillingNumber)
+                .OrderByDescending(b => b.MsapBillingNumber.Length)
+                .ThenByDescending(b => b.MsapBillingNumber)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (lastRecord == null)
@@ -223,7 +216,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 return "B" + ((lastNumber + 1).ToString("D6"));
             }
 
-            return "B" + (DateTime.Now.Ticks % 1000000).ToString("D6");
+            return "B000001";
         }
 
         public Billing ProcessAddress(Billing model, CancellationToken cancellationToken = default)
@@ -279,7 +272,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<(IEnumerable<Billing> Data, int RecordsFiltered, int TotalRecords)> GetPagedBillingsAsync(DataTablesParameters parameters, CancellationToken cancellationToken, int? customerOrderSlipId = null)
         {
-            IQueryable<Billing> query = dbSet
+            IQueryable<Billing> query = dbSet.AsNoTracking()
                 .Include(b => b.Customer)
                 .Include(b => b.Terminal).ThenInclude(b => b.Port)
                 .Include(b => b.Vessel)

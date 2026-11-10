@@ -3,17 +3,17 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace IBS.Models.MSAP
 {
-    public class AuditTrail(string username, string activity, string documentType, int? recordId = null, string? referenceNumber = null)
+    public class AuditTrail(string username, string activity, string documentType, int? recordId = null, string? referenceNumber = null, string? userId = null, string? actorName = null)
     {
         public Guid Id { get; set; }
 
         public string Username { get; set; } = username;
 
         [MaxLength(450)]
-        public string? UserId { get; set; }
+        public string? UserId { get; set; } = userId;
 
         [MaxLength(255)]
-        public string? ActorName { get; set; }
+        public string? ActorName { get; set; } = actorName;
 
         [Column(TypeName = "timestamp without time zone")]
         public DateTime Date { get; set; } = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow,

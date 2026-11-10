@@ -315,12 +315,27 @@ namespace IBS.Services.MSAP
         private async Task ActivateRowsAsync(RateUpload update, List<RateUploadRowViewModel> rows,
             ApplicationUser actor, CancellationToken ct)
         {
-            DateTime now = DateTimeHelper.GetCurrentPhilippineTime();
+            var now = DateTimeHelper.GetCurrentPhilippineTime();
+            var existingTariffIds = update.RateKind == RateTableKind.Tariff
+                ? rows.Where(r => r.ExistingRateId.HasValue).Select(r => r.ExistingRateId!.Value).Distinct().ToList()
+                : [];
+            var existingBafIds = update.RateKind == RateTableKind.BAF
+                ? rows.Where(r => r.ExistingRateId.HasValue).Select(r => r.ExistingRateId!.Value).Distinct().ToList()
+                : [];
+
+            var existingTariffRates = existingTariffIds.Count != 0
+                ? await _db.MsapTariffRates.Where(r => existingTariffIds.Contains(r.TariffRateId)).ToDictionaryAsync(r => r.TariffRateId, ct)
+                : [];
+            var existingBafRates = existingBafIds.Count != 0
+                ? await _db.MsapBafRates.Where(r => existingBafIds.Contains(r.BafRateId)).ToDictionaryAsync(r => r.BafRateId, ct)
+                : [];
+
             foreach (var row in rows)
             {
                 if (update.RateKind == RateTableKind.Tariff)
                 {
-                    TariffRate rate = row.ExistingRateId.HasValue ? await _db.MsapTariffRates.SingleAsync(rate => rate.TariffRateId == row.ExistingRateId, ct)
+                    var rate = row.ExistingRateId.HasValue && existingTariffRates.TryGetValue(row.ExistingRateId.Value, out var foundTariff)
+                        ? foundTariff
                         : new TariffRate { CustomerId = row.CustomerId, PortId = row.PortId, TerminalId = row.TerminalId, ServiceId = row.ServiceId, AsOfDate = row.EffectiveDate, CreatedBy = update.UploadedBy, CreatedDate = now };
                     rate.Dispatch = row.Amount!.Value;
                     rate.UpdateBy = actor.Name.Trim();
@@ -334,7 +349,8 @@ namespace IBS.Services.MSAP
                 }
                 else
                 {
-                    BafRate rate = row.ExistingRateId.HasValue ? await _db.MsapBafRates.SingleAsync(rate => rate.BafRateId == row.ExistingRateId, ct)
+                    var rate = row.ExistingRateId.HasValue && existingBafRates.TryGetValue(row.ExistingRateId.Value, out var foundBaf)
+                        ? foundBaf
                         : new BafRate { CustomerId = row.CustomerId, PortId = row.PortId, TerminalId = row.TerminalId, ServiceId = row.ServiceId, AsOfDate = row.EffectiveDate, CreatedBy = update.UploadedBy, CreatedDate = now };
                     rate.Amount = row.Amount!.Value;
                     rate.UpdateBy = actor.Name.Trim();

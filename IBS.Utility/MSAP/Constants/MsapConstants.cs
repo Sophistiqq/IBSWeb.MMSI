@@ -24,29 +24,6 @@ namespace IBS.Utility.MSAP.Constants
 
         #endregion Tax Type
 
-        #region Filpride Department
-
-        public const string Department_Accounting = "Accounting";
-        public const string Department_CreditAndCollection = "Credit and Collection";
-        public const string Department_Engineering = "Engineering";
-        public const string Department_Finance = "Finance";
-        public const string Department_HRAndAdminOrLegal = "HR and Admin/Legal";
-        public const string Department_Logistics = "Logistics";
-        public const string Department_Marketing = "Marketing";
-        public const string Department_ManagementAccounting = "Management Accounting";
-        public const string Department_MIS = "MIS";
-        public const string Department_Operation = "Operation";
-        public const string Department_RCD = "RCD";
-        public const string Department_RetailAdmin = "Retail Admin";
-        public const string Department_RetailAudit = "Retail Audit";
-        public const string Department_SiteDevAndSiteAcquisition = "Site Dev and Acquisition";
-        public const string Department_StationCashier = "Station Cashier";
-        public const string Department_TradeAndSupply = "Trade and Supply";
-        public const string Department_TrainingAndCompliance = "Training and Compliance";
-
-        #endregion Filpride Department
-
-
         #region Format string
 
         public const string Date_Format = "MMM dd, yyyy";

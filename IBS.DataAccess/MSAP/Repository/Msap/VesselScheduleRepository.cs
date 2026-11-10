@@ -41,7 +41,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<IEnumerable<VesselSchedule>> GetSchedulesWithDetailsAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
         {
-            var query = _db.MsapVesselSchedules
+            var query = _db.MsapVesselSchedules.AsNoTracking()
                 .Include(s => s.Customer)
                 .Include(s => s.CustomerOrderSlip)
                 .Include(s => s.Vessel)

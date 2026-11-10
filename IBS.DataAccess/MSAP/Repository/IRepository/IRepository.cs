@@ -16,9 +16,5 @@ namespace IBS.DataAccess.MSAP.Repository.IRepository
         Task AddAsync(T entity, CancellationToken cancellationToken = default);
 
         Task RemoveAsync(T entity, CancellationToken cancellationToken = default);
-
-        decimal ComputeNetOfVat(decimal grossAmount);
-
-        decimal ComputeVatAmount(decimal netOfVatAmount);
     }
 }
