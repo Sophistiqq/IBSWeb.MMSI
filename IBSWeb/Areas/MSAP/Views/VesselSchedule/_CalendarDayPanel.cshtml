@@ -43,7 +43,7 @@
         @foreach (var schedule in schedules)
         {
             var ids = assignments[schedule.VesselScheduleId];
-            <article class="schedule-panel-record">
+            <article class="schedule-panel-record @(schedule.Status == MsapConstants.VesselScheduleStatus.Cancelled ? "schedule-cancelled opacity-60" : "")">
                 <div class="schedule-panel-heading"><strong>@schedule.Vessel.VesselName</strong><span class="schedule-status" data-status="@schedule.Status">@MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status)</span></div>
                 <p>@schedule.PlannedStart.ToString("MMM d HH:mm") – @schedule.PlannedEnd.ToString("MMM d HH:mm") · @schedule.Terminal.TerminalName</p>
                 <div class="schedule-panel-tugs">

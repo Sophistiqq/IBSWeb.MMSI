@@ -471,3 +471,9 @@
 .billing-preparation .billing-service-table td {
     font-variant-numeric: tabular-nums;
 }
+
+@media print {
+    body:has(.billing-review-screen) {
+        display: none !important;
+    }
+}

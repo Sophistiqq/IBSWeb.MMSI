@@ -11,13 +11,10 @@
     bool canPrint = BillingService.CanPrint(Model);
     bool canPost = ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && ViewData["IsPeriodClosed"] is not true;
 }
-<style media="print">
-    body { display: none !important; }
-</style>
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/billing-preparation.css" asp-append-version="true" />
 
-<div class="modern-layout app-ui billing-preparation">
+<div class="modern-layout app-ui billing-preparation billing-review-screen">
     <div class="billing-workspace">
         <div class="ui-stack">
             @foreach (var progress in progressItems)
@@ -93,7 +90,7 @@
                 <div class="billing-amount"><span>Remaining billing balance</span><strong>@Model.Balance.ToString("N2")</strong></div>
                 @if (basicOnly)
                 {
-                    <p class="ui-caption ui-muted">Reminder: confirm SBMA placement and financial treatment.</p>
+                    <p class="ui-notice ui-attention" role="note"><span class="material-symbols-outlined" aria-hidden="true">info</span> Reminder: confirm SBMA placement and financial treatment.</p>
                 }
             </section>
             <section class="ui-stack" aria-labelledby="ticketImagesHeading">
@@ -113,7 +110,9 @@
                 {
                     <form asp-action="Review" asp-route-id="@Model.MsapBillingId" method="post" id="postReviewedBilling">
                         <input type="hidden" name="reviewedRevision" value="@Model.Revision" />
-                        <button class="modern-btn-primary ui-page-action" type="submit">Approve final bill @Model.MsapBillingNumber</button>
+                        <button class="modern-btn-primary ui-page-action" type="submit">
+                            <span class="material-symbols-outlined" aria-hidden="true">check_circle</span> Approve final bill @Model.MsapBillingNumber
+                        </button>
                     </form>
                 }
                 else

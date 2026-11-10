@@ -21,6 +21,9 @@
             <div class="flex gap-2 ui-actions">
                 @if (Model.CustomerOrderSlipId.HasValue)
                 {
+                    <a class="modern-btn-primary" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value" asp-route-dispatchTicketId="@Model.DispatchTicketId" asp-fragment="actualTicketEntry">
+                        <span class="material-symbols-outlined">open_in_new</span> Open in COS
+                    </a>
                     <a class="modern-btn-secondary" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId.Value" data-ui-back>
                         <span class="material-symbols-outlined">arrow_back</span> Back
                     </a>
@@ -238,6 +241,14 @@
                                 <span class="financial-label">Grand Total Billing</span>
                                 <span class="financial-value primary">₱ @Model.TotalBilling.ToString("N2")</span>
                             </div>
+                            @if (Model.Tugboat is { IsCompanyOwned: false } && Model.ApOtherTugs > 0)
+                            {
+                                <div class="financial-divider"></div>
+                                <div class="financial-item">
+                                    <span class="financial-label">Outsourced Tug Cost</span>
+                                    <span class="financial-value text-error">₱ (@Model.ApOtherTugs.ToString("N2"))</span>
+                                </div>
+                            }
                             <div class="financial-divider"></div>
                             <div class="financial-item">
                                 <span class="financial-label">Net Revenue Realized</span>

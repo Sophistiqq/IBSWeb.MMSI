@@ -140,14 +140,14 @@
     resize: vertical;
 }
 
-.app-ui :is(.modern-btn-primary, .modern-btn-secondary, .modern-btn-link, .ui-button) {
+.app-ui :is(.modern-btn-primary, .modern-btn-secondary, .modern-btn-complete, .modern-btn-warning, .modern-btn-error, .modern-btn-link, .ui-button, [class*="ui-button--"]) {
     font-family: inherit;
     font-size: var(--ui-text-body);
     font-weight: var(--ui-weight-medium);
     line-height: var(--ui-leading-body);
 }
 
-.app-ui :is(.modern-btn-primary, .modern-btn-secondary, .ui-button) {
+.app-ui :is(.modern-btn-primary, .modern-btn-secondary, .modern-btn-complete, .modern-btn-warning, .modern-btn-error, .ui-button, [class*="ui-button--"]) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -158,6 +158,7 @@
     border-radius: var(--ui-radius);
     box-shadow: none;
     text-decoration: none;
+    cursor: pointer;
 }
 
 .app-ui .ui-button {
@@ -166,11 +167,64 @@
     cursor: pointer;
 }
 
-.app-ui :is(.ui-button--primary, .modern-btn-primary),
+.app-ui :is(.ui-button--primary, .modern-btn-primary) {
+    color: var(--on-primary, #ffffff);
+    background: var(--primary, #0b514d);
+    border-color: var(--primary, #0b514d);
+}
+
 .app-ui :is(.ui-button--primary, .modern-btn-primary):hover {
-    color: var(--ui-surface);
-    background: var(--ui-ink);
-    border-color: var(--ui-ink);
+    color: var(--on-primary, #ffffff);
+    background: color-mix(in srgb, var(--primary, #0b514d) 88%, #000000);
+    border-color: color-mix(in srgb, var(--primary, #0b514d) 88%, #000000);
+}
+
+.app-ui :is(.ui-button--complete, .modern-btn-complete) {
+    color: #ffffff;
+    background: #398459;
+    border-color: #398459;
+}
+
+.app-ui :is(.ui-button--complete, .modern-btn-complete):hover {
+    color: #ffffff;
+    background: color-mix(in srgb, #398459 88%, #000000);
+    border-color: color-mix(in srgb, #398459 88%, #000000);
+}
+
+.app-ui :is(.ui-button--warning, .modern-btn-warning) {
+    color: #ffffff;
+    background: #d38a16;
+    border-color: #d38a16;
+}
+
+.app-ui :is(.ui-button--warning, .modern-btn-warning):hover {
+    color: #ffffff;
+    background: color-mix(in srgb, #d38a16 88%, #000000);
+    border-color: color-mix(in srgb, #d38a16 88%, #000000);
+}
+
+.app-ui :is(.ui-button--error, .modern-btn-error) {
+    color: #ffffff;
+    background: var(--error, #ba1a1a);
+    border-color: var(--error, #ba1a1a);
+}
+
+.app-ui :is(.ui-button--error, .modern-btn-error):hover {
+    color: #ffffff;
+    background: color-mix(in srgb, var(--error, #ba1a1a) 88%, #000000);
+    border-color: color-mix(in srgb, var(--error, #ba1a1a) 88%, #000000);
+}
+
+[data-bs-theme="dark"] .app-ui :is(.ui-button--complete, .modern-btn-complete) {
+    color: #1a1a1a;
+    background: #4ade80;
+    border-color: #4ade80;
+}
+
+[data-bs-theme="dark"] .app-ui :is(.ui-button--warning, .modern-btn-warning) {
+    color: #1a1a1a;
+    background: #fbbf24;
+    border-color: #fbbf24;
 }
 
 .app-ui .modern-btn-secondary {
@@ -178,11 +232,11 @@
     background: var(--ui-surface);
 }
 
-.app-ui :is(.ui-button:not(.ui-button--primary), .modern-btn-secondary):hover {
+.app-ui :is(.ui-button:not(.ui-button--primary):not(.ui-button--complete):not(.ui-button--warning):not(.ui-button--error), .modern-btn-secondary):hover {
     background: var(--ui-surface-muted);
 }
 
-.app-ui :is(.modern-btn-primary, .modern-btn-secondary, .ui-button):hover {
+.app-ui :is(.modern-btn-primary, .modern-btn-secondary, .modern-btn-complete, .modern-btn-warning, .modern-btn-error, .ui-button):hover {
     text-decoration: none;
 }
 
@@ -198,6 +252,77 @@
     color: white;
     background: var(--error);
     border-color: var(--error);
+}
+
+/* Tactile action chips for table rows */
+.app-ui .ui-action-chip,
+.app-ui .cos-ticket-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .2rem .6rem;
+    font-size: var(--ui-text-caption, .75rem);
+    font-weight: var(--ui-weight-medium, 500);
+    border-radius: var(--ui-radius, .25rem);
+    border: 1px solid var(--ui-border, var(--outline-variant));
+    background: var(--ui-surface, #ffffff);
+    color: var(--ui-ink, var(--on-surface));
+    text-decoration: none;
+    cursor: pointer;
+    line-height: 1.4;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.app-ui .ui-action-chip:hover,
+.app-ui .cos-ticket-link:hover {
+    background: var(--ui-surface-muted, #f7f7f7);
+    text-decoration: none;
+}
+
+.app-ui .ui-action-chip.ui-action-primary,
+.app-ui .cos-ticket-link.cos-ticket-primary {
+    background: color-mix(in srgb, var(--primary, #0b514d) 10%, var(--surface-container-lowest, #ffffff));
+    border-color: var(--primary, #0b514d);
+    color: var(--primary, #0b514d);
+}
+
+.app-ui .ui-action-chip.ui-action-primary:hover,
+.app-ui .cos-ticket-link.cos-ticket-primary:hover {
+    background: var(--primary, #0b514d);
+    color: var(--on-primary, #ffffff);
+}
+
+.app-ui .ui-action-chip.ui-critical,
+.app-ui .cos-ticket-link.ui-critical {
+    background: color-mix(in srgb, var(--error, #ba1a1a) 10%, var(--surface-container-lowest, #ffffff));
+    border-color: var(--error, #ba1a1a);
+    color: var(--error, #ba1a1a);
+}
+
+.app-ui .ui-action-chip.ui-critical:hover,
+.app-ui .cos-ticket-link.ui-critical:hover {
+    background: var(--error, #ba1a1a);
+    color: #ffffff;
+}
+
+/* Subtext cancel button for service row */
+.app-ui .cos-cancel-subtext {
+    display: inline-block;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    margin-top: .15rem;
+    font-size: .75rem;
+    color: var(--on-surface-variant, #727878);
+    cursor: pointer;
+    text-decoration: none;
+    line-height: 1.2;
+    transition: color 0.15s ease;
+}
+
+.app-ui .cos-cancel-subtext:hover {
+    color: var(--error, #ba1a1a);
+    text-decoration: underline;
 }
 
 .app-ui :is(.ui-input, .modern-input, .ui-select-trigger, .modern-select-trigger):is(:focus-visible, .active) {

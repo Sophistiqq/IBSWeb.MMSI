@@ -190,8 +190,12 @@
                 <footer class="billing-footer">
                     <p id="preparationNote" class="ui-caption ui-muted">One preparation · One billing number</p>
                     <div class="billing-footer-actions">
-                        <button type="submit" id="previewBilling" class="modern-btn-secondary ui-page-action" formaction="@Url.Action("PreviewPreparation")" formtarget="_blank" disabled>Preview statements</button>
-                        <button type="submit" id="saveBilling" class="modern-btn-primary ui-page-action" disabled>Save for reviewing</button>
+                        <button type="submit" id="previewBilling" class="modern-btn-secondary ui-page-action" formaction="@Url.Action("PreviewPreparation")" formtarget="_blank" disabled>
+                            <span class="material-symbols-outlined" aria-hidden="true">visibility</span> Preview statements
+                        </button>
+                        <button type="submit" id="saveBilling" class="modern-btn-primary ui-page-action" disabled>
+                            <span class="material-symbols-outlined" aria-hidden="true">save</span> Save for reviewing
+                        </button>
                     </div>
                 </footer>
             </div>

@@ -33,7 +33,10 @@
                 <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">Collections</a></li><li aria-current="page">@Model.MsapCollectionNumber</li></ol></nav>
                 <h1 class="ui-page-title" data-page-header>Receipt @Model.MsapCollectionNumber</h1>
                 <a asp-action="Index" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
-                <p class="ui-page-description ui-caption ui-muted">@Model.PaymentStatus / @(Model.IsUndocumented ? "Undocumented" : "Documented") / @Model.Date.ToString(MsapConstants.Date_Format)</p>
+                <div class="ui-page-description flex items-center gap-2">
+                    <span class="schedule-status-pill ui-status @(Model.PaymentStatus == "Returned" ? "ui-critical" : Model.PaymentStatus == "Cleared" ? "ui-complete" : "ui-attention")">@Model.PaymentStatus</span>
+                    <span class="ui-caption ui-muted">@(Model.IsUndocumented ? "Undocumented" : "Documented") · @Model.Date.ToString(MsapConstants.Date_Format)</span>
+                </div>
             </header>
             <section class="ui-panel collection-heading @(Model.ClearedDate.HasValue ? "" : Model.ReturnedDate.HasValue && !Model.DepositDate.HasValue ? "ui-critical" : "ui-attention")" aria-label="Receipt actions">
                 <div>
@@ -43,21 +46,21 @@
                 <div class="collection-actions">
                     @if (canEdit)
                     {
-                        <a asp-action="Edit" asp-route-id="@Model.MsapCollectionId" class="modern-btn-secondary">Edit receipt</a>
+                        <a asp-action="Edit" asp-route-id="@Model.MsapCollectionId" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">edit</span> Edit receipt</a>
                     }
                     @if (canBank && !Model.IsMonthClosed && !Model.ClearedDate.HasValue)
                     {
                         @if (!Model.DepositDate.HasValue)
                         {
-                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Deposit" data-collection-banking="@(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")" class="modern-btn-primary">@(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")</a>
+                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Deposit" data-collection-banking="@(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">account_balance</span> @(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")</a>
                         }
                         else
                         {
                             @if (Model.CheckAmount > 0)
                             {
-                                <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.ReturnCheck" data-collection-banking="Record returned check" class="modern-btn-secondary">Return check</a>
+                                <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.ReturnCheck" data-collection-banking="Record returned check" class="modern-btn-warning"><span class="material-symbols-outlined" aria-hidden="true">assignment_return</span> Return check</a>
                             }
-                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Clear" data-collection-banking="Record clearing" class="modern-btn-primary">Record clearing</a>
+                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Clear" data-collection-banking="Record clearing" class="modern-btn-complete"><span class="material-symbols-outlined" aria-hidden="true">verified</span> Record clearing</a>
                         }
                     }
                 </div>

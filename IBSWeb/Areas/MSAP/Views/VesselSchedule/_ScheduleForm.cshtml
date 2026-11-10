@@ -12,7 +12,17 @@
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 
 <div class="schedule-screen-layout app-ui">
-    <partial name="_BookingProgress" model="Model.VesselScheduleId" />
+    @{
+        var reviewing = ViewData["BookingProgressReview"] is true;
+        var progress = new JobProgressViewModel
+        {
+            HasSchedule = true,
+            VesselScheduleId = Model.VesselScheduleId > 0 ? Model.VesselScheduleId : null,
+            Stage = reviewing ? 1 : 0,
+            Guidance = reviewing ? "Review booking and rates. Approve when ready." : "Complete booking details. Save for reviewing."
+        };
+    }
+    <partial name="_WorkflowProgress" model="progress" />
 
     <!-- Center Column: Main Workspace Form -->
     <div class="schedule-main-workspace">

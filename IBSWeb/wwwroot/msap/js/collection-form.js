@@ -78,13 +78,14 @@ if (typeof document !== 'undefined') $(function () {
             row.append($('<td>').append(checkbox));
             row.append($('<td>').append($('<strong>').text(`${b.msapBillingNumber} / ${b.component}`), $('<p class="ui-caption ui-muted">').text(`${b.cosNumber || 'No COS reference'} / ${b.reason || 'Approved'}`)));
             row.append($('<td>').text(money(b.amount)));
-            row.append($('<td>').append($('<div class="ui-caption">').text(`EWT ${money(b.ewt)}`), $('<div class="ui-caption">').text(`WVAT ${money(b.wvat)}`)));
+            row.append($('<td>').text(money(b.ewt)));
+            row.append($('<td>').text(money(b.wvat)));
             row.append($('<td>').text(money(b.net)));
             row.append($('<td>').text(b.eligible ? money(b.net) : 'Not eligible'));
             row.append($('<td>').text(money(b.selected ? 0 : b.amount))); body.append(row);
             checkbox.on('change', function () { b.selected = this.checked; render(); updateTotals(true); });
         });
-        if (!body.children().length) body.append($('<tr>').append($('<td colspan="7">').text(loading ? 'Loading billings...' : 'No billings match the current filters.')));
+        if (!body.children().length) body.append($('<tr>').append($('<td colspan="8">').text(loading ? 'Loading billings...' : 'No billings match the current filters.')));
         const eligible = bills.filter(b => b.eligible && visible(b));
         $('#selectAllBillings').prop({ checked: eligible.length > 0 && eligible.every(b => b.selected), indeterminate: eligible.some(b => b.selected) && !eligible.every(b => b.selected), disabled: !eligible.length });
     }
