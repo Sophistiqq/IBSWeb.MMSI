@@ -83,13 +83,13 @@
                         </div>
                         @if (canReopen)
                         {
-                            <button type="button" class="modern-btn-warning" id="btnReopenCharge"
+                            <button type="button" class="modern-btn-danger" id="btnReopenCharge"
                                 data-action="@Url.Action("Reopen", "OtherTugCharge")"
                                 data-id="@Model.Id"
                                 data-cos-id="@Model.CustomerOrderSlipId"
                                 data-reference="@Model.Charge?.ProviderReference"
                                 data-finalized="@(Model.Charge?.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
-                                <span class="material-symbols-outlined" aria-hidden="true">lock_open</span> Reopen to revise
+                                Reopen to revise
                             </button>
                         }
                     </div>

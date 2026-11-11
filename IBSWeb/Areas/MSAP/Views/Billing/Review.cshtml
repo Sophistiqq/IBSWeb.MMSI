@@ -124,10 +124,9 @@
                         <div>
                             @if (canDiscard)
                             {
-                                <button type="button" class="modern-btn-secondary" id="btnDiscardDraft"
+                                <button type="button" class="modern-btn-danger" id="btnDiscardDraft"
                                     data-action="@Url.Action("Delete", "Billing")"
-                                    data-id="@Model.MsapBillingId"
-                                    style="font-size: 13px; padding: 6px 14px;">
+                                    data-id="@Model.MsapBillingId">
                                     Discard draft
                                 </button>
                             }
@@ -157,8 +156,7 @@
                             data-action="@Url.Action("ReopenForRevision", "Billing")"
                             data-id="@Model.MsapBillingId"
                             data-billing-number="@Model.MsapBillingNumber"
-                            data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")"
-                            style="font-size: 13px; padding: 4px 12px; font-weight: normal;">
+                            data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
                             Reopen for revision
                         </button>
                     </div>
