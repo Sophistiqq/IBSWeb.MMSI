@@ -236,6 +236,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 ws.View.FreezePanes(8, 1);
 
                 int dataStart = 8, row = dataStart;
+                bool hasAdjustedRows = false;
                 foreach (var t in data)
                 {
                     ws.Cells[row, 1].Value = t.COSNumber;
@@ -285,25 +286,9 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                         }
                     }
 
-                    bool isRowAdjusted = t.PeriodStatus == MsapPeriodStatus.Adjusted
-                        || t.Billing?.PeriodStatus == MsapPeriodStatus.Adjusted
-                        || t.OtherTugChargeLine?.Charge?.PeriodStatus == MsapPeriodStatus.Adjusted
-                        || ticketCollections.Any(c => c.PeriodStatus == MsapPeriodStatus.Adjusted);
-                    if (isRowAdjusted)
+                    if (ApplyRowAdjustments(ws, row, t, ticketCollections, logsByTicket, logsByBilling, logsByOtherTug, logsByCollection, isSalesSummary: false))
                     {
-                        var adjRange = ws.Cells[row, 1, row, totalCols];
-                        adjRange.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                        adjRange.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(255, 242, 204));
-                        var aLog = logsByTicket[t.DispatchTicketId].LastOrDefault()
-                            ?? (t.BillingId.HasValue ? logsByBilling[t.BillingId.Value].LastOrDefault() : null)
-                            ?? (t.OtherTugChargeLine?.OtherTugChargeId is int otId ? logsByOtherTug[otId].LastOrDefault() : null)
-                            ?? ticketCollections.Select(c => logsByCollection[c.MsapCollectionId].LastOrDefault()).FirstOrDefault(l => l != null);
-                        var note = FormatAdjustmentNote(aLog);
-                        AddOrAppendComment(ws.Cells[row, 2], note, "MMSI System");
-                        if (t.BillingId.HasValue)
-                        {
-                            AddOrAppendComment(ws.Cells[row, 23], note, "MMSI System");
-                        }
+                        hasAdjustedRows = true;
                     }
 
                     row++;
@@ -321,6 +306,16 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 FinalizeColumns(ws, dataStart, lastDataRow, totalCols);
                 ws.Column(6).Width = 50.7;
                 ws.Column(25).Width = 20.7;
+
+                if (hasAdjustedRows)
+                {
+                    int noteRow = totalRow + 2;
+                    ws.Cells[noteRow, 1].Value = "NOTE: Cells highlighted in light amber [ADJUSTED] contain post-close adjustments recorded after month-end finalization. Hover over the cells to view change details and audit reasons.";
+                    ws.Cells[noteRow, 1].Style.Font.Italic = true;
+                    ws.Cells[noteRow, 1].Style.Font.Bold = true;
+                    ws.Cells[noteRow, 1].Style.Font.Color.SetColor(Color.FromArgb(180, 83, 9));
+                }
+
                 return File(await pkg.GetAsByteArrayAsync(ct), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     $"Dispatch_Ticket_Summary_{DateTimeHelper.GetCurrentPhilippineTime():yyyyMMdd}.xlsx");
             }
@@ -692,30 +687,9 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                         AddOrAppendComment(ws.Cells[row, 2], "Financial recognition only. This service and its hours were counted in the original ticket period.", "MMSI");
                     }
 
-                    bool isRowAdjusted = t.PeriodStatus == MsapPeriodStatus.Adjusted
-                        || t.Billing?.PeriodStatus == MsapPeriodStatus.Adjusted
-                        || t.OtherTugChargeLine?.Charge?.PeriodStatus == MsapPeriodStatus.Adjusted
-                        || ticketCollections.Any(c => c.PeriodStatus == MsapPeriodStatus.Adjusted);
-
-                    if (isRowAdjusted)
+                    if (ApplyRowAdjustments(ws, row, t, ticketCollections, logsByTicket, logsByBilling, logsByOtherTug, logsByCollection, isSalesSummary: true))
                     {
                         hasAdjustedRows = true;
-                        var adjRange = ws.Cells[row, 1, row, Math.Min(35, totalCols)];
-                        adjRange.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                        adjRange.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(255, 242, 204));
-
-                        var aLog = logsByTicket[t.DispatchTicketId].LastOrDefault()
-                            ?? (t.BillingId.HasValue ? logsByBilling[t.BillingId.Value].LastOrDefault() : null)
-                            ?? (t.OtherTugChargeLine?.OtherTugChargeId is int otId ? logsByOtherTug[otId].LastOrDefault() : null)
-                            ?? ticketCollections.Select(c => logsByCollection[c.MsapCollectionId].LastOrDefault()).FirstOrDefault(l => l != null);
-
-                        var note = FormatAdjustmentNote(aLog);
-
-                        AddOrAppendComment(ws.Cells[row, 2], note, "MMSI System");
-                        if (t.BillingId.HasValue)
-                        {
-                            AddOrAppendComment(ws.Cells[row, 3], note, "MMSI System");
-                        }
                     }
 
                     // Number formats for detail section
@@ -1103,7 +1077,7 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 if (hasAdjustedRows)
                 {
                     currRow += 2;
-                    ws.Cells[currRow, 1].Value = "NOTE: Rows highlighted in light amber [ADJUSTED] contain post-close adjustments recorded after month-end finalization.";
+                    ws.Cells[currRow, 1].Value = "NOTE: Cells highlighted in light amber [ADJUSTED] contain post-close adjustments recorded after month-end finalization. Hover over the cells to view change details and audit reasons.";
                     ws.Cells[currRow, 1].Style.Font.Italic = true;
                     ws.Cells[currRow, 1].Style.Font.Bold = true;
                     ws.Cells[currRow, 1].Style.Font.Color.SetColor(Color.FromArgb(180, 83, 9));
@@ -1422,7 +1396,9 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 var ticketIds = data.Select(t => t.DispatchTicketId).ToList();
                 var billingIds = data.Where(t => t.BillingId.HasValue).Select(t => t.BillingId!.Value).Distinct().ToList();
                 var otherTugIds = data.Where(t => t.OtherTugChargeLine != null).Select(t => t.OtherTugChargeLine!.OtherTugChargeId).Distinct().ToList();
-                var collectionIds = collectionsByTicket.Values.SelectMany(c => c).Select(c => c.MsapCollectionId).Distinct().ToList();
+                var directCollectionIds = data.Where(t => t.Billing?.CollectionId.HasValue == true).Select(t => t.Billing!.CollectionId!.Value);
+                var collectionIds = collectionsByTicket.Values.SelectMany(c => c).Select(c => c.MsapCollectionId)
+                    .Concat(directCollectionIds).Distinct().ToList();
                 var logs = await unitOfWork.MsapAdjustmentLog.GetAllAsync(l =>
                     (l.DocumentType == "DispatchTicket" && ticketIds.Contains(l.RecordId))
                     || (l.DocumentType == "Billing" && billingIds.Contains(l.RecordId))
@@ -1436,15 +1412,249 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
             }
         }
 
+        private static readonly Color AmberAdjustmentFill = Color.FromArgb(255, 242, 204);
+
+        private static void HighlightCellWithComment(ExcelRange cell, string note)
+        {
+            cell.Style.Fill.PatternType = ExcelFillStyle.Solid;
+            cell.Style.Fill.BackgroundColor.SetColor(AmberAdjustmentFill);
+            AddOrAppendComment(cell, note, "MMSI System");
+        }
+
+        private static List<MsapFieldChange> ParseChanges(string? changesJson)
+        {
+            if (string.IsNullOrWhiteSpace(changesJson))
+            {
+                return [];
+            }
+            try
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<MsapFieldChange>>(changesJson) ?? [];
+            }
+            catch
+            {
+                return [];
+            }
+        }
+
+        private static int[] GetDispatchTicketSummaryColsForField(string docType, string field)
+        {
+            return docType switch
+            {
+                "DispatchTicket" => field switch
+                {
+                    "Date" => [3],
+                    "ServiceId" or "ServiceName" or "Service" => [4],
+                    "VoyageNumber" => [5],
+                    "CustomerId" or "CustomerName" or "Customer" => [6],
+                    "VesselId" or "VesselName" or "Vessel" => [7],
+                    "PortId" or "PortName" or "Port" => [8],
+                    "TerminalId" or "TerminalName" or "Terminal" => [9],
+                    "DateLeft" or "TimeLeft" => [10],
+                    "DateArrived" or "TimeArrived" => [11],
+                    "TotalHours" => [12],
+                    "DispatchRate" => [14, 25],
+                    "DispatchBillingAmount" or "TotalBilling" or "Gross Billing" => [15, 22, 26],
+                    "DispatchDiscount" => [16],
+                    "DispatchNetRevenue" or "TotalNetRevenue" or "Net Revenue" => [17],
+                    "BAFRate" => [18, 27],
+                    "BAFBillingAmount" => [19, 28],
+                    "BAFDiscount" => [20],
+                    "BAFNetRevenue" => [21],
+                    _ => [2]
+                },
+                "Billing" => field switch
+                {
+                    "Date" or "BillingDate" => [24],
+                    "DispatchRate" => [25],
+                    "BAFRate" => [27],
+                    "Amount" or "Gross" or "TotalBilling" => [22, 26, 28],
+                    "CosDiscountPercent" or "Discount" => [16, 20],
+                    _ => [23]
+                },
+                "OtherTugCharge" => [29],
+                "Collection" => field switch
+                {
+                    "CheckNumber" => [31],
+                    "CheckDate" => [32],
+                    "DepositDate" => [33],
+                    "Amount" or "Net" or "Paid" => [34],
+                    "EWT" or "WVAT" => [35],
+                    "Bank" or "BankAccountId" or "BankAccountName" => [30, 33],
+                    _ => [30]
+                },
+                _ => [2]
+            };
+        }
+
+        private static int[] GetSalesSummaryColsForField(string docType, string field)
+        {
+            return docType switch
+            {
+                "DispatchTicket" => field switch
+                {
+                    "Date" => [1],
+                    "CustomerId" or "CustomerName" or "Customer" => [4],
+                    "VesselId" or "VesselName" or "Vessel" => [5],
+                    "VesselType" => [6],
+                    "TugboatId" or "TugboatName" or "Tugboat" => [7, 8],
+                    "PortId" or "PortName" or "Port" => [9],
+                    "TerminalId" or "TerminalName" or "Terminal" => [10],
+                    "IsIoc" => [11],
+                    "ServiceId" or "ServiceName" or "Service" => [12],
+                    "DateLeft" or "TimeLeft" => [13],
+                    "DateArrived" or "TimeArrived" => [14],
+                    "TotalHours" => [15],
+                    "DispatchRate" or "BAFRate" or "DispatchBillingAmount" or "BAFBillingAmount" or "TotalBilling" or "Gross Billing" => [16, 17],
+                    "DispatchNetRevenue" or "BAFNetRevenue" or "TotalNetRevenue" or "Net Revenue" => [18],
+                    "DispatchDiscount" or "BAFDiscount" or "CosDiscountPercent" or "Discount" => [16, 17, 18],
+                    _ => [2]
+                },
+                "Billing" => field switch
+                {
+                    "Date" or "BillingDate" => [1],
+                    "Amount" or "Gross" or "TotalBilling" => [16, 17],
+                    "IsVatable" or "IsVatInclusive" => [18, 19],
+                    "PrintWht" => [20],
+                    "CosDiscountPercent" or "Discount" => [16, 17, 18],
+                    _ => [3]
+                },
+                "OtherTugCharge" => [33, 34, 35],
+                "Collection" => field switch
+                {
+                    "DepositDate" => [21],
+                    "Date" or "CollectionDate" => [22],
+                    "Bank" or "BankAccountId" or "BankAccountName" => [24],
+                    "EWT" or "WVAT" => [25, 26],
+                    "Amount" or "Net" or "Paid" => [27],
+                    "CheckNumber" or "CheckDate" or "ClearedDate" or "ReturnedDate" => [21, 23],
+                    _ => [23]
+                },
+                _ => [2]
+            };
+        }
+
+        private static bool ApplyRowAdjustments(
+            ExcelWorksheet ws,
+            int row,
+            DispatchTicket t,
+            List<Collection> ticketCollections,
+            ILookup<int, MsapAdjustmentLog> logsByTicket,
+            ILookup<int, MsapAdjustmentLog> logsByBilling,
+            ILookup<int, MsapAdjustmentLog> logsByOtherTug,
+            ILookup<int, MsapAdjustmentLog> logsByCollection,
+            bool isSalesSummary)
+        {
+            var anyAdjusted = false;
+
+            var getCols = isSalesSummary
+                ? (Func<string, string, int[]>)GetSalesSummaryColsForField
+                : GetDispatchTicketSummaryColsForField;
+
+            var ticketFallbackCol = 2;
+            var billingFallbackCol = isSalesSummary ? 3 : 23;
+            var otherTugFallbackCol = isSalesSummary ? 33 : 29;
+            var collectionFallbackCol = isSalesSummary ? 23 : 30;
+
+            void ProcessLogs(string docType, int fallbackCol, List<MsapAdjustmentLog> logs, bool isStatusAdjusted)
+            {
+                if (logs.Count == 0)
+                {
+                    if (isStatusAdjusted)
+                    {
+                        anyAdjusted = true;
+                        HighlightCellWithComment(ws.Cells[row, fallbackCol], "[ADJUSTED]\nModified after month-end finalization.");
+                    }
+                    return;
+                }
+
+                anyAdjusted = true;
+                foreach (var log in logs)
+                {
+                    var changes = ParseChanges(log.ChangesJson);
+                    var nonStatusChanges = changes.Where(c => c.Field != "PeriodStatus").ToList();
+
+                    if (nonStatusChanges.Count == 0)
+                    {
+                        var note = $"[ADJUSTED]\nReason: {log.Reason}\nEdited: {log.EditedDate:yyyy-MM-dd HH:mm} by {log.EditedBy}";
+                        HighlightCellWithComment(ws.Cells[row, fallbackCol], note);
+                    }
+                    else
+                    {
+                        var changesByCol = new Dictionary<int, List<MsapFieldChange>>();
+                        foreach (var c in nonStatusChanges)
+                        {
+                            var targetCols = getCols(docType, c.Field);
+                            foreach (var col in targetCols)
+                            {
+                                if (!changesByCol.TryGetValue(col, out var list))
+                                {
+                                    list = [];
+                                    changesByCol[col] = list;
+                                }
+                                list.Add(c);
+                            }
+                        }
+
+                        foreach (var (col, fieldChanges) in changesByCol)
+                        {
+                            var builder = new System.Text.StringBuilder();
+                            builder.Append($"[ADJUSTED]\nReason: {log.Reason}\nEdited: {log.EditedDate:yyyy-MM-dd HH:mm} by {log.EditedBy}");
+                            foreach (var c in fieldChanges)
+                            {
+                                builder.Append($"\n• {c.Label}: {c.Before} -> {c.After}");
+                            }
+                            HighlightCellWithComment(ws.Cells[row, col], builder.ToString());
+                        }
+                    }
+                }
+            }
+
+            // 1. Dispatch Ticket
+            var ticketLogs = logsByTicket[t.DispatchTicketId].ToList();
+            var ticketAdjusted = t.PeriodStatus == MsapPeriodStatus.Adjusted;
+            ProcessLogs("DispatchTicket", ticketFallbackCol, ticketLogs, ticketAdjusted);
+
+            // 2. Billing
+            if (t.BillingId.HasValue)
+            {
+                var billingLogs = logsByBilling[t.BillingId.Value].ToList();
+                var billingAdjusted = t.Billing?.PeriodStatus == MsapPeriodStatus.Adjusted;
+                ProcessLogs("Billing", billingFallbackCol, billingLogs, billingAdjusted);
+            }
+
+            // 3. Other Tug Charge
+            if (t.OtherTugChargeLine != null)
+            {
+                var otherTugLogs = logsByOtherTug[t.OtherTugChargeLine.OtherTugChargeId].ToList();
+                var otherTugAdjusted = t.OtherTugChargeLine.Charge?.PeriodStatus == MsapPeriodStatus.Adjusted;
+                ProcessLogs("OtherTugCharge", otherTugFallbackCol, otherTugLogs, otherTugAdjusted);
+            }
+
+            // 4. Collections
+            foreach (var col in ticketCollections)
+            {
+                var colLogs = logsByCollection[col.MsapCollectionId].ToList();
+                var collectionAdjusted = col.PeriodStatus == MsapPeriodStatus.Adjusted;
+                ProcessLogs("Collection", collectionFallbackCol, colLogs, collectionAdjusted);
+            }
+
+            return anyAdjusted;
+        }
+
         private static void AddOrAppendComment(ExcelRange cell, string text, string author)
         {
             if (cell.Comment != null)
             {
-                cell.Comment.Text = $"{cell.Comment.Text}\n\n{text}";
+                if (!cell.Comment.Text.Contains(text, StringComparison.Ordinal))
+                {
+                    cell.Comment.Text = $"{cell.Comment.Text}\n\n{text}";
+                }
             }
             else
             {
-                cell.AddComment(text, author);
+                var comment = cell.AddComment(text, author);
+                comment.AutoFit = true;
             }
         }
 

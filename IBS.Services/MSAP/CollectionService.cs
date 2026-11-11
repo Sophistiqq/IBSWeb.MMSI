@@ -63,6 +63,8 @@ namespace IBS.Services.MSAP
                     }
 
                     string description;
+                    var isAdjustedAction = collection.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+                    var changes = new List<MsapFieldChange>();
                     switch (action)
                     {
                         case CollectionBankingAction.Deposit:
@@ -80,6 +82,14 @@ namespace IBS.Services.MSAP
                             {
                                 throw new InvalidOperationException("Select a valid MMSI bank account.");
                             }
+                            if (collection.BankId != bank.BankAccountId)
+                            {
+                                changes.Add(new MsapFieldChange { Field = "Bank", Label = "Bank", Before = collection.BankAccountName ?? "-", After = bank.AccountName });
+                            }
+                            if (collection.DepositDate != date)
+                            {
+                                changes.Add(new MsapFieldChange { Field = "DepositDate", Label = "Deposit Date", Before = collection.DepositDate?.ToString("yyyy-MM-dd") ?? "-", After = date.ToString("yyyy-MM-dd") });
+                            }
                             collection.BankId = bank.BankAccountId;
                             collection.BankAccountName = bank.AccountName;
                             collection.BankAccountNumber = bank.AccountNo;
@@ -91,6 +101,14 @@ namespace IBS.Services.MSAP
                             {
                                 throw new InvalidOperationException("Only a deposited check can be returned, on or after its deposit date.");
                             }
+                            if (collection.ReturnedDate != date)
+                            {
+                                changes.Add(new MsapFieldChange { Field = "ReturnedDate", Label = "Returned Date", Before = collection.ReturnedDate?.ToString("yyyy-MM-dd") ?? "-", After = date.ToString("yyyy-MM-dd") });
+                            }
+                            if (collection.DepositDate != null)
+                            {
+                                changes.Add(new MsapFieldChange { Field = "DepositDate", Label = "Deposit Date", Before = collection.DepositDate.Value.ToString("yyyy-MM-dd"), After = "-" });
+                            }
                             collection.ReturnedDate = date;
                             collection.DepositDate = null;
                             description = "Return check";
@@ -99,6 +117,10 @@ namespace IBS.Services.MSAP
                             if (!collection.DepositDate.HasValue || date < collection.DepositDate)
                             {
                                 throw new InvalidOperationException("Record a deposit first. Clearing date cannot precede its deposit date.");
+                            }
+                            if (collection.ClearedDate != date)
+                            {
+                                changes.Add(new MsapFieldChange { Field = "ClearedDate", Label = "Cleared Date", Before = collection.ClearedDate?.ToString("yyyy-MM-dd") ?? "-", After = date.ToString("yyyy-MM-dd") });
                             }
                             collection.ClearedDate = date;
                             description = "Clear";
@@ -109,6 +131,29 @@ namespace IBS.Services.MSAP
 
                     collection.EditedBy = username;
                     collection.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+
+                    if (isAdjustedAction)
+                    {
+                        if (collection.PeriodStatus == MsapPeriodStatus.Final)
+                        {
+                            collection.PeriodStatus = MsapPeriodStatus.Adjusted;
+                            changes.Insert(0, new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted });
+                        }
+                        if (changes.Count > 0)
+                        {
+                            var log = new MsapAdjustmentLog
+                            {
+                                DocumentType = "Collection",
+                                RecordId = collection.MsapCollectionId,
+                                ReferenceNumber = collection.MsapCollectionNumber,
+                                Reason = $"{description} recorded on collection #{collection.MsapCollectionNumber}",
+                                ChangesJson = System.Text.Json.JsonSerializer.Serialize(changes),
+                                EditedBy = username,
+                                EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
+                            };
+                            await unitOfWork.MsapAdjustmentLog.AddAsync(log, ct);
+                        }
+                    }
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
                         $"{description} collection #{collection.MsapCollectionNumber} on {date:yyyy-MM-dd}, bank #{collection.BankId}",
                         "Collection", collection.MsapCollectionId, collection.MsapCollectionNumber), ct);
@@ -175,22 +220,28 @@ namespace IBS.Services.MSAP
                     collection.EditedBy = username;
                     collection.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
-                    if (collection.PeriodStatus == MsapPeriodStatus.Final)
+                    if (collection.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
                     {
-                        collection.PeriodStatus = MsapPeriodStatus.Adjusted;
-                        changes.Insert(0, new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted });
-
-                        var log = new MsapAdjustmentLog
+                        if (collection.PeriodStatus == MsapPeriodStatus.Final)
                         {
-                            DocumentType = "Collection",
-                            RecordId = collection.MsapCollectionId,
-                            ReferenceNumber = collection.MsapCollectionNumber,
-                            Reason = reason.Trim(),
-                            ChangesJson = System.Text.Json.JsonSerializer.Serialize(changes),
-                            EditedBy = username,
-                            EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
-                        };
-                        await unitOfWork.MsapAdjustmentLog.AddAsync(log, ct);
+                            collection.PeriodStatus = MsapPeriodStatus.Adjusted;
+                            changes.Insert(0, new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted });
+                        }
+
+                        if (changes.Count > 0)
+                        {
+                            var log = new MsapAdjustmentLog
+                            {
+                                DocumentType = "Collection",
+                                RecordId = collection.MsapCollectionId,
+                                ReferenceNumber = collection.MsapCollectionNumber,
+                                Reason = reason.Trim(),
+                                ChangesJson = System.Text.Json.JsonSerializer.Serialize(changes),
+                                EditedBy = username,
+                                EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
+                            };
+                            await unitOfWork.MsapAdjustmentLog.AddAsync(log, ct);
+                        }
                     }
 
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
