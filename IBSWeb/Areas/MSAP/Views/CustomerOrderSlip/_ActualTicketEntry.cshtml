@@ -13,6 +13,7 @@
     var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
     var role = readOnly || userId == null ? null : await MsapRoleService.GetUserRoleAsync(userId);
     var imageRequired = role != MsapRoles.Admin && string.IsNullOrEmpty(Model.ImageName);
+    var canVoid = canEdit && savedTicket != null && savedTicket?.BillingId == null && savedTicket?.Status != MsapConstants.DispatchTicketStatus.Billed;
 }
 <form asp-controller="DispatchTicket" asp-action="@(editing ? "EditTicket" : "Create")" method="post" enctype="multipart/form-data" class="ui-stack" id="@(readOnly ? "cosActualTicketDetails" : "cosActualTicketForm")" onsubmit="@(readOnly ? "return false;" : null)">
     <input name="inlineEntry" type="hidden" value="true" />
@@ -167,21 +168,21 @@
         </section>
     }
     <div class="cos-entry-footer">
+        @if (canVoid && savedTicket != null)
+        {
+            <button type="button" class="modern-btn-danger me-auto" id="btnVoidTicketEntry" style="margin-right: auto;"
+                data-action="@Url.Action("VoidTicket", "DispatchTicket")"
+                data-id="@savedTicket!.DispatchTicketId"
+                data-cos-id="@savedTicket!.CustomerOrderSlipId"
+                data-dispatch-number="@savedTicket!.DispatchNumber"
+                data-finalized="@(savedTicket!.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
+                <span class="material-symbols-outlined" aria-hidden="true">cancel</span> Void ticket entry
+            </button>
+        }
         <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@(editing ? Model.DispatchTicketId : null)" asp-fragment="@(editing ? "actualTicketEntry" : null)" class="modern-btn-secondary">@(readOnly ? "Close ticket" : editing ? "Cancel changes" : "Cancel entry")</a>
         @if (canEdit)
         {
             <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@Model.DispatchTicketId" asp-route-editTicket="true" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">edit</span> Edit ticket</a>
-            @if (savedTicket != null && savedTicket.BillingId == null && savedTicket.Status != MsapConstants.DispatchTicketStatus.Billed)
-            {
-                <button type="button" class="modern-btn-danger" id="btnVoidTicketEntry"
-                    data-action="@Url.Action("VoidTicket", "DispatchTicket")"
-                    data-id="@savedTicket.DispatchTicketId"
-                    data-cos-id="@savedTicket.CustomerOrderSlipId"
-                    data-dispatch-number="@savedTicket.DispatchNumber"
-                    data-finalized="@(savedTicket.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
-                    <span class="material-symbols-outlined" aria-hidden="true">cancel</span> Void ticket entry
-                </button>
-            }
         }
         @if (!readOnly)
         {

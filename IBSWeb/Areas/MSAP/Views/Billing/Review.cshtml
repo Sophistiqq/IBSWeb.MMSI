@@ -30,6 +30,16 @@
                 <div class="billing-review-header-actions">
                     <a asp-action="Index" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
                     <a asp-action="Preview" asp-route-id="@Model.MsapBillingId" asp-route-printCopy="@canPrint" target="_blank" class="modern-btn-primary ui-page-action">Preview statements</a>
+                    @if (canReverse)
+                    {
+                        <button type="button" class="modern-btn-warning ui-page-action" id="btnReopenBilling"
+                            data-action="@Url.Action("ReopenForRevision", "Billing")"
+                            data-id="@Model.MsapBillingId"
+                            data-billing-number="@Model.MsapBillingNumber"
+                            data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
+                            <span class="material-symbols-outlined" aria-hidden="true">lock_open</span> Reopen for revision
+                        </button>
+                    }
                 </div>
                 <p class="ui-page-description ui-caption ui-muted">
                     @Model.MsapBillingNumber · @component · @(Model.Status == MsapConstants.BillingStatus.ForPosting ? "Awaiting final approval" : "Approved") · @(Model.IsUndocumented ? "Undocumented" : "Documented")
@@ -116,9 +126,9 @@
                 }
             </section>
             <footer class="billing-footer">
-                <p class="ui-caption ui-muted">Final approval applies to @Model.MsapBillingNumber only.</p>
                 @if (canPost)
                 {
+                    <p class="ui-caption ui-muted">Final approval applies to @Model.MsapBillingNumber only.</p>
                     <form asp-action="Review" asp-route-id="@Model.MsapBillingId" method="post" id="postReviewedBilling">
                         <input type="hidden" name="reviewedRevision" value="@Model.Revision" />
                         <button class="modern-btn-primary ui-page-action" type="submit">
@@ -128,13 +138,7 @@
                 }
                 else if (canReverse)
                 {
-                    <button type="button" class="modern-btn-warning ui-button" id="btnReopenBilling"
-                        data-action="@Url.Action("ReopenForRevision", "Billing")"
-                        data-id="@Model.MsapBillingId"
-                        data-billing-number="@Model.MsapBillingNumber"
-                        data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
-                        <span class="material-symbols-outlined" aria-hidden="true">lock_open</span> Reopen for revision
-                    </button>
+                    <p class="ui-caption ui-muted">This bill is approved and awaiting collection. To make corrections, use <strong>Reopen for revision</strong> in the header actions.</p>
                 }
                 else
                 {

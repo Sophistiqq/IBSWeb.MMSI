@@ -75,12 +75,28 @@
             </section>
             @if (Model.Charge != null)
             {
-                <section class="ui-panel ui-stack"><p class="ui-caption ui-muted">Prepared by @Model.Charge.PreparedByName · @Model.Charge.UpdatedAt.ToString("dd MMM yyyy, HH:mm") Philippine time</p>
-                    @if (confirmed) { <p class="ui-body">Confirmed by @Model.Charge.ConfirmedByName · @Model.Charge.ConfirmedAt?.ToString("dd MMM yyyy, HH:mm") Philippine time</p> }
+                <section class="ui-panel ui-stack">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="ui-caption ui-muted mb-1">Prepared by @Model.Charge.PreparedByName · @Model.Charge.UpdatedAt.ToString("dd MMM yyyy, HH:mm") Philippine time</p>
+                            @if (confirmed) { <p class="ui-body mb-0">Confirmed by @Model.Charge.ConfirmedByName · @Model.Charge.ConfirmedAt?.ToString("dd MMM yyyy, HH:mm") Philippine time</p> }
+                        </div>
+                        @if (canReopen)
+                        {
+                            <button type="button" class="modern-btn-warning" id="btnReopenCharge"
+                                data-action="@Url.Action("Reopen", "OtherTugCharge")"
+                                data-id="@Model.Id"
+                                data-cos-id="@Model.CustomerOrderSlipId"
+                                data-reference="@Model.Charge?.ProviderReference"
+                                data-finalized="@(Model.Charge?.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
+                                <span class="material-symbols-outlined" aria-hidden="true">lock_open</span> Reopen to revise
+                            </button>
+                        }
+                    </div>
                 </section>
             }
             <footer class="cos-entry-footer">
-                <span class="ui-caption ui-muted">@(confirmed ? "Confirmed charges are locked." : "Draft amounts do not update AP reports. Customer billing remains independent of provider charge entry.")</span>
+                <span class="ui-caption ui-muted">@(confirmed ? (canReopen ? "Confirmed charges require reopening before editing." : "Confirmed charges are locked.") : "Draft amounts do not update AP reports. Customer billing remains independent of provider charge entry.")</span>
                 @if (canEdit)
                 {
                     <button type="button" class="modern-btn-secondary" id="editOtherTugCharge" hidden="@editing">Edit</button>
@@ -88,17 +104,6 @@
                     <button type="submit" class="ui-button ui-button--primary" id="saveOtherTugCharge" hidden="@(!editing)">Save for reviewing</button>
                 }
                 @if (canConfirm) { <button type="button" class="ui-button ui-button--primary" id="confirmOtherTugCharge" hidden="@editing" data-url="@Url.Action("Confirm")">Confirm saved charges</button> }
-                @if (canReopen)
-                {
-                    <button type="button" class="modern-btn-warning" id="btnReopenCharge"
-                        data-action="@Url.Action("Reopen", "OtherTugCharge")"
-                        data-id="@Model.Id"
-                        data-cos-id="@Model.CustomerOrderSlipId"
-                        data-reference="@Model.Charge?.ProviderReference"
-                        data-finalized="@(Model.Charge?.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
-                        <span class="material-symbols-outlined" aria-hidden="true">lock_open</span> Reopen to revise
-                    </button>
-                }
             </footer>
         </form>
     </main>

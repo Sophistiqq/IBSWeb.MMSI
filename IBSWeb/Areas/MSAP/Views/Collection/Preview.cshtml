@@ -74,17 +74,6 @@
                             <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Clear" data-collection-banking="Record clearing" class="modern-btn-complete"><span class="material-symbols-outlined" aria-hidden="true">verified</span> Record clearing</a>
                         }
                     }
-                    @if (canRevertBanking)
-                    {
-                        <button type="button" class="modern-btn-secondary" id="btnRevertBanking"
-                            data-action="@Url.Action("RevertBankingStep", "Collection")"
-                            data-id="@Model.MsapCollectionId"
-                            data-step="@(Model.ClearedDate.HasValue ? "Cleared" : "Deposited")"
-                            data-cleared="@(Model.ClearedDate.HasValue ? "true" : "false")"
-                            data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
-                            <span class="material-symbols-outlined" aria-hidden="true">undo</span> Revert banking step
-                        </button>
-                    }
                 </div>
                 @if (Model.IsMonthClosed)
                 {
@@ -151,7 +140,21 @@
                         }
                     </section>
                     <section class="ui-panel ui-stack" aria-labelledby="depositDetailsHeading">
-                        <h2 id="depositDetailsHeading" class="ui-section-title">Deposit and clearing</h2>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <h2 id="depositDetailsHeading" class="ui-section-title mb-0">Deposit and clearing</h2>
+                            @if (canRevertBanking)
+                            {
+                                <button type="button" class="modern-btn-secondary" id="btnRevertBanking"
+                                    data-action="@Url.Action("RevertBankingStep", "Collection")"
+                                    data-id="@Model.MsapCollectionId"
+                                    data-step="@(Model.ClearedDate.HasValue ? "Cleared" : "Deposited")"
+                                    data-cleared="@(Model.ClearedDate.HasValue ? "true" : "false")"
+                                    data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")"
+                                    style="padding: 4px 10px; font-size: 13px;">
+                                    <span class="material-symbols-outlined fs-6" aria-hidden="true">undo</span> Revert banking step
+                                </button>
+                            }
+                        </div>
                         <div class="ui-field"><span class="ui-caption ui-muted">MMSI receiving bank account</span><p class="ui-body">@(Model.BankAccount?.Bank ?? "Not recorded")</p><p class="ui-caption ui-muted">@(Model.BankAccountNumber ?? Model.BankAccount?.AccountNo) / @(Model.BankAccountName ?? Model.BankAccount?.AccountName)</p></div>
                         <div class="collection-fields">
                             <div class="ui-field"><span class="ui-caption ui-muted">@(Model.ReturnedDate.HasValue ? "Latest deposit" : "Deposit date")</span><p class="ui-body">@(Model.DepositDate?.ToString(MsapConstants.Date_Format) ?? "Not recorded")</p></div>
