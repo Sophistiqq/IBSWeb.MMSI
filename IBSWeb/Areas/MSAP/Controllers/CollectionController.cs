@@ -97,6 +97,13 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return NotFound();
             }
 
+            var isMonthClosed = await unitOfWork.PostedPeriod.IsMonthClosedAsync(viewModel.Date.Year, viewModel.Date.Month, cancellationToken);
+            if (isMonthClosed)
+            {
+                TempData["error"] = "Collections in a locked or finalized month cannot be edited.";
+                return RedirectToAction(nameof(Preview), new { id });
+            }
+
             return View(viewModel);
         }
 

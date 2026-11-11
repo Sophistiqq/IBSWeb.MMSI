@@ -11,7 +11,7 @@
     ViewData["JobProgressActionStage"] = Model.DepositDate.HasValue ? JobProgressCalculator.ClearingStage : JobProgressCalculator.DepositStage;
     ViewData["JobProgressActionTargetId"] = Model.MsapCollectionId;
     bool isFinalOrAdjusted = Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
-    bool canEdit = canPrepare && (!Model.IsMonthClosed || isFinalOrAdjusted) && !Model.DepositDate.HasValue && !Model.ReturnedDate.HasValue && !Model.ClearedDate.HasValue;
+    bool canEdit = canPrepare && !Model.IsMonthClosed && !Model.DepositDate.HasValue && !Model.ReturnedDate.HasValue && !Model.ClearedDate.HasValue;
     bool canRevertBanking = canBank && (Model.DepositDate.HasValue || Model.ClearedDate.HasValue);
     var progressItems = (ViewBag.JobProgressItems as IEnumerable<JobProgressViewModel> ?? []).ToList();
 }

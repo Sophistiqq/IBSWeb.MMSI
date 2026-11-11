@@ -466,13 +466,11 @@ namespace IBS.Services.MSAP
                         throw new InvalidOperationException("Collection not found.");
                     }
 
-                    if (currentModel.PeriodStatus is not (MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted))
+                    var guard = await GuardClosedPeriodAsync(currentModel.Date, cancellationToken)
+                        ?? await GuardClosedPeriodAsync(viewModel.Date, cancellationToken);
+                    if (guard != null)
                     {
-                        var guard = await GuardClosedPeriodAsync(currentModel.Date, cancellationToken);
-                        if (guard != null)
-                        {
-                            throw new InvalidOperationException(guard.Message);
-                        }
+                        throw new InvalidOperationException(guard.Message);
                     }
 
                     if (currentModel.CustomerId != viewModel.CustomerId)
