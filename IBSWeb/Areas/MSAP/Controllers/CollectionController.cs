@@ -226,6 +226,16 @@ namespace IBSWeb.Areas.MSAP.Controllers
             return RedirectToAction(nameof(Preview), new { id });
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.AccessTreasury, "Access denied. You don't have permission to record banking updates.")]
+        public async Task<IActionResult> RevertBankingStep(int id, string reason, CancellationToken ct)
+        {
+            var result = await collectionService.RevertCollectionBankingStepAsync(id, reason, User.Identity?.Name ?? "System", ct);
+            TempData[result.IsSuccess ? "success" : "error"] = result.Message;
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+
         #region AJAX Endpoints
 
         /// <summary>

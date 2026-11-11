@@ -120,6 +120,89 @@ namespace IBS.Services.MSAP
             }
         }
 
+        public async Task<ServiceResult> RevertCollectionBankingStepAsync(int id, string reason, string username, CancellationToken ct)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
+                {
+                    return ServiceResult.Failure("Please provide a valid reason for reverting this banking step (minimum 5 characters).");
+                }
+
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    var collection = await unitOfWork.Collection.GetForUpdateAsync(id, ct)
+                        ?? throw new InvalidOperationException("Collection not found.");
+
+                    var guard = await GuardClosedPeriodAsync(collection.Date, ct);
+                    if (guard != null)
+                    {
+                        throw new InvalidOperationException(guard.Message);
+                    }
+
+                    string stepDescription;
+                    List<MsapFieldChange> changes = [];
+
+                    if (collection.ClearedDate.HasValue)
+                    {
+                        stepDescription = "Cleared status reverted to Deposited";
+                        changes.Add(new MsapFieldChange { Field = "ClearedDate", Label = "Cleared Date", Before = collection.ClearedDate.Value.ToString("yyyy-MM-dd"), After = "" });
+                        collection.ClearedDate = null;
+                    }
+                    else if (collection.DepositDate.HasValue)
+                    {
+                        stepDescription = "Deposit status reverted to " + (collection.ReturnedDate.HasValue ? "Returned" : "Undeposited");
+                        changes.Add(new MsapFieldChange { Field = "DepositDate", Label = "Deposit Date", Before = collection.DepositDate.Value.ToString("yyyy-MM-dd"), After = "" });
+                        collection.DepositDate = null;
+                        if (!collection.ReturnedDate.HasValue)
+                        {
+                            collection.BankId = null;
+                            collection.BankAccountName = null;
+                            collection.BankAccountNumber = null;
+                        }
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Collection has no active deposit or clearing step to revert.");
+                    }
+
+                    collection.EditedBy = username;
+                    collection.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+
+                    if (collection.PeriodStatus == MsapPeriodStatus.Final)
+                    {
+                        collection.PeriodStatus = MsapPeriodStatus.Adjusted;
+                        changes.Insert(0, new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted });
+
+                        var log = new MsapAdjustmentLog
+                        {
+                            DocumentType = "Collection",
+                            RecordId = collection.MsapCollectionId,
+                            ReferenceNumber = collection.MsapCollectionNumber,
+                            Reason = reason.Trim(),
+                            ChangesJson = System.Text.Json.JsonSerializer.Serialize(changes),
+                            EditedBy = username,
+                            EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
+                        };
+                        await unitOfWork.MsapAdjustmentLog.AddAsync(log, ct);
+                    }
+
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
+                        $"Reverted banking step ({stepDescription}) for collection #{collection.MsapCollectionNumber}. Reason: {reason.Trim()}",
+                        "Collection", collection.MsapCollectionId, collection.MsapCollectionNumber), ct);
+
+                    await unitOfWork.SaveAsync(ct);
+                }, ct);
+
+                return ServiceResult.Success("Collection banking step reverted successfully.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to revert collection banking step");
+                return ServiceResult.Failure(ExceptionHelper.GetErrorMessage(ex));
+            }
+        }
+
         public static Dictionary<int, (decimal Amount, decimal Ewt)> GetCollectedBillingAmounts(Collection collection, IEnumerable<Billing> billings)
         {
             // Use the receipt's recorded withholding, not the customer's current master-file settings.
@@ -337,9 +420,9 @@ namespace IBS.Services.MSAP
                         throw new InvalidOperationException("Customer cannot be changed on an existing collection.");
                     }
 
-                    if (currentModel.IsPrinted || currentModel.DepositDate.HasValue || currentModel.ReturnedDate.HasValue || currentModel.ClearedDate.HasValue)
+                    if (currentModel.DepositDate.HasValue || currentModel.ReturnedDate.HasValue || currentModel.ClearedDate.HasValue)
                     {
-                        throw new InvalidOperationException("Cannot edit a collection after printing or recording a deposit.");
+                        throw new InvalidOperationException("Cannot edit a collection after recording a deposit or clearing. Revert the banking step first.");
                     }
 
                     var allocations = await GetSettlementAllocationsAsync(viewModel, cancellationToken);
@@ -348,6 +431,26 @@ namespace IBS.Services.MSAP
                         ? viewModel.MsapCollectionNumber ?? oldCollectionNumber
                         : oldCollectionNumber;
                     currentModel.MsapCollectionNumber = newCollectionNumber;
+
+                    if (currentModel.PeriodStatus == MsapPeriodStatus.Final)
+                    {
+                        currentModel.PeriodStatus = MsapPeriodStatus.Adjusted;
+                        var log = new MsapAdjustmentLog
+                        {
+                            DocumentType = "Collection",
+                            RecordId = currentModel.MsapCollectionId,
+                            ReferenceNumber = currentModel.MsapCollectionNumber,
+                            Reason = "Collection details edited after period finalization",
+                            ChangesJson = System.Text.Json.JsonSerializer.Serialize(new[]
+                            {
+                                new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted },
+                                new MsapFieldChange { Field = "CollectionNumber", Label = "Collection Number", Before = oldCollectionNumber, After = newCollectionNumber }
+                            }),
+                            EditedBy = username,
+                            EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
+                        };
+                        await unitOfWork.MsapAdjustmentLog.AddAsync(log, cancellationToken);
+                    }
 
                     // Revert old allocations
                     var oldBillings = await unitOfWork.Billing.GetAllAsync(b => b.CollectionId == currentModel.MsapCollectionId, cancellationToken);

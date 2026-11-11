@@ -166,6 +166,47 @@ namespace Checks.MSAP
                         Check(log != null, "Expected adjustment log for voided finalized ticket");
                         Check(log!.Reason == "Correction of duplicate ticket entry", "Expected adjustment log reason to match");
                         Check(log.ChangesJson.Contains("Adjusted"), "Expected adjustment log changes to mention Adjusted");
+
+                        // 5. Test Collection Banking Reversion produces Adjusted tag & AdjustmentLog
+                        var testCollection = new Collection
+                        {
+                            Date = testDate,
+                            CustomerId = customerId,
+                            MsapCollectionNumber = "COL-TEST-" + Guid.NewGuid().ToString("N")[..6],
+                            Amount = 1000m,
+                            Total = 1000m,
+                            CashAmount = 1000m,
+                            DepositDate = testDate,
+                            ClearedDate = testDate,
+                            PeriodStatus = MsapPeriodStatus.Final,
+                            CreatedBy = "Tester"
+                        };
+                        await db.MsapCollections.AddAsync(testCollection);
+                        await db.SaveChangesAsync();
+
+                        try
+                        {
+                            var collService = new CollectionService(uow, NullLogger<CollectionService>.Instance);
+                            var revertResult = await collService.RevertCollectionBankingStepAsync(testCollection.MsapCollectionId, "Premature clearing entry", "Tester", CancellationToken.None);
+                            Check(revertResult.IsSuccess, $"Expected revert to succeed: {revertResult.Message}");
+
+                            var reloadedColl = await db.MsapCollections.AsNoTracking().FirstAsync(c => c.MsapCollectionId == testCollection.MsapCollectionId);
+                            Check(reloadedColl.ClearedDate == null, "Expected ClearedDate to be reverted to null");
+                            Check(reloadedColl.DepositDate == testDate, "Expected DepositDate to remain before second revert");
+                            Check(reloadedColl.PeriodStatus == MsapPeriodStatus.Adjusted, $"Expected collection PeriodStatus to be Adjusted, got '{reloadedColl.PeriodStatus}'");
+
+                            var collLog = await db.MsapAdjustmentLogs.AsNoTracking().FirstOrDefaultAsync(l => l.DocumentType == "Collection" && l.RecordId == testCollection.MsapCollectionId);
+                            Check(collLog != null, "Expected adjustment log for collection banking revert");
+                            Check(collLog!.Reason == "Premature clearing entry", "Expected collection adjustment log reason to match");
+                            Check(collLog.ChangesJson.Contains("Adjusted"), "Expected collection adjustment log changes to mention Adjusted");
+                        }
+                        finally
+                        {
+                            var collLogs = await db.MsapAdjustmentLogs.Where(l => l.DocumentType == "Collection" && l.RecordId == testCollection.MsapCollectionId).ToListAsync();
+                            db.MsapAdjustmentLogs.RemoveRange(collLogs);
+                            db.MsapCollections.Remove(testCollection);
+                            await db.SaveChangesAsync();
+                        }
                     }
                     finally
                     {

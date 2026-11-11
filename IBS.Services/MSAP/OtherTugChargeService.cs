@@ -352,6 +352,121 @@ namespace IBS.Services.MSAP
                 : "Provider charges confirmed and applied to AP Other Tugs reporting.");
         }
 
+        public async Task<ServiceResult> ReopenConfirmedChargeAsync(int id, string reason, string userId, CancellationToken ct)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
+                {
+                    return ServiceResult.Failure("Please provide a valid reason for reopening this charge (minimum 5 characters).");
+                }
+
+                var actor = await _db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId && u.IsActive, ct);
+                if (actor == null || string.IsNullOrWhiteSpace(actor.Name) || actor.Name.Trim().Length > 255)
+                {
+                    return ServiceResult.Failure("An active account with a full name is required.");
+                }
+
+                await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+                var charge = await LockAsync(id, ct);
+                if (charge == null)
+                {
+                    return ServiceResult.Failure("Provider charge not found.");
+                }
+
+                if (!charge.ConfirmedAt.HasValue)
+                {
+                    return ServiceResult.Failure("This provider charge is not confirmed.");
+                }
+
+                // Check if an active (non-voided/non-canceled) Check Voucher payment exists in IBS AP
+                await using var accounting = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+                    .UseNpgsql(_db.Database.GetDbConnection()).Options);
+                if (_db.Database.CurrentTransaction != null)
+                {
+                    await accounting.Database.UseTransactionAsync(_db.Database.CurrentTransaction.GetDbTransaction(), ct);
+                }
+
+                var activePayment = await accounting.FilprideTugboatPayments
+                    .Include(p => p.Voucher)
+                    .Where(p => p.OtherTugChargeId == id
+                        && p.Voucher.Status != nameof(CheckVoucherPaymentStatus.Voided)
+                        && p.Voucher.Status != nameof(CheckVoucherPaymentStatus.Canceled))
+                    .FirstOrDefaultAsync(ct);
+
+                if (activePayment != null)
+                {
+                    return ServiceResult.Failure($"Cannot reopen charge: active Check Voucher {activePayment.Voucher.CheckVoucherHeaderNo} exists in IBS AP. Void or cancel the check voucher first.");
+                }
+
+                // Reverse recognized GL entries in FilprideGeneralLedgerBooks
+                var glEntries = await accounting.FilprideGeneralLedgerBooks.IgnoreQueryFilters(["TugboatWorkspace"])
+                    .Where(g => g.WorkspaceTugboatId == null && g.Reference == charge.ProviderReference
+                        && g.CounterpartyId == charge.TugboatOwnerId)
+                    .ToListAsync(ct);
+                if (glEntries.Count != 0)
+                {
+                    accounting.FilprideGeneralLedgerBooks.RemoveRange(glEntries);
+                    await accounting.SaveChangesAsync(ct);
+                }
+
+                int priorRevision = charge.Revision;
+                charge.ConfirmedAt = null;
+                charge.ConfirmedByUserId = null;
+                charge.ConfirmedByName = null;
+                charge.Revision += 1;
+                charge.UpdatedAt = DateTimeHelper.GetCurrentPhilippineTime();
+
+                // Clear AP amounts on tickets until re-confirmed
+                List<int> ids = charge.Lines.Select(l => l.DispatchTicketId).ToList();
+                var tickets = await _db.MsapDispatchTickets.Where(t => ids.Contains(t.DispatchTicketId)).ToListAsync(ct);
+                foreach (var ticket in tickets)
+                {
+                    ticket.ApOtherTugs = 0m;
+                    ticket.ApOtherTugsIncludesVat = false;
+                }
+
+                if (charge.PeriodStatus == MsapPeriodStatus.Final)
+                {
+                    charge.PeriodStatus = MsapPeriodStatus.Adjusted;
+                    var log = new MsapAdjustmentLog
+                    {
+                        DocumentType = "OtherTugCharge",
+                        RecordId = charge.OtherTugChargeId,
+                        ReferenceNumber = charge.ProviderReference,
+                        Reason = reason.Trim(),
+                        ChangesJson = JsonSerializer.Serialize(new[]
+                        {
+                            new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted },
+                            new MsapFieldChange { Field = "Revision", Label = "Revision", Before = priorRevision.ToString(), After = charge.Revision.ToString() },
+                            new MsapFieldChange { Field = "ConfirmedAt", Label = "Confirmed Date", Before = "Confirmed", After = "Reopened" }
+                        }),
+                        EditedBy = actor.Name.Trim(),
+                        EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
+                    };
+                    await _db.MsapAdjustmentLogs.AddAsync(log, ct);
+                }
+
+                _db.AuditTrails.Add(new AuditTrail(actor.UserName ?? userId,
+                    $"Reopened provider charge {charge.ProviderReference} for revision (rev {charge.Revision}). Reason: {reason.Trim()}",
+                    "Other Tug Charges", charge.OtherTugChargeId, charge.ProviderReference)
+                {
+                    UserId = userId,
+                    ActorName = actor.Name.Trim()
+                });
+
+                await _db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+
+                return ServiceResult.Success($"Provider charge {charge.ProviderReference} reopened for revision successfully.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to reopen provider charge {Id}", id);
+                return ServiceResult.Failure($"Failed to reopen provider charge: {ExceptionHelper.GetErrorMessage(ex)}");
+            }
+        }
+
         public static (decimal Gross, decimal Net, decimal InputVat) CalculateRecognition(TugboatOwner owner, OtherTugCharge charge)
         {
             var (gross, _) = TugboatPaymentService.Calculate(owner, charge);

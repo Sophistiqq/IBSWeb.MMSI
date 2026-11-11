@@ -76,5 +76,23 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return Json(new { success = false, message = "Unable to confirm the charge. Reload and review the current details." });
             }
         }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.ConfirmOtherTugCharges)]
+        public async Task<IActionResult> Reopen(int id, int? customerOrderSlipId, string reason, CancellationToken ct)
+        {
+            var result = await _charges.ReopenConfirmedChargeAsync(id, reason, UserId, ct);
+            if (result.IsSuccess)
+            {
+                TempData["success"] = result.Message;
+            }
+            else
+            {
+                TempData["error"] = result.Message;
+            }
+
+            return RedirectToAction(nameof(Editor), new { customerOrderSlipId, id });
+        }
     }
 }
