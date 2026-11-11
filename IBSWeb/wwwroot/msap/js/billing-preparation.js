@@ -37,6 +37,7 @@ $(function () {
         defaultDiscount = 0;
         $('#sbmaCard').prop('hidden', true);
         $('#CosDiscountPercent, #SkipCosDiscount, #SbmaEnabled, #sbmaFalse, #discountToggle').prop('disabled', true);
+        $('#SeparateBaf').prop('disabled', form.dataset.editingDraft === 'true');
         $('#CosDiscountPercent').val('');
         $('#SkipCosDiscount, #SbmaEnabled').prop('checked', false);
         $('#discountCard').removeClass('is-enabled');
@@ -215,7 +216,17 @@ $(function () {
             if (principals.length) $recipient.append('<option value="PRINCIPAL">Principal</option>');
             $('#customerVat').prop('checked', customer.vatType === 'Vatable');
             $('#customerWithholding').prop('checked', !!customer.withholdingTax);
-            $('#IsUndocumented').prop('checked', customer.isUndoc === 'Undocumented');
+            const isInitialEdit = Boolean(initialCos) && form.dataset.editingDraft === 'true';
+            if (!isInitialEdit) {
+                $('#IsUndocumented').prop('checked', customer.isUndoc === 'Undocumented');
+            } else {
+                if (form.dataset.initialBilledTo === 'PRINCIPAL' && principals.length) {
+                    $recipient.val('PRINCIPAL');
+                }
+                if (form.dataset.initialPrincipal) {
+                    $principal.val(form.dataset.initialPrincipal);
+                }
+            }
             updateSummary();
             updateRecipient();
             if (initialCos && jobs.some(job => String(job.value) === initialCos)) $cos.val(initialCos);
@@ -244,6 +255,7 @@ $(function () {
             $('#bookingVoyage').text(header.voyageNumber || '—');
             $('#bookingDates').text(date(header.serviceStart) + ' – ' + date(header.serviceEnd));
             $('#bookingIoc').text(header.isIoc ? 'IOC' : 'Non-IOC');
+            $('#SeparateBaf').prop('disabled', form.dataset.editingDraft === 'true');
             commercialEnabled = header.hasSchedule;
             $('#CosDiscountPercent, #SkipCosDiscount, #SbmaEnabled, #sbmaFalse, #discountToggle').prop('disabled', !commercialEnabled);
             defaultDiscount = Number(header.cosDiscountPercent) || 0;

@@ -90,6 +90,11 @@
     outline-offset: 2px;
 }
 
+.billing-preparation .billing-option:has(input:disabled) {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .billing-preparation .billing-recipient {
     display: grid;
     grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
@@ -159,6 +164,16 @@
 
 .billing-preparation .billing-footer {
     padding: var(--ui-space-2) 0;
+}
+
+.billing-review-screen .billing-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--ui-space-2);
+}
+
+.billing-review-screen .billing-footer > p {
+    margin: 0;
 }
 
 .billing-preparation .billing-footer .ui-page-action {

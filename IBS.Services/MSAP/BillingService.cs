@@ -52,6 +52,10 @@ namespace IBS.Services.MSAP
                     var existingDraft = await unitOfWork.Billing.GetAsync(
                         b => b.CustomerOrderSlipId == model.CustomerOrderSlipId.Value && b.Status == MsapConstants.BillingStatus.ForPosting && b.BasicBillingId == null,
                         cancellationToken);
+                    if (existingDraft != null)
+                    {
+                        model.SeparateBaf = existingDraft.BafBilling != null;
+                    }
                     var prepared = await PrepareBillingAsync(model, username, company, cancellationToken);
                     if (!prepared.IsSuccess || prepared.Data == null)
                     {
@@ -189,6 +193,10 @@ namespace IBS.Services.MSAP
             var existingDraft = await unitOfWork.Billing.GetAsync(
                 b => b.CustomerOrderSlipId == model.CustomerOrderSlipId.Value && b.Status == MsapConstants.BillingStatus.ForPosting && b.BasicBillingId == null,
                 cancellationToken);
+            if (existingDraft != null)
+            {
+                model.SeparateBaf = existingDraft.BafBilling != null;
+            }
             var isAuthorizedRevision = existingDraft != null
                 && (existingDraft.UnpostedDate.HasValue || existingDraft.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted);
             if (!isAuthorizedRevision)

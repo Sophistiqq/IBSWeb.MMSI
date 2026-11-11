@@ -122,7 +122,7 @@
                 @if (Model.Status == MsapConstants.BillingStatus.ForPosting)
                 {
                     <p class="ui-caption ui-muted">Final approval applies to @Model.MsapBillingNumber only.</p>
-                    <div class="d-flex justify-content-between align-items-center w-100 flex-wrap gap-2">
+                    <div class="billing-footer-actions">
                         <div class="d-flex align-items-center gap-2 flex-wrap">
                             @if (canDiscard)
                             {

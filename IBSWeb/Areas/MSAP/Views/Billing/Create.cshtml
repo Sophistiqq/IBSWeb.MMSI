@@ -1,6 +1,7 @@
 @model Billing
 @{
-    ViewData["Title"] = "Prepare billing";
+    bool isEditingDraft = Model.MsapBillingId > 0;
+    ViewData["Title"] = isEditingDraft ? "Edit billing" : "Prepare billing";
     ViewData["IsFullWidth"] = true;
 }
 
@@ -16,7 +17,10 @@
           data-progress-url="@Url.Action("Progress", "CustomerOrderSlip")"
           data-index-url="@Url.Action("Index")"
           data-details-url="@Url.Action("Details", "CustomerOrderSlip")"
-          data-initial-cos="@Model.CustomerOrderSlipId">
+          data-initial-cos="@Model.CustomerOrderSlipId"
+          data-editing-draft="@isEditingDraft.ToString().ToLowerInvariant()"
+          data-initial-billed-to="@Model.BilledTo"
+          data-initial-principal="@Model.PrincipalId">
         @Html.AntiForgeryToken()
         <main class="billing-workspace">
             <aside class="ui-panel schedule-details-progress billing-progress" aria-label="Job Progress">
@@ -86,7 +90,11 @@
                         <h2 id="billingHeading" class="ui-section-title">Billing details</h2>
                         <div class="billing-options">
                             <label class="billing-option"><input asp-for="IsUndocumented" /> Undocumented</label>
-                            <label class="billing-option"><input asp-for="SeparateBaf" /> Separate Basic and BAF</label>
+                            <label class="billing-option" title="@(isEditingDraft ? "Discard draft first to change Basic and BAF split." : null)"><input asp-for="SeparateBaf" disabled="@isEditingDraft" /> Separate Basic and BAF</label>
+                            @if (isEditingDraft)
+                            {
+                                <input type="hidden" name="SeparateBaf" value="@Model.SeparateBaf.ToString().ToLowerInvariant()" />
+                            }
                         </div>
                     </div>
                     <div class="billing-number-fields">

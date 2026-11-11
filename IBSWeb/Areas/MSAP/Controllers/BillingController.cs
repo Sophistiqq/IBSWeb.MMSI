@@ -78,6 +78,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     cancellationToken);
                 if (existingDraft != null)
                 {
+                    model.MsapBillingId = existingDraft.MsapBillingId;
                     model.MsapBillingNumber = existingDraft.MsapBillingNumber;
                     model.Date = existingDraft.Date;
                     model.BilledTo = existingDraft.BilledTo;
