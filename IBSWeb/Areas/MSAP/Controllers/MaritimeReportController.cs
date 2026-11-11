@@ -322,6 +322,14 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
                 var data = await unitOfWork.Report.GetDispatchReportData(dateFrom, dateTo, ct, filterByBillingDate: true);
+                var ticketIds = data.Select(t => t.DispatchTicketId).ToList();
+                var billingIds = data.Where(t => t.BillingId.HasValue).Select(t => t.BillingId!.Value).Distinct().ToList();
+                var adjLogs = await unitOfWork.MsapAdjustmentLog.GetAllAsync(l =>
+                    (l.DocumentType == "DispatchTicket" && ticketIds.Contains(l.RecordId)) ||
+                    (l.DocumentType == "Billing" && billingIds.Contains(l.RecordId)), ct);
+                var logsByTicket = adjLogs.Where(l => l.DocumentType == "DispatchTicket").ToLookup(l => l.RecordId);
+                var logsByBilling = adjLogs.Where(l => l.DocumentType == "Billing").ToLookup(l => l.RecordId);
+                bool hasAdjustedRows = false;
                 var (collectionShares, collectionsByTicket) = await AllocateCollectionsByTicketAsync(data, ct);
                 var sbmaShares = data.ToDictionary(t => t.DispatchTicketId, t => t.SbmaShareAmount);
                 var cosIds = data.Where(t => t.CustomerOrderSlipId.HasValue).Select(t => t.CustomerOrderSlipId!.Value).Distinct().ToList();
@@ -658,6 +666,31 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     if (!includesService)
                     {
                         ws.Cells[row, 2].AddComment("Financial recognition only. This service and its hours were counted in the original ticket period.", "MMSI");
+                    }
+
+                    bool isRowAdjusted = t.PeriodStatus == MsapPeriodStatus.Adjusted
+                        || t.Billing?.PeriodStatus == MsapPeriodStatus.Adjusted
+                        || t.OtherTugChargeLine?.Charge?.PeriodStatus == MsapPeriodStatus.Adjusted;
+
+                    if (isRowAdjusted)
+                    {
+                        hasAdjustedRows = true;
+                        var adjRange = ws.Cells[row, 1, row, Math.Min(35, totalCols)];
+                        adjRange.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                        adjRange.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(255, 242, 204));
+
+                        var tLog = logsByTicket[t.DispatchTicketId].LastOrDefault();
+                        var bLog = t.BillingId.HasValue ? logsByBilling[t.BillingId.Value].LastOrDefault() : null;
+                        var aLog = tLog ?? bLog;
+
+                        var note = "[ADJUSTED]\n" +
+                            (aLog != null ? $"Reason: {aLog.Reason}\nEdited: {aLog.EditedDate:yyyy-MM-dd HH:mm} by {aLog.EditedBy}" : "Modified after month-end finalization.");
+
+                        ws.Cells[row, 2].AddComment(note, "MMSI System");
+                        if (t.BillingId.HasValue)
+                        {
+                            ws.Cells[row, 3].AddComment(note, "MMSI System");
+                        }
                     }
 
                     // Number formats for detail section
@@ -1040,6 +1073,15 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 if (principalCol > 0)
                 {
                     ws.Column(principalCol).Width = 50;
+                }
+
+                if (hasAdjustedRows)
+                {
+                    currRow += 2;
+                    ws.Cells[currRow, 1].Value = "NOTE: Rows highlighted in light amber [ADJUSTED] contain post-close adjustments recorded after month-end finalization.";
+                    ws.Cells[currRow, 1].Style.Font.Italic = true;
+                    ws.Cells[currRow, 1].Style.Font.Bold = true;
+                    ws.Cells[currRow, 1].Style.Font.Color.SetColor(Color.FromArgb(180, 83, 9));
                 }
 
                 // Export a snapshot. Excel should receive values, not hidden report logic.

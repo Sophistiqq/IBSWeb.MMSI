@@ -42,7 +42,17 @@
             <section class="ui-panel collection-heading @(Model.ClearedDate.HasValue ? "" : Model.ReturnedDate.HasValue && !Model.DepositDate.HasValue ? "ui-critical" : "ui-attention")" aria-label="Receipt actions">
                 <div>
                     <h2 class="ui-section-title">Receipt banking</h2>
-                    <p class="ui-caption ui-muted">Banking updates this receipt once for all covered billings.</p>
+                    <p class="ui-caption ui-muted">
+                        Banking updates this receipt once for all covered billings.
+                        @if (Model.PeriodStatus == MsapPeriodStatus.Adjusted)
+                        {
+                            <span class="badge bg-warning text-dark ms-2"><span class="material-symbols-outlined fs-6 align-middle">warning</span> Adjusted</span>
+                        }
+                        else if (Model.PeriodStatus == MsapPeriodStatus.Final)
+                        {
+                            <span class="badge bg-secondary ms-2"><span class="material-symbols-outlined fs-6 align-middle">lock</span> Final</span>
+                        }
+                    </p>
                 </div>
                 <div class="collection-actions">
                     @if (canEdit)

@@ -31,7 +31,17 @@
                     <a asp-action="Index" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
                     <a asp-action="Preview" asp-route-id="@Model.MsapBillingId" asp-route-printCopy="@canPrint" target="_blank" class="modern-btn-primary ui-page-action">Preview statements</a>
                 </div>
-                <p class="ui-page-description ui-caption ui-muted">@Model.MsapBillingNumber · @component · @(Model.Status == MsapConstants.BillingStatus.ForPosting ? "Awaiting final approval" : "Approved") · @(Model.IsUndocumented ? "Undocumented" : "Documented")</p>
+                <p class="ui-page-description ui-caption ui-muted">
+                    @Model.MsapBillingNumber · @component · @(Model.Status == MsapConstants.BillingStatus.ForPosting ? "Awaiting final approval" : "Approved") · @(Model.IsUndocumented ? "Undocumented" : "Documented")
+                    @if (Model.PeriodStatus == MsapPeriodStatus.Adjusted)
+                    {
+                        <span class="badge bg-warning text-dark ms-2"><span class="material-symbols-outlined fs-6 align-middle">warning</span> Adjusted</span>
+                    }
+                    else if (Model.PeriodStatus == MsapPeriodStatus.Final)
+                    {
+                        <span class="badge bg-secondary ms-2"><span class="material-symbols-outlined fs-6 align-middle">lock</span> Final</span>
+                    }
+                </p>
             </header>
             @if (Model.ApprovedAt.HasValue)
             {

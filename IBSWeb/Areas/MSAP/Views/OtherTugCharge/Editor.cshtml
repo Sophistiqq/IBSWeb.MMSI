@@ -18,7 +18,17 @@
             <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId">COS details</a></li><li aria-current="page">Other Tug Charges</li></ol></nav>
             <h1 class="ui-page-title" data-page-header>@(confirmed ? "Provider charge details" : "Review provider charges")</h1>
             <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-fragment="otherTugCharges" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
-            <p class="ui-page-description ui-body ui-muted">@Model.ProviderName · @(confirmed ? "Confirmed" : "For reviewing") · Payment in IBS</p>
+            <p class="ui-page-description ui-body ui-muted">
+                @Model.ProviderName · @(confirmed ? "Confirmed" : "For reviewing") · Payment in IBS
+                @if (Model.Charge?.PeriodStatus == MsapPeriodStatus.Adjusted)
+                {
+                    <span class="badge bg-warning text-dark ms-2"><span class="material-symbols-outlined fs-6 align-middle">warning</span> Adjusted</span>
+                }
+                else if (Model.Charge?.PeriodStatus == MsapPeriodStatus.Final)
+                {
+                    <span class="badge bg-secondary ms-2"><span class="material-symbols-outlined fs-6 align-middle">lock</span> Final</span>
+                }
+            </p>
         </header>
         <form asp-action="Save" method="post" enctype="multipart/form-data" class="ui-stack" id="otherTugChargeForm" data-can-edit="@canEdit.ToString().ToLowerInvariant()" data-editable="@editing.ToString().ToLowerInvariant()">
             <input asp-for="Id" type="hidden" /><input asp-for="Revision" type="hidden" /><input asp-for="CustomerOrderSlipId" type="hidden" />
