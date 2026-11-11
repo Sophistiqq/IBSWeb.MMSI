@@ -7,7 +7,8 @@
     var booking = ViewBag.VesselSchedule as VesselSchedule;
     var progress = (JobProgressViewModel)ViewBag.JobProgress;
     var entries = booking?.ServiceEntries ?? new List<VesselScheduleServiceEntry>();
-    var pendingServices = entries.Where(entry => !entry.CancelledAt.HasValue && !Model.DispatchTickets.Any(ticket => ticket.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId)).ToList();
+    var activeEntries = entries.Where(entry => !entry.CancelledAt.HasValue && !(Model.DispatchTickets.Any(t => t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId && t.Status == MsapConstants.DispatchTicketStatus.Deleted) && !Model.DispatchTickets.Any(t => t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId && t.Status != MsapConstants.DispatchTicketStatus.Deleted))).ToList();
+    var pendingServices = activeEntries.Where(entry => !Model.DispatchTickets.Any(ticket => ticket.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId && ticket.Status != MsapConstants.DispatchTicketStatus.Deleted)).ToList();
     var approvalPending = booking != null && (booking.ApprovedRevision != booking.Revision || booking.Status == MsapConstants.VesselScheduleStatus.Tentative);
     var bookingClosed = booking?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
     var canRecord = ViewBag.CanCreateDispatchTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open
@@ -15,6 +16,8 @@
     ViewData["CanRecordExpectedService"] = canRecord;
     ViewData["CanCancelExpectedService"] = ViewBag.CanEditCustomerOrderSlip == true && !bookingClosed
         && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && ViewBag.HasBilling != true;
+    var canVoidTicketRow = ViewBag.CanEditTicket == true && ViewBag.HasBilling != true
+        && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && booking?.Status != MsapConstants.VesselScheduleStatus.Cancelled;
     var tugIds = entries.Select(entry => entry.TugboatId).Concat(Model.DispatchTickets.Select(ticket => ticket.TugBoatId)).Distinct().ToList();
     var statusLabel = bookingClosed && booking != null ? MsapConstants.VesselScheduleStatus.GetDisplayName(booking.Status)
         : approvalPending ? booking!.ApprovedRevision.HasValue ? "Pending reapproval" : "Approval pending"
@@ -43,7 +46,7 @@
                 <span class="ui-body ui-muted">@Model.CustomerOrderSlipNumber</span>
                 @if (entries.Count > 0)
                 {
-                    <span class="ui-body ui-muted">@(entries.Count(entry => !entry.CancelledAt.HasValue) - pendingServices.Count) of @entries.Count(entry => !entry.CancelledAt.HasValue) tickets entered · @pendingServices.Count pending</span>
+                    <span class="ui-body ui-muted">@(activeEntries.Count - pendingServices.Count) of @activeEntries.Count tickets entered · @pendingServices.Count pending</span>
                 }
             </div>
         </header>
@@ -107,7 +110,7 @@
                             <tr class="cos-tug-group"><th colspan="6">@tug.TugboatName <span class="ui-caption ui-muted">@(tug.IsCompanyOwned ? "Company-owned" : "Subcontractor")</span></th></tr>
                             @foreach (var entry in tugEntries)
                             {
-                                var ticket = tugTickets.FirstOrDefault(item => item.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId);
+                                var ticket = tugTickets.OrderBy(item => item.Status == MsapConstants.DispatchTicketStatus.Deleted ? 1 : 0).FirstOrDefault(item => item.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId);
                                 var calculationBlocker = ticket == null ? null : progress.CalculationBlockers.GetValueOrDefault(ticket.DispatchTicketId);
                                 var isSelected = ticketEntry != null && (ticket != null ? ticketEntry.DispatchTicketId == ticket.DispatchTicketId : ticketEntry.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId);
                                 var rowState = isSelected ? "ui-active" : calculationBlocker != null || ticket?.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "ui-critical" : entry.CancelledAt.HasValue != true && (ticket == null || approvalPending) ? "ui-attention" : "";
@@ -172,11 +175,11 @@
                                             }
                                             @if (ticket.PeriodStatus == MsapPeriodStatus.Adjusted)
                                             {
-                                                <span class="badge bg-warning text-dark ms-1" title="Adjusted after period finalization"><span class="material-symbols-outlined fs-6 align-middle">warning</span> Adjusted</span>
+                                                <span class="schedule-status-pill ui-status ui-attention" title="Adjusted after period finalization">Adjusted</span>
                                             }
                                             else if (ticket.PeriodStatus == MsapPeriodStatus.Final)
                                             {
-                                                <span class="badge bg-secondary ms-1" title="Finalized Month-End Period"><span class="material-symbols-outlined fs-6 align-middle">lock</span> Final</span>
+                                                <span class="schedule-status-pill" title="Finalized month-end period">Final</span>
                                             }
                                             @if (calculationBlocker != null)
                                             {
@@ -184,12 +187,18 @@
                                             }
                                         </td>
                                         <td>
-                                            @if (ViewData["CanViewActualTicket"] is true)
-                                            {
-                                                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-fragment="actualTicketEntry" class="cos-ticket-link">
-                                                    <span class="material-symbols-outlined" style="font-size: 15px;">visibility</span> View ticket
-                                                </a>
-                                            }
+                                            <div class="cos-service-actions">
+                                                @if (ViewData["CanViewActualTicket"] is true)
+                                                {
+                                                    <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-fragment="actualTicketEntry" class="cos-ticket-link">
+                                                        <span class="material-symbols-outlined" style="font-size: 15px;">visibility</span> View ticket
+                                                    </a>
+                                                }
+                                                @if (canVoidTicketRow && ticket.Status != MsapConstants.DispatchTicketStatus.Billed && ticket.Status != MsapConstants.DispatchTicketStatus.Deleted)
+                                                {
+                                                    <button type="button" class="cos-cancel-subtext" data-void-ticket="@ticket.DispatchTicketId" data-cos-id="@Model.CustomerOrderSlipId" data-dispatch-number="@ticket.DispatchNumber" data-finalized="@(ticket.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")" data-url="@Url.Action("VoidTicket", "DispatchTicket")">Void ticket</button>
+                                                }
+                                            </div>
                                         </td>
                                     }
                                 </tr>
@@ -228,11 +237,11 @@
                                         }
                                         @if (ticket.PeriodStatus == MsapPeriodStatus.Adjusted)
                                         {
-                                            <span class="badge bg-warning text-dark ms-1" title="Adjusted after period finalization"><span class="material-symbols-outlined fs-6 align-middle">warning</span> Adjusted</span>
+                                            <span class="schedule-status-pill ui-status ui-attention" title="Adjusted after period finalization">Adjusted</span>
                                         }
                                         else if (ticket.PeriodStatus == MsapPeriodStatus.Final)
                                         {
-                                            <span class="badge bg-secondary ms-1" title="Finalized Month-End Period"><span class="material-symbols-outlined fs-6 align-middle">lock</span> Final</span>
+                                            <span class="schedule-status-pill" title="Finalized month-end period">Final</span>
                                         }
                                         @if (calculationBlocker != null)
                                         {
@@ -240,12 +249,18 @@
                                         }
                                     </td>
                                     <td>
-                                        @if (ViewData["CanViewActualTicket"] is true)
-                                        {
-                                            <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-fragment="actualTicketEntry" class="cos-ticket-link">
-                                                <span class="material-symbols-outlined" style="font-size: 15px;">visibility</span> View ticket
-                                            </a>
-                                        }
+                                        <div class="cos-service-actions">
+                                            @if (ViewData["CanViewActualTicket"] is true)
+                                            {
+                                                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-fragment="actualTicketEntry" class="cos-ticket-link">
+                                                    <span class="material-symbols-outlined" style="font-size: 15px;">visibility</span> View ticket
+                                                </a>
+                                            }
+                                            @if (canVoidTicketRow && ticket.Status != MsapConstants.DispatchTicketStatus.Billed && ticket.Status != MsapConstants.DispatchTicketStatus.Deleted)
+                                            {
+                                                <button type="button" class="cos-cancel-subtext" data-void-ticket="@ticket.DispatchTicketId" data-cos-id="@Model.CustomerOrderSlipId" data-dispatch-number="@ticket.DispatchNumber" data-finalized="@(ticket.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")" data-url="@Url.Action("VoidTicket", "DispatchTicket")">Void ticket</button>
+                                            }
+                                        </div>
                                     </td>
                                 </tr>
                             }
@@ -263,7 +278,7 @@
             </section>
         }
         @{
-            var otherTugTickets = Model.DispatchTickets.Where(t => !t.Tugboat.IsCompanyOwned && t.VesselScheduleServiceEntryId.HasValue).ToList();
+            var otherTugTickets = Model.DispatchTickets.Where(t => !t.Tugboat.IsCompanyOwned && t.VesselScheduleServiceEntryId.HasValue && t.Status != MsapConstants.DispatchTicketStatus.Deleted).ToList();
             var otherCharges = ViewData["OtherTugCharges"] as List<OtherTugCharge> ?? [];
             var canViewOtherCharges = ViewData["CanViewOtherTugCharges"] is true;
             var canManageOtherCharges = ViewData["CanManageOtherTugCharges"] is true;

@@ -287,33 +287,6 @@ textarea.form-control {
     border-color: color-mix(in srgb, var(--primary) 88%, #000000);
 }
 
-.app-ui .modern-btn-danger,
-.modern-btn-danger {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border: none !important;
-    border-radius: var(--radius-xl);
-    background: transparent !important;
-    background-color: transparent !important;
-    color: var(--error, #ba1a1a) !important;
-    font-weight: 500;
-    font-size: 14px;
-    line-height: 1.5;
-    transition: color 0.15s ease, background-color 0.15s ease;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-.app-ui .modern-btn-danger:hover,
-.modern-btn-danger:hover {
-    background-color: rgba(186, 26, 26, 0.08) !important;
-    color: #900 !important;
-    text-decoration: none;
-}
-
 .modern-btn-error {
     display: inline-flex;
     align-items: center;
@@ -1110,34 +1083,6 @@ table.dataTable tbody tr:hover {
 
 .modern-swal-cancel:hover {
     background-color: var(--surface-container) !important;
-}
-
-.modern-swal-popup:has(.msap-adjustment-dialog) {
-    width: min(480px, calc(100vw - 2rem)) !important;
-}
-
-.modern-swal-popup:has(.msap-adjustment-dialog) .modern-value-md {
-    max-width: none;
-    text-align: left;
-}
-
-.msap-adjustment-dialog textarea.modern-input {
-    width: 100%;
-    min-height: 80px;
-    box-sizing: border-box;
-    font-family: inherit;
-    font-size: 13px;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--radius-md, 0.375rem);
-    border: 1px solid var(--outline-variant);
-    background-color: var(--surface);
-    color: var(--on-surface);
-}
-
-.msap-adjustment-dialog textarea.modern-input:focus {
-    outline: none;
-    border-color: #4648d4;
-    box-shadow: 0 0 0 2px rgba(70, 72, 212, 0.15);
 }
 
 /* Icon Container & Animations */

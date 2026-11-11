@@ -49,10 +49,108 @@ namespace IBS.Services.MSAP
                         await unitOfWork.VesselSchedule.GetForUpdateAsync(schedule.VesselScheduleId, cancellationToken);
                     }
                     await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(model.CustomerOrderSlipId.Value, cancellationToken);
+                    var existingDraft = await unitOfWork.Billing.GetAsync(
+                        b => b.CustomerOrderSlipId == model.CustomerOrderSlipId.Value && b.Status == MsapConstants.BillingStatus.ForPosting && b.BasicBillingId == null,
+                        cancellationToken);
                     var prepared = await PrepareBillingAsync(model, username, company, cancellationToken);
                     if (!prepared.IsSuccess || prepared.Data == null)
                     {
                         throw new InvalidOperationException(prepared.Message ?? "Unable to prepare billing.");
+                    }
+                    if (existingDraft != null)
+                    {
+                        var fieldDiffs = new List<MsapFieldChange>();
+                        void TrackDiff(string field, string label, object? beforeVal, object? afterVal)
+                        {
+                            var bStr = beforeVal?.ToString() ?? "";
+                            var aStr = afterVal?.ToString() ?? "";
+                            if (bStr != aStr)
+                            {
+                                fieldDiffs.Add(new MsapFieldChange { Field = field, Label = label, Before = bStr, After = aStr });
+                            }
+                        }
+
+                        TrackDiff("MsapBillingNumber", "Billing Number", existingDraft.MsapBillingNumber, model.MsapBillingNumber);
+                        TrackDiff("Date", "Billing Date", existingDraft.Date.ToString("yyyy-MM-dd"), model.Date.ToString("yyyy-MM-dd"));
+                        TrackDiff("BilledTo", "Billed To", existingDraft.BilledTo, model.BilledTo);
+                        TrackDiff("PrincipalId", "Principal", existingDraft.PrincipalId, model.PrincipalId);
+                        TrackDiff("DispatchAmount", "Dispatch Amount", existingDraft.DispatchAmount.ToString("N2"), model.DispatchAmount.ToString("N2"));
+                        TrackDiff("BAFAmount", "BAF Amount", existingDraft.BAFAmount.ToString("N2"), model.BAFAmount.ToString("N2"));
+                        TrackDiff("Amount", "Total Amount", existingDraft.Amount.ToString("N2"), model.Amount.ToString("N2"));
+
+                        existingDraft.MsapBillingNumber = model.MsapBillingNumber;
+                        existingDraft.Date = model.Date;
+                        existingDraft.DueDate = model.DueDate;
+                        existingDraft.Year = model.Year;
+                        existingDraft.BilledTo = model.BilledTo;
+                        existingDraft.PrincipalId = model.PrincipalId;
+                        existingDraft.Principal = model.Principal;
+                        existingDraft.IsPrincipal = model.IsPrincipal;
+                        existingDraft.Terms = model.Terms;
+                        existingDraft.IsVatable = model.IsVatable;
+                        existingDraft.IsVatInclusive = model.IsVatInclusive;
+                        existingDraft.PrintWht = model.PrintWht;
+                        existingDraft.IsUndocumented = model.IsUndocumented;
+                        existingDraft.DispatchAmount = model.DispatchAmount;
+                        existingDraft.BAFAmount = model.BAFAmount;
+                        existingDraft.Amount = model.Amount;
+                        existingDraft.Balance = model.Balance;
+                        existingDraft.EditedBy = username;
+                        existingDraft.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+
+                        if (existingDraft.BafBilling != null && model.BafBilling != null)
+                        {
+                            existingDraft.BafBilling.MsapBillingNumber = model.BafBilling.MsapBillingNumber;
+                            existingDraft.BafBilling.Date = model.BafBilling.Date;
+                            existingDraft.BafBilling.DueDate = model.BafBilling.DueDate;
+                            existingDraft.BafBilling.Year = model.BafBilling.Year;
+                            existingDraft.BafBilling.BilledTo = model.BafBilling.BilledTo;
+                            existingDraft.BafBilling.PrincipalId = model.BafBilling.PrincipalId;
+                            existingDraft.BafBilling.Principal = model.BafBilling.Principal;
+                            existingDraft.BafBilling.IsPrincipal = model.BafBilling.IsPrincipal;
+                            existingDraft.BafBilling.Terms = model.BafBilling.Terms;
+                            existingDraft.BafBilling.IsVatable = model.BafBilling.IsVatable;
+                            existingDraft.BafBilling.IsVatInclusive = model.BafBilling.IsVatInclusive;
+                            existingDraft.BafBilling.PrintWht = model.BafBilling.PrintWht;
+                            existingDraft.BafBilling.IsUndocumented = model.BafBilling.IsUndocumented;
+                            existingDraft.BafBilling.BAFAmount = model.BafBilling.BAFAmount;
+                            existingDraft.BafBilling.Amount = model.BafBilling.Amount;
+                            existingDraft.BafBilling.Balance = model.BafBilling.Balance;
+                            existingDraft.BafBilling.EditedBy = username;
+                            existingDraft.BafBilling.EditedDate = existingDraft.EditedDate;
+                        }
+
+                        foreach (var ticket in model.PaidDispatchTickets!)
+                        {
+                            ticket.BillingId = existingDraft.MsapBillingId;
+                            ticket.Billing = existingDraft;
+                        }
+
+                        if (existingDraft.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted && fieldDiffs.Count > 0)
+                        {
+                            if (existingDraft.PeriodStatus == MsapPeriodStatus.Final)
+                            {
+                                existingDraft.PeriodStatus = MsapPeriodStatus.Adjusted;
+                                fieldDiffs.Insert(0, new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted });
+                            }
+                            await unitOfWork.MsapAdjustmentLog.AddAsync(new MsapAdjustmentLog
+                            {
+                                DocumentType = "Billing",
+                                RecordId = existingDraft.MsapBillingId,
+                                ReferenceNumber = existingDraft.MsapBillingNumber,
+                                Reason = existingDraft.UnpostRemarks ?? "Billing commercial settings revised",
+                                ChangesJson = System.Text.Json.JsonSerializer.Serialize(fieldDiffs),
+                                EditedBy = username,
+                                EditedDate = existingDraft.EditedDate.Value
+                            }, cancellationToken);
+                        }
+
+                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
+                            $"Updated Billing #{existingDraft.MsapBillingNumber} (rev {existingDraft.Revision}). COS discount: {model.CosDiscountPercent}; skipped: {model.SkipCosDiscount}; SBMA: {model.SbmaEnabled}.",
+                            "Billing", existingDraft.MsapBillingId, existingDraft.MsapBillingNumber), cancellationToken);
+                        await unitOfWork.SaveAsync(cancellationToken);
+                        model.MsapBillingId = existingDraft.MsapBillingId;
+                        return;
                     }
                     foreach (var bill in prepared.Data)
                     {
@@ -84,14 +182,22 @@ namespace IBS.Services.MSAP
 
         public async Task<ServiceResult<List<Billing>>> PrepareBillingAsync(Billing model, string username, string company, CancellationToken cancellationToken)
         {
-            var guard = await GuardClosedPeriodAsync(model.Date, cancellationToken);
-            if (guard != null)
-            {
-                return ServiceResult<List<Billing>>.Failure(guard.Message!);
-            }
             if (model.Date == default || model.CustomerOrderSlipId is not > 0)
             {
                 return ServiceResult<List<Billing>>.Failure("Billing date and COS are required.");
+            }
+            var existingDraft = await unitOfWork.Billing.GetAsync(
+                b => b.CustomerOrderSlipId == model.CustomerOrderSlipId.Value && b.Status == MsapConstants.BillingStatus.ForPosting && b.BasicBillingId == null,
+                cancellationToken);
+            var isAuthorizedRevision = existingDraft != null
+                && (existingDraft.UnpostedDate.HasValue || existingDraft.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted);
+            if (!isAuthorizedRevision)
+            {
+                var guard = await GuardClosedPeriodAsync(model.Date, cancellationToken);
+                if (guard != null)
+                {
+                    return ServiceResult<List<Billing>>.Failure(guard.Message!);
+                }
             }
             var job = await unitOfWork.CustomerOrderSlip.GetCustomerOrderSlipWithDetailsAsync(model.CustomerOrderSlipId.Value, cancellationToken);
             if (job == null || job.CustomerId != model.CustomerId)
@@ -109,7 +215,9 @@ namespace IBS.Services.MSAP
                 return ServiceResult<List<Billing>>.Failure(blocker);
             }
             var tickets = job.DispatchTickets.Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted).ToList();
-            if (tickets.Count == 0 || tickets.Any(t => t.CustomerId != customer.CustomerId || t.BillingId.HasValue || t.Status != MsapConstants.DispatchTicketStatus.ForBilling))
+            if (tickets.Count == 0 || tickets.Any(t => t.CustomerId != customer.CustomerId
+                || (t.BillingId.HasValue && t.BillingId != existingDraft?.MsapBillingId)
+                || t.Status != MsapConstants.DispatchTicketStatus.ForBilling))
             {
                 return ServiceResult<List<Billing>>.Failure("All COS tickets must be ready and unbilled. Partial billing is not allowed.");
             }
@@ -127,7 +235,7 @@ namespace IBS.Services.MSAP
                 model.BilledTo = "LOCAL";
                 model.PrincipalId = null;
             }
-            if (model.IsUndocumented)
+            if (model.IsUndocumented && (existingDraft == null || string.IsNullOrWhiteSpace(model.MsapBillingNumber)))
             {
                 model.MsapBillingNumber = await unitOfWork.Billing.GenerateBillingNumber(model.Date.Year, cancellationToken);
             }
@@ -149,7 +257,10 @@ namespace IBS.Services.MSAP
             {
                 return ServiceResult<List<Billing>>.Failure("Basic and BAF billing numbers must be different.");
             }
+            int? ignoreBasicId = existingDraft?.MsapBillingId;
+            int? ignoreBafId = existingDraft?.BafBilling?.MsapBillingId;
             var duplicate = await unitOfWork.Billing.GetAsync(b => b.Company == company && b.Year == model.Date.Year
+                && b.MsapBillingId != ignoreBasicId && b.MsapBillingId != ignoreBafId
                 && (b.MsapBillingNumber == basicNumber || (model.SeparateBaf && b.MsapBillingNumber == bafNumber)), cancellationToken);
             if (duplicate != null)
             {
@@ -168,11 +279,14 @@ namespace IBS.Services.MSAP
                 && (model.CosDiscountPercent != schedule.CosDiscountPercent || model.SkipCosDiscount != schedule.SkipCosDiscount))
                 || (model.SbmaEnabled.HasValue && model.SbmaEnabled != schedule.SbmaEnabled)))
             {
-                foreach (var period in tickets.Select(t => t.Date).Distinct())
+                if (!isAuthorizedRevision)
                 {
-                    if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(period.Year, period.Month, cancellationToken))
+                    foreach (var period in tickets.Select(t => t.Date).Distinct())
                     {
-                        return ServiceResult<List<Billing>>.Failure("Cannot change commercial settings for tickets in a closed period.");
+                        if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(period.Year, period.Month, cancellationToken))
+                        {
+                            return ServiceResult<List<Billing>>.Failure("Cannot change commercial settings for tickets in a closed period.");
+                        }
                     }
                 }
                 if (model.CosDiscountPercent.HasValue)
@@ -283,10 +397,15 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Billing not found.", ServiceResultStatus.NotFound);
                 }
 
-                var guard = await GuardClosedPeriodAsync(billing.Date, cancellationToken);
-                if (guard != null)
+                var isReopenedRevision = billing.UnpostedDate.HasValue
+                    || billing.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+                if (!isReopenedRevision)
                 {
-                    return guard;
+                    var guard = await GuardClosedPeriodAsync(billing.Date, cancellationToken);
+                    if (guard != null)
+                    {
+                        return guard;
+                    }
                 }
 
                 string? progressBlocker = await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, billing, JobProgressCalculator.PostingStage, cancellationToken);
@@ -312,7 +431,7 @@ namespace IBS.Services.MSAP
                     {
                         throw new InvalidOperationException("This bill changed. Review the current revision before approving.");
                     }
-                    var lockedGuard = await GuardClosedPeriodAsync(model.Date, cancellationToken);
+                    var lockedGuard = isReopenedRevision ? null : await GuardClosedPeriodAsync(model.Date, cancellationToken);
                     string? lockedBlocker = await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, model, JobProgressCalculator.PostingStage, cancellationToken);
                     if (lockedGuard != null || lockedBlocker != null)
                     {
@@ -468,6 +587,17 @@ namespace IBS.Services.MSAP
                             cos.EditedBy = username;
                             cos.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
                         }
+                        var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == billing.CustomerOrderSlipId.Value, cancellationToken);
+                        if (schedule?.Status == MsapConstants.VesselScheduleStatus.Completed)
+                        {
+                            schedule = await unitOfWork.VesselSchedule.GetForUpdateAsync(schedule.VesselScheduleId, cancellationToken);
+                            if (schedule != null)
+                            {
+                                schedule.Status = MsapConstants.VesselScheduleStatus.Confirmed;
+                                schedule.EditedBy = username;
+                                schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                            }
+                        }
                     }
 
                     await unitOfWork.SaveAsync(cancellationToken);
@@ -595,10 +725,16 @@ namespace IBS.Services.MSAP
                 return ServiceResult<CustomerOrderSlipBillingDto>.Failure(blocker);
             }
 
-            var sbmaAmounts = SbmaShareCalculator.Allocate(customerOrderSlip.DispatchTickets
-                .Where(t => t is { Status: MsapConstants.DispatchTicketStatus.ForBilling, BillingId: null }), true);
-            var tickets = customerOrderSlip.DispatchTickets
-                .Where(t => t is { Status: MsapConstants.DispatchTicketStatus.ForBilling, BillingId: null })
+            var existingDraft = await unitOfWork.Billing.GetAsync(
+                b => b.CustomerOrderSlipId == customerOrderSlipId && b.Status == MsapConstants.BillingStatus.ForPosting && b.BasicBillingId == null,
+                cancellationToken);
+            int? draftBillingId = existingDraft?.MsapBillingId;
+
+            var eligibleTickets = customerOrderSlip.DispatchTickets
+                .Where(t => t.Status == MsapConstants.DispatchTicketStatus.ForBilling && (t.BillingId == null || t.BillingId == draftBillingId))
+                .ToList();
+            var sbmaAmounts = SbmaShareCalculator.Allocate(eligibleTickets, true);
+            var tickets = eligibleTickets
                 .Select(t => new CustomerOrderSlipTicketDto
                 {
                     DispatchTicketId = t.DispatchTicketId,
@@ -626,6 +762,9 @@ namespace IBS.Services.MSAP
                     Terminal = t.Terminal?.TerminalName
                 }).ToList();
 
+            var activeTickets = customerOrderSlip.DispatchTickets
+                .Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted)
+                .ToList();
             var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
             return ServiceResult<CustomerOrderSlipBillingDto>.Success(new CustomerOrderSlipBillingDto
             {
@@ -635,8 +774,8 @@ namespace IBS.Services.MSAP
                     VesselName = customerOrderSlip.Vessel.VesselName,
                     PortName = customerOrderSlip.Port.PortName,
                     TerminalName = customerOrderSlip.Terminal.TerminalName,
-                    ServiceStart = customerOrderSlip.DispatchTickets.Min(t => t.DateLeft),
-                    ServiceEnd = customerOrderSlip.DispatchTickets.Max(t => t.DateArrived),
+                    ServiceStart = activeTickets.Count > 0 ? activeTickets.Min(t => t.DateLeft) : null,
+                    ServiceEnd = activeTickets.Count > 0 ? activeTickets.Max(t => t.DateArrived) : null,
                     CosDiscountPercent = schedule?.CosDiscountPercent,
                     SkipCosDiscount = schedule?.SkipCosDiscount ?? false,
                     SbmaEnabled = schedule?.SbmaEnabled,
@@ -722,7 +861,7 @@ namespace IBS.Services.MSAP
             }).ToList();
         }
 
-        private static bool IsUnapprovedDraft(Billing bill)
+        public static bool IsUnapprovedDraft(Billing bill)
         {
             return bill.Status == MsapConstants.BillingStatus.ForPosting && bill.AmountPaid == 0 && !bill.IsPaid
                 && !bill.CollectionId.HasValue && !bill.ApprovedRevision.HasValue

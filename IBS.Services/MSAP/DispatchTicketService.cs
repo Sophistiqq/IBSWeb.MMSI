@@ -184,7 +184,7 @@ namespace IBS.Services.MSAP
                         {
                             throw new InvalidOperationException("The expected service changed. Reload the COS before recording its ticket.");
                         }
-                        if (await unitOfWork.DispatchTicket.GetAsync(t => t.VesselScheduleServiceEntryId == model.VesselScheduleServiceEntryId, cancellationToken) != null)
+                        if (await unitOfWork.DispatchTicket.GetAsync(t => t.VesselScheduleServiceEntryId == model.VesselScheduleServiceEntryId && t.Status != MsapConstants.DispatchTicketStatus.Deleted, cancellationToken) != null)
                         {
                             throw new InvalidOperationException("A ticket has already been recorded for this expected service.");
                         }
@@ -311,22 +311,26 @@ namespace IBS.Services.MSAP
                     }
                     if (ticket.Status is not (MsapConstants.DispatchTicketStatus.CalculationPending or MsapConstants.DispatchTicketStatus.ForTariff or MsapConstants.DispatchTicketStatus.ForBilling
                             or MsapConstants.DispatchTicketStatus.ForApproval or MsapConstants.DispatchTicketStatus.Disapproved)
-                        || await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == customerOrderSlipId, ct) != null
+                        || await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == customerOrderSlipId && b.Status != MsapConstants.BillingStatus.ForPosting, ct) != null
                         || await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == customerOrderSlipId
-                            && (t.BillingId.HasValue || t.Status == MsapConstants.DispatchTicketStatus.Billed), ct) != null)
+                            && t.Status == MsapConstants.DispatchTicketStatus.Billed, ct) != null)
                     {
-                        result = ServiceResult.Failure("Only unbilled tickets without linked billing can be recalculated.");
+                        result = ServiceResult.Failure("Only unbilled tickets without approved billing can be recalculated.");
                         return;
                     }
-                    var periodBlocker = await GuardClosedPeriodAsync(ticket.Date, ct);
-                    if (periodBlocker == null && ticket.DateLeft.HasValue)
+                    var isAuthorizedRevision = ticket.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted || ticket.BillingId.HasValue;
+                    if (!isAuthorizedRevision)
                     {
-                        periodBlocker = await GuardClosedPeriodAsync(ticket.DateLeft.Value, ct);
-                    }
-                    if (periodBlocker != null)
-                    {
-                        result = periodBlocker;
-                        return;
+                        var periodBlocker = await GuardClosedPeriodAsync(ticket.Date, ct);
+                        if (periodBlocker == null && ticket.DateLeft.HasValue)
+                        {
+                            periodBlocker = await GuardClosedPeriodAsync(ticket.DateLeft.Value, ct);
+                        }
+                        if (periodBlocker != null)
+                        {
+                            result = periodBlocker;
+                            return;
+                        }
                     }
                     schedule = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(schedule.VesselScheduleId, ct);
                     var entry = schedule?.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
@@ -356,6 +360,48 @@ namespace IBS.Services.MSAP
                     ticket.TariffDate = DateTimeHelper.GetCurrentPhilippineTime();
                     ticket.EditedBy = username;
                     ticket.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                    if (ticket.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
+                    {
+                        var fieldDiffs = new List<MsapFieldChange>();
+                        if (ticket.PeriodStatus == MsapPeriodStatus.Final)
+                        {
+                            ticket.PeriodStatus = MsapPeriodStatus.Adjusted;
+                            fieldDiffs.Add(new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted });
+                        }
+                        if (oldTariff != ticket.DispatchRate)
+                        {
+                            fieldDiffs.Add(new MsapFieldChange { Field = "DispatchRate", Label = "Dispatch Rate", Before = oldTariff.ToString("N2"), After = ticket.DispatchRate.ToString("N2") });
+                        }
+                        if (oldBaf != ticket.BAFRate)
+                        {
+                            fieldDiffs.Add(new MsapFieldChange { Field = "BAFRate", Label = "BAF Rate", Before = oldBaf.ToString("N2"), After = ticket.BAFRate.ToString("N2") });
+                        }
+                        if (oldGross != ticket.TotalBilling)
+                        {
+                            fieldDiffs.Add(new MsapFieldChange { Field = "TotalBilling", Label = "Gross Billing", Before = oldGross.ToString("N2"), After = ticket.TotalBilling.ToString("N2") });
+                        }
+                        if (oldNet != ticket.TotalNetRevenue)
+                        {
+                            fieldDiffs.Add(new MsapFieldChange { Field = "TotalNetRevenue", Label = "Net Revenue", Before = oldNet.ToString("N2"), After = ticket.TotalNetRevenue.ToString("N2") });
+                        }
+                        if (fieldDiffs.Count > 0)
+                        {
+                            await unitOfWork.MsapAdjustmentLog.AddAsync(new MsapAdjustmentLog
+                            {
+                                DocumentType = "DispatchTicket",
+                                RecordId = ticket.DispatchTicketId,
+                                ReferenceNumber = ticket.DispatchNumber,
+                                Reason = "Charges recalculated from revised schedule terms and service-date rates",
+                                ChangesJson = System.Text.Json.JsonSerializer.Serialize(fieldDiffs),
+                                EditedBy = username,
+                                EditedDate = ticket.EditedDate.Value
+                            }, ct);
+                        }
+                    }
+                    if (ticket.BillingId.HasValue)
+                    {
+                        await SyncDraftBillingAmountsAsync(ticket.BillingId.Value, ct);
+                    }
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Recalculate charges for #{ticket.DispatchNumber}: tariff {oldTariff} -> {ticket.DispatchRate} (manual {oldManualTariff} -> {ticket.IsManualTariffRate}); BAF {oldBaf} -> {ticket.BAFRate}; gross {oldGross} -> {ticket.TotalBilling}; net {oldNet} -> {ticket.TotalNetRevenue}. {blocker ?? "Charges calculated from approved COS terms and service-date rates"}", "Dispatch Ticket", ticket.DispatchTicketId, ticket.DispatchNumber), ct);
                     await unitOfWork.SaveAsync(ct);
                     result = blocker == null ? ServiceResult.Success("Ticket charges recalculated successfully.") : ServiceResult.Failure(blocker);
@@ -453,10 +499,14 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Ticket not found.", ServiceResultStatus.NotFound);
                 }
 
-                var guard = await GuardClosedPeriodAsync(currentModel.Date, cancellationToken);
-                if (guard != null)
+                var isAuthorizedAdjustment = currentModel.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted || currentModel.BillingId.HasValue;
+                if (!isAuthorizedAdjustment)
                 {
-                    return guard;
+                    var guard = await GuardClosedPeriodAsync(currentModel.Date, cancellationToken);
+                    if (guard != null)
+                    {
+                        return guard;
+                    }
                 }
 
                 if (currentModel.CustomerOrderSlipId.HasValue && await unitOfWork.DispatchTicket.GetAsync(dt => dt.CustomerOrderSlipId == currentModel.CustomerOrderSlipId && dt.Status == MsapConstants.DispatchTicketStatus.Billed, cancellationToken) != null)
@@ -473,7 +523,7 @@ namespace IBS.Services.MSAP
                     {
                         return ServiceResult.Failure("The ticket must retain its approved COS, tugboat, service and booking details.");
                     }
-                    var actualError = await ValidateExpectedActualAsync(viewModel, cancellationToken);
+                    var actualError = await ValidateExpectedActualAsync(viewModel, cancellationToken, isAuthorizedAdjustment);
                     if (actualError != null)
                     {
                         return ServiceResult.Failure(actualError);
@@ -481,13 +531,25 @@ namespace IBS.Services.MSAP
                 }
 
                 var originalTotalHours = currentModel.TotalHours;
+                var originalDispatchRate = currentModel.DispatchRate;
+                var originalBafRate = currentModel.BAFRate;
+                var originalTotalBilling = currentModel.TotalBilling;
+                var originalTotalNetRevenue = currentModel.TotalNetRevenue;
                 var changes = new List<string>();
+                var fieldDiffs = new List<MsapFieldChange>();
 
-                void AddChange(string name, object? oldVal, object? newVal)
+                void AddChange(string name, object? oldVal, object? newVal, string? label = null)
                 {
                     if (!Equals(oldVal, newVal))
                     {
                         changes.Add($"{name}: '{oldVal}' -> '{newVal}'");
+                        fieldDiffs.Add(new MsapFieldChange
+                        {
+                            Field = name,
+                            Label = label ?? name,
+                            Before = oldVal?.ToString(),
+                            After = newVal?.ToString()
+                        });
                     }
                 }
 
@@ -624,6 +686,46 @@ namespace IBS.Services.MSAP
                     changes.Add("Video updated");
                 }
 
+                if (currentModel.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted && changes.Count > 0)
+                {
+                    if (currentModel.PeriodStatus == MsapPeriodStatus.Final)
+                    {
+                        currentModel.PeriodStatus = MsapPeriodStatus.Adjusted;
+                        fieldDiffs.Insert(0, new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted });
+                    }
+                    if (originalDispatchRate != currentModel.DispatchRate)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange { Field = "DispatchRate", Label = "Dispatch Rate", Before = originalDispatchRate.ToString("N2"), After = currentModel.DispatchRate.ToString("N2") });
+                    }
+                    if (originalBafRate != currentModel.BAFRate)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange { Field = "BAFRate", Label = "BAF Rate", Before = originalBafRate.ToString("N2"), After = currentModel.BAFRate.ToString("N2") });
+                    }
+                    if (originalTotalBilling != currentModel.TotalBilling)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange { Field = "TotalBilling", Label = "Gross Billing", Before = originalTotalBilling.ToString("N2"), After = currentModel.TotalBilling.ToString("N2") });
+                    }
+                    if (originalTotalNetRevenue != currentModel.TotalNetRevenue)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange { Field = "TotalNetRevenue", Label = "Net Revenue", Before = originalTotalNetRevenue.ToString("N2"), After = currentModel.TotalNetRevenue.ToString("N2") });
+                    }
+                    await unitOfWork.MsapAdjustmentLog.AddAsync(new MsapAdjustmentLog
+                    {
+                        DocumentType = "DispatchTicket",
+                        RecordId = currentModel.DispatchTicketId,
+                        ReferenceNumber = currentModel.DispatchNumber,
+                        Reason = "Ticket details edited after period finalization",
+                        ChangesJson = System.Text.Json.JsonSerializer.Serialize(fieldDiffs),
+                        EditedBy = username,
+                        EditedDate = currentModel.EditedDate ?? DateTimeHelper.GetCurrentPhilippineTime()
+                    }, cancellationToken);
+                }
+
+                if (currentModel.BillingId.HasValue)
+                {
+                    await SyncDraftBillingAmountsAsync(currentModel.BillingId.Value, cancellationToken);
+                }
+
                 var auditMessage = changes.Any()
                     ? $"Edit dispatch ticket #{currentModel.DispatchNumber}, {string.Join(", ", changes)}"
                     : $"No changes detected for #{currentModel.DispatchNumber}";
@@ -704,9 +806,21 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Ticket not found.", ServiceResultStatus.NotFound);
                 }
 
-                if (model.BillingId != null || model.Status == MsapConstants.DispatchTicketStatus.Billed)
+                if (model.Status == MsapConstants.DispatchTicketStatus.Billed)
                 {
                     return ServiceResult.Failure("Cannot void a billed ticket. Reopen and revise the billing first.", ServiceResultStatus.ValidationError);
+                }
+
+                int? draftBillingId = model.BillingId;
+                if (draftBillingId.HasValue)
+                {
+                    var linkedBilling = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == draftBillingId.Value, cancellationToken);
+                    if (linkedBilling != null && linkedBilling.Status != MsapConstants.BillingStatus.ForPosting)
+                    {
+                        return ServiceResult.Failure("Cannot void a billed ticket. Reopen and revise the billing first.", ServiceResultStatus.ValidationError);
+                    }
+                    model.BillingId = null;
+                    model.Billing = null;
                 }
 
                 if (model.OtherTugChargeLine?.Charge?.ConfirmedAt != null)
@@ -716,11 +830,48 @@ namespace IBS.Services.MSAP
 
                 var priorStatus = model.Status;
                 model.Status = MsapConstants.DispatchTicketStatus.Deleted;
+                model.ApOtherTugs = 0m;
                 model.EditedBy = username;
                 model.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
-                if (model.PeriodStatus == MsapPeriodStatus.Final)
+                if (model.CustomerOrderSlipId.HasValue)
                 {
+                    await RefreshSbmaAsync(model, cancellationToken);
+
+                    var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == model.CustomerOrderSlipId.Value, cancellationToken);
+                    if (schedule != null)
+                    {
+                        schedule = await unitOfWork.VesselSchedule.GetForUpdateAsync(schedule.VesselScheduleId, cancellationToken);
+                    }
+                    var job = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(model.CustomerOrderSlipId.Value, cancellationToken);
+                    if (schedule != null && job != null)
+                    {
+                        var cosTickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == model.CustomerOrderSlipId.Value, cancellationToken)).ToList();
+                        var activeTickets = cosTickets.Where(t => t.DispatchTicketId != model.DispatchTicketId && t.Status != MsapConstants.DispatchTicketStatus.Deleted).ToList();
+                        var allEntriesResolved = schedule.ServiceEntries.All(e =>
+                            e.CancelledAt.HasValue
+                            || e.VesselScheduleServiceEntryId == model.VesselScheduleServiceEntryId
+                            || cosTickets.Any(t => t.VesselScheduleServiceEntryId == e.VesselScheduleServiceEntryId && t.Status == MsapConstants.DispatchTicketStatus.Deleted));
+                        if (activeTickets.Count == 0 && allEntriesResolved)
+                        {
+                            schedule.Status = MsapConstants.VesselScheduleStatus.Cancelled;
+                            schedule.EditedBy = username;
+                            schedule.EditedDate = model.EditedDate;
+                            job.Status = MsapConstants.CustomerOrderSlipStatus.Cancelled;
+                            job.EditedBy = username;
+                            job.EditedDate = model.EditedDate;
+                        }
+                    }
+                }
+
+                if (draftBillingId.HasValue)
+                {
+                    await SyncDraftBillingAmountsAsync(draftBillingId.Value, cancellationToken);
+                }
+
+                if (model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
+                {
+                    var priorPeriodStatus = model.PeriodStatus;
                     model.PeriodStatus = MsapPeriodStatus.Adjusted;
                     var log = new MsapAdjustmentLog
                     {
@@ -730,7 +881,7 @@ namespace IBS.Services.MSAP
                         Reason = reason.Trim(),
                         ChangesJson = System.Text.Json.JsonSerializer.Serialize(new[]
                         {
-                            new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted },
+                            new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = priorPeriodStatus, After = MsapPeriodStatus.Adjusted },
                             new MsapFieldChange { Field = "Status", Label = "Status", Before = priorStatus, After = MsapConstants.DispatchTicketStatus.Deleted }
                         }),
                         EditedBy = username,
@@ -739,7 +890,7 @@ namespace IBS.Services.MSAP
                     await unitOfWork.MsapAdjustmentLog.AddAsync(log, cancellationToken);
                 }
 
-                await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Voided/removed dispatch ticket #{model.DispatchNumber}. Reason: {reason.Trim()}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
+                await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Voided dispatch ticket #{model.DispatchNumber}. Reason: {reason.Trim()}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
                 await unitOfWork.SaveAsync(cancellationToken);
 
                 return ServiceResult.Success($"Dispatch Ticket #{model.DispatchNumber} voided successfully.");
@@ -885,7 +1036,13 @@ namespace IBS.Services.MSAP
             {
                 return results[0].ErrorMessage;
             }
-            string? error = await ValidateExpectedActualAsync(model, ct);
+            var skipClosedPeriodGuard = false;
+            if (model.DispatchTicketId.HasValue)
+            {
+                var existing = await unitOfWork.DispatchTicket.GetAsync(t => t.DispatchTicketId == model.DispatchTicketId.Value, ct);
+                skipClosedPeriodGuard = existing?.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted || existing?.BillingId.HasValue == true;
+            }
+            string? error = await ValidateExpectedActualAsync(model, ct, skipClosedPeriodGuard);
             if (error != null)
             {
                 return error;
@@ -916,6 +1073,10 @@ namespace IBS.Services.MSAP
 
         private async Task RefreshSbmaAsync(DispatchTicket ticket, CancellationToken ct)
         {
+            if (!ticket.CustomerOrderSlipId.HasValue)
+            {
+                return;
+            }
             var schedule = await unitOfWork.VesselSchedule.GetAsync(x => x.CustomerOrderSlipId == ticket.CustomerOrderSlipId, ct);
             List<DispatchTicket> siblings = (await unitOfWork.DispatchTicket.GetAllAsync(x => x.CustomerOrderSlipId == ticket.CustomerOrderSlipId, ct)).ToList();
             Dictionary<int, decimal> amounts = SbmaShareCalculator.Allocate(
@@ -927,14 +1088,41 @@ namespace IBS.Services.MSAP
                 {
                     continue;
                 }
+                var isSiblingAdjustable = sibling.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted || sibling.BillingId.HasValue;
                 if (sibling.Status == MsapConstants.DispatchTicketStatus.Billed
-                    || await GuardClosedPeriodAsync(sibling.Date, ct) != null
-                    || sibling.DateLeft.HasValue && await GuardClosedPeriodAsync(sibling.DateLeft.Value, ct) != null
-                    || sibling.DateArrived.HasValue && await GuardClosedPeriodAsync(sibling.DateArrived.Value, ct) != null)
+                    || (!isSiblingAdjustable
+                        && (await GuardClosedPeriodAsync(sibling.Date, ct) != null
+                            || sibling.DateLeft.HasValue && await GuardClosedPeriodAsync(sibling.DateLeft.Value, ct) != null
+                            || sibling.DateArrived.HasValue && await GuardClosedPeriodAsync(sibling.DateArrived.Value, ct) != null)))
                 {
                     throw new InvalidOperationException("SBMA rounding would change a billed or closed-period ticket.");
                 }
                 sibling.SbmaShareAmount = amount;
+            }
+        }
+
+        private async Task SyncDraftBillingAmountsAsync(int billingId, CancellationToken ct)
+        {
+            var selected = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == billingId, ct);
+            if (selected == null)
+            {
+                return;
+            }
+            var basic = selected.BasicBilling ?? selected;
+            if (basic.Status != MsapConstants.BillingStatus.ForPosting)
+            {
+                return;
+            }
+            var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(
+                t => t.BillingId == basic.MsapBillingId && t.Status != MsapConstants.DispatchTicketStatus.Deleted, ct)).ToList();
+            basic.DispatchAmount = tickets.Sum(t => t.DispatchNetRevenue);
+            var baf = tickets.Sum(t => t.BAFNetRevenue);
+            basic.BAFAmount = basic.BafBilling != null ? 0m : baf;
+            basic.Amount = basic.Balance = basic.DispatchAmount + basic.BAFAmount;
+            if (basic.BafBilling is { Status: MsapConstants.BillingStatus.ForPosting } bafBill)
+            {
+                bafBill.BAFAmount = baf;
+                bafBill.Amount = bafBill.Balance = baf;
             }
         }
 
@@ -953,7 +1141,7 @@ namespace IBS.Services.MSAP
             }
         }
 
-        private async Task<string?> ValidateExpectedActualAsync(DispatchTicketViewModel model, CancellationToken ct)
+        private async Task<string?> ValidateExpectedActualAsync(DispatchTicketViewModel model, CancellationToken ct, bool skipClosedPeriodGuard = false)
         {
             if (string.IsNullOrWhiteSpace(model.DispatchNumber) || model.DispatchNumber.Trim().Length > 20
                 || !model.DateLeft.HasValue || !model.DateArrived.HasValue || !model.TimeLeft.HasValue || !model.TimeArrived.HasValue)
@@ -973,6 +1161,10 @@ namespace IBS.Services.MSAP
             if (model.Date == default || model.Date > DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()))
             {
                 return "Enter a valid actual ticket date that is not in the future.";
+            }
+            if (skipClosedPeriodGuard)
+            {
+                return null;
             }
             return (await GuardClosedPeriodAsync(model.DateArrived.Value, ct))?.Message
                 ?? (await GuardClosedPeriodAsync(model.DateLeft.Value, ct))?.Message

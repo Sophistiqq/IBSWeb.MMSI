@@ -10,8 +10,9 @@
     bool canBank = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.AccessTreasury);
     ViewData["JobProgressActionStage"] = Model.DepositDate.HasValue ? JobProgressCalculator.ClearingStage : JobProgressCalculator.DepositStage;
     ViewData["JobProgressActionTargetId"] = Model.MsapCollectionId;
-    bool canEdit = canPrepare && !Model.IsMonthClosed && !Model.DepositDate.HasValue && !Model.ReturnedDate.HasValue && !Model.ClearedDate.HasValue;
-    bool canRevertBanking = canBank && !Model.IsMonthClosed && (Model.DepositDate.HasValue || Model.ClearedDate.HasValue);
+    bool isFinalOrAdjusted = Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+    bool canEdit = canPrepare && (!Model.IsMonthClosed || isFinalOrAdjusted) && !Model.DepositDate.HasValue && !Model.ReturnedDate.HasValue && !Model.ClearedDate.HasValue;
+    bool canRevertBanking = canBank && (Model.DepositDate.HasValue || Model.ClearedDate.HasValue);
     var progressItems = (ViewBag.JobProgressItems as IEnumerable<JobProgressViewModel> ?? []).ToList();
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
@@ -46,11 +47,11 @@
                         Banking updates this receipt once for all covered billings.
                         @if (Model.PeriodStatus == MsapPeriodStatus.Adjusted)
                         {
-                            <span class="badge bg-warning text-dark ms-2"><span class="material-symbols-outlined fs-6 align-middle">warning</span> Adjusted</span>
+                            <span class="schedule-status-pill ui-status ui-attention" title="Adjusted after period finalization">Adjusted</span>
                         }
                         else if (Model.PeriodStatus == MsapPeriodStatus.Final)
                         {
-                            <span class="badge bg-secondary ms-2"><span class="material-symbols-outlined fs-6 align-middle">lock</span> Final</span>
+                            <span class="schedule-status-pill" title="Finalized month-end period">Final</span>
                         }
                     </p>
                 </div>
@@ -59,19 +60,19 @@
                     {
                         <a asp-action="Edit" asp-route-id="@Model.MsapCollectionId" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">edit</span> Edit receipt</a>
                     }
-                    @if (canBank && !Model.IsMonthClosed && !Model.ClearedDate.HasValue)
+                    @if (canBank && (!Model.IsMonthClosed || isFinalOrAdjusted) && !Model.ClearedDate.HasValue)
                     {
                         @if (!Model.DepositDate.HasValue)
                         {
-                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Deposit" data-collection-banking="@(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")" class="modern-btn-primary">@(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")</a>
+                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Deposit" data-collection-banking="@(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">account_balance</span> @(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")</a>
                         }
                         else
                         {
                             @if (Model.CheckAmount > 0)
                             {
-                                <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.ReturnCheck" data-collection-banking="Record returned check" class="modern-btn-danger">Return check</a>
+                                <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.ReturnCheck" data-collection-banking="Record returned check" class="modern-btn-warning"><span class="material-symbols-outlined" aria-hidden="true">assignment_return</span> Return check</a>
                             }
-                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Clear" data-collection-banking="Record clearing" class="modern-btn-primary">Record clearing</a>
+                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Clear" data-collection-banking="Record clearing" class="modern-btn-complete"><span class="material-symbols-outlined" aria-hidden="true">task_alt</span> Record clearing</a>
                         }
                     }
                 </div>
@@ -144,13 +145,13 @@
                             <h2 id="depositDetailsHeading" class="ui-section-title mb-0">Deposit and clearing</h2>
                             @if (canRevertBanking)
                             {
-                                <button type="button" class="modern-btn-danger" id="btnRevertBanking"
+                                <button type="button" class="modern-btn-error" id="btnRevertBanking"
                                     data-action="@Url.Action("RevertBankingStep", "Collection")"
                                     data-id="@Model.MsapCollectionId"
                                     data-step="@(Model.ClearedDate.HasValue ? "Cleared" : "Deposited")"
                                     data-cleared="@(Model.ClearedDate.HasValue ? "true" : "false")"
                                     data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
-                                    Revert banking step
+                                    <span class="material-symbols-outlined" aria-hidden="true">undo</span> Revert banking step
                                 </button>
                             }
                         </div>
@@ -188,34 +189,19 @@
             const btn = this;
             const isFinal = btn.dataset.finalized === 'true';
             const isCleared = btn.dataset.cleared === 'true';
-            const confirmResult = await ModernAlert.confirm({
-                title: 'Revert Banking Step?',
-                text: `
-                    <div class="msap-adjustment-dialog app-ui ui-stack text-start">
-                        <p class="ui-body mb-2">${isCleared 
-                            ? 'This will revert the Cleared status back to Deposited so clearing date or details can be corrected.'
-                            : 'This will revert the Deposited status back to Undeposited so deposit date, bank account, or collection details can be corrected.'}</p>
-                        ${isFinal ? `<div class="alert alert-warning py-2 mb-2 text-start small">
-                            <strong>Period Finalized:</strong> This collection was included in a finalized month-end period. Reverting will tag it as <strong>Adjusted</strong> and log this step in the change audit history.
-                        </div>` : ''}
-                        <div class="ui-field">
-                            <label class="ui-label" for="swalRevertReason">Reason for reverting <span class="text-danger">*</span></label>
-                            <textarea id="swalRevertReason" class="modern-input" rows="3" placeholder="State why this banking step is being reverted..."></textarea>
-                        </div>
-                    </div>
-                `,
-                icon: 'warning',
-                confirmText: 'Revert Step',
-                cancelText: 'Keep Current',
-                didOpen: () => document.getElementById('swalRevertReason')?.focus(),
-                preConfirm: () => {
-                    const reason = document.getElementById('swalRevertReason')?.value?.trim();
-                    if (!reason || reason.length < 5) {
-                        Swal.showValidationMessage('Please provide a reason (minimum 5 characters).');
-                        return false;
-                    }
-                    return reason;
-                }
+            const stepText = isCleared
+                ? 'This reverts Cleared status back to Deposited so clearing date or details can be corrected.'
+                : 'This reverts Deposited status back to Undeposited so deposit date, bank account, or collection details can be corrected.';
+            const text = isFinal
+                ? `${stepText} Because this receipt belongs to a finalized period, reverting tags it as Adjusted in the audit history.`
+                : stepText;
+            const confirmResult = await ModernAlert.prompt({
+                title: 'Revert banking step?',
+                text,
+                placeholder: 'Reason for reverting',
+                confirmText: 'Revert step',
+                cancelText: 'Keep current',
+                validator: value => !value?.trim() || value.trim().length < 5 || value.trim().length > 500 ? 'Enter a reason between 5 and 500 characters.' : null
             });
 
             if (!confirmResult.isConfirmed) return;
@@ -228,7 +214,7 @@
             form.innerHTML = `
                 <input type="hidden" name="__RequestVerificationToken" value="${token}" />
                 <input type="hidden" name="id" value="${btn.dataset.id}" />
-                <input type="hidden" name="reason" value="${confirmResult.value}" />
+                <input type="hidden" name="reason" value="${confirmResult.value.trim()}" />
             `;
             document.body.appendChild(form);
             form.submit();

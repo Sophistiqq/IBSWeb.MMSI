@@ -45,10 +45,13 @@ namespace IBS.Services.MSAP
                 {
                     var collection = await unitOfWork.Collection.GetForUpdateAsync(id, ct)
                         ?? throw new InvalidOperationException("Collection not found.");
-                    var guard = await GuardClosedPeriodAsync(collection.Date, ct) ?? await GuardClosedPeriodAsync(date, ct);
-                    if (guard != null)
+                    if (collection.PeriodStatus is not (MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted))
                     {
-                        throw new InvalidOperationException(guard.Message);
+                        var guard = await GuardClosedPeriodAsync(collection.Date, ct) ?? await GuardClosedPeriodAsync(date, ct);
+                        if (guard != null)
+                        {
+                            throw new InvalidOperationException(guard.Message);
+                        }
                     }
                     if (date == default || date < collection.Date || date > DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()))
                     {
@@ -134,10 +137,13 @@ namespace IBS.Services.MSAP
                     var collection = await unitOfWork.Collection.GetForUpdateAsync(id, ct)
                         ?? throw new InvalidOperationException("Collection not found.");
 
-                    var guard = await GuardClosedPeriodAsync(collection.Date, ct);
-                    if (guard != null)
+                    if (collection.PeriodStatus is not (MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted))
                     {
-                        throw new InvalidOperationException(guard.Message);
+                        var guard = await GuardClosedPeriodAsync(collection.Date, ct);
+                        if (guard != null)
+                        {
+                            throw new InvalidOperationException(guard.Message);
+                        }
                     }
 
                     string stepDescription;
@@ -409,10 +415,13 @@ namespace IBS.Services.MSAP
                         throw new InvalidOperationException("Collection not found.");
                     }
 
-                    var guard = await GuardClosedPeriodAsync(currentModel.Date, cancellationToken);
-                    if (guard != null)
+                    if (currentModel.PeriodStatus is not (MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted))
                     {
-                        throw new InvalidOperationException(guard.Message);
+                        var guard = await GuardClosedPeriodAsync(currentModel.Date, cancellationToken);
+                        if (guard != null)
+                        {
+                            throw new InvalidOperationException(guard.Message);
+                        }
                     }
 
                     if (currentModel.CustomerId != viewModel.CustomerId)
@@ -432,24 +441,53 @@ namespace IBS.Services.MSAP
                         : oldCollectionNumber;
                     currentModel.MsapCollectionNumber = newCollectionNumber;
 
-                    if (currentModel.PeriodStatus == MsapPeriodStatus.Final)
+                    if (currentModel.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
                     {
-                        currentModel.PeriodStatus = MsapPeriodStatus.Adjusted;
-                        var log = new MsapAdjustmentLog
+                        var changes = new List<MsapFieldChange>();
+                        if (currentModel.PeriodStatus == MsapPeriodStatus.Final)
                         {
-                            DocumentType = "Collection",
-                            RecordId = currentModel.MsapCollectionId,
-                            ReferenceNumber = currentModel.MsapCollectionNumber,
-                            Reason = "Collection details edited after period finalization",
-                            ChangesJson = System.Text.Json.JsonSerializer.Serialize(new[]
+                            changes.Add(new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted });
+                        }
+                        if (oldCollectionNumber != newCollectionNumber)
+                        {
+                            changes.Add(new MsapFieldChange { Field = "CollectionNumber", Label = "Collection Number", Before = oldCollectionNumber, After = newCollectionNumber });
+                        }
+                        if (currentModel.Date != viewModel.Date)
+                        {
+                            changes.Add(new MsapFieldChange { Field = "Date", Label = "Collection Date", Before = currentModel.Date.ToString("yyyy-MM-dd"), After = viewModel.Date.ToString("yyyy-MM-dd") });
+                        }
+                        if (currentModel.Amount != viewModel.Amount)
+                        {
+                            changes.Add(new MsapFieldChange { Field = "Amount", Label = "Amount", Before = currentModel.Amount.ToString("N2"), After = viewModel.Amount.ToString("N2") });
+                        }
+                        if (currentModel.EWT != viewModel.EWT)
+                        {
+                            changes.Add(new MsapFieldChange { Field = "EWT", Label = "EWT", Before = currentModel.EWT.ToString("N2"), After = viewModel.EWT.ToString("N2") });
+                        }
+                        if (currentModel.WVAT != viewModel.WVAT)
+                        {
+                            changes.Add(new MsapFieldChange { Field = "WVAT", Label = "WVAT", Before = currentModel.WVAT.ToString("N2"), After = viewModel.WVAT.ToString("N2") });
+                        }
+                        if ((currentModel.CheckNumber ?? string.Empty) != (viewModel.CheckNumber ?? string.Empty))
+                        {
+                            changes.Add(new MsapFieldChange { Field = "CheckNumber", Label = "Check Number", Before = currentModel.CheckNumber ?? "-", After = viewModel.CheckNumber ?? "-" });
+                        }
+
+                        currentModel.PeriodStatus = MsapPeriodStatus.Adjusted;
+                        if (changes.Count > 0)
+                        {
+                            var log = new MsapAdjustmentLog
                             {
-                                new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted },
-                                new MsapFieldChange { Field = "CollectionNumber", Label = "Collection Number", Before = oldCollectionNumber, After = newCollectionNumber }
-                            }),
-                            EditedBy = username,
-                            EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
-                        };
-                        await unitOfWork.MsapAdjustmentLog.AddAsync(log, cancellationToken);
+                                DocumentType = "Collection",
+                                RecordId = currentModel.MsapCollectionId,
+                                ReferenceNumber = currentModel.MsapCollectionNumber,
+                                Reason = "Collection details edited after period finalization",
+                                ChangesJson = System.Text.Json.JsonSerializer.Serialize(changes),
+                                EditedBy = username,
+                                EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
+                            };
+                            await unitOfWork.MsapAdjustmentLog.AddAsync(log, cancellationToken);
+                        }
                     }
 
                     // Revert old allocations

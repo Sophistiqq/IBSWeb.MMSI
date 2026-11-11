@@ -22,11 +22,11 @@
                 @Model.ProviderName · @(confirmed ? "Confirmed" : "For reviewing") · Payment in IBS
                 @if (Model.Charge?.PeriodStatus == MsapPeriodStatus.Adjusted)
                 {
-                    <span class="badge bg-warning text-dark ms-2"><span class="material-symbols-outlined fs-6 align-middle">warning</span> Adjusted</span>
+                    <span class="schedule-status-pill ui-status ui-attention" title="Adjusted after period finalization">Adjusted</span>
                 }
                 else if (Model.Charge?.PeriodStatus == MsapPeriodStatus.Final)
                 {
-                    <span class="badge bg-secondary ms-2"><span class="material-symbols-outlined fs-6 align-middle">lock</span> Final</span>
+                    <span class="schedule-status-pill" title="Finalized month-end period">Final</span>
                 }
             </p>
         </header>
@@ -83,13 +83,13 @@
                         </div>
                         @if (canReopen)
                         {
-                            <button type="button" class="modern-btn-danger" id="btnReopenCharge"
+                            <button type="button" class="modern-btn-secondary" id="btnReopenCharge"
                                 data-action="@Url.Action("Reopen", "OtherTugCharge")"
                                 data-id="@Model.Id"
                                 data-cos-id="@Model.CustomerOrderSlipId"
                                 data-reference="@Model.Charge?.ProviderReference"
                                 data-finalized="@(Model.Charge?.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
-                                Reopen to revise
+                                <span class="material-symbols-outlined" aria-hidden="true">history</span> Reopen to revise
                             </button>
                         }
                     </div>
@@ -115,32 +115,16 @@
             const btn = this;
             const isFinal = btn.dataset.finalized === 'true';
             const refNo = btn.dataset.reference;
-            const confirmResult = await ModernAlert.confirm({
-                title: `Reopen Provider Charge ${refNo}?`,
-                text: `
-                    <div class="msap-adjustment-dialog app-ui ui-stack text-start">
-                        <p class="ui-body mb-2">Reopening this charge will unlock allocations for revision and reverse the recognized AP liability until re-confirmed. Reopening is only allowed if no active Check Voucher payment is linked in IBS.</p>
-                        ${isFinal ? `<div class="alert alert-warning py-2 mb-2 text-start small">
-                            <strong>Period Finalized:</strong> This charge was included in a finalized month-end period. Reopening will tag it as <strong>Adjusted</strong> and log all revisions in the change audit history.
-                        </div>` : ''}
-                        <div class="ui-field">
-                            <label class="ui-label" for="swalReopenChargeReason">Reason for revision <span class="text-danger">*</span></label>
-                            <textarea id="swalReopenChargeReason" class="modern-input" rows="3" placeholder="State why this confirmed provider charge needs revision..."></textarea>
-                        </div>
-                    </div>
-                `,
-                icon: 'warning',
-                confirmText: 'Reopen to Revise',
-                cancelText: 'Keep Confirmed',
-                didOpen: () => document.getElementById('swalReopenChargeReason')?.focus(),
-                preConfirm: () => {
-                    const reason = document.getElementById('swalReopenChargeReason')?.value?.trim();
-                    if (!reason || reason.length < 5) {
-                        Swal.showValidationMessage('Please provide a reason (minimum 5 characters).');
-                        return false;
-                    }
-                    return reason;
-                }
+            const text = isFinal
+                ? 'Reopening this charge unlocks allocations for revision, reverses the recognized AP liability until re-confirmed, and tags this finalized-period record as Adjusted in the audit history.'
+                : 'Reopening this charge unlocks allocations for revision and reverses the recognized AP liability until re-confirmed. Reopening is only allowed when no active Check Voucher payment is linked in IBS.';
+            const confirmResult = await ModernAlert.prompt({
+                title: `Reopen provider charge ${refNo}?`,
+                text,
+                placeholder: 'Reason for revision',
+                confirmText: 'Reopen to revise',
+                cancelText: 'Keep confirmed',
+                validator: value => !value?.trim() || value.trim().length < 5 || value.trim().length > 500 ? 'Enter a reason between 5 and 500 characters.' : null
             });
 
             if (!confirmResult.isConfirmed) return;
@@ -154,7 +138,7 @@
                 <input type="hidden" name="__RequestVerificationToken" value="${token}" />
                 <input type="hidden" name="id" value="${btn.dataset.id}" />
                 <input type="hidden" name="customerOrderSlipId" value="${btn.dataset.cosId}" />
-                <input type="hidden" name="reason" value="${confirmResult.value}" />
+                <input type="hidden" name="reason" value="${confirmResult.value.trim()}" />
             `;
             document.body.appendChild(form);
             form.submit();

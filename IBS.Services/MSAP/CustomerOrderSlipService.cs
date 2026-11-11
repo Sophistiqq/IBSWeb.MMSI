@@ -32,7 +32,7 @@ namespace IBS.Services.MSAP
                     if (entry == null || job?.Status != MsapConstants.CustomerOrderSlipStatus.Open
                         || schedule!.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled
                         || await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == customerOrderSlipId, ct) != null
-                        || await unitOfWork.DispatchTicket.GetAsync(t => t.VesselScheduleServiceEntryId == entryId, ct) != null)
+                        || await unitOfWork.DispatchTicket.GetAsync(t => t.VesselScheduleServiceEntryId == entryId && t.Status != MsapConstants.DispatchTicketStatus.Deleted, ct) != null)
                     {
                         return;
                     }
@@ -44,7 +44,22 @@ namespace IBS.Services.MSAP
                     entry.CancelledAt = DateTimeHelper.GetCurrentPhilippineTime();
                     entry.CancelledByUserId = userId;
                     entry.CancellationReason = reason.Trim();
-                    if (schedule.ServiceEntries.All(e => e.CancelledAt.HasValue))
+                    var remainingEntries = schedule.ServiceEntries.Where(e => !e.CancelledAt.HasValue).ToList();
+                    var allResolvedWithNoActive = remainingEntries.Count == 0;
+                    if (!allResolvedWithNoActive
+                        && await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == customerOrderSlipId && t.Status != MsapConstants.DispatchTicketStatus.Deleted, ct) == null)
+                    {
+                        allResolvedWithNoActive = true;
+                        foreach (var rem in remainingEntries)
+                        {
+                            if (await unitOfWork.DispatchTicket.GetAsync(t => t.VesselScheduleServiceEntryId == rem.VesselScheduleServiceEntryId && t.Status == MsapConstants.DispatchTicketStatus.Deleted, ct) == null)
+                            {
+                                allResolvedWithNoActive = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (allResolvedWithNoActive)
                     {
                         schedule.Status = MsapConstants.VesselScheduleStatus.Cancelled;
                         job.Status = MsapConstants.CustomerOrderSlipStatus.Cancelled;
@@ -165,7 +180,7 @@ namespace IBS.Services.MSAP
             {
                 return "Edit the vessel schedule instead. Scheduled COS records cannot be revised directly.";
             }
-            if (await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == job.CustomerOrderSlipId, ct) != null)
+            if (await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == job.CustomerOrderSlipId && t.Status != MsapConstants.DispatchTicketStatus.Deleted, ct) != null)
             {
                 return "This COS already has Dispatch Tickets and cannot be edited.";
             }

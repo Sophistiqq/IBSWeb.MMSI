@@ -13,7 +13,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<bool> IsMonthClosedAsync(int year, int month, CancellationToken cancellationToken = default)
         {
-            if (!MsapConstants.EnforceClosedPeriods)
+            if (!MsapConstants.EnforceClosedPeriods || _db == null)
             {
                 return false;
             }

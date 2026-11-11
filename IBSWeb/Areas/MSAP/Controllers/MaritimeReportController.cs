@@ -155,6 +155,11 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
             {
                 var data = await unitOfWork.Report.GetDispatchReportData(dateFrom, dateTo, ct);
                 var (collectionShares, collectionsByTicket) = await AllocateCollectionsByTicketAsync(data, ct);
+                var adjLogs = await LoadAdjustmentLogsAsync(data, collectionsByTicket, ct);
+                var logsByTicket = adjLogs.Where(l => l.DocumentType == "DispatchTicket").ToLookup(l => l.RecordId);
+                var logsByBilling = adjLogs.Where(l => l.DocumentType == "Billing").ToLookup(l => l.RecordId);
+                var logsByOtherTug = adjLogs.Where(l => l.DocumentType == "OtherTugCharge").ToLookup(l => l.RecordId);
+                var logsByCollection = adjLogs.Where(l => l.DocumentType == "Collection").ToLookup(l => l.RecordId);
                 using var pkg = new ExcelPackage();
                 var ws = pkg.Workbook.Worksheets.Add("Dispatch Summary");
                 const int totalCols = 35;
@@ -280,6 +285,27 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                         }
                     }
 
+                    bool isRowAdjusted = t.PeriodStatus == MsapPeriodStatus.Adjusted
+                        || t.Billing?.PeriodStatus == MsapPeriodStatus.Adjusted
+                        || t.OtherTugChargeLine?.Charge?.PeriodStatus == MsapPeriodStatus.Adjusted
+                        || ticketCollections.Any(c => c.PeriodStatus == MsapPeriodStatus.Adjusted);
+                    if (isRowAdjusted)
+                    {
+                        var adjRange = ws.Cells[row, 1, row, totalCols];
+                        adjRange.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                        adjRange.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(255, 242, 204));
+                        var aLog = logsByTicket[t.DispatchTicketId].LastOrDefault()
+                            ?? (t.BillingId.HasValue ? logsByBilling[t.BillingId.Value].LastOrDefault() : null)
+                            ?? (t.OtherTugChargeLine?.OtherTugChargeId is int otId ? logsByOtherTug[otId].LastOrDefault() : null)
+                            ?? ticketCollections.Select(c => logsByCollection[c.MsapCollectionId].LastOrDefault()).FirstOrDefault(l => l != null);
+                        var note = FormatAdjustmentNote(aLog);
+                        AddOrAppendComment(ws.Cells[row, 2], note, "MMSI System");
+                        if (t.BillingId.HasValue)
+                        {
+                            AddOrAppendComment(ws.Cells[row, 23], note, "MMSI System");
+                        }
+                    }
+
                     row++;
                 }
 
@@ -322,15 +348,13 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                 const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
                 var data = await unitOfWork.Report.GetDispatchReportData(dateFrom, dateTo, ct, filterByBillingDate: true);
-                var ticketIds = data.Select(t => t.DispatchTicketId).ToList();
-                var billingIds = data.Where(t => t.BillingId.HasValue).Select(t => t.BillingId!.Value).Distinct().ToList();
-                var adjLogs = await unitOfWork.MsapAdjustmentLog.GetAllAsync(l =>
-                    (l.DocumentType == "DispatchTicket" && ticketIds.Contains(l.RecordId)) ||
-                    (l.DocumentType == "Billing" && billingIds.Contains(l.RecordId)), ct);
+                var (collectionShares, collectionsByTicket) = await AllocateCollectionsByTicketAsync(data, ct);
+                var adjLogs = await LoadAdjustmentLogsAsync(data, collectionsByTicket, ct);
                 var logsByTicket = adjLogs.Where(l => l.DocumentType == "DispatchTicket").ToLookup(l => l.RecordId);
                 var logsByBilling = adjLogs.Where(l => l.DocumentType == "Billing").ToLookup(l => l.RecordId);
+                var logsByOtherTug = adjLogs.Where(l => l.DocumentType == "OtherTugCharge").ToLookup(l => l.RecordId);
+                var logsByCollection = adjLogs.Where(l => l.DocumentType == "Collection").ToLookup(l => l.RecordId);
                 bool hasAdjustedRows = false;
-                var (collectionShares, collectionsByTicket) = await AllocateCollectionsByTicketAsync(data, ct);
                 var sbmaShares = data.ToDictionary(t => t.DispatchTicketId, t => t.SbmaShareAmount);
                 var cosIds = data.Where(t => t.CustomerOrderSlipId.HasValue).Select(t => t.CustomerOrderSlipId!.Value).Distinct().ToList();
                 var scheduleIoc = (await unitOfWork.VesselSchedule.GetAllAsync(s => s.CustomerOrderSlipId.HasValue
@@ -665,12 +689,13 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                     }
                     if (!includesService)
                     {
-                        ws.Cells[row, 2].AddComment("Financial recognition only. This service and its hours were counted in the original ticket period.", "MMSI");
+                        AddOrAppendComment(ws.Cells[row, 2], "Financial recognition only. This service and its hours were counted in the original ticket period.", "MMSI");
                     }
 
                     bool isRowAdjusted = t.PeriodStatus == MsapPeriodStatus.Adjusted
                         || t.Billing?.PeriodStatus == MsapPeriodStatus.Adjusted
-                        || t.OtherTugChargeLine?.Charge?.PeriodStatus == MsapPeriodStatus.Adjusted;
+                        || t.OtherTugChargeLine?.Charge?.PeriodStatus == MsapPeriodStatus.Adjusted
+                        || ticketCollections.Any(c => c.PeriodStatus == MsapPeriodStatus.Adjusted);
 
                     if (isRowAdjusted)
                     {
@@ -679,17 +704,17 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
                         adjRange.Style.Fill.PatternType = ExcelFillStyle.Solid;
                         adjRange.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(255, 242, 204));
 
-                        var tLog = logsByTicket[t.DispatchTicketId].LastOrDefault();
-                        var bLog = t.BillingId.HasValue ? logsByBilling[t.BillingId.Value].LastOrDefault() : null;
-                        var aLog = tLog ?? bLog;
+                        var aLog = logsByTicket[t.DispatchTicketId].LastOrDefault()
+                            ?? (t.BillingId.HasValue ? logsByBilling[t.BillingId.Value].LastOrDefault() : null)
+                            ?? (t.OtherTugChargeLine?.OtherTugChargeId is int otId ? logsByOtherTug[otId].LastOrDefault() : null)
+                            ?? ticketCollections.Select(c => logsByCollection[c.MsapCollectionId].LastOrDefault()).FirstOrDefault(l => l != null);
 
-                        var note = "[ADJUSTED]\n" +
-                            (aLog != null ? $"Reason: {aLog.Reason}\nEdited: {aLog.EditedDate:yyyy-MM-dd HH:mm} by {aLog.EditedBy}" : "Modified after month-end finalization.");
+                        var note = FormatAdjustmentNote(aLog);
 
-                        ws.Cells[row, 2].AddComment(note, "MMSI System");
+                        AddOrAppendComment(ws.Cells[row, 2], note, "MMSI System");
                         if (t.BillingId.HasValue)
                         {
-                            ws.Cells[row, 3].AddComment(note, "MMSI System");
+                            AddOrAppendComment(ws.Cells[row, 3], note, "MMSI System");
                         }
                     }
 
@@ -1385,6 +1410,71 @@ public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
             }
 
             return (shares, collectionsByTicket);
+        }
+
+        private async Task<List<MsapAdjustmentLog>> LoadAdjustmentLogsAsync(
+            List<DispatchTicket> data,
+            Dictionary<int, List<Collection>> collectionsByTicket,
+            CancellationToken ct)
+        {
+            try
+            {
+                var ticketIds = data.Select(t => t.DispatchTicketId).ToList();
+                var billingIds = data.Where(t => t.BillingId.HasValue).Select(t => t.BillingId!.Value).Distinct().ToList();
+                var otherTugIds = data.Where(t => t.OtherTugChargeLine != null).Select(t => t.OtherTugChargeLine!.OtherTugChargeId).Distinct().ToList();
+                var collectionIds = collectionsByTicket.Values.SelectMany(c => c).Select(c => c.MsapCollectionId).Distinct().ToList();
+                var logs = await unitOfWork.MsapAdjustmentLog.GetAllAsync(l =>
+                    (l.DocumentType == "DispatchTicket" && ticketIds.Contains(l.RecordId))
+                    || (l.DocumentType == "Billing" && billingIds.Contains(l.RecordId))
+                    || (l.DocumentType == "OtherTugCharge" && otherTugIds.Contains(l.RecordId))
+                    || (l.DocumentType == "Collection" && collectionIds.Contains(l.RecordId)), ct);
+                return logs.ToList();
+            }
+            catch
+            {
+                return [];
+            }
+        }
+
+        private static void AddOrAppendComment(ExcelRange cell, string text, string author)
+        {
+            if (cell.Comment != null)
+            {
+                cell.Comment.Text = $"{cell.Comment.Text}\n\n{text}";
+            }
+            else
+            {
+                cell.AddComment(text, author);
+            }
+        }
+
+        private static string FormatAdjustmentNote(MsapAdjustmentLog? log)
+        {
+            if (log == null)
+            {
+                return "[ADJUSTED]\nModified after month-end finalization.";
+            }
+            var builder = new System.Text.StringBuilder();
+            builder.Append($"[ADJUSTED]\nReason: {log.Reason}\nEdited: {log.EditedDate:yyyy-MM-dd HH:mm} by {log.EditedBy}");
+            if (!string.IsNullOrWhiteSpace(log.ChangesJson))
+            {
+                try
+                {
+                    var changes = System.Text.Json.JsonSerializer.Deserialize<List<MsapFieldChange>>(log.ChangesJson);
+                    if (changes is { Count: > 0 })
+                    {
+                        foreach (var c in changes)
+                        {
+                            builder.Append($"\n• {c.Label}: {c.Before} -> {c.After}");
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore malformed diff JSON in Excel cell comment.
+                }
+            }
+            return builder.ToString();
         }
 
         private static string? JoinCollectionValues(IEnumerable<Collection> collections, Func<Collection, string?> valueSelector)

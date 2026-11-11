@@ -24,6 +24,41 @@ namespace IBSWeb.Areas.MSAPAdmin.Controllers
             return View(periods);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> GetPeriodSummary(int year, int month, CancellationToken cancellationToken)
+        {
+            var start = new DateOnly(year, month, 1);
+            var end = start.AddMonths(1).AddDays(-1);
+            var startDateTime = new DateTime(year, month, 1, 0, 0, 0);
+            var endDateTime = startDateTime.AddMonths(1);
+
+            var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(
+                t => (t.DateLeft ?? t.Date) >= start && (t.DateLeft ?? t.Date) <= end &&
+                     (t.Status == MsapConstants.DispatchTicketStatus.ForBilling || t.Status == MsapConstants.DispatchTicketStatus.Billed),
+                cancellationToken)).Count();
+
+            var billings = (await unitOfWork.Billing.GetAllAsync(
+                b => b.Date >= start && b.Date <= end &&
+                     (b.Status == MsapConstants.BillingStatus.ForCollection || b.Status == MsapConstants.BillingStatus.Collected),
+                cancellationToken)).Count();
+
+            var draftBillings = (await unitOfWork.Billing.GetAllAsync(
+                b => b.Date >= start && b.Date <= end && b.Status == MsapConstants.BillingStatus.ForPosting,
+                cancellationToken)).Count();
+
+            var collections = (await unitOfWork.Collection.GetAllAsync(
+                c => c.Date >= start && c.Date <= end,
+                cancellationToken)).Count();
+
+            return Json(new
+            {
+                tickets,
+                billings,
+                draftBillings,
+                collections
+            });
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Close(int year, int month, CancellationToken cancellationToken)

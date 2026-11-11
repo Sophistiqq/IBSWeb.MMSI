@@ -9,7 +9,9 @@
     string component = bafOnly ? "BAF" : basicOnly ? "Basic" : "Basic and BAF";
     string? blocker = ViewData["PostingBlocker"] as string;
     bool canPrint = BillingService.CanPrint(Model);
-    bool canPost = ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && ViewData["IsPeriodClosed"] is not true;
+    bool isReopenedOrFinalized = Model.UnpostedDate.HasValue || Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+    bool canPost = ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && (ViewData["IsPeriodClosed"] is not true || isReopenedOrFinalized);
+    bool canEditDraft = ViewData["CanCreateBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && Model.CustomerOrderSlipId.HasValue && (ViewData["IsPeriodClosed"] is not true || isReopenedOrFinalized);
     bool canReverse = ViewData["CanReverseBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForCollection && Model.AmountPaid == 0;
     bool canDiscard = ViewData["CanDiscardBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && ViewData["IsPeriodClosed"] is not true;
 }
@@ -36,11 +38,11 @@
                     @Model.MsapBillingNumber · @component · @(Model.Status == MsapConstants.BillingStatus.ForPosting ? "Awaiting final approval" : "Approved") · @(Model.IsUndocumented ? "Undocumented" : "Documented")
                     @if (Model.PeriodStatus == MsapPeriodStatus.Adjusted)
                     {
-                        <span class="badge bg-warning text-dark ms-2"><span class="material-symbols-outlined fs-6 align-middle">warning</span> Adjusted</span>
+                        <span class="schedule-status-pill ui-status ui-attention" title="Adjusted after period finalization">Adjusted</span>
                     }
                     else if (Model.PeriodStatus == MsapPeriodStatus.Final)
                     {
-                        <span class="badge bg-secondary ms-2"><span class="material-symbols-outlined fs-6 align-middle">lock</span> Final</span>
+                        <span class="schedule-status-pill" title="Finalized month-end period">Final</span>
                     }
                 </p>
             </header>
@@ -121,14 +123,20 @@
                 {
                     <p class="ui-caption ui-muted">Final approval applies to @Model.MsapBillingNumber only.</p>
                     <div class="d-flex justify-content-between align-items-center w-100 flex-wrap gap-2">
-                        <div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
                             @if (canDiscard)
                             {
-                                <button type="button" class="modern-btn-danger" id="btnDiscardDraft"
+                                <button type="button" class="modern-btn-error" id="btnDiscardDraft"
                                     data-action="@Url.Action("Delete", "Billing")"
                                     data-id="@Model.MsapBillingId">
-                                    Discard draft
+                                    <span class="material-symbols-outlined" aria-hidden="true">delete</span> Discard draft
                                 </button>
+                            }
+                            @if (canEditDraft)
+                            {
+                                <a asp-action="Create" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-secondary">
+                                    <span class="material-symbols-outlined" aria-hidden="true">edit</span> Edit billing
+                                </a>
                             }
                         </div>
                         <div>
@@ -143,7 +151,7 @@
                             }
                             else
                             {
-                                <span class="@(blocker != null || ViewData["IsPeriodClosed"] is true ? "ui-notice ui-critical" : "ui-caption ui-muted")">@(blocker ?? (ViewData["IsPeriodClosed"] is true ? "This accounting period is closed." : "Waiting for an authorized final-bill approver."))</span>
+                                <span class="@(blocker != null || (ViewData["IsPeriodClosed"] is true && !isReopenedOrFinalized) ? "ui-notice ui-critical" : "ui-caption ui-muted")">@(blocker ?? (ViewData["IsPeriodClosed"] is true && !isReopenedOrFinalized ? "This accounting period is closed." : "Waiting for an authorized final-bill approver."))</span>
                             }
                         </div>
                     </div>
@@ -157,13 +165,13 @@
                             data-id="@Model.MsapBillingId"
                             data-billing-number="@Model.MsapBillingNumber"
                             data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
-                            Reopen for revision
+                            <span class="material-symbols-outlined" aria-hidden="true">history</span> Reopen for revision
                         </button>
                     </div>
                 }
                 else
                 {
-                    <p class="@(blocker != null || ViewData["IsPeriodClosed"] is true ? "ui-notice ui-critical" : "ui-caption ui-muted")">@(blocker ?? (ViewData["IsPeriodClosed"] is true ? "This accounting period is closed." : "This billing has already been approved."))</p>
+                    <p class="@(blocker != null || (ViewData["IsPeriodClosed"] is true && !isReopenedOrFinalized) ? "ui-notice ui-critical" : "ui-caption ui-muted")">@(blocker ?? (ViewData["IsPeriodClosed"] is true && !isReopenedOrFinalized ? "This accounting period is closed." : "This billing has already been approved."))</p>
                 }
             </footer>
         </main>
@@ -191,32 +199,16 @@
             const btn = this;
             const isFinal = btn.dataset.finalized === 'true';
             const billingNo = btn.dataset.billingNumber;
-            const confirmResult = await ModernAlert.confirm({
-                title: `Reopen Billing #${billingNo}?`,
-                text: `
-                    <div class="msap-adjustment-dialog app-ui ui-stack text-start">
-                        <p class="ui-body mb-2">Reopening this billing will return it to <strong>For Posting</strong> status, revert linked tickets to <strong>For Billing</strong>, reopen the COS, and void its recorded Sales Book entry.</p>
-                        ${isFinal ? `<div class="alert alert-warning py-2 mb-2 text-start small">
-                            <strong>Period Finalized:</strong> This bill was included in a finalized month-end close. Reopening it will tag it as <strong>Adjusted</strong> and log this action in the change audit history.
-                        </div>` : ''}
-                        <div class="ui-field">
-                            <label class="ui-label" for="swalReopenReason">Reason for revision <span class="text-danger">*</span></label>
-                            <textarea id="swalReopenReason" class="modern-input" rows="3" placeholder="State why this billing is being reopened (e.g. rate correction, wrong customer details, WHT adjustment)..."></textarea>
-                        </div>
-                    </div>
-                `,
-                icon: 'warning',
-                confirmText: 'Reopen for Revision',
-                cancelText: 'Keep Approved',
-                didOpen: () => document.getElementById('swalReopenReason')?.focus(),
-                preConfirm: () => {
-                    const reason = document.getElementById('swalReopenReason')?.value?.trim();
-                    if (!reason || reason.length < 5) {
-                        Swal.showValidationMessage('Please provide a reason (minimum 5 characters).');
-                        return false;
-                    }
-                    return reason;
-                }
+            const text = isFinal
+                ? 'Reopening this billing returns it to For Posting, unlocks linked tickets and COS for revision, voids its Sales Book entry, and tags this finalized-period bill as Adjusted in the audit history.'
+                : 'Reopening this billing returns it to For Posting, unlocks linked tickets and COS for revision, and voids its recorded Sales Book entry.';
+            const confirmResult = await ModernAlert.prompt({
+                title: `Reopen billing #${billingNo}?`,
+                text,
+                placeholder: 'Reason for revision',
+                confirmText: 'Reopen for revision',
+                cancelText: 'Keep approved',
+                validator: value => !value?.trim() || value.trim().length < 5 || value.trim().length > 500 ? 'Enter a reason between 5 and 500 characters.' : null
             });
 
             if (!confirmResult.isConfirmed) return;
@@ -229,7 +221,7 @@
             form.innerHTML = `
                 <input type="hidden" name="__RequestVerificationToken" value="${token}" />
                 <input type="hidden" name="id" value="${btn.dataset.id}" />
-                <input type="hidden" name="reason" value="${confirmResult.value}" />
+                <input type="hidden" name="reason" value="${confirmResult.value.trim()}" />
             `;
             document.body.appendChild(form);
             form.submit();

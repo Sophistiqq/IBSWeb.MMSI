@@ -212,6 +212,10 @@ namespace IBS.Services.MSAP
                     oldDocument = charge.DocumentName;
                     charge.DocumentName = uploaded;
                 }
+                var oldRef = charge.ProviderReference;
+                var oldDate = charge.DocumentDate;
+                var oldVat = charge.IncludesVat;
+                var oldTotal = charge.Lines.Sum(l => l.Amount);
                 charge.TugboatOwnerId = ownerId;
                 charge.ProviderName = tickets[0].Tugboat.TugboatOwner!.TugboatOwnerName;
                 charge.ProviderReference = reference;
@@ -245,6 +249,45 @@ namespace IBS.Services.MSAP
                     _db.MsapOtherTugCharges.Add(charge);
                 }
                 await _db.SaveChangesAsync(ct);
+                if (model.Id.HasValue && charge.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
+                {
+                    var newTotal = charge.Lines.Sum(l => l.Amount);
+                    var diffs = new List<MsapFieldChange>();
+                    if (charge.PeriodStatus == MsapPeriodStatus.Final)
+                    {
+                        charge.PeriodStatus = MsapPeriodStatus.Adjusted;
+                        diffs.Add(new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted });
+                    }
+                    if (!string.Equals(oldRef, reference, StringComparison.Ordinal))
+                    {
+                        diffs.Add(new MsapFieldChange { Field = "ProviderReference", Label = "Provider Reference", Before = oldRef, After = reference });
+                    }
+                    if (oldDate != charge.DocumentDate)
+                    {
+                        diffs.Add(new MsapFieldChange { Field = "DocumentDate", Label = "Document Date", Before = oldDate.ToString("yyyy-MM-dd"), After = charge.DocumentDate.ToString("yyyy-MM-dd") });
+                    }
+                    if (oldVat != charge.IncludesVat)
+                    {
+                        diffs.Add(new MsapFieldChange { Field = "IncludesVat", Label = "Includes VAT", Before = oldVat.ToString(), After = charge.IncludesVat.ToString() });
+                    }
+                    if (oldTotal != newTotal)
+                    {
+                        diffs.Add(new MsapFieldChange { Field = "TotalAmount", Label = "Total Amount", Before = oldTotal.ToString("N2"), After = newTotal.ToString("N2") });
+                    }
+                    if (diffs.Count > 0)
+                    {
+                        _db.MsapAdjustmentLogs.Add(new MsapAdjustmentLog
+                        {
+                            DocumentType = "OtherTugCharge",
+                            RecordId = charge.OtherTugChargeId,
+                            ReferenceNumber = reference,
+                            Reason = charge.Remarks ?? "Provider charge details revised",
+                            ChangesJson = System.Text.Json.JsonSerializer.Serialize(diffs),
+                            EditedBy = actor.UserName ?? userId,
+                            EditedDate = charge.UpdatedAt
+                        });
+                    }
+                }
                 _db.AuditTrails.Add(new AuditTrail(actor.UserName ?? userId, $"Saved provider charge {reference}. Before: {before}. After: {Snapshot(charge)}",
                     "Other Tug Charges", charge.OtherTugChargeId, reference) { UserId = userId, ActorName = actor.Name.Trim() });
                 await _db.SaveChangesAsync(ct);

@@ -72,6 +72,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Include(a => a.Tugboat).ThenInclude(t => t.TugboatOwner)
                 .Include(a => a.TugMaster)
                 .Include(a => a.Vessel)
+                .Include(a => a.OtherTugChargeLine).ThenInclude(l => l!.Charge)
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
@@ -84,6 +85,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Include(a => a.Tugboat).ThenInclude(t => t.TugboatOwner)
                 .Include(a => a.TugMaster)
                 .Include(a => a.Vessel)
+                .Include(a => a.OtherTugChargeLine).ThenInclude(l => l!.Charge)
                 .FirstOrDefaultAsync(cancellationToken);
         }
 

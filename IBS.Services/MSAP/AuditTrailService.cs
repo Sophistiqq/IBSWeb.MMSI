@@ -77,6 +77,40 @@ namespace IBS.Services.MSAP
                 .ToList();
         }
 
+        public async Task<IEnumerable<MsapAdjustmentLog>> GetCustomerOrderSlipAdjustmentLogsAsync(int customerOrderSlipId, CancellationToken cancellationToken)
+        {
+            var dispatchTickets = await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
+            var dtIds = dispatchTickets.Select(dt => dt.DispatchTicketId).ToList();
+
+            var billings = await unitOfWork.Billing.GetAllAsync(b => b.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
+            var billingIds = billings.Select(b => b.MsapBillingId).ToList();
+            var collectionIds = billings.Where(b => b.CollectionId.HasValue).Select(b => b.CollectionId!.Value).Distinct().ToList();
+
+            var logs = new List<MsapAdjustmentLog>();
+            if (dtIds.Count > 0)
+            {
+                logs.AddRange(await unitOfWork.MsapAdjustmentLog.GetAllAsync(
+                    l => l.DocumentType == "DispatchTicket" && dtIds.Contains(l.RecordId),
+                    cancellationToken));
+            }
+
+            if (billingIds.Count > 0)
+            {
+                logs.AddRange(await unitOfWork.MsapAdjustmentLog.GetAllAsync(
+                    l => l.DocumentType == "Billing" && billingIds.Contains(l.RecordId),
+                    cancellationToken));
+            }
+
+            if (collectionIds.Count > 0)
+            {
+                logs.AddRange(await unitOfWork.MsapAdjustmentLog.GetAllAsync(
+                    l => l.DocumentType == "Collection" && collectionIds.Contains(l.RecordId),
+                    cancellationToken));
+            }
+
+            return logs.OrderByDescending(l => l.EditedDate).ToList();
+        }
+
         public async Task<(IEnumerable<AuditTrail> Data, int RecordsFiltered, int TotalRecords)> GetPagedAuditTrailsAsync(DataTablesParameters parameters, CancellationToken cancellationToken)
         {
             return await unitOfWork.AuditTrail.GetPagedAuditTrailsAsync(parameters, cancellationToken);

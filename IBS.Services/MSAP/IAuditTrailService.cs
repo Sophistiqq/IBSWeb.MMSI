@@ -8,6 +8,8 @@ namespace IBS.Services.MSAP
 
         Task<IEnumerable<AuditTrail>> GetCustomerOrderSlipTimelineAsync(int customerOrderSlipId, CancellationToken cancellationToken);
 
+        Task<IEnumerable<MsapAdjustmentLog>> GetCustomerOrderSlipAdjustmentLogsAsync(int customerOrderSlipId, CancellationToken cancellationToken);
+
         Task<(IEnumerable<AuditTrail> Data, int RecordsFiltered, int TotalRecords)> GetPagedAuditTrailsAsync(DataTablesParameters parameters, CancellationToken cancellationToken);
     }
 }

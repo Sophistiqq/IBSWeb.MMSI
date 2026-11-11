@@ -112,8 +112,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             var billing = await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == id, cancellationToken);
-            ViewData["HasBilling"] = billing != null;
-            ViewBag.HasDispatchTickets = await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == id, cancellationToken) != null;
+            var hasLockedBilling = billing != null && billing.Status != MsapConstants.BillingStatus.ForPosting;
+            ViewData["HasBilling"] = hasLockedBilling;
+            ViewBag.HasDispatchTickets = await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == id && t.Status != MsapConstants.DispatchTicketStatus.Deleted, cancellationToken) != null;
             ViewData["BillingNumber"] = billing?.MsapBillingNumber;
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -182,9 +183,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     {
                         return Forbid();
                     }
-                    if (billing != null || customerOrderSlip.Status != MsapConstants.CustomerOrderSlipStatus.Open
-                        || customerOrderSlip.DispatchTickets.Any(t => t.Status == MsapConstants.DispatchTicketStatus.Billed || t.BillingId.HasValue)
-                        || schedule?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+                    if (hasLockedBilling || customerOrderSlip.Status != MsapConstants.CustomerOrderSlipStatus.Open
+                        || ticket.Status == MsapConstants.DispatchTicketStatus.Deleted
+                        || customerOrderSlip.DispatchTickets.Any(t => t.Status == MsapConstants.DispatchTicketStatus.Billed)
+                        || schedule?.Status == MsapConstants.VesselScheduleStatus.Cancelled)
                     {
                         TempData["error"] = "This ticket cannot be edited in the current booking or billing state.";
                         return RedirectToAction(nameof(Details), new { id, dispatchTicketId });

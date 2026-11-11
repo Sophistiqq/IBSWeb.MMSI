@@ -268,6 +268,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
         {
             var username = User.Identity?.Name ?? "System";
             var result = await dispatchTicketService.VoidTicketAsync(id, reason, username, cancellationToken);
+            if (Request.Headers.XRequestedWith == "XMLHttpRequest")
+            {
+                return Json(new { success = result.IsSuccess, message = result.Message });
+            }
+
             if (!result.IsSuccess)
             {
                 TempData["error"] = result.Message;

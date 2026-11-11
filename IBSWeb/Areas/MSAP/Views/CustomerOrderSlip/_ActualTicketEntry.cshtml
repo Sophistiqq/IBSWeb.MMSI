@@ -7,13 +7,13 @@
     var cos = ViewData["Cos"] as CustomerOrderSlip;
     var booking = ViewBag.VesselSchedule as VesselSchedule;
     var canEdit = readOnly && ViewBag.CanEditTicket == true && ViewBag.HasBilling != true
-        && cos?.Status == MsapConstants.CustomerOrderSlipStatus.Open && savedTicket?.BillingId == null
+        && cos?.Status == MsapConstants.CustomerOrderSlipStatus.Open
         && Model.Status != MsapConstants.DispatchTicketStatus.Billed && savedTicket?.Status != MsapConstants.DispatchTicketStatus.Deleted
-        && booking?.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled);
+        && booking?.Status != MsapConstants.VesselScheduleStatus.Cancelled;
     var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
     var role = readOnly || userId == null ? null : await MsapRoleService.GetUserRoleAsync(userId);
     var imageRequired = role != MsapRoles.Admin && string.IsNullOrEmpty(Model.ImageName);
-    var canVoid = canEdit && savedTicket != null && savedTicket?.BillingId == null && savedTicket?.Status != MsapConstants.DispatchTicketStatus.Billed && savedTicket?.Status != MsapConstants.DispatchTicketStatus.Deleted;
+    var canVoid = canEdit && savedTicket != null && savedTicket?.Status != MsapConstants.DispatchTicketStatus.Billed && savedTicket?.Status != MsapConstants.DispatchTicketStatus.Deleted;
 }
 <form asp-controller="DispatchTicket" asp-action="@(editing ? "EditTicket" : "Create")" method="post" enctype="multipart/form-data" class="ui-stack" id="@(readOnly ? "cosActualTicketDetails" : "cosActualTicketForm")" onsubmit="@(readOnly ? "return false;" : null)">
     <input name="inlineEntry" type="hidden" value="true" />
@@ -26,9 +26,7 @@
     <input asp-for="VoyageNumber" type="hidden" />
     @if (savedTicket?.Status == MsapConstants.DispatchTicketStatus.Deleted)
     {
-        <div class="alert alert-danger py-2 mb-2 text-start small">
-            <strong>Voided:</strong> This ticket entry has been voided and is excluded from billing calculations.
-        </div>
+        <p class="ui-notice ui-critical" role="status">Voided · This ticket entry has been voided and is excluded from billing calculations.</p>
     }
     <p class="ui-caption">COS: @Model.COSNumber · Actual ticket details can be saved while approval or rates are pending. Billing requires approved COS terms and calculated charges.</p>
     <fieldset class="cos-entry-fields" disabled="@readOnly">
@@ -126,7 +124,7 @@
         var canRecalculate = !editing && savedTicket.VesselScheduleServiceEntryId.HasValue
             && ViewData["CanEditTicket"] is true && ViewData["HasBilling"] is not true
             && cos != null && cos.Status == MsapConstants.CustomerOrderSlipStatus.Open
-            && !cos.DispatchTickets.Any(t => t.BillingId.HasValue || t.Status == MsapConstants.DispatchTicketStatus.Billed)
+            && !cos.DispatchTickets.Any(t => t.Status == MsapConstants.DispatchTicketStatus.Billed)
             && booking != null && booking.ApprovedRevision == booking.Revision
             && booking.Status is MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress or MsapConstants.VesselScheduleStatus.Completed;
 
@@ -176,13 +174,13 @@
     <div class="cos-entry-footer">
         @if (canVoid && savedTicket != null)
         {
-            <button type="button" class="modern-btn-danger me-auto" id="btnVoidTicketEntry" style="margin-right: auto;"
-                data-action="@Url.Action("VoidTicket", "DispatchTicket")"
-                data-id="@savedTicket!.DispatchTicketId"
+            <button type="button" class="modern-btn-error" style="margin-right: auto;"
+                data-void-ticket="@savedTicket!.DispatchTicketId"
                 data-cos-id="@savedTicket!.CustomerOrderSlipId"
                 data-dispatch-number="@savedTicket!.DispatchNumber"
-                data-finalized="@(savedTicket!.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
-                Void ticket entry
+                data-finalized="@(savedTicket!.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")"
+                data-url="@Url.Action("VoidTicket", "DispatchTicket")">
+                <span class="material-symbols-outlined" aria-hidden="true">cancel</span> Void ticket
             </button>
         }
         <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@(editing ? Model.DispatchTicketId : null)" asp-fragment="@(editing ? "actualTicketEntry" : null)" class="modern-btn-secondary">@(readOnly ? "Close ticket" : editing ? "Cancel changes" : "Cancel entry")</a>
@@ -196,57 +194,3 @@
         }
     </div>
 </form>
-
-<script>
-    (() => {
-        const btn = document.getElementById('btnVoidTicketEntry');
-        if (!btn) return;
-        btn.addEventListener('click', async () => {
-            const isFinal = btn.dataset.finalized === 'true';
-            const dispatchNo = btn.dataset.dispatchNumber;
-            const confirmResult = await ModernAlert.confirm({
-                title: `Void Ticket Entry #${dispatchNo}`,
-                text: `
-                    <div class="msap-adjustment-dialog app-ui ui-stack text-start">
-                        <p class="ui-body mb-2">Voiding this actual ticket will remove it from billing calculations and reset the scheduled service entry back to <em>awaiting ticket</em>.</p>
-                        ${isFinal ? `<div class="alert alert-warning py-2 mb-2 text-start small">
-                            <strong>Period Finalized:</strong> This ticket was included in a finalized month-end period. Voiding it will tag it as <strong>Adjusted</strong> and log this action in the change audit history.
-                        </div>` : ''}
-                        <div class="ui-field">
-                            <label class="ui-label" for="swalVoidReason">Reason for voiding <span class="text-danger">*</span></label>
-                            <textarea id="swalVoidReason" class="modern-input" rows="3" placeholder="State why this ticket is being voided or unlinked..."></textarea>
-                        </div>
-                    </div>
-                `,
-                icon: 'warning',
-                confirmText: 'Void Ticket',
-                cancelText: 'Keep Ticket',
-                didOpen: () => document.getElementById('swalVoidReason')?.focus(),
-                preConfirm: () => {
-                    const reason = document.getElementById('swalVoidReason')?.value?.trim();
-                    if (!reason || reason.length < 5) {
-                        Swal.showValidationMessage('Please provide a reason (minimum 5 characters).');
-                        return false;
-                    }
-                    return reason;
-                }
-            });
-
-            if (!confirmResult.isConfirmed) return;
-
-            ModernAlert.showLoading('Voiding ticket entry...');
-            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = btn.dataset.action;
-            form.innerHTML = `
-                <input type="hidden" name="__RequestVerificationToken" value="${token}" />
-                <input type="hidden" name="id" value="${btn.dataset.id}" />
-                <input type="hidden" name="customerOrderSlipId" value="${btn.dataset.cosId}" />
-                <input type="hidden" name="reason" value="${confirmResult.value}" />
-            `;
-            document.body.appendChild(form);
-            form.submit();
-        });
-    })();
-</script>

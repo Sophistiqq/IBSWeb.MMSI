@@ -23,6 +23,39 @@ const initializeCosTicketEntry = () => {
             await ModernAlert.error('Unable to cancel the service. Refresh the COS and try again.');
         } finally { button.disabled = false; }
     }));
+    document.querySelectorAll('[data-void-ticket]').forEach(button => button.addEventListener('click', async () => {
+        if (button.disabled) return;
+        button.disabled = true;
+        try {
+            const isFinal = button.dataset.finalized === 'true';
+            const dispatchNo = button.dataset.dispatchNumber || '';
+            const text = isFinal
+                ? 'Voiding this ticket removes it from billing calculations and tags this finalized-period record as Adjusted in the audit history.'
+                : 'Voiding this ticket removes it from billing calculations and retains the voided row and your reason.';
+            const result = await ModernAlert.prompt({
+                title: dispatchNo ? `Void ticket #${dispatchNo}?` : 'Void ticket?',
+                text,
+                placeholder: 'Reason for voiding',
+                confirmText: 'Void ticket',
+                cancelText: 'Keep ticket',
+                validator: value => !value?.trim() || value.trim().length > 500 ? 'Enter a reason of up to 500 characters.' : null
+            });
+            if (!result.isConfirmed) return;
+            const body = new FormData();
+            body.set('__RequestVerificationToken', document.querySelector('input[name="__RequestVerificationToken"]').value);
+            body.set('id', button.dataset.voidTicket);
+            body.set('customerOrderSlipId', button.dataset.cosId);
+            body.set('reason', result.value.trim());
+            const response = await fetch(button.dataset.url, { method: 'POST', body, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!response.ok || response.redirected) throw new Error('Void failed');
+            const saved = await response.json();
+            if (!saved.success) { await ModernAlert.error(saved.message || 'The ticket could not be voided.'); return; }
+            await ModernAlert.success(saved.message);
+            window.location.href = `/MSAP/CustomerOrderSlip/Details/${encodeURIComponent(button.dataset.cosId)}`;
+        } catch {
+            await ModernAlert.error('Unable to void the ticket. Refresh the COS and try again.');
+        } finally { button.disabled = false; }
+    }));
     const recalculate = document.querySelector('[data-recalculate-ticket]');
     recalculate?.addEventListener('click', async () => {
         if (recalculate.disabled) return;

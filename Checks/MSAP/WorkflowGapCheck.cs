@@ -49,6 +49,29 @@ namespace Checks.MSAP
             Check((await service.CancelServiceAsync(1, 2, "Not required", "check", "id", default)).IsSuccess
                 && job.Status == MsapConstants.CustomerOrderSlipStatus.Cancelled && schedule.Status == MsapConstants.VesselScheduleStatus.Cancelled,
                 "Cancelling every unperformed service left an impossible empty job.");
+            first.CancelledAt = null;
+            second.CancelledAt = null;
+            job.Status = MsapConstants.CustomerOrderSlipStatus.Open;
+            schedule.Status = MsapConstants.VesselScheduleStatus.Confirmed;
+            var recordedTicket = new DispatchTicket
+            {
+                DispatchTicketId = 1, CustomerOrderSlipId = 1, VesselScheduleServiceEntryId = 1,
+                TugBoatId = 1, ServiceId = 1,
+                DateLeft = new DateOnly(2025, 6, 1), DateArrived = new DateOnly(2025, 6, 1),
+                TimeLeft = new TimeOnly(8, 0), TimeArrived = new TimeOnly(9, 0),
+                Status = MsapConstants.DispatchTicketStatus.ForBilling, TotalHours = 1m
+            };
+            var voidedTicket = new DispatchTicket
+            {
+                DispatchTicketId = 2, CustomerOrderSlipId = 1, VesselScheduleServiceEntryId = 2,
+                TugBoatId = 1, ServiceId = 1,
+                DateLeft = new DateOnly(2025, 6, 1), DateArrived = new DateOnly(2025, 6, 1),
+                TimeLeft = new TimeOnly(8, 0), TimeArrived = new TimeOnly(9, 0),
+                Status = MsapConstants.DispatchTicketStatus.Deleted, TotalHours = 1m
+            };
+            var voidProgress = JobProgressCalculator.Calculate(job, schedule, [recordedTicket, voidedTicket], []);
+            Check(voidProgress.ExpectedTicketCount == 1 && voidProgress.RecordedTicketCount == 1 && voidProgress.Stage == JobProgressCalculator.BillingStage,
+                $"Voided ticket on second service entry blocked billing progression (Expected={voidProgress.ExpectedTicketCount}, Recorded={voidProgress.RecordedTicketCount}, Stage={voidProgress.Stage}).");
             var ticket = new DispatchTicket { DispatchTicketId = 10, BAFRate = 35000m, TotalBilling = 35000m };
             var preview = new DispatchTicket { DispatchTicketId = 10, BAFRate = 35000.0000m, TotalBilling = 35000.0000m };
             Check(!ScheduledTicketCharges.HasChanges(ticket, preview), "Database decimal scale created a false rate change.");

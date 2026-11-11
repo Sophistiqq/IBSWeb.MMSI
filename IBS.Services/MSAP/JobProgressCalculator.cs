@@ -155,15 +155,21 @@ namespace IBS.Services.MSAP
 
         public static JobProgressViewModel Calculate(CustomerOrderSlip? job, VesselSchedule? schedule, IEnumerable<DispatchTicket> tickets, IEnumerable<Billing> billings, IEnumerable<Collection>? collections = null)
         {
+            List<DispatchTicket> allTickets = tickets.OrderBy(t => t.DispatchTicketId).ToList();
+            List<DispatchTicket> active = allTickets.Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted).ToList();
+            bool IsEntryVoided(VesselScheduleServiceEntry entry) =>
+                !entry.CancelledAt.HasValue
+                && active.All(t => t.VesselScheduleServiceEntryId != entry.VesselScheduleServiceEntryId)
+                && allTickets.Any(t => t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId && t.Status == MsapConstants.DispatchTicketStatus.Deleted);
+
             var result = new JobProgressViewModel
             {
                 HasSchedule = schedule != null,
                 VesselScheduleId = schedule?.VesselScheduleId,
                 CustomerOrderSlipId = job?.CustomerOrderSlipId,
                 CustomerOrderSlipNumber = job?.CustomerOrderSlipNumber,
-                ExpectedTicketCount = schedule?.ServiceEntries.Count(e => !e.CancelledAt.HasValue) ?? 0
+                ExpectedTicketCount = schedule?.ServiceEntries.Count(e => !e.CancelledAt.HasValue && !IsEntryVoided(e)) ?? 0
             };
-            List<DispatchTicket> active = tickets.Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted).OrderBy(t => t.DispatchTicketId).ToList();
             List<Billing> bills = billings.OrderBy(b => b.MsapBillingId).ToList();
             result.RecordedTicketCount = active.Count;
             result.LinkedBillings = bills;
@@ -229,7 +235,7 @@ namespace IBS.Services.MSAP
                 result.Guidance = "Linked records have an unresolved status or billing reference. Ask an authorized user to review them before proceeding.";
                 return result;
             }
-            if (schedule?.ServiceEntries.Where(entry => !entry.CancelledAt.HasValue).Any(entry => active.Count(t => t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId
+            if (schedule?.ServiceEntries.Where(entry => !entry.CancelledAt.HasValue && !IsEntryVoided(entry)).Any(entry => active.Count(t => t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId
                 && t.TugBoatId == entry.TugboatId && t.ServiceId == entry.ServiceId) != 1) == true)
             {
                 result.Stage = 2;

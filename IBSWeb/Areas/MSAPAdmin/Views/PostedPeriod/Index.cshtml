@@ -16,7 +16,7 @@
                     <span class="modern-label" style="color: var(--on-surface)">Posting Periods</span>
                 </div>
                 <h1 class="modern-headline-lg">@ViewData["Title"]</h1>
-                <p class="modern-body-md" style="color: var(--on-surface-variant)">MSAP month restrictions are suspended while the late-ticket policy is reviewed. Stored period history is retained; shared IBS/Filpride controls are unchanged.</p>
+                <p class="modern-body-md" style="color: var(--on-surface-variant)">Close completed accounting months to stamp operational records as Final. Subsequent adjustments require authorized reversal and audit reasons.</p>
             </div>
             <div class="flex gap-2">
                 <form style="@(IBS.Utility.MSAP.Constants.MsapConstants.EnforceClosedPeriods ? null : "display:none")" asp-action="Close" method="post" class="flex items-center gap-2" onsubmit="return confirmPostPeriod(event)">
@@ -114,7 +114,7 @@
                                 <tr>
                                     <td colspan="8" class="text-center" style="padding: 40px; color: var(--on-surface-variant);">
                                         <span class="material-symbols-outlined" style="font-size: 40px; display: block; margin-bottom: 8px;">calendar_month</span>
-                                        No stored posting periods. Month closing is currently suspended.
+                                        No posting periods recorded yet.
                                     </td>
                                 </tr>
                             }
@@ -128,40 +128,59 @@
 
 @section Scripts {
     <script>
-        function confirmPostPeriod(event) {
+        async function fetchPeriodSummaryText(year, month, label) {
+            try {
+                const res = await fetch(`@Url.Action("GetPeriodSummary", "PostedPeriod", new { area = "MSAPAdmin" })?year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const draftNote = data.draftBillings > 0
+                        ? ` (${data.draftBillings} unapproved draft billing(s) remain For Posting)`
+                        : '';
+                    return `Closing ${label} will finalize ${data.tickets} dispatch ticket(s), ${data.billings} approved billing(s)${draftNote}, and ${data.collections} collection(s). Subsequent changes will require authorized adjustment reasons. Continue?`;
+                }
+            } catch {
+                // fallback below
+            }
+            return `Closing ${label} will lock all transactions and stamp records as Final. Continue?`;
+        }
+
+        async function confirmPostPeriod(event) {
             event.preventDefault();
             const form = event.target;
+            const month = form.querySelector('select[name="month"]').value;
             const monthName = form.querySelector('select[name="month"] option:checked').text;
             const year = form.querySelector('select[name="year"]').value;
-            ModernAlert.confirm({
+            const summaryText = await fetchPeriodSummaryText(year, month, `${monthName} ${year}`);
+            const result = await ModernAlert.confirm({
                 title: 'Post Period?',
-                text: `Closing ${monthName} ${year} will lock all transactions. No edits, creates, or deletes will be allowed for this month. Continue?`,
+                text: summaryText,
                 icon: 'warning',
                 confirmText: 'Yes, post it!',
                 confirmButtonColor: '#d33'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    ModernAlert.showLoading(`Posting ${monthName} ${year}...`);
-                    form.submit();
-                }
             });
+            if (result.isConfirmed) {
+                ModernAlert.showLoading(`Posting ${monthName} ${year}...`);
+                form.submit();
+            }
         }
 
-        function confirmClose(event, month) {
+        async function confirmClose(event, monthLabel) {
             event.preventDefault();
             const form = event.target;
-            ModernAlert.confirm({
+            const year = form.querySelector('input[name="year"]').value;
+            const month = form.querySelector('input[name="month"]').value;
+            const summaryText = await fetchPeriodSummaryText(year, month, monthLabel);
+            const result = await ModernAlert.confirm({
                 title: 'Close Period?',
-                text: `Closing ${month} will lock all transactions. No edits, creates, or deletes will be allowed for this month. Continue?`,
+                text: summaryText,
                 icon: 'warning',
                 confirmText: 'Yes, close it!',
                 confirmButtonColor: '#d33'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    ModernAlert.showLoading(`Closing ${month}...`);
-                    form.submit();
-                }
             });
+            if (result.isConfirmed) {
+                ModernAlert.showLoading(`Closing ${monthLabel}...`);
+                form.submit();
+            }
         }
 
         function confirmOpen(event, month) {

@@ -226,7 +226,7 @@ namespace Checks.MSAP
             await AssertEndpointAsync(typeof(BillingController), "Delete", false, post: true);
             grants.CanReverseBilling = true;
             await AssertAccessAsync(ProcedureEnum.AccessMsap, false);
-            await AssertAccessAsync(ProcedureEnum.ReverseBilling, false);
+            await AssertAccessAsync(ProcedureEnum.ReverseBilling, true);
             grants.CanReverseBilling = false;
             grants.CanEditBilling = true;
             await AssertAccessAsync(ProcedureEnum.AccessMsap, false);
@@ -250,8 +250,8 @@ namespace Checks.MSAP
             await AssertAccessAsync(ProcedureEnum.ConfirmOtherTugCharges, false);
 
             ProcedureEnum[] retired = [ProcedureEnum.EditBilling, ProcedureEnum.SetTariff, ProcedureEnum.ApproveTariff, ProcedureEnum.DeleteDispatchTicket,
-                ProcedureEnum.DeleteCustomerOrderSlip, ProcedureEnum.CloseCustomerOrderSlip, ProcedureEnum.ReverseBilling,
-                ProcedureEnum.CreateDisbursement, ProcedureEnum.ManagePostedPeriod, ProcedureEnum.ViewInventoryReport, ProcedureEnum.ManageMsapImport];
+                ProcedureEnum.DeleteCustomerOrderSlip, ProcedureEnum.CloseCustomerOrderSlip,
+                ProcedureEnum.CreateDisbursement, ProcedureEnum.ViewInventoryReport, ProcedureEnum.ManageMsapImport];
             foreach (PropertyInfo property in typeof(UserAccess).GetProperties().Where(p => p.PropertyType == typeof(bool)))
             {
                 property.SetValue(grants, true);

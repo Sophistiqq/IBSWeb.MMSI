@@ -73,6 +73,19 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 }
                 model.CustomerId = job.CustomerId;
                 model.CustomerOrderSlipId = job.CustomerOrderSlipId;
+                var existingDraft = await unitOfWork.Billing.GetAsync(
+                    b => b.CustomerOrderSlipId == customerOrderSlipId.Value && b.Status == MsapConstants.BillingStatus.ForPosting && b.BasicBillingId == null,
+                    cancellationToken);
+                if (existingDraft != null)
+                {
+                    model.MsapBillingNumber = existingDraft.MsapBillingNumber;
+                    model.Date = existingDraft.Date;
+                    model.BilledTo = existingDraft.BilledTo;
+                    model.PrincipalId = existingDraft.PrincipalId;
+                    model.IsUndocumented = existingDraft.IsUndocumented;
+                    model.SeparateBaf = existingDraft.BafBilling != null;
+                    model.BafBillingNumber = existingDraft.BafBilling?.MsapBillingNumber;
+                }
             }
             model = await billingService.PopulateBillingSelectListsAsync(model, cancellationToken);
             return View(model);
@@ -186,9 +199,18 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewData["CanApproveFinalBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveFinalBilling);
             ViewData["CanReverseBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ReverseBilling);
-            ViewData["CanDiscardBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteBilling);
+            ViewData["CanCreateBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateBilling);
+            var basic = model.BasicBilling ?? model;
+            var baf = basic.BafBilling;
+            var prepIds = new[] { basic.MsapBillingId, baf?.MsapBillingId ?? basic.MsapBillingId }.Distinct().ToList();
+            var salesBookHistory = await unitOfWork.Billing.GetBillingIdsWithSalesBookAsync(prepIds, cancellationToken);
+            var isUnapprovedDraft = BillingService.IsUnapprovedDraft(basic) && !salesBookHistory.Contains(basic.MsapBillingId)
+                && (baf == null || (BillingService.IsUnapprovedDraft(baf) && !salesBookHistory.Contains(baf.MsapBillingId)));
+            var isPeriodClosed = await unitOfWork.PostedPeriod.IsMonthClosedAsync(model.Date.Year, model.Date.Month, cancellationToken);
+            var isReopenedRevision = model.UnpostedDate.HasValue || model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+            ViewData["CanDiscardBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteBilling) && isUnapprovedDraft && !isPeriodClosed;
             ViewData["PostingBlocker"] = await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, model, JobProgressCalculator.PostingStage, cancellationToken);
-            ViewData["IsPeriodClosed"] = await unitOfWork.PostedPeriod.IsMonthClosedAsync(model.Date.Year, model.Date.Month, cancellationToken);
+            ViewData["IsPeriodClosed"] = isPeriodClosed && !isReopenedRevision;
             return View(model);
         }
 

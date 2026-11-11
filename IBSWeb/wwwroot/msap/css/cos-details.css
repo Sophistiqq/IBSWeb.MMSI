@@ -137,6 +137,8 @@
     align-items: center;
     justify-content: center;
     text-align: center;
+    min-height: 44px;
+    min-width: 160px;
 }
 
 .cos-timeline-toggle {

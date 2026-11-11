@@ -39,6 +39,7 @@
     bool canManageTugMaster = await ModernHasAnyAccess(ProcedureEnum.ManageTugMasterMasterFile);
     bool canManagePrincipal = await ModernHasAnyAccess(ProcedureEnum.ManagePrincipalMasterFile);
     bool canManageBankAccount = await ModernHasAnyAccess(ProcedureEnum.ManageBankAccountMasterFile);
+    bool canManagePostedPeriod = await ModernHasAnyAccess(ProcedureEnum.ManagePostedPeriod);
     bool canManageReferences = canManageCustomer || canManageService || canManagePort || canManageTerminal
         || canManageVessel || canManageTugboat || canManageTugboatOwner || canManageTugMaster || canManagePrincipal;
     bool canAccessRates = await ModernHasAnyAccess(ProcedureEnum.ViewRates, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload);
@@ -190,7 +191,7 @@
                     </li>
                 }
 
-                @if (msapRole == MsapRoles.Admin || canManageBankAccount)
+                @if (msapRole == MsapRoles.Admin || canManageBankAccount || canManagePostedPeriod)
                 {
                     <!-- Master File mega menu -->
                     <li class="mnav-item" data-mega role="none">
@@ -226,6 +227,18 @@
                                 <div>
                                     <div class="mnav-section-label">Accounting</div>
                                     <div class="mnav-link-list">
+                                        @if (msapRole == MsapRoles.Admin || canManagePostedPeriod)
+                                        {
+                                            <a class="mnav-mega-link"
+                                               asp-area="MSAPAdmin" asp-controller="PostedPeriod" asp-action="Index"
+                                               role="menuitem">
+                                                <span class="material-symbols-outlined">lock_clock</span>
+                                                <div>
+                                                    <div class="mnav-link-title">Posting Periods</div>
+                                                    <div class="mnav-link-sub">Close &amp; manage accounting months</div>
+                                                </div>
+                                            </a>
+                                        }
                                         <a class="mnav-mega-link"
                                            asp-area="MSAP" asp-controller="PaymentTerms" asp-action="Index"
                                            role="menuitem">
