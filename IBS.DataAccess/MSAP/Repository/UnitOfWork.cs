@@ -88,6 +88,8 @@ namespace IBS.DataAccess.MSAP.Repository
 
         public IPostedPeriodRepository PostedPeriod { get; }
 
+        public IMsapAdjustmentLogRepository MsapAdjustmentLog { get; }
+
         #endregion
 
         public UnitOfWork(MsapDbContext db, ApplicationDbContext sharedDb)
@@ -136,6 +138,7 @@ namespace IBS.DataAccess.MSAP.Repository
             #region -- Posting Period --
 
             PostedPeriod = new PostedPeriodRepository(_db);
+            MsapAdjustmentLog = new MsapAdjustmentLogRepository(_db);
 
             #endregion
         }

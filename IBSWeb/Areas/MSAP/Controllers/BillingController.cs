@@ -185,6 +185,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ViewData["JobProgressActionTargetId"] = id;
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewData["CanApproveFinalBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveFinalBilling);
+            ViewData["CanReverseBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ReverseBilling);
             ViewData["PostingBlocker"] = await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, model, JobProgressCalculator.PostingStage, cancellationToken);
             ViewData["IsPeriodClosed"] = await unitOfWork.PostedPeriod.IsMonthClosedAsync(model.Date.Year, model.Date.Month, cancellationToken);
             return View(model);
@@ -197,6 +198,18 @@ namespace IBSWeb.Areas.MSAP.Controllers
         public async Task<IActionResult> ReviewConfirmed(int id, int reviewedRevision, CancellationToken cancellationToken)
         {
             var result = await billingService.PostBillingAsync(id, User.Identity?.Name ?? "System", cancellationToken, User.FindFirstValue(ClaimTypes.NameIdentifier)!, reviewedRevision);
+            TempData[result.IsSuccess ? "success" : "error"] = result.Message;
+            return RedirectToAction(nameof(Review), new { id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.ReverseBilling)]
+        public async Task<IActionResult> ReopenForRevision(int id, string reason, CancellationToken cancellationToken)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var username = User.Identity?.Name ?? "System";
+            var result = await billingService.ReopenBillingForRevisionAsync(id, reason, username, userId, cancellationToken);
             TempData[result.IsSuccess ? "success" : "error"] = result.Message;
             return RedirectToAction(nameof(Review), new { id });
         }

@@ -1,4 +1,5 @@
 using IBS.DataAccess.MSAP.Data;
+using IBS.DataAccess.MSAP.Repository;
 using IBS.DataAccess.MSAP.Repository.Msap;
 using IBS.Models;
 using IBS.Models.MSAP;
@@ -139,16 +140,39 @@ namespace Checks.MSAP
                     try
                     {
                         await repo.FinalizePeriodRecordsAsync(testYear, testMonth);
+                        db.ChangeTracker.Clear();
 
                         var reloaded1 = await db.MsapDispatchTickets.AsNoTracking().FirstAsync(t => t.DispatchTicketId == ticket1.DispatchTicketId);
                         var reloaded2 = await db.MsapDispatchTickets.AsNoTracking().FirstAsync(t => t.DispatchTicketId == ticket2.DispatchTicketId);
 
                         Check(reloaded1.PeriodStatus == MsapPeriodStatus.Final, $"Expected ticket1 PeriodStatus to be 'Final', got '{reloaded1.PeriodStatus}'");
                         Check(reloaded2.PeriodStatus == null, $"Expected ticket2 PeriodStatus to remain null, got '{reloaded2.PeriodStatus}'");
+
+                        // 4. Test Voiding Finalized Ticket produces Adjusted tag & AdjustmentLog
+                        var appDbOptions = new DbContextOptionsBuilder<IBS.DataAccess.Data.ApplicationDbContext>()
+                            .UseNpgsql(connectionString)
+                            .Options;
+                        await using var appDb = new IBS.DataAccess.Data.ApplicationDbContext(appDbOptions);
+                        var uow = new UnitOfWork(db, appDb);
+                        var dtService = new DispatchTicketService(uow, null!, NullLogger<DispatchTicketService>.Instance);
+                        var voidResult = await dtService.VoidTicketAsync(ticket1.DispatchTicketId, "Correction of duplicate ticket entry", "TestUser", CancellationToken.None);
+                        Check(voidResult.IsSuccess, $"Expected ticket void to succeed, got: {voidResult.Message}");
+
+                        var voidedTicket = await db.MsapDispatchTickets.AsNoTracking().FirstAsync(t => t.DispatchTicketId == ticket1.DispatchTicketId);
+                        Check(voidedTicket.Status == MsapConstants.DispatchTicketStatus.Deleted, "Expected ticket status to be Deleted");
+                        Check(voidedTicket.PeriodStatus == MsapPeriodStatus.Adjusted, $"Expected ticket PeriodStatus to be Adjusted, got '{voidedTicket.PeriodStatus}'");
+
+                        var log = await db.MsapAdjustmentLogs.AsNoTracking().FirstOrDefaultAsync(l => l.DocumentType == "DispatchTicket" && l.RecordId == ticket1.DispatchTicketId);
+                        Check(log != null, "Expected adjustment log for voided finalized ticket");
+                        Check(log!.Reason == "Correction of duplicate ticket entry", "Expected adjustment log reason to match");
+                        Check(log.ChangesJson.Contains("Adjusted"), "Expected adjustment log changes to mention Adjusted");
                     }
                     finally
                     {
-                        db.MsapDispatchTickets.RemoveRange(ticket1, ticket2);
+                        var logs = await db.MsapAdjustmentLogs.Where(l => l.DocumentType == "DispatchTicket" && l.RecordId == ticket1.DispatchTicketId).ToListAsync();
+                        db.MsapAdjustmentLogs.RemoveRange(logs);
+                        var ticketsToRemove = await db.MsapDispatchTickets.Where(t => t.DispatchTicketId == ticket1.DispatchTicketId || t.DispatchTicketId == ticket2.DispatchTicketId).ToListAsync();
+                        db.MsapDispatchTickets.RemoveRange(ticketsToRemove);
                         await db.SaveChangesAsync();
                     }
                 }

@@ -178,11 +178,11 @@ namespace IBS.Services.MSAP
                     }
 
                     var existingTickets = existing.CustomerOrderSlipId.HasValue
-                        ? (await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == existing.CustomerOrderSlipId.Value, ct)).ToList()
+                        ? (await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == existing.CustomerOrderSlipId.Value && t.Status != MsapConstants.DispatchTicketStatus.Deleted, ct)).ToList()
                         : [];
                     var entryIds = existing.ServiceEntries.Select(e => e.VesselScheduleServiceEntryId).ToList();
                     var entryTickets = entryIds.Count > 0
-                        ? (await unitOfWork.DispatchTicket.GetAllAsync(t => t.VesselScheduleServiceEntryId.HasValue && entryIds.Contains(t.VesselScheduleServiceEntryId.Value), ct)).ToList()
+                        ? (await unitOfWork.DispatchTicket.GetAllAsync(t => t.VesselScheduleServiceEntryId.HasValue && entryIds.Contains(t.VesselScheduleServiceEntryId.Value) && t.Status != MsapConstants.DispatchTicketStatus.Deleted, ct)).ToList()
                         : [];
                     bool hasTickets = existingTickets.Count > 0 || entryTickets.Count > 0;
                     bool hasBilling = existing.CustomerOrderSlipId.HasValue && await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == existing.CustomerOrderSlipId.Value, ct) != null;

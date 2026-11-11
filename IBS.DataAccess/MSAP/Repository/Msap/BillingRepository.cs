@@ -35,6 +35,20 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             await _db.MsapSalesBooks.AddAsync(entry, ct);
         }
 
+        public async Task VoidSalesBookAsync(int billingId, int revision, string username, string reason, CancellationToken ct)
+        {
+            var entries = await _db.MsapSalesBooks
+                .Where(b => b.DocumentId == billingId && b.BillingRevision == revision && b.VoidedAt == null)
+                .ToListAsync(ct);
+            var now = IBS.Utility.MSAP.Helpers.DateTimeHelper.GetCurrentPhilippineTime();
+            foreach (var entry in entries)
+            {
+                entry.VoidedAt = now;
+                entry.VoidedBy = username;
+                entry.VoidReason = reason;
+            }
+        }
+
         public async Task<List<int>> GetBillingIdsWithSalesBookAsync(List<int> billingIds, CancellationToken ct)
         {
             return await _db.MsapSalesBooks.Where(b => b.DocumentId.HasValue && billingIds.Contains(b.DocumentId.Value))

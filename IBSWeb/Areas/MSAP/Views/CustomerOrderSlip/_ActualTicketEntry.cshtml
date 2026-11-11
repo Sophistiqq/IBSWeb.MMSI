@@ -171,6 +171,12 @@
         @if (canEdit)
         {
             <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@Model.DispatchTicketId" asp-route-editTicket="true" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">edit</span> Edit ticket</a>
+            @if (savedTicket != null && savedTicket.BillingId == null && savedTicket.Status != MsapConstants.DispatchTicketStatus.Billed)
+            {
+                <button type="button" class="modern-btn-danger" data-bs-toggle="modal" data-bs-target="#voidTicketModal">
+                    <span class="material-symbols-outlined" aria-hidden="true">cancel</span> Void ticket entry
+                </button>
+            }
         }
         @if (!readOnly)
         {
@@ -178,3 +184,43 @@
         }
     </div>
 </form>
+
+@if (canEdit && savedTicket != null)
+{
+    var st = savedTicket!;
+    if (st.BillingId == null && st.Status != MsapConstants.DispatchTicketStatus.Billed)
+    {
+    <div class="modal fade" id="voidTicketModal" tabindex="-1" aria-labelledby="voidTicketModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form asp-controller="DispatchTicket" asp-action="VoidTicket" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@st.DispatchTicketId" />
+                    <input type="hidden" name="customerOrderSlipId" value="@st.CustomerOrderSlipId" />
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="voidTicketModalLabel">Void Ticket Entry #@st.DispatchNumber</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body ui-stack">
+                        <p class="ui-body">Voiding this actual ticket will remove it from billing calculations and reset the scheduled service entry back to <em>awaiting ticket</em>.</p>
+                        @if (st.PeriodStatus == MsapPeriodStatus.Final)
+                        {
+                            <div class="alert alert-warning py-2 mb-2">
+                                <strong>Period Finalized:</strong> This ticket was included in a finalized month-end period. Voiding it will tag it as <strong>Adjusted</strong> and log this action in the change audit history.
+                            </div>
+                        }
+                        <div class="form-group">
+                            <label class="form-label" for="voidReason">Reason for voiding <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="voidReason" name="reason" rows="3" required placeholder="State why this ticket is being voided or unlinked..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="modern-btn-secondary" data-bs-dismiss="modal">Keep ticket</button>
+                        <button type="submit" class="modern-btn-danger">Confirm Void Ticket</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    }
+}

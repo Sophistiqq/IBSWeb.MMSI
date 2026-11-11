@@ -377,6 +377,111 @@ namespace IBS.Services.MSAP
             }
         }
 
+        public async Task<ServiceResult> ReopenBillingForRevisionAsync(int id, string reason, string username, string approverUserId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
+                {
+                    return ServiceResult.Failure("Please provide a valid reason for reopening this billing (minimum 5 characters).", ServiceResultStatus.ValidationError);
+                }
+
+                var billing = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == id, cancellationToken);
+                if (billing == null)
+                {
+                    return ServiceResult.Failure("Billing not found.", ServiceResultStatus.NotFound);
+                }
+
+                if (string.IsNullOrEmpty(approverUserId) || !await accessControl.HasAccessAsync(approverUserId, ProcedureEnum.ReverseBilling))
+                {
+                    return ServiceResult.Failure("You do not have permission to reopen approved billings.", ServiceResultStatus.ValidationError);
+                }
+
+                if (billing.Status != MsapConstants.BillingStatus.ForCollection || billing.AmountPaid > 0 || billing.IsPaid || billing.CollectionId.HasValue)
+                {
+                    return ServiceResult.Failure("Cannot reopen billing: it has recorded collections or has already been collected. Void or cancel the collections first.", ServiceResultStatus.ValidationError);
+                }
+
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    var related = billing.BasicBilling ?? billing.BafBilling;
+                    var targetBills = new[] { billing, related }.Where(b => b != null).Distinct().ToList();
+
+                    foreach (var bill in targetBills)
+                    {
+                        if (bill!.AmountPaid > 0 || bill.IsPaid || bill.CollectionId.HasValue)
+                        {
+                            throw new InvalidOperationException($"Cannot reopen billing #{bill.MsapBillingNumber}: collections exist.");
+                        }
+
+                        int priorRevision = bill.Revision;
+                        string priorStatus = bill.Status;
+
+                        bill.Revision += 1;
+                        bill.Status = MsapConstants.BillingStatus.ForPosting;
+                        bill.UnpostedBy = username;
+                        bill.UnpostedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                        bill.UnpostRemarks = reason.Trim();
+                        bill.ApprovedRevision = null;
+                        bill.ApprovedByUserId = null;
+                        bill.ApprovedAt = null;
+
+                        await unitOfWork.Billing.VoidSalesBookAsync(bill.MsapBillingId, priorRevision, username, reason.Trim(), cancellationToken);
+
+                        if (bill.PeriodStatus == MsapPeriodStatus.Final)
+                        {
+                            bill.PeriodStatus = MsapPeriodStatus.Adjusted;
+                            var log = new MsapAdjustmentLog
+                            {
+                                DocumentType = "Billing",
+                                RecordId = bill.MsapBillingId,
+                                ReferenceNumber = bill.MsapBillingNumber,
+                                Reason = reason.Trim(),
+                                ChangesJson = System.Text.Json.JsonSerializer.Serialize(new[]
+                                {
+                                    new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted },
+                                    new MsapFieldChange { Field = "Status", Label = "Status", Before = priorStatus, After = MsapConstants.BillingStatus.ForPosting },
+                                    new MsapFieldChange { Field = "Revision", Label = "Revision", Before = priorRevision.ToString(), After = bill.Revision.ToString() }
+                                }),
+                                EditedBy = username,
+                                EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
+                            };
+                            await unitOfWork.MsapAdjustmentLog.AddAsync(log, cancellationToken);
+                        }
+
+                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Reopened billing #{bill.MsapBillingNumber} for revision (rev {bill.Revision}). Reason: {reason.Trim()}", "Billing", bill.MsapBillingId, bill.MsapBillingNumber), cancellationToken);
+                    }
+
+                    int sourceId = billing.BasicBillingId ?? billing.MsapBillingId;
+                    var linkedTickets = await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.BillingId == sourceId, cancellationToken);
+                    foreach (var dt in linkedTickets)
+                    {
+                        dt.Status = MsapConstants.DispatchTicketStatus.ForBilling;
+                    }
+
+                    if (billing.CustomerOrderSlipId.HasValue)
+                    {
+                        var cos = await unitOfWork.CustomerOrderSlip.GetAsync(c => c.CustomerOrderSlipId == billing.CustomerOrderSlipId.Value, cancellationToken);
+                        if (cos?.Status == MsapConstants.CustomerOrderSlipStatus.Closed)
+                        {
+                            cos.Status = MsapConstants.CustomerOrderSlipStatus.Open;
+                            cos.EditedBy = username;
+                            cos.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                        }
+                    }
+
+                    await unitOfWork.SaveAsync(cancellationToken);
+                }, cancellationToken);
+
+                return ServiceResult.Success($"Billing #{billing.MsapBillingNumber} reopened for revision successfully.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to reopen billing {BillingId} for revision", id);
+                return ServiceResult.Failure($"Failed to reopen billing for revision: {ExceptionHelper.GetErrorMessage(ex)}");
+            }
+        }
+
         public async Task<ServiceResult> DeleteBillingAsync(int id, string username, CancellationToken cancellationToken)
         {
             try

@@ -689,6 +689,69 @@ namespace IBS.Services.MSAP
             }
         }
 
+        public async Task<ServiceResult> VoidTicketAsync(int id, string reason, string username, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
+                {
+                    return ServiceResult.Failure("Please provide a valid reason for voiding this ticket (minimum 5 characters).", ServiceResultStatus.ValidationError);
+                }
+
+                var model = await unitOfWork.DispatchTicket.GetAsync(dt => dt.DispatchTicketId == id, cancellationToken);
+                if (model == null)
+                {
+                    return ServiceResult.Failure("Ticket not found.", ServiceResultStatus.NotFound);
+                }
+
+                if (model.BillingId != null || model.Status == MsapConstants.DispatchTicketStatus.Billed)
+                {
+                    return ServiceResult.Failure("Cannot void a billed ticket. Reopen and revise the billing first.", ServiceResultStatus.ValidationError);
+                }
+
+                if (model.OtherTugChargeLine?.Charge?.ConfirmedAt != null)
+                {
+                    return ServiceResult.Failure("Cannot void ticket: confirmed Other Tug Charge exists. Reopen the provider charge first.", ServiceResultStatus.ValidationError);
+                }
+
+                var priorStatus = model.Status;
+                model.Status = MsapConstants.DispatchTicketStatus.Deleted;
+                model.VesselScheduleServiceEntryId = null;
+                model.EditedBy = username;
+                model.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+
+                if (model.PeriodStatus == MsapPeriodStatus.Final)
+                {
+                    model.PeriodStatus = MsapPeriodStatus.Adjusted;
+                    var log = new MsapAdjustmentLog
+                    {
+                        DocumentType = "DispatchTicket",
+                        RecordId = model.DispatchTicketId,
+                        ReferenceNumber = model.DispatchNumber,
+                        Reason = reason.Trim(),
+                        ChangesJson = System.Text.Json.JsonSerializer.Serialize(new[]
+                        {
+                            new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted },
+                            new MsapFieldChange { Field = "Status", Label = "Status", Before = priorStatus, After = MsapConstants.DispatchTicketStatus.Deleted }
+                        }),
+                        EditedBy = username,
+                        EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
+                    };
+                    await unitOfWork.MsapAdjustmentLog.AddAsync(log, cancellationToken);
+                }
+
+                await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Voided/removed dispatch ticket #{model.DispatchNumber}. Reason: {reason.Trim()}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
+                await unitOfWork.SaveAsync(cancellationToken);
+
+                return ServiceResult.Success($"Dispatch Ticket #{model.DispatchNumber} voided successfully.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to void dispatch ticket {Id}", id);
+                return ServiceResult.Failure($"Failed to void ticket: {ExceptionHelper.GetErrorMessage(ex)}");
+            }
+        }
+
         public async Task<ServiceResult> RestoreTicketAsync(int id, string username, CancellationToken cancellationToken)
         {
             try

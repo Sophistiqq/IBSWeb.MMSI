@@ -62,6 +62,7 @@ namespace IBS.DataAccess.MSAP.Repository.IRepository
         #region -- Posting Period --
 
         IPostedPeriodRepository PostedPeriod { get; }
+        IMsapAdjustmentLogRepository MsapAdjustmentLog { get; }
 
         #endregion
 

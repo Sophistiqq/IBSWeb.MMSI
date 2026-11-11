@@ -261,6 +261,30 @@ namespace IBSWeb.Areas.MSAP.Controllers
             return RedirectToAction("EditTicket", new { id = viewModel.DispatchTicketId, customerOrderSlipId = viewModel.CustomerOrderSlipId });
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.EditDispatchTicket)]
+        public async Task<IActionResult> VoidTicket(int id, string reason, int? customerOrderSlipId, CancellationToken cancellationToken)
+        {
+            var username = User.Identity?.Name ?? "System";
+            var result = await dispatchTicketService.VoidTicketAsync(id, reason, username, cancellationToken);
+            if (!result.IsSuccess)
+            {
+                TempData["error"] = result.Message;
+            }
+            else
+            {
+                TempData["success"] = result.Message;
+            }
+
+            if (customerOrderSlipId.HasValue)
+            {
+                return RedirectToAction("Details", "CustomerOrderSlip", new { id = customerOrderSlipId.Value });
+            }
+
+            return RedirectToAction(nameof(Index));
+        }
+
         #endregion
 
         [HttpGet]

@@ -12,6 +12,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
 
         Task AddSalesBookAsync(IBS.Models.MSAP.Books.SalesBook entry, CancellationToken ct);
 
+        Task VoidSalesBookAsync(int billingId, int revision, string username, string reason, CancellationToken ct);
+
         Task<List<int>> GetBillingIdsWithSalesBookAsync(List<int> billingIds, CancellationToken ct);
 
         Task<List<string>?> GetToBillDispatchTicketListAsync(int billingId, CancellationToken cancellationToken = default);
