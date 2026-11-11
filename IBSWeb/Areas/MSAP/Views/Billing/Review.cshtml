@@ -11,6 +11,7 @@
     bool canPrint = BillingService.CanPrint(Model);
     bool canPost = ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && ViewData["IsPeriodClosed"] is not true;
     bool canReverse = ViewData["CanReverseBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForCollection && Model.AmountPaid == 0;
+    bool canDiscard = ViewData["CanDiscardBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && ViewData["IsPeriodClosed"] is not true;
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/billing-preparation.css" asp-append-version="true" />
@@ -30,16 +31,6 @@
                 <div class="billing-review-header-actions">
                     <a asp-action="Index" asp-route-customerOrderSlipId="@Model.CustomerOrderSlipId" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
                     <a asp-action="Preview" asp-route-id="@Model.MsapBillingId" asp-route-printCopy="@canPrint" target="_blank" class="modern-btn-primary ui-page-action">Preview statements</a>
-                    @if (canReverse)
-                    {
-                        <button type="button" class="modern-btn-warning ui-page-action" id="btnReopenBilling"
-                            data-action="@Url.Action("ReopenForRevision", "Billing")"
-                            data-id="@Model.MsapBillingId"
-                            data-billing-number="@Model.MsapBillingNumber"
-                            data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
-                            <span class="material-symbols-outlined" aria-hidden="true">lock_open</span> Reopen for revision
-                        </button>
-                    }
                 </div>
                 <p class="ui-page-description ui-caption ui-muted">
                     @Model.MsapBillingNumber · @component · @(Model.Status == MsapConstants.BillingStatus.ForPosting ? "Awaiting final approval" : "Approved") · @(Model.IsUndocumented ? "Undocumented" : "Documented")
@@ -126,28 +117,62 @@
                 }
             </section>
             <footer class="billing-footer">
-                @if (canPost)
+                @if (Model.Status == MsapConstants.BillingStatus.ForPosting)
                 {
                     <p class="ui-caption ui-muted">Final approval applies to @Model.MsapBillingNumber only.</p>
-                    <form asp-action="Review" asp-route-id="@Model.MsapBillingId" method="post" id="postReviewedBilling">
-                        <input type="hidden" name="reviewedRevision" value="@Model.Revision" />
-                        <button class="modern-btn-primary ui-page-action" type="submit">
-                            <span class="material-symbols-outlined" aria-hidden="true">check_circle</span> Approve final bill @Model.MsapBillingNumber
-                        </button>
-                    </form>
+                    <div class="d-flex justify-content-between align-items-center w-100 flex-wrap gap-2">
+                        <div>
+                            @if (canDiscard)
+                            {
+                                <button type="button" class="modern-btn-secondary" id="btnDiscardDraft"
+                                    data-action="@Url.Action("Delete", "Billing")"
+                                    data-id="@Model.MsapBillingId"
+                                    style="font-size: 13px; padding: 6px 14px;">
+                                    Discard draft
+                                </button>
+                            }
+                        </div>
+                        <div>
+                            @if (canPost)
+                            {
+                                <form asp-action="Review" asp-route-id="@Model.MsapBillingId" method="post" id="postReviewedBilling" class="d-inline">
+                                    <input type="hidden" name="reviewedRevision" value="@Model.Revision" />
+                                    <button class="modern-btn-primary ui-page-action" type="submit">
+                                        <span class="material-symbols-outlined" aria-hidden="true">check_circle</span> Approve final bill @Model.MsapBillingNumber
+                                    </button>
+                                </form>
+                            }
+                            else
+                            {
+                                <span class="@(blocker != null || ViewData["IsPeriodClosed"] is true ? "ui-notice ui-critical" : "ui-caption ui-muted")">@(blocker ?? (ViewData["IsPeriodClosed"] is true ? "This accounting period is closed." : "Waiting for an authorized final-bill approver."))</span>
+                            }
+                        </div>
+                    </div>
                 }
                 else if (canReverse)
                 {
-                    <p class="ui-caption ui-muted">This bill is approved and awaiting collection. To make corrections, use <strong>Reopen for revision</strong> in the header actions.</p>
+                    <div class="d-flex justify-content-between align-items-center w-100 flex-wrap gap-2">
+                        <p class="ui-caption ui-muted mb-0">This billing is approved for collection.</p>
+                        <button type="button" class="modern-btn-secondary" id="btnReopenBilling"
+                            data-action="@Url.Action("ReopenForRevision", "Billing")"
+                            data-id="@Model.MsapBillingId"
+                            data-billing-number="@Model.MsapBillingNumber"
+                            data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")"
+                            style="font-size: 13px; padding: 4px 12px; font-weight: normal;">
+                            Reopen for revision
+                        </button>
+                    </div>
                 }
                 else
                 {
-                    <p class="@(blocker != null || ViewData["IsPeriodClosed"] is true ? "ui-notice ui-critical" : "ui-caption ui-muted")">@(blocker ?? (ViewData["IsPeriodClosed"] is true ? "This accounting period is closed." : Model.Status == MsapConstants.BillingStatus.ForPosting ? "Waiting for an authorized final-bill approver." : "This billing has already been approved."))</p>
+                    <p class="@(blocker != null || ViewData["IsPeriodClosed"] is true ? "ui-notice ui-critical" : "ui-caption ui-muted")">@(blocker ?? (ViewData["IsPeriodClosed"] is true ? "This accounting period is closed." : "This billing has already been approved."))</p>
                 }
             </footer>
         </main>
     </div>
 </div>
+
+<form id="discardBillingForm" method="post" style="display:none;">@Html.AntiForgeryToken()</form>
 
 @section Scripts {
     <script>
@@ -210,6 +235,23 @@
             `;
             document.body.appendChild(form);
             form.submit();
+        });
+
+        $('#btnDiscardDraft').on('click', async function () {
+            const btn = this;
+            const confirmResult = await ModernAlert.confirm({
+                title: 'Discard this billing preparation?',
+                text: 'This discards the unapproved draft and any paired Basic/BAF draft. Actual service tickets and charges are kept and become available for preparation again.',
+                icon: 'warning',
+                confirmText: 'Discard draft',
+                cancelText: 'Keep draft'
+            });
+            if (confirmResult.isConfirmed) {
+                ModernAlert.showLoading('Discarding draft billing...');
+                const form = document.getElementById('discardBillingForm');
+                form.action = `${btn.dataset.action}/${btn.dataset.id}`;
+                form.submit();
+            }
         });
 
         $('#postReviewedBilling').on('submit', async function (event) {

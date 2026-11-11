@@ -186,6 +186,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewData["CanApproveFinalBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveFinalBilling);
             ViewData["CanReverseBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ReverseBilling);
+            ViewData["CanDiscardBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteBilling);
             ViewData["PostingBlocker"] = await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, model, JobProgressCalculator.PostingStage, cancellationToken);
             ViewData["IsPeriodClosed"] = await unitOfWork.PostedPeriod.IsMonthClosedAsync(model.Date.Year, model.Date.Month, cancellationToken);
             return View(model);

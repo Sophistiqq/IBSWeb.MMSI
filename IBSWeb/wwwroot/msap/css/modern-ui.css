@@ -287,7 +287,8 @@ textarea.form-control {
     border-color: color-mix(in srgb, var(--primary) 88%, #000000);
 }
 
-.modern-btn-error {
+.modern-btn-error,
+.modern-btn-danger {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -301,7 +302,8 @@ textarea.form-control {
     transition: background-color 0.2s;
 }
 
-.modern-btn-error:hover {
+.modern-btn-error:hover,
+.modern-btn-danger:hover {
     background-color: rgba(255, 218, 214, 0.2);
 }
 

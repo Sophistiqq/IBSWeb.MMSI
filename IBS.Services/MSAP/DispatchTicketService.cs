@@ -716,7 +716,6 @@ namespace IBS.Services.MSAP
 
                 var priorStatus = model.Status;
                 model.Status = MsapConstants.DispatchTicketStatus.Deleted;
-                model.VesselScheduleServiceEntryId = null;
                 model.EditedBy = username;
                 model.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 

@@ -148,6 +148,7 @@
                             else if (data === "@MsapConstants.DispatchTicketStatus.Disapproved") statusClass = "ui-status ui-critical";
                             else if (data === "@MsapConstants.DispatchTicketStatus.ForBilling") statusClass = "ui-status ui-attention";
                             else if (data === "@MsapConstants.DispatchTicketStatus.Billed") statusClass = "ui-status ui-complete";
+                            else if (data === "@MsapConstants.DispatchTicketStatus.Deleted") return ModernTable.render.badge("Voided", "ui-status ui-critical");
                             return ModernTable.render.badge(data, statusClass);
                         }
                     },

@@ -63,15 +63,15 @@
                     {
                         @if (!Model.DepositDate.HasValue)
                         {
-                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Deposit" data-collection-banking="@(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">account_balance</span> @(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")</a>
+                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Deposit" data-collection-banking="@(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")" class="modern-btn-primary">@(Model.ReturnedDate.HasValue ? "Record redeposit" : "Record deposit")</a>
                         }
                         else
                         {
                             @if (Model.CheckAmount > 0)
                             {
-                                <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.ReturnCheck" data-collection-banking="Record returned check" class="modern-btn-warning"><span class="material-symbols-outlined" aria-hidden="true">assignment_return</span> Return check</a>
+                                <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.ReturnCheck" data-collection-banking="Record returned check" class="modern-btn-warning">Return check</a>
                             }
-                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Clear" data-collection-banking="Record clearing" class="modern-btn-complete"><span class="material-symbols-outlined" aria-hidden="true">verified</span> Record clearing</a>
+                            <a asp-action="Banking" asp-route-id="@Model.MsapCollectionId" asp-route-bankingAction="@CollectionBankingAction.Clear" data-collection-banking="Record clearing" class="modern-btn-complete">Record clearing</a>
                         }
                     }
                 </div>

@@ -162,7 +162,14 @@
                                         <td>@(ticket.RawDurationHours?.ToString("0.00") ?? "—")</td>
                                         <td>@ticket.TotalHours.ToString("0.00")</td>
                                         <td>
-                                            <span class="schedule-status-pill ui-status @(approvalPending ? "ui-attention" : calculationBlocker != null || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "ui-critical" : "ui-complete")">@(approvalPending ? "Awaiting approval" : calculationBlocker != null || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "Calculation pending" : "Recorded")</span>
+                                            @if (ticket.Status == MsapConstants.DispatchTicketStatus.Deleted)
+                                            {
+                                                <span class="schedule-status-pill ui-status ui-critical">Voided</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="schedule-status-pill ui-status @(approvalPending ? "ui-attention" : calculationBlocker != null || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "ui-critical" : "ui-complete")">@(approvalPending ? "Awaiting approval" : calculationBlocker != null || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "Calculation pending" : "Recorded")</span>
+                                            }
                                             @if (ticket.PeriodStatus == MsapPeriodStatus.Adjusted)
                                             {
                                                 <span class="badge bg-warning text-dark ms-1" title="Adjusted after period finalization"><span class="material-symbols-outlined fs-6 align-middle">warning</span> Adjusted</span>
@@ -211,7 +218,14 @@
                                     <td>@(ticket.RawDurationHours?.ToString("0.00") ?? "—")</td>
                                     <td>@ticket.TotalHours.ToString("0.00")</td>
                                     <td>
-                                        <span class="schedule-status-pill ui-status @(approvalPending ? "ui-attention" : calculationBlocker != null || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "ui-critical" : "ui-complete")">@(approvalPending ? "Awaiting approval" : calculationBlocker != null || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "Calculation pending" : "Recorded")</span>
+                                        @if (ticket.Status == MsapConstants.DispatchTicketStatus.Deleted)
+                                        {
+                                            <span class="schedule-status-pill ui-status ui-critical">Voided</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="schedule-status-pill ui-status @(approvalPending ? "ui-attention" : calculationBlocker != null || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "ui-critical" : "ui-complete")">@(approvalPending ? "Awaiting approval" : calculationBlocker != null || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending ? "Calculation pending" : "Recorded")</span>
+                                        }
                                         @if (ticket.PeriodStatus == MsapPeriodStatus.Adjusted)
                                         {
                                             <span class="badge bg-warning text-dark ms-1" title="Adjusted after period finalization"><span class="material-symbols-outlined fs-6 align-middle">warning</span> Adjusted</span>
@@ -306,7 +320,7 @@
         }
         <footer class="cos-details-footer">
             <span class="ui-caption ui-muted">@progress.Guidance</span>
-            <span class="ui-body">@Model.DispatchTickets.Count ticket(s) · Calculated billing ₱ @Model.DispatchTickets.Where(ticket => ticket.Status != MsapConstants.DispatchTicketStatus.CalculationPending).Sum(ticket => ticket.TotalBilling).ToString("N2")
+            <span class="ui-body">@Model.DispatchTickets.Count(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted) ticket(s) · Calculated billing ₱ @Model.DispatchTickets.Where(ticket => ticket.Status != MsapConstants.DispatchTicketStatus.CalculationPending && ticket.Status != MsapConstants.DispatchTicketStatus.Deleted).Sum(ticket => ticket.TotalBilling).ToString("N2")
                 @if (Model.DispatchTickets.Any(ticket => ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending))
                 {
                     <span class="ui-caption ui-muted">· Unresolved charges excluded</span>
