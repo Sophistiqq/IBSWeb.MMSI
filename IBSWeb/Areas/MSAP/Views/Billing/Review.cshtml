@@ -128,8 +128,12 @@
                 }
                 else if (canReverse)
                 {
-                    <button type="button" class="modern-btn-secondary ui-button" data-bs-toggle="modal" data-bs-target="#reopenBillingModal">
-                        <span class="material-symbols-outlined" aria-hidden="true">history</span> Reopen for revision
+                    <button type="button" class="modern-btn-warning ui-button" id="btnReopenBilling"
+                        data-action="@Url.Action("ReopenForRevision", "Billing")"
+                        data-id="@Model.MsapBillingId"
+                        data-billing-number="@Model.MsapBillingNumber"
+                        data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
+                        <span class="material-symbols-outlined" aria-hidden="true">lock_open</span> Reopen for revision
                     </button>
                 }
                 else
@@ -141,39 +145,6 @@
     </div>
 </div>
 
-@if (canReverse)
-{
-    <div class="modal fade" id="reopenBillingModal" tabindex="-1" aria-labelledby="reopenBillingModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <form asp-action="ReopenForRevision" asp-route-id="@Model.MsapBillingId" method="post">
-                    @Html.AntiForgeryToken()
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="reopenBillingModalLabel">Reopen Billing #@Model.MsapBillingNumber for Revision</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body ui-stack">
-                        <p class="ui-body">Reopening this billing will return it to <strong>For Posting</strong> status, revert its linked tickets to <strong>For Billing</strong>, reopen its COS, and void its recorded Sales Book entry.</p>
-                        @if (Model.PeriodStatus == MsapPeriodStatus.Final)
-                        {
-                            <div class="alert alert-warning py-2 mb-2">
-                                <strong>Period Finalized:</strong> This bill was included in a finalized month-end close. Reopening it will tag it as <strong>Adjusted</strong> and log this action in the change audit history.
-                            </div>
-                        }
-                        <div class="form-group">
-                            <label class="form-label" for="reopenReason">Reason for revision <span class="text-danger">*</span></label>
-                            <textarea class="form-control" id="reopenReason" name="reason" rows="3" required placeholder="State why this billing is being reopened (e.g. rate correction, wrong customer details, WHT adjustment)..."></textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="modern-btn-secondary" data-bs-dismiss="modal">Keep approved</button>
-                        <button type="submit" class="modern-btn-warning">Confirm Reopen for Revision</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-}
 @section Scripts {
     <script>
         window.IBS_TOUR_STEPS = [
@@ -189,6 +160,54 @@
         });
     </script>
     <script>
+        $('#btnReopenBilling').on('click', async function () {
+            const btn = this;
+            const isFinal = btn.dataset.finalized === 'true';
+            const billingNo = btn.dataset.billingNumber;
+            const confirmResult = await ModernAlert.confirm({
+                title: `Reopen Billing #${billingNo}?`,
+                text: `
+                    <div class="msap-adjustment-dialog app-ui ui-stack text-start">
+                        <p class="ui-body mb-2">Reopening this billing will return it to <strong>For Posting</strong> status, revert linked tickets to <strong>For Billing</strong>, reopen the COS, and void its recorded Sales Book entry.</p>
+                        ${isFinal ? `<div class="alert alert-warning py-2 mb-2 text-start small">
+                            <strong>Period Finalized:</strong> This bill was included in a finalized month-end close. Reopening it will tag it as <strong>Adjusted</strong> and log this action in the change audit history.
+                        </div>` : ''}
+                        <div class="ui-field">
+                            <label class="ui-label" for="swalReopenReason">Reason for revision <span class="text-danger">*</span></label>
+                            <textarea id="swalReopenReason" class="modern-input" rows="3" placeholder="State why this billing is being reopened (e.g. rate correction, wrong customer details, WHT adjustment)..."></textarea>
+                        </div>
+                    </div>
+                `,
+                icon: 'warning',
+                confirmText: 'Reopen for Revision',
+                cancelText: 'Keep Approved',
+                didOpen: () => document.getElementById('swalReopenReason')?.focus(),
+                preConfirm: () => {
+                    const reason = document.getElementById('swalReopenReason')?.value?.trim();
+                    if (!reason || reason.length < 5) {
+                        Swal.showValidationMessage('Please provide a reason (minimum 5 characters).');
+                        return false;
+                    }
+                    return reason;
+                }
+            });
+
+            if (!confirmResult.isConfirmed) return;
+
+            ModernAlert.showLoading('Reopening billing for revision...');
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = btn.dataset.action;
+            form.innerHTML = `
+                <input type="hidden" name="__RequestVerificationToken" value="${token}" />
+                <input type="hidden" name="id" value="${btn.dataset.id}" />
+                <input type="hidden" name="reason" value="${confirmResult.value}" />
+            `;
+            document.body.appendChild(form);
+            form.submit();
+        });
+
         $('#postReviewedBilling').on('submit', async function (event) {
             event.preventDefault();
             const form = this;

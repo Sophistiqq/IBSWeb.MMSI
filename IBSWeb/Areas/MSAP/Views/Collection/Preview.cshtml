@@ -76,7 +76,12 @@
                     }
                     @if (canRevertBanking)
                     {
-                        <button type="button" class="modern-btn-secondary" data-bs-toggle="modal" data-bs-target="#revertBankingModal">
+                        <button type="button" class="modern-btn-secondary" id="btnRevertBanking"
+                            data-action="@Url.Action("RevertBankingStep", "Collection")"
+                            data-id="@Model.MsapCollectionId"
+                            data-step="@(Model.ClearedDate.HasValue ? "Cleared" : "Deposited")"
+                            data-cleared="@(Model.ClearedDate.HasValue ? "true" : "false")"
+                            data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
                             <span class="material-symbols-outlined" aria-hidden="true">undo</span> Revert banking step
                         </button>
                     }
@@ -172,47 +177,60 @@
     </main>
 </div>
 
-@if (canRevertBanking)
-{
-    <div class="modal fade" id="revertBankingModal" tabindex="-1" aria-labelledby="revertBankingModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <form asp-action="RevertBankingStep" method="post">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="id" value="@Model.MsapCollectionId" />
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="revertBankingModalLabel">Revert Banking Step</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body ui-stack">
-                        <p class="ui-body">
-                            @(Model.ClearedDate.HasValue 
-                                ? "This will revert the Cleared status back to Deposited so clearing date or details can be corrected."
-                                : "This will revert the Deposited status back to Undeposited so deposit date, bank account, or collection details can be corrected.")
-                        </p>
-                        @if (Model.PeriodStatus == MsapPeriodStatus.Final)
-                        {
-                            <div class="alert alert-warning py-2 mb-2">
-                                <strong>Period Finalized:</strong> This collection was included in a finalized month-end period. Reverting will tag it as <strong>Adjusted</strong> and log this step in the change audit history.
-                            </div>
-                        }
-                        <div class="form-group">
-                            <label class="form-label" for="revertReason">Reason for reverting <span class="text-danger">*</span></label>
-                            <textarea class="form-control" id="revertReason" name="reason" rows="3" required placeholder="State why this banking step is being reverted..."></textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="modern-btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="modern-btn-warning"><span class="material-symbols-outlined" aria-hidden="true">undo</span> Confirm Revert</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-}
+<form id="collectionTokenForm" style="display:none;">@Html.AntiForgeryToken()</form>
+
 @section Scripts
 {
     <script>
+        $('#btnRevertBanking').on('click', async function () {
+            const btn = this;
+            const isFinal = btn.dataset.finalized === 'true';
+            const isCleared = btn.dataset.cleared === 'true';
+            const confirmResult = await ModernAlert.confirm({
+                title: 'Revert Banking Step?',
+                text: `
+                    <div class="msap-adjustment-dialog app-ui ui-stack text-start">
+                        <p class="ui-body mb-2">${isCleared 
+                            ? 'This will revert the Cleared status back to Deposited so clearing date or details can be corrected.'
+                            : 'This will revert the Deposited status back to Undeposited so deposit date, bank account, or collection details can be corrected.'}</p>
+                        ${isFinal ? `<div class="alert alert-warning py-2 mb-2 text-start small">
+                            <strong>Period Finalized:</strong> This collection was included in a finalized month-end period. Reverting will tag it as <strong>Adjusted</strong> and log this step in the change audit history.
+                        </div>` : ''}
+                        <div class="ui-field">
+                            <label class="ui-label" for="swalRevertReason">Reason for reverting <span class="text-danger">*</span></label>
+                            <textarea id="swalRevertReason" class="modern-input" rows="3" placeholder="State why this banking step is being reverted..."></textarea>
+                        </div>
+                    </div>
+                `,
+                icon: 'warning',
+                confirmText: 'Revert Step',
+                cancelText: 'Keep Current',
+                didOpen: () => document.getElementById('swalRevertReason')?.focus(),
+                preConfirm: () => {
+                    const reason = document.getElementById('swalRevertReason')?.value?.trim();
+                    if (!reason || reason.length < 5) {
+                        Swal.showValidationMessage('Please provide a reason (minimum 5 characters).');
+                        return false;
+                    }
+                    return reason;
+                }
+            });
+
+            if (!confirmResult.isConfirmed) return;
+
+            ModernAlert.showLoading('Reverting banking step...');
+            const token = document.querySelector('#collectionTokenForm input[name="__RequestVerificationToken"]')?.value;
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = btn.dataset.action;
+            form.innerHTML = `
+                <input type="hidden" name="__RequestVerificationToken" value="${token}" />
+                <input type="hidden" name="id" value="${btn.dataset.id}" />
+                <input type="hidden" name="reason" value="${confirmResult.value}" />
+            `;
+            document.body.appendChild(form);
+            form.submit();
+        });
         window.IBS_TOUR_STEPS = [
             { selector: '[aria-labelledby="receiptDetailsHeading"]', title: 'Receipt details', text: 'Review the service customer, receipt date and payment reference against the received payment.', interactive: false },
             { selector: '[aria-labelledby="coveredBillingsHeading"]', title: 'Covered billings', text: 'Review the payment and withholding allocated to each bill and its remaining balance. Open a billing number to review that bill separately.', interactive: false },

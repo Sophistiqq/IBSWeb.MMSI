@@ -90,7 +90,12 @@
                 @if (canConfirm) { <button type="button" class="ui-button ui-button--primary" id="confirmOtherTugCharge" hidden="@editing" data-url="@Url.Action("Confirm")">Confirm saved charges</button> }
                 @if (canReopen)
                 {
-                    <button type="button" class="modern-btn-warning" data-bs-toggle="modal" data-bs-target="#reopenChargeModal">
+                    <button type="button" class="modern-btn-warning" id="btnReopenCharge"
+                        data-action="@Url.Action("Reopen", "OtherTugCharge")"
+                        data-id="@Model.Id"
+                        data-cos-id="@Model.CustomerOrderSlipId"
+                        data-reference="@Model.Charge?.ProviderReference"
+                        data-finalized="@(Model.Charge?.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
                         <span class="material-symbols-outlined" aria-hidden="true">lock_open</span> Reopen to revise
                     </button>
                 }
@@ -99,43 +104,57 @@
     </main>
 </div>
 
-@if (canReopen)
-{
-    <div class="modal fade" id="reopenChargeModal" tabindex="-1" aria-labelledby="reopenChargeModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <form asp-action="Reopen" method="post">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="id" value="@Model.Id" />
-                    <input type="hidden" name="customerOrderSlipId" value="@Model.CustomerOrderSlipId" />
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="reopenChargeModalLabel">Reopen Provider Charge @Model.Charge?.ProviderReference</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body ui-stack">
-                        <p class="ui-body">Reopening this charge will unlock allocations for revision and reverse the recognized AP liability until re-confirmed. Reopening is only allowed if no active Check Voucher payment is linked in IBS.</p>
-                        @if (Model.Charge?.PeriodStatus == MsapPeriodStatus.Final)
-                        {
-                            <div class="alert alert-warning py-2 mb-2">
-                                <strong>Period Finalized:</strong> This charge was included in a finalized month-end period. Reopening will tag it as <strong>Adjusted</strong> and log all revisions in the change audit history.
-                            </div>
-                        }
-                        <div class="form-group">
-                            <label class="form-label" for="reopenReason">Reason for revision <span class="text-danger">*</span></label>
-                            <textarea class="form-control" id="reopenReason" name="reason" rows="3" required placeholder="State why this confirmed provider charge needs revision..."></textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="modern-btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="modern-btn-warning"><span class="material-symbols-outlined" aria-hidden="true">lock_open</span> Confirm Reopen</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-}
 @section Scripts {
     <script>
+        $('#btnReopenCharge').on('click', async function () {
+            const btn = this;
+            const isFinal = btn.dataset.finalized === 'true';
+            const refNo = btn.dataset.reference;
+            const confirmResult = await ModernAlert.confirm({
+                title: `Reopen Provider Charge ${refNo}?`,
+                text: `
+                    <div class="msap-adjustment-dialog app-ui ui-stack text-start">
+                        <p class="ui-body mb-2">Reopening this charge will unlock allocations for revision and reverse the recognized AP liability until re-confirmed. Reopening is only allowed if no active Check Voucher payment is linked in IBS.</p>
+                        ${isFinal ? `<div class="alert alert-warning py-2 mb-2 text-start small">
+                            <strong>Period Finalized:</strong> This charge was included in a finalized month-end period. Reopening will tag it as <strong>Adjusted</strong> and log all revisions in the change audit history.
+                        </div>` : ''}
+                        <div class="ui-field">
+                            <label class="ui-label" for="swalReopenChargeReason">Reason for revision <span class="text-danger">*</span></label>
+                            <textarea id="swalReopenChargeReason" class="modern-input" rows="3" placeholder="State why this confirmed provider charge needs revision..."></textarea>
+                        </div>
+                    </div>
+                `,
+                icon: 'warning',
+                confirmText: 'Reopen to Revise',
+                cancelText: 'Keep Confirmed',
+                didOpen: () => document.getElementById('swalReopenChargeReason')?.focus(),
+                preConfirm: () => {
+                    const reason = document.getElementById('swalReopenChargeReason')?.value?.trim();
+                    if (!reason || reason.length < 5) {
+                        Swal.showValidationMessage('Please provide a reason (minimum 5 characters).');
+                        return false;
+                    }
+                    return reason;
+                }
+            });
+
+            if (!confirmResult.isConfirmed) return;
+
+            ModernAlert.showLoading('Reopening provider charge...');
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = btn.dataset.action;
+            form.innerHTML = `
+                <input type="hidden" name="__RequestVerificationToken" value="${token}" />
+                <input type="hidden" name="id" value="${btn.dataset.id}" />
+                <input type="hidden" name="customerOrderSlipId" value="${btn.dataset.cosId}" />
+                <input type="hidden" name="reason" value="${confirmResult.value}" />
+            `;
+            document.body.appendChild(form);
+            form.submit();
+        });
+
         window.IBS_TOUR_STEPS = [
             { selector: '.other-tug-charge-workspace .ui-page-header', title: 'Provider charge status', text: 'Check the provider and whether the charges are awaiting review or confirmed. Provider costs are separate from customer billing; payment is handled in IBS.', interactive: false },
             { selector: '[data-charge-fields]', title: 'Provider bill and VAT', text: 'Enter the provider reference and document date, and attach the supporting document when available. Includes VAT starts enabled for a new charge; check it against the provider document. Saved charges must be opened with Edit before changing them.', interactive: false },
