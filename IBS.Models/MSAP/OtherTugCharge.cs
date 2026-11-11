@@ -33,6 +33,9 @@ namespace IBS.Models.MSAP
         public string? ConfirmedByName { get; set; }
         [Column(TypeName = "timestamp without time zone")]
         public DateTime? ConfirmedAt { get; set; }
+        [Column(TypeName = "varchar(20)")]
+        [MaxLength(20)]
+        public string? PeriodStatus { get; set; }
         public List<OtherTugChargeLine> Lines { get; set; } = [];
     }
 }

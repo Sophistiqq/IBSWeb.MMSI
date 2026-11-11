@@ -28,11 +28,6 @@ namespace IBSWeb.Areas.MSAPAdmin.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Close(int year, int month, CancellationToken cancellationToken)
         {
-            if (!MsapConstants.EnforceClosedPeriods)
-            {
-                TempData["error"] = "MSAP month closing is suspended pending agreement on late-ticket handling.";
-                return RedirectToAction(nameof(Index));
-            }
             try
             {
                 var username = User.Identity?.Name ?? "System";
@@ -56,6 +51,8 @@ namespace IBSWeb.Areas.MSAPAdmin.Controllers
                     period.ClosedDate = DateTimeHelper.GetCurrentPhilippineTime();
                     await unitOfWork.PostedPeriod.UpdateAsync(period, cancellationToken);
                 }
+
+                await unitOfWork.PostedPeriod.FinalizePeriodRecordsAsync(year, month, cancellationToken);
 
                 var audit = new AuditTrail(username, $"Closed posting period {new DateOnly(year, month, 1):MMMM yyyy}", "Posting Period", period.Id);
                 await unitOfWork.AuditTrail.AddAsync(audit, cancellationToken);

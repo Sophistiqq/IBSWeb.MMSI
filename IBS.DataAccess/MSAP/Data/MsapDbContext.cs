@@ -52,6 +52,8 @@ namespace IBS.DataAccess.MSAP.Data
 
         public DbSet<CollectionBill> MsapCollectionBills { get; set; }
 
+        public DbSet<MsapAdjustmentLog> MsapAdjustmentLogs { get; set; }
+
         #endregion
 
         #region --Master File Entity
@@ -131,6 +133,12 @@ namespace IBS.DataAccess.MSAP.Data
             builder.Entity<VesselScheduleServiceEntry>().ToTable("mmsi_vessel_schedule_service_entries");
             builder.Entity<UserAccess>().ToTable("mmsi_user_accesses");
             builder.Entity<MsapPostedPeriod>().ToTable("mmsi_posted_periods");
+            builder.Entity<MsapAdjustmentLog>(log =>
+            {
+                log.ToTable("mmsi_adjustment_logs");
+                log.HasIndex(x => new { x.DocumentType, x.RecordId });
+                log.HasIndex(x => x.EditedDate);
+            });
             builder.Entity<ApplicationUser>().Ignore(u => u.UserNotifications)
                 .ToTable("AspNetUsers", "public", table => table.ExcludeFromMigrations());
             builder.Entity<IdentityRole>()

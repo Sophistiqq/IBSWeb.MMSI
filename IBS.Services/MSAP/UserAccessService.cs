@@ -21,8 +21,8 @@ namespace IBS.Services.MSAP
         {
             if (!Enum.IsDefined(procedure) || procedure is ProcedureEnum.EditBilling or ProcedureEnum.SetTariff or ProcedureEnum.ApproveTariff
                 or ProcedureEnum.DeleteDispatchTicket or ProcedureEnum.DeleteCustomerOrderSlip
-                or ProcedureEnum.CloseCustomerOrderSlip or ProcedureEnum.ReverseBilling
-                or ProcedureEnum.CreateDisbursement or ProcedureEnum.ManagePostedPeriod or ProcedureEnum.ViewInventoryReport
+                or ProcedureEnum.CloseCustomerOrderSlip
+                or ProcedureEnum.CreateDisbursement or ProcedureEnum.ViewInventoryReport
                 or ProcedureEnum.ManageMsapImport)
             {
                 return false;
@@ -70,6 +70,8 @@ namespace IBS.Services.MSAP
                 ProcedureEnum.EditDispatchTicket => userAccess.CanEditDispatchTicket,
                 ProcedureEnum.CreateBilling => userAccess.CanCreateBilling,
                 ProcedureEnum.DeleteBilling => userAccess.CanDeleteBilling,
+                ProcedureEnum.ReverseBilling => userAccess.CanReverseBilling,
+                ProcedureEnum.ManagePostedPeriod => false,
                 ProcedureEnum.CreateCollection => userAccess.CanCreateCollection,
                 ProcedureEnum.CreateCustomerOrderSlip => userAccess.CanCreateCustomerOrderSlip,
                 ProcedureEnum.EditCustomerOrderSlip => userAccess.CanEditCustomerOrderSlip,
@@ -212,6 +214,7 @@ namespace IBS.Services.MSAP
                 if (existing.CanApproveTariff != model.CanApproveTariff) changes.Add($"Approve Tariff: {existing.CanApproveTariff} → {model.CanApproveTariff}");
                 if (existing.CanCreateBilling != model.CanCreateBilling) changes.Add($"Create Billing: {existing.CanCreateBilling} → {model.CanCreateBilling}");
                 if (existing.CanDeleteBilling != model.CanDeleteBilling) changes.Add($"Discard draft billing: {existing.CanDeleteBilling} → {model.CanDeleteBilling}");
+                if (existing.CanReverseBilling != model.CanReverseBilling) changes.Add($"Reopen approved billing: {existing.CanReverseBilling} → {model.CanReverseBilling}");
                 if (existing.CanCreateCollection != model.CanCreateCollection) changes.Add($"Create Collection: {existing.CanCreateCollection} → {model.CanCreateCollection}");
                 if (existing.CanCreateCustomerOrderSlip != model.CanCreateCustomerOrderSlip) changes.Add($"Create schedule: {existing.CanCreateCustomerOrderSlip} → {model.CanCreateCustomerOrderSlip}");
                 if (existing.CanEditCustomerOrderSlip != model.CanEditCustomerOrderSlip) changes.Add($"Edit booking: {existing.CanEditCustomerOrderSlip} → {model.CanEditCustomerOrderSlip}");
@@ -256,6 +259,7 @@ namespace IBS.Services.MSAP
                     existing.CanApproveTariff = model.CanApproveTariff;
                     existing.CanCreateBilling = model.CanCreateBilling;
                     existing.CanDeleteBilling = model.CanDeleteBilling;
+                    existing.CanReverseBilling = model.CanReverseBilling;
                     existing.CanCreateCollection = model.CanCreateCollection;
                     existing.CanCreateCustomerOrderSlip = model.CanCreateCustomerOrderSlip;
                     existing.CanEditCustomerOrderSlip = model.CanEditCustomerOrderSlip;
@@ -303,7 +307,6 @@ namespace IBS.Services.MSAP
             model.CanDeleteDispatchTicket = false;
             model.CanDeleteCustomerOrderSlip = false;
             model.CanCloseCustomerOrderSlip = false;
-            model.CanReverseBilling = false;
             model.CanCreateDisbursement = false;
             model.CanViewInventoryReport = false;
             model.CanManageMsapImport = false;

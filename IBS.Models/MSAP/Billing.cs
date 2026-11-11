@@ -217,6 +217,10 @@ namespace IBS.Models.MSAP
         [Column("unpost_remarks")]
         public string? UnpostRemarks { get; set; }
 
+        [Column(TypeName = "varchar(20)")]
+        [MaxLength(20)]
+        public string? PeriodStatus { get; set; }
+
         [NotMapped]
         public List<SelectListItem>? CustomerPrincipal { get; set; }
 

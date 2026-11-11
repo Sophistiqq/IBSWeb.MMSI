@@ -229,6 +229,10 @@ namespace IBS.Models.MSAP
 
         #endregion ---Columns with Table relations---
 
+        [Column(TypeName = "varchar(20)")]
+        [MaxLength(20)]
+        public string? PeriodStatus { get; set; }
+
         [NotMapped]
         public bool IsMonthClosed { get; set; }
     }

@@ -13,5 +13,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
         Task AddAsync(MsapPostedPeriod period, CancellationToken cancellationToken = default);
 
         Task UpdateAsync(MsapPostedPeriod period, CancellationToken cancellationToken = default);
+
+        Task FinalizePeriodRecordsAsync(int year, int month, CancellationToken cancellationToken = default);
     }
 }

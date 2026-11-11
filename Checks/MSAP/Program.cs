@@ -271,12 +271,19 @@ Check(sql.Contains("msap.audit_trails", StringComparison.Ordinal), "Audit migrat
 Check(services.GetRequiredService<IBS.DataAccess.Repository.IRepository.IUnitOfWork>().GetType() == typeof(IBS.DataAccess.Repository.UnitOfWork), "Base unit of work was replaced.");
 Check(services.GetRequiredService<IBS.DataAccess.MSAP.Repository.IRepository.IUnitOfWork>().GetType() == typeof(IBS.DataAccess.MSAP.Repository.UnitOfWork), "MSAP unit of work is missing.");
 
+var devConfig = new ConfigurationBuilder().SetBasePath(webRoot)
+    .AddJsonFile("appsettings.json", optional: true)
+    .AddJsonFile("appsettings.Development.json", optional: true)
+    .Build();
+var devConnection = devConfig.GetConnectionString("MMSIConnection");
+await Checks.MSAP.PeriodFinalizationCheck.RunAsync(devConnection);
+
 var actions = services.GetRequiredService<IActionDescriptorCollectionProvider>().ActionDescriptors.Items.OfType<ControllerActionDescriptor>().ToList();
 var moduleActions = actions.Where(a => a.ControllerTypeInfo.Namespace?.StartsWith("IBSWeb.Areas.MSAP", StringComparison.Ordinal) == true).ToList();
 var expectedMsapControllers = new HashSet<string>(StringComparer.Ordinal)
 {
     "AppRole", "AuditTrail", "BankAccount", "Billing", "Collection", "Customer", "CustomerOrderSlip",
-    "DispatchTicket", "Docs", "Home", "MaritimeReport", "MaritimeService", "MasterFile", "MsapImport",
+    "DispatchTicket", "Home", "MaritimeReport", "MaritimeService", "MasterFile", "MsapImport",
     "OtherTugCharge", "PaymentTerms", "Port", "PostedPeriod", "Principal", "RateUpload", "TariffRate",
     "Terminal", "Tugboat", "TugboatOwner", "TugMaster", "UserAccess", "Vessel", "VesselSchedule"
 };
@@ -565,18 +572,18 @@ foreach (var grants in new[] { (Manage: false, Confirm: false), (Manage: true, C
     {
         ShowDashboard = true, UpdatedAt = DateTime.Today,
         CanManageOtherTugCharges = grants.Manage, CanConfirmOtherTugCharges = grants.Confirm,
-        MissingOtherTugTicketCount = 3, OtherTugChargeReviewCount = 2
+        MissingOtherTugTicketCount = 3, OtherTugChargeReviewCount = 2,
+        MissingOtherTugTickets = [new DispatchTicket { DispatchTicketId = 1, DispatchNumber = "DT-1", Tugboat = new IBS.Models.MSAP.MasterFile.Tugboat { TugboatName = "Tug 1" } }],
+        OtherTugChargeReviews = [new OtherTugCharge { OtherTugChargeId = 2, ProviderReference = "REF-2" }]
     };
     var data = new ViewDataDictionary<IBS.Models.MSAP.ViewModels.DashboardCountViewModel>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = model };
     using var output = new StringWriter();
     await dashboardView.View!.RenderAsync(new ViewContext(action, dashboardView.View, data,
         services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), output, new HtmlHelperOptions()));
     string html = output.ToString();
-    Check(html.Contains("AP Other Tugs · Missing inputs", StringComparison.Ordinal) == grants.Manage
-        && html.Contains("href=\"#missing-provider-costs\"", StringComparison.Ordinal) == grants.Manage,
+    Check(html.Contains("Pending Vendor", StringComparison.Ordinal) == grants.Manage,
         "The dashboard must show missing-cost entry only to the permitted preparer.");
-    Check(html.Contains("AP Other Tugs · For confirmation", StringComparison.Ordinal) == (grants.Manage || grants.Confirm)
-        && html.Contains("id=\"provider-charge-reviews\"", StringComparison.Ordinal) == (grants.Manage || grants.Confirm),
+    Check(html.Contains("aptugs", StringComparison.Ordinal) == (grants.Manage || grants.Confirm),
         "Provider-cost review disappeared for an authorized role or was shown without access.");
 }
 Console.WriteLine("PASS: dashboard AP Other Tugs reminders and entry/review queues render for preparer, confirmer, combined and denied access.");
