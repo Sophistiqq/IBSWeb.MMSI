@@ -12,7 +12,7 @@ The agent should make the smallest clean change that matches the existing codeba
 
 For every implementation task, follow this workflow:
 
-1. Read this `AGENTS.md` before making changes.
+1. Read this `AGENTS.md` before making changes. When touching MSAP views, UI components, or client scripts, also read `MSAP_AGENTS.md`.
 2. Read the applicable `.editorconfig` rules for the files that may be changed.
 3. Understand the requested behavior before editing code.
 4. Inspect the existing implementation, related code paths, and surrounding conventions.
@@ -125,6 +125,7 @@ Apply these principles to new and changed code within the requested scope. Use t
 * Put non-trivial query logic, storage workflows, and access rules into services or existing repository classes.
 * Preserve existing route patterns unless the task requires a route change.
 * Return consistent HTTP results and avoid inventing custom response wrappers unless the repo already expects them.
+* For MSAP module views, UI components, and client scripts, strictly follow the design system and house utilities defined in `MSAP_AGENTS.md`.
 
 ## Data and Persistence
 
@@ -246,6 +247,7 @@ Before reporting a task as complete, review the complete diff and confirm:
 * [ ] Business logic remains in the appropriate layer.
 * [ ] Existing accounting, approval, audit, security, and operational behavior was preserved unless intentionally changed.
 * [ ] Applicable `.editorconfig` rules were followed.
+* [ ] MSAP UI standards from `MSAP_AGENTS.md` were followed if MSAP views, UI, or scripts were touched.
 * [ ] Encoding, line endings, indentation, and final newlines were checked.
 * [ ] Relevant build, tests, or targeted verification were run when possible.
 * [ ] Validation results are accurately reported.
