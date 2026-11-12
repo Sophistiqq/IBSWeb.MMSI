@@ -851,6 +851,11 @@ else
                             }
                         });
 
+                        var actionList = document.querySelector('.dashboard-action-list');
+                        if (actionList) {
+                            actionList.scrollTop = 0;
+                        }
+
                         if (emptyState) {
                             emptyState.style.display = visibleCount === 0 ? 'flex' : 'none';
                         }
@@ -866,6 +871,11 @@ else
                         activeHoverCard.hidePopover();
                     }
                     activeHoverCard = null;
+                }
+
+                var actionList = document.querySelector('.dashboard-action-list');
+                if (actionList) {
+                    actionList.addEventListener('scroll', closeActiveHover, { passive: true });
                 }
 
                 function positionCard(trigger, card) {

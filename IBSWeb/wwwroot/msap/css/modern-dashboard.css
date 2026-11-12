@@ -357,7 +357,11 @@
     position: sticky;
     top: var(--ui-space-4);
     max-height: calc(100vh - var(--ui-space-5));
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .dashboard-sidebar-header {
@@ -366,6 +370,7 @@
     justify-content: space-between;
     gap: var(--ui-space-2);
     margin-bottom: var(--ui-space-2);
+    flex-shrink: 0;
 }
 
 .dashboard-sidebar-title {
@@ -388,6 +393,7 @@
     font-weight: var(--ui-weight-bold);
     background: var(--surface-container-highest, var(--surface-container));
     color: var(--on-surface);
+    flex-shrink: 0;
 }
 
 /* Redesigned segmented filter tabs */
@@ -402,6 +408,7 @@
     scrollbar-width: thin;
     scrollbar-color: var(--outline-variant) transparent;
     -webkit-overflow-scrolling: touch;
+    flex-shrink: 0;
 }
 
 .dashboard-filter-tabs::-webkit-scrollbar {
@@ -475,6 +482,25 @@
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-2);
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding-right: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--outline-variant) transparent;
+}
+
+.dashboard-action-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.dashboard-action-list::-webkit-scrollbar-thumb {
+    background: var(--outline-variant);
+    border-radius: 4px;
+}
+
+.dashboard-action-list::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .dashboard-action-item {
