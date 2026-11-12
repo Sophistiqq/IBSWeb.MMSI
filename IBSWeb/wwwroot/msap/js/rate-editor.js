@@ -136,6 +136,63 @@
         $(terminal).trigger('change');
         updateState();
     });
+    if (model.selectedCustomerId) {
+        filters[0].value = String(model.selectedCustomerId);
+        window.refreshModernSelect?.($(filters[0]));
+    }
+    if (model.selectedPortId) {
+        filters[1].value = String(model.selectedPortId);
+        window.refreshModernSelect?.($(filters[1]));
+        const terminal = filters[2];
+        terminal.replaceChildren(new Option('All terminals', ''));
+        model.terminals.filter(item => item.portId === Number(filters[1].value))
+            .forEach(item => terminal.add(new Option(item.name, item.id)));
+        if (model.selectedTerminalId) {
+            terminal.value = String(model.selectedTerminalId);
+        }
+        window.refreshModernSelect?.($(terminal));
+    } else if (model.selectedTerminalId) {
+        filters[2].value = String(model.selectedTerminalId);
+        window.refreshModernSelect?.($(filters[2]));
+    }
+    if (model.selectedServiceId) {
+        filters[3].value = String(model.selectedServiceId);
+        window.refreshModernSelect?.($(filters[3]));
+    }
+    if (canEdit && model.selectedCustomerId && model.selectedPortId && model.selectedTerminalId && model.selectedServiceId) {
+        const existingRow = rows.find(r => r.customerId === Number(model.selectedCustomerId)
+            && r.portId === Number(model.selectedPortId)
+            && r.terminalId === Number(model.selectedTerminalId)
+            && r.serviceId === Number(model.selectedServiceId));
+        if (!existingRow) {
+            const customer = model.customers.find(item => item.id === Number(model.selectedCustomerId));
+            const port = model.ports.find(item => item.id === Number(model.selectedPortId));
+            const terminal = model.terminals.find(item => item.id === Number(model.selectedTerminalId));
+            const service = model.services.find(item => item.id === Number(model.selectedServiceId));
+            if (customer && port && terminal && service && terminal.portId === port.id) {
+                const initialAmt = model.initialAmount != null ? String(model.initialAmount) : '';
+                const newRow = {
+                    customerId: customer.id, customerCode: customer.code, customerName: customer.name,
+                    portId: port.id, portName: port.name,
+                    terminalId: terminal.id, terminalName: terminal.name,
+                    serviceId: service.id, serviceName: service.name,
+                    effectiveDate: model.asOfDate, amount: initialAmt,
+                    originalAmount: '', originalDate: model.asOfDate
+                };
+                rows.push(newRow);
+                appendRow(newRow);
+                dirty = true;
+                setTimeout(() => newRow.amountInput?.focus(), 0);
+            }
+        } else {
+            if (model.initialAmount != null && (!existingRow.amount || scaled(existingRow.amount) === null)) {
+                existingRow.amount = String(model.initialAmount);
+                if (existingRow.amountInput) existingRow.amountInput.value = existingRow.amount;
+                dirty = true;
+            }
+            setTimeout(() => existingRow.amountInput?.focus(), 0);
+        }
+    }
     document.getElementById('rateAdd')?.addEventListener('click', () => {
         if (filters.some(filter => !filter.value)) { showError('Select a customer, port, terminal and service first.'); return; }
         const customer = model.customers.find(item => item.id === Number(filters[0].value));

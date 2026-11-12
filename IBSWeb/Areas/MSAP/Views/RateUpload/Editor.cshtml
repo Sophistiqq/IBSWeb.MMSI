@@ -15,8 +15,8 @@
             <p class="ui-page-description ui-caption ui-muted">@(Model.Kind == RateTableKind.BAF ? "Enter the final calculated BAF amount. Charging follows the approved COS method." : "Maintain base service charges independently of BAF.") @(canEdit ? "Saving a draft leaves live rates unchanged." : "View and export access only.")</p>
         </header>
         <nav class="rate-list-filters" aria-label="Rate table">
-            <a asp-action="Editor" asp-route-kind="Tariff" asp-route-asOfDate="@Model.AsOfDate.ToString("yyyy-MM-dd")" class="modern-btn-secondary" aria-current="@(Model.Kind == RateTableKind.Tariff ? "page" : null)">Tariff rates</a>
-            <a asp-action="Editor" asp-route-kind="BAF" asp-route-asOfDate="@Model.AsOfDate.ToString("yyyy-MM-dd")" class="modern-btn-secondary" aria-current="@(Model.Kind == RateTableKind.BAF ? "page" : null)">BAF rates</a>
+            <a asp-action="Editor" asp-route-kind="Tariff" asp-route-asOfDate="@Model.AsOfDate.ToString("yyyy-MM-dd")" asp-route-customerId="@Model.SelectedCustomerId" asp-route-portId="@Model.SelectedPortId" asp-route-terminalId="@Model.SelectedTerminalId" asp-route-serviceId="@Model.SelectedServiceId" asp-route-amount="@Model.InitialAmount" class="modern-btn-secondary" aria-current="@(Model.Kind == RateTableKind.Tariff ? "page" : null)">Tariff rates</a>
+            <a asp-action="Editor" asp-route-kind="BAF" asp-route-asOfDate="@Model.AsOfDate.ToString("yyyy-MM-dd")" asp-route-customerId="@Model.SelectedCustomerId" asp-route-portId="@Model.SelectedPortId" asp-route-terminalId="@Model.SelectedTerminalId" asp-route-serviceId="@Model.SelectedServiceId" asp-route-amount="@Model.InitialAmount" class="modern-btn-secondary" aria-current="@(Model.Kind == RateTableKind.BAF ? "page" : null)">BAF rates</a>
         </nav>
         @if (Model.Kind == RateTableKind.BAF)
         {
@@ -24,10 +24,10 @@
         }
         <section class="ui-panel ui-stack">
             <div class="rate-editor-filters">
-                <div class="ui-field"><label class="ui-label" for="rateCustomer">Customer</label><select id="rateCustomer" class="js-modern-select"><option value="">All customers</option>@foreach (var item in Model.Customers) { <option value="@item.Id">@item.Code - @item.Name</option> }</select></div>
-                <div class="ui-field"><label class="ui-label" for="ratePort">Port</label><select id="ratePort" class="js-modern-select"><option value="">All ports</option>@foreach (var item in Model.Ports) { <option value="@item.Id">@item.Name</option> }</select></div>
-                <div class="ui-field"><label class="ui-label" for="rateTerminal">Terminal</label><select id="rateTerminal" class="js-modern-select"><option value="">All terminals</option>@foreach (var item in Model.Terminals) { <option value="@item.Id" data-port="@item.PortId">@item.Name</option> }</select></div>
-                <div class="ui-field"><label class="ui-label" for="rateService">Service</label><select id="rateService" class="js-modern-select"><option value="">All services</option>@foreach (var item in Model.Services) { <option value="@item.Id">@item.Name</option> }</select></div>
+                <div class="ui-field"><label class="ui-label" for="rateCustomer">Customer</label><select id="rateCustomer" class="js-modern-select"><option value="">All customers</option>@foreach (var item in Model.Customers) { <option value="@item.Id" selected="@(item.Id == Model.SelectedCustomerId)">@item.Code - @item.Name</option> }</select></div>
+                <div class="ui-field"><label class="ui-label" for="ratePort">Port</label><select id="ratePort" class="js-modern-select"><option value="">All ports</option>@foreach (var item in Model.Ports) { <option value="@item.Id" selected="@(item.Id == Model.SelectedPortId)">@item.Name</option> }</select></div>
+                <div class="ui-field"><label class="ui-label" for="rateTerminal">Terminal</label><select id="rateTerminal" class="js-modern-select"><option value="">All terminals</option>@foreach (var item in Model.Terminals) { <option value="@item.Id" data-port="@item.PortId" selected="@(item.Id == Model.SelectedTerminalId)">@item.Name</option> }</select></div>
+                <div class="ui-field"><label class="ui-label" for="rateService">Service</label><select id="rateService" class="js-modern-select"><option value="">All services</option>@foreach (var item in Model.Services) { <option value="@item.Id" selected="@(item.Id == Model.SelectedServiceId)">@item.Name</option> }</select></div>
                 <div class="ui-field"><label class="ui-label" for="rateSearch">Search</label><input id="rateSearch" type="search" class="modern-input" placeholder="Customer / location / service" /></div>
             </div>
             <div class="rate-upload-heading">

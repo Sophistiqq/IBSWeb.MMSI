@@ -176,12 +176,13 @@ namespace Checks.MSAP
                 }];
                 var scheduleCount = await db.MsapVesselSchedules.CountAsync();
                 var zeroTariffResult = await schedules.CreateAsync(prepared, "check");
-                Check(!zeroTariffResult.IsSuccess && zeroTariffResult.Message!.Contains("Tariff rate must be greater than zero")
-                    && await db.MsapVesselSchedules.CountAsync() == scheduleCount,
-                    "A zero manual tariff was accepted or persisted a schedule.");
+                Check(zeroTariffResult.IsSuccess, "A pending rate on spot vessel must be allowed during schedule creation.");
+                var confirmPending = await schedules.ConfirmAsync(prepared.VesselScheduleId, prepared.CreatedDate, "check");
+                Check(!confirmPending.IsSuccess && confirmPending.Message!.Contains("pending rate"),
+                    "Approval must block a schedule with pending tariff rates.");
                 prepared.ServiceEntries[0].ManualTariffRate = 100m;
-                var preparedResult = await schedules.CreateAsync(prepared, "check");
-                Check(preparedResult.IsSuccess, $"Could not save schedule commercial settings and expected services: {preparedResult.Message}");
+                var updateResult = await schedules.UpdateAsync(prepared, "check");
+                Check(updateResult.IsSuccess, $"Could not update schedule with positive manual rate: {updateResult.Message}");
                 var restored = await schedules.GetByIdAsync(prepared.VesselScheduleId);
                 Check(restored!.ServiceEntries.Count == 1 && restored.CosDiscountPercent == customer.DefaultCosDiscountPercent && !restored.SbmaEnabled
                     && restored.ServiceEntries[0].ManualTariffRate == 100m, "Schedule details lost expected services, the positive manual rate or commercial settings.");

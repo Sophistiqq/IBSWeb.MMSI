@@ -26,31 +26,48 @@ namespace IBS.Services.MSAP
                 foreach (RateTableKind kind in Enum.GetValues<RateTableKind>())
                 {
                     decimal? amount = kind == RateTableKind.Tariff ? entry.ManualTariffRate : entry.ManualBafRate;
-                    if (!amount.HasValue)
-                    {
-                        continue;
-                    }
-                    RateUpload? captured = published.FirstOrDefault(update => update.RateKind == kind
-                        && JsonSerializer.Deserialize<List<RateUploadRowViewModel>>(update.RowsJson)!.Any(row => row.Selected
-                            && row.SourceScheduleId == schedule.VesselScheduleId && row.SourceRevision == schedule.Revision
-                            && row.SourceServiceEntryId == entry.VesselScheduleServiceEntryId && row.Amount == amount));
+                    decimal? tableRate = null;
                     bool eligible;
                     if (kind == RateTableKind.Tariff)
                     {
                         TariffRate? rate = await _work.TariffTable.GetApplicableRateAsync(schedule.CustomerId.GetValueOrDefault(), schedule.TerminalId, entry.ServiceId, plannedDate, ct);
+                        tableRate = rate?.Dispatch;
                         eligible = rate == null || rate.Dispatch == amount;
                     }
                     else
                     {
                         BafRate? rate = await _work.BafTable.GetApplicableRateAsync(schedule.CustomerId.GetValueOrDefault(), schedule.TerminalId, entry.ServiceId, plannedDate, ct);
+                        tableRate = rate?.Amount;
                         eligible = rate == null || rate.AsOfDate < ScheduledTicketCharges.BafCycleStart(plannedDate) || rate.Amount == amount;
                     }
+
+                    if (!amount.HasValue && tableRate.HasValue && tableRate > 0)
+                    {
+                        continue;
+                    }
+
+                    RateUpload? captured = amount.HasValue
+                        ? published.FirstOrDefault(update => update.RateKind == kind
+                            && JsonSerializer.Deserialize<List<RateUploadRowViewModel>>(update.RowsJson)!.Any(row => row.Selected
+                                && row.SourceScheduleId == schedule.VesselScheduleId && row.SourceRevision == schedule.Revision
+                                && row.SourceServiceEntryId == entry.VesselScheduleServiceEntryId && row.Amount == amount))
+                        : null;
+
+                    bool isPending = !amount.HasValue && (!tableRate.HasValue || (kind == RateTableKind.Tariff && tableRate <= 0));
+
                     result.Add(new ScheduleRateCaptureViewModel
                     {
                         ScheduleId = schedule.VesselScheduleId, EntryId = entry.VesselScheduleServiceEntryId, Kind = kind,
                         EffectiveDate = kind == RateTableKind.BAF ? ScheduledTicketCharges.BafCycleStart(plannedDate) : plannedDate,
                         PublishedUpdateId = captured?.RateUploadId,
-                        CanCapture = captured == null && eligible && schedule.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+                        CanCapture = captured == null && (eligible || isPending) && schedule.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled),
+                        CustomerId = schedule.CustomerId,
+                        PortId = schedule.PortId,
+                        TerminalId = schedule.TerminalId,
+                        ServiceId = entry.ServiceId,
+                        Amount = amount,
+                        IsPendingRate = isPending,
+                        ApplicableTableRate = tableRate
                     });
                 }
             }

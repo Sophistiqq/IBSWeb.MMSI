@@ -186,8 +186,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
             await SetActionPermissionsAsync();
             ViewBag.RateCaptures = await rates.GetScheduleCapturesAsync(schedule, ct);
-            ViewBag.CanCaptureRates = ViewBag.CanConfirm == true
-                && await accessControl.HasAccessAsync(User.FindFirstValue(ClaimTypes.NameIdentifier)!, ProcedureEnum.ApproveRateUpload);
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            ViewBag.CanManageRates = userId != null
+                && await accessControl.HasAnyAccessAsync(userId, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload);
+            ViewBag.CanCaptureRates = ViewBag.CanManageRates;
             ViewData["JobProgressActionStage"] = 1;
             ViewData["JobProgressActionTargetId"] = id;
             var job = schedule.CustomerOrderSlipId.HasValue
@@ -230,6 +232,51 @@ namespace IBSWeb.Areas.MSAP.Controllers
             return result.IsSuccess
                 ? RedirectToAction("Details", "CustomerOrderSlip", new { id = result.Data })
                 : RedirectToAction(nameof(Details), new { id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.ApproveSchedule)]
+        public async Task<IActionResult> AdoptTableRate(int scheduleId, int entryId, RateTableKind kind, CancellationToken ct)
+        {
+            var schedule = await LoadDetailsAsync(scheduleId, ct);
+            if (schedule == null)
+            {
+                return NotFound(new { message = "Schedule not found." });
+            }
+            if (schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+            {
+                return BadRequest(new { message = "Completed or cancelled schedules cannot be modified." });
+            }
+            var entry = schedule.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == entryId);
+            if (entry == null || entry.CancelledAt.HasValue)
+            {
+                return BadRequest(new { message = "Service entry not found." });
+            }
+            var rateDate = DateOnly.FromDateTime(schedule.PlannedStart);
+            decimal? tableRate;
+            if (kind == RateTableKind.Tariff)
+            {
+                var rate = await unitOfWork.TariffTable.GetApplicableRateAsync(schedule.CustomerId.GetValueOrDefault(), schedule.TerminalId, entry.ServiceId, rateDate, ct);
+                if (rate == null || rate.Dispatch <= 0)
+                {
+                    return BadRequest(new { message = "No valid rate found in rate table to adopt." });
+                }
+                tableRate = rate.Dispatch;
+                entry.ManualTariffRate = null;
+                entry.IsManualTariffOverride = false;
+            }
+            else
+            {
+                var rate = await unitOfWork.BafTable.GetApplicableRateAsync(schedule.CustomerId.GetValueOrDefault(), schedule.TerminalId, entry.ServiceId, rateDate, ct);
+                tableRate = rate?.Amount ?? 0m;
+                entry.ManualBafRate = null;
+            }
+            await unitOfWork.AuditTrail.AddAsync(new AuditTrail(User.Identity?.Name ?? "system",
+                $"Adopted {kind} table rate ({tableRate:N2}) for booking #{scheduleId} entry #{entryId}",
+                "Vessel Schedule", scheduleId), ct);
+            await unitOfWork.SaveAsync(ct);
+            return Json(new { success = true, newRate = tableRate?.ToString("N2"), rate = tableRate });
         }
 
         [HttpGet]

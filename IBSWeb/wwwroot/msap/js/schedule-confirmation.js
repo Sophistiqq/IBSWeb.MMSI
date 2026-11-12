@@ -73,24 +73,89 @@
             if (!response.ok || response.redirected) throw new Error('Rate lookup unavailable');
             const data = await response.json();
             cells.forEach(cell => {
-                const rate = cell.dataset.reviewRate === 'tariff' ? data.tariffRate : data.bafRate;
+                const kind = cell.dataset.reviewRate;
+                const rate = kind === 'tariff' ? data.tariffRate : data.bafRate;
                 const found = data.exists && rate != null;
                 const manual = cell.dataset.manual === 'true';
                 const formattedRate = found ? Number(rate).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 4}) : '';
-                cell.parentElement.classList.toggle('schedule-review-attention', manual);
+                const cellVal = Number((cell.textContent || '').replace(/,/g, '').trim());
+                const isZero = manual && cellVal === 0;
+                const isZeroBaf = kind === 'baf' && isZero;
+                const isZeroTariff = kind === 'tariff' && isZero;
+
+                cell.parentElement.classList.toggle('schedule-review-attention', manual && !isZeroBaf);
                 cell.parentElement.classList.toggle('schedule-review-override', manual && found);
                 if (!manual) cell.textContent = found ? formattedRate : 'No table match';
-                cell.parentElement.querySelector('[data-rate-source]').textContent = manual
-                    ? found ? 'Manual override · table estimate: ' + formattedRate : 'Manual rate · no table match'
-                    : found ? 'Table estimate · planned date' : 'Rate needs review';
+                const sourceEl = cell.parentElement.querySelector('[data-rate-source]');
+                sourceEl.textContent = manual
+                    ? isZeroBaf
+                        ? (found ? 'Zero BAF · table estimate: ' + formattedRate : 'Zero BAF')
+                        : isZeroTariff
+                            ? (found ? 'Zero tariff · table estimate: ' + formattedRate : 'Zero tariff')
+                            : (found ? 'Manual override · table estimate: ' + formattedRate : 'Manual rate · no table match')
+                    : found ? 'Table estimate · planned date' : 'Rate pending · no table match';
+
+                if (manual && found && review.dataset.adoptUrl && row.dataset.entryId) {
+                    let adoptBtn = cell.parentElement.querySelector('.schedule-adopt-rate');
+                    if (!adoptBtn) {
+                        adoptBtn = document.createElement('button');
+                        adoptBtn.type = 'button';
+                        adoptBtn.className = 'schedule-adopt-rate';
+                        adoptBtn.textContent = 'Adopt table rate';
+                        adoptBtn.title = `Adopt active table rate of ₱${formattedRate}`;
+                        adoptBtn.addEventListener('click', async e => {
+                            e.preventDefault();
+                            adoptBtn.disabled = true;
+                            try {
+                                const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+                                const body = new URLSearchParams({
+                                    scheduleId: review.dataset.scheduleId,
+                                    entryId: row.dataset.entryId,
+                                    kind: kind === 'tariff' ? 'Tariff' : 'BAF'
+                                });
+                                const res = await fetch(review.dataset.adoptUrl, {
+                                    method: 'POST',
+                                    headers: { 'RequestVerificationToken': token, 'X-Requested-With': 'XMLHttpRequest' },
+                                    body
+                                });
+                                const result = await res.json();
+                                if (!res.ok || !result.success) throw new Error(result.message || 'Could not adopt table rate.');
+                                cell.textContent = result.newRate || formattedRate;
+                                cell.dataset.manual = 'false';
+                                cell.classList.remove('schedule-review-manual');
+                                cell.parentElement.classList.remove('schedule-review-attention', 'schedule-review-override');
+                                sourceEl.textContent = 'Table estimate · planned date';
+                                cell.parentElement.querySelectorAll('.schedule-adopt-rate, .schedule-adopt-sep').forEach(el => el.remove());
+                                const captureWrapper = cell.parentElement.querySelector('.schedule-rate-capture-wrapper');
+                                if (captureWrapper) {
+                                    captureWrapper.innerHTML = '<small class="ui-caption text-muted">Standard table rate</small>';
+                                }
+                            } catch (err) {
+                                ModernAlert.error(err.message || 'Could not adopt table rate.');
+                                adoptBtn.disabled = false;
+                            }
+                        });
+                        const sep = document.createElement('span');
+                        sep.className = 'schedule-adopt-sep ui-caption ui-muted';
+                        sep.textContent = ' · ';
+                        sourceEl.after(sep, adoptBtn);
+                    }
+                }
             });
         } catch (_) {
             cells.forEach(cell => {
+                const kind = cell.dataset.reviewRate;
                 const manual = cell.dataset.manual === 'true';
-                cell.parentElement.classList.toggle('schedule-review-attention', manual);
+                const cellVal = Number((cell.textContent || '').replace(/,/g, '').trim());
+                const isZero = manual && cellVal === 0;
+                const isZeroBaf = kind === 'baf' && isZero;
+                const isZeroTariff = kind === 'tariff' && isZero;
+                cell.parentElement.classList.toggle('schedule-review-attention', manual && !isZeroBaf);
                 cell.parentElement.classList.toggle('schedule-review-override', false);
                 if (!manual) cell.textContent = 'Unavailable';
-                cell.parentElement.querySelector('[data-rate-source]').textContent = manual ? 'Saved manual rate · table lookup unavailable' : 'Could not check table rate';
+                cell.parentElement.querySelector('[data-rate-source]').textContent = manual
+                    ? isZeroBaf ? 'Zero BAF' : isZeroTariff ? 'Zero tariff' : 'Saved manual rate · table lookup unavailable'
+                    : 'Could not check table rate';
             });
         }
     });

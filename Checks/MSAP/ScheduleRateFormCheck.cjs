@@ -14,14 +14,14 @@ for (const readOnly of [false, true]) {
         ModernFormValidator: {validate: () => !tariff.required || Number(tariff.value) > 0}
     });
     vm.runInContext(provenance + validation + '\nthis.validate = validateForm;', context);
-    assert.equal(context.validate(), readOnly, 'Manual tariff cannot be blank; table-backed tariff needs no manual value.');
-    assert.equal(baf.value, readOnly ? '' : '0', 'Only an empty manual BAF should default to zero.');
+    assert.equal(context.validate(), true, 'Pending manual tariff can be blank for spot vessel scheduling.');
+    assert.equal(baf.value, '', 'Empty manual BAF stays blank as a pending rate.');
     tariff.value = '100';
     assert(context.validate());
     assert.equal(tariff.value, '100');
     if (!readOnly) {
         tariff.value = '0';
-        assert.equal(context.validate(), false, 'Zero manual tariff must be rejected.');
+        assert.equal(context.validate(), true, 'Zero manual tariff is permitted as pending rate.');
         tariff.value = '0.0001';
         assert(context.validate(), 'Positive tariff must be allowed.');
         baf.value = '25';
@@ -29,9 +29,9 @@ for (const readOnly of [false, true]) {
         assert.equal(baf.value, '25', 'Explicit BAF must not be overwritten.');
     }
 }
-console.log('PASS: missing manual tariff blocked, blank manual BAF becomes zero, table placeholders and entered amounts preserved.');
+console.log('PASS: pending manual tariff allowed, blank manual BAF becomes zero, table placeholders and entered amounts preserved.');
 
 const view = fs.readFileSync(path.resolve(__dirname, '../../IBSWeb/Areas/MSAP/Views/VesselSchedule/_ScheduleForm.cshtml'), 'utf8');
 const tariffInputs = view.split('\n').filter(line => line.includes('class="modern-input js-tariff-rate"'));
 assert.equal(tariffInputs.length, 2);
-assert(tariffInputs.every(line => line.includes('min="0.0001"')), 'Saved rows and new rows must reject zero tariffs.');
+assert(tariffInputs.every(line => line.includes('min="0"')), 'Saved rows and new rows must allow zero/pending tariffs.');

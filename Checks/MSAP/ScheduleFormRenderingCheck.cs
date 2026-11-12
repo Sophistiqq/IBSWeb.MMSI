@@ -147,10 +147,9 @@ namespace Checks.MSAP
                 await reviewView.View!.RenderAsync(new ViewContext(context, reviewView.View, reviewData,
                     services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), reviewOutput, new HtmlHelperOptions()));
                 string reviewHtml = reviewOutput.ToString();
-                Check(Regex.Matches(reviewHtml, "data-rate-capture").Count == 2
-                    && reviewHtml.Contains("Save Basic rate for reuse", StringComparison.Ordinal)
-                    && reviewHtml.Contains("Save BAF rate for reuse", StringComparison.Ordinal)
-                    && reviewHtml.Contains("captureRateToken", StringComparison.Ordinal), "Authorized capture actions or anti-forgery token were missing.");
+                Check(Regex.Matches(reviewHtml, "RateUpload/Editor").Count == 2
+                    && reviewHtml.Contains("Open Basic in rate editor", StringComparison.Ordinal)
+                    && reviewHtml.Contains("Open BAF in rate editor", StringComparison.Ordinal), "Authorized rate editor actions were missing.");
                 int reviewSummaryIndex = reviewHtml.IndexOf("aria-label=\"Review summary\"", StringComparison.Ordinal);
                 int reviewSummaryEnd = reviewSummaryIndex < 0 ? -1 : reviewHtml.IndexOf("</aside>", reviewSummaryIndex, StringComparison.Ordinal);
                 int approvalIndex = reviewHtml.IndexOf("id=\"confirmSchedule\"", StringComparison.Ordinal);

@@ -6,8 +6,6 @@
 
     function validateForm() {
         form.querySelectorAll('[data-service-row]').forEach(row => {
-            const baf = row.querySelector('.js-baf-rate');
-            if (!baf.readOnly && baf.value === '') baf.value = '0';
             updateRateProvenance(row);
         });
         const invalidSelect = [...form.querySelectorAll('select.js-modern-select')].find(select => !select.checkValidity());
@@ -306,13 +304,27 @@
     function updateRateProvenance(row) {
         for (const kind of ['tariff', 'baf']) {
             const input = row.querySelector(`.js-${kind}-rate`);
-            input.required = kind === 'tariff' && !input.readOnly;
-            const overridesTable = input.value !== '' && input.dataset.lookup === 'found';
+            input.required = false;
+            const isFilled = input.value !== '';
+            const valNum = isFilled ? Number(input.value) : null;
+            const isZero = valNum === 0;
+            const overridesTable = isFilled && input.dataset.lookup === 'found';
             input.classList.toggle('schedule-rate-override', overridesTable);
-            input.classList.toggle('schedule-rate-missing', input.value !== '' && input.dataset.lookup === 'missing');
-            row.querySelector(`.js-${kind}-provenance`).textContent = input.value !== ''
-                ? overridesTable ? 'Overrides table rate' : 'Manual rate'
-                : ({ found: 'Table estimate · planned date', missing: 'No table match', loading: 'Checking table…', error: 'Lookup unavailable' }[input.dataset.lookup] || 'Rate not checked');
+            input.classList.toggle('schedule-rate-missing', isFilled && input.dataset.lookup === 'missing');
+
+            let provText;
+            if (isFilled) {
+                if (kind === 'baf' && isZero) {
+                    provText = overridesTable ? 'Zero BAF · overrides table' : 'Zero BAF';
+                } else if (kind === 'tariff' && isZero) {
+                    provText = overridesTable ? 'Zero tariff · overrides table' : 'Zero tariff';
+                } else {
+                    provText = overridesTable ? 'Overrides table rate' : 'Manual rate';
+                }
+            } else {
+                provText = ({ found: 'Table estimate · planned date', missing: 'Rate pending', loading: 'Checking table…', error: 'Lookup unavailable' }[input.dataset.lookup] || 'Rate not checked');
+            }
+            row.querySelector(`.js-${kind}-provenance`).textContent = provText;
         }
     }
 
@@ -341,7 +353,9 @@
                 input.dataset.lookup = data.exists && rate != null && (index !== 0 || Number(rate) > 0) ? 'found' : 'missing';
                 input.readOnly = !manualRates() && input.value === '' && input.dataset.lookup === 'found';
                 // Estimates stay out of Manual* fields so saving cannot turn a table rate into a manual override.
-                input.placeholder = input.dataset.lookup === 'found' ? Number(rate).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : 'Enter manual rate';
+                input.placeholder = input.dataset.lookup === 'found'
+                    ? Number(rate).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+                    : 'Pending rate';
             });
         } catch (error) {
             if (error.name === 'AbortError') return;
@@ -441,14 +455,6 @@
                 }
                 updateSummary();
                 return;
-            }
-        });
-
-        servicesContainer.addEventListener('focusout', e => {
-            if (e.target.matches('.js-baf-rate') && !e.target.readOnly && e.target.value === '') {
-                e.target.value = '0';
-                updateRateProvenance(e.target.closest('[data-service-row]'));
-                updateSummary();
             }
         });
 

@@ -40,7 +40,16 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> Editor(CancellationToken ct, RateTableKind kind = RateTableKind.Tariff, DateOnly? asOfDate = null, Guid? id = null)
+        public async Task<IActionResult> Editor(
+            CancellationToken ct,
+            RateTableKind kind = RateTableKind.Tariff,
+            DateOnly? asOfDate = null,
+            Guid? id = null,
+            int? customerId = null,
+            int? portId = null,
+            int? terminalId = null,
+            int? serviceId = null,
+            decimal? amount = null)
         {
             if (!ModelState.IsValid)
             {
@@ -48,7 +57,16 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
             ViewData["CanEditRates"] = await _access.HasAccessAsync(UserId, ProcedureEnum.ManageRates);
             RateEditorViewModel? model = await _rates.GetEditorAsync(kind, asOfDate ?? DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()), id, UserId, ct);
-            return model == null ? NotFound() : View(model);
+            if (model == null)
+            {
+                return NotFound();
+            }
+            model.SelectedCustomerId = customerId;
+            model.SelectedPortId = portId;
+            model.SelectedTerminalId = terminalId;
+            model.SelectedServiceId = serviceId;
+            model.InitialAmount = amount;
+            return View(model);
         }
 
         [HttpPost]

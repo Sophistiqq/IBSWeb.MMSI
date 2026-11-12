@@ -695,17 +695,19 @@ namespace IBS.Services.MSAP
                     {
                         continue;
                     }
+                    if (entry.ManualTariffRate.HasValue && entry.ManualTariffRate.Value == 0)
+                    {
+                        entry.ManualTariffRate = null;
+                    }
                     var rateDate = DateOnly.FromDateTime(model.PlannedStart);
                     var tariffRate = entry.ManualTariffRate
                         ?? (await unitOfWork.TariffTable.GetApplicableRateAsync(model.CustomerId.Value, model.TerminalId, entry.ServiceId, rateDate, ct))?.Dispatch;
-                    if (tariffRate is not > 0)
+                    if (confirming && tariffRate is not > 0)
                     {
-                        return "Tariff rate must be greater than zero. Enter a manual rate or use an applicable positive table rate.";
-                    }
-                    if (!entry.ManualBafRate.HasValue
-                        && await unitOfWork.BafTable.GetApplicableRateAsync(model.CustomerId.Value, model.TerminalId, entry.ServiceId, rateDate, ct) == null)
-                    {
-                        entry.ManualBafRate = 0m;
+                        var serviceName = validServices.Contains(entry.ServiceId)
+                            ? (await unitOfWork.Service.GetAsync(s => s.ServiceId == entry.ServiceId, ct))?.ServiceName
+                            : $"Service #{entry.ServiceId}";
+                        return $"Cannot approve schedule with pending rate on {serviceName}. Establish rate in Rate Editor or set an authorized manual rate.";
                     }
                 }
             }

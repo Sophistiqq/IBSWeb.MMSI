@@ -198,8 +198,8 @@
                                                     </select>
                                                 </div>
                                                 <div class="col-rate">
-                                                    <input name="ServiceEntries[@rowKey].ManualTariffRate" value="@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("0.00##") : "")" type="number" step="0.0001" min="0.0001" placeholder="From table" class="modern-input js-tariff-rate" aria-label="Manual tariff rate" readonly />
-                                                    <span class="schedule-rate-provenance js-tariff-provenance ui-caption ui-muted">@(entry.ManualTariffRate.HasValue ? "Manual rate" : "Rate not checked")</span>
+                                                    <input name="ServiceEntries[@rowKey].ManualTariffRate" value="@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("0.00##") : "")" type="number" step="0.0001" min="0" placeholder="Pending rate" class="modern-input js-tariff-rate" aria-label="Manual tariff rate" readonly />
+                                                    <span class="schedule-rate-provenance js-tariff-provenance ui-caption ui-muted">@(entry.ManualTariffRate.HasValue ? (entry.ManualTariffRate.Value == 0 ? "Zero tariff" : "Manual rate") : "Rate not checked")</span>
                                                 </div>
                                                 <div class="col-baf-method">
                                                     <select name="ServiceEntries[@rowKey].BafMethod" class="js-modern-select js-baf-method" aria-label="BAF method">
@@ -211,8 +211,8 @@
                                                     <span class="schedule-pending-notice ui-caption" @(entry.BafMethod is BafCalculationMethod.Lumpsum or BafCalculationMethod.Industry ? "" : "hidden")>Approved amount applied once per service</span>
                                                 </div>
                                                 <div class="col-baf-rate">
-                                                    <input name="ServiceEntries[@rowKey].ManualBafRate" value="@(entry.ManualBafRate.HasValue ? entry.ManualBafRate.Value.ToString("0.00##") : "")" type="number" step="0.0001" min="0" placeholder="From table" class="modern-input js-baf-rate" aria-label="Manual BAF rate" readonly />
-                                                    <span class="schedule-rate-provenance js-baf-provenance ui-caption ui-muted">@(entry.ManualBafRate.HasValue ? "Manual rate" : "Rate not checked")</span>
+                                                    <input name="ServiceEntries[@rowKey].ManualBafRate" value="@(entry.ManualBafRate.HasValue ? entry.ManualBafRate.Value.ToString("0.00##") : "")" type="number" step="0.0001" min="0" placeholder="Pending rate" class="modern-input js-baf-rate" aria-label="Manual BAF rate" readonly />
+                                                    <span class="schedule-rate-provenance js-baf-provenance ui-caption ui-muted">@(entry.ManualBafRate.HasValue ? (entry.ManualBafRate.Value == 0 ? "Zero BAF" : "Manual rate") : "Rate not checked")</span>
                                                 </div>
                                                 <div class="col-action">
                                                     <button type="button" class="modern-btn-icon js-remove-service-btn" title="Remove service" aria-label="Remove service">
@@ -381,7 +381,7 @@
             </select>
         </div>
         <div class="col-rate">
-            <input name="ServiceEntries[__KEY__].ManualTariffRate" type="number" step="0.0001" min="0.0001" placeholder="From table" class="modern-input js-tariff-rate" aria-label="Manual tariff rate" readonly />
+            <input name="ServiceEntries[__KEY__].ManualTariffRate" type="number" step="0.0001" min="0" placeholder="Pending rate" class="modern-input js-tariff-rate" aria-label="Manual tariff rate" readonly />
             <span class="schedule-rate-provenance js-tariff-provenance ui-caption ui-muted">Rate not checked</span>
         </div>
         <div class="col-baf-method">
@@ -394,7 +394,7 @@
             <span class="schedule-pending-notice ui-caption" hidden>Approved amount applied once per service</span>
         </div>
         <div class="col-baf-rate">
-            <input name="ServiceEntries[__KEY__].ManualBafRate" type="number" step="0.0001" min="0" placeholder="From table" class="modern-input js-baf-rate" aria-label="Manual BAF rate" readonly />
+            <input name="ServiceEntries[__KEY__].ManualBafRate" type="number" step="0.0001" min="0" placeholder="Pending rate" class="modern-input js-baf-rate" aria-label="Manual BAF rate" readonly />
             <span class="schedule-rate-provenance js-baf-provenance ui-caption ui-muted">Rate not checked</span>
         </div>
         <div class="col-action">

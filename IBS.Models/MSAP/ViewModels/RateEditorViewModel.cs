@@ -12,5 +12,10 @@ namespace IBS.Models.MSAP.ViewModels
         public List<RateReferenceViewModel> Ports { get; set; } = [];
         public List<RateReferenceViewModel> Terminals { get; set; } = [];
         public List<RateReferenceViewModel> Services { get; set; } = [];
+        public int? SelectedCustomerId { get; set; }
+        public int? SelectedPortId { get; set; }
+        public int? SelectedTerminalId { get; set; }
+        public int? SelectedServiceId { get; set; }
+        public decimal? InitialAmount { get; set; }
     }
 }
