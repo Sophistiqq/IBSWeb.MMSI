@@ -36,6 +36,14 @@
                 </div>
                 <p class="ui-page-description ui-caption ui-muted">
                     @Model.MsapBillingNumber · @component · @(Model.Status == MsapConstants.BillingStatus.ForPosting ? "Awaiting final approval" : "Approved") · @(Model.IsUndocumented ? "Undocumented" : "Documented")
+                    @{
+                        var billingChanges = ViewBag.BillingChanges as List<MsapFieldChange> ?? new List<MsapFieldChange>();
+                        var hasSeriesOverride = billingChanges.Any(c => c.Field == nameof(Billing.MsapBillingNumber));
+                    }
+                    @if (hasSeriesOverride)
+                    {
+                        <span class="schedule-status-pill ui-status ui-attention" title="Invoice number differs from the expected sequential BIR series">Series overridden</span>
+                    }
                     @if (Model.PeriodStatus == MsapPeriodStatus.Adjusted)
                     {
                         <span class="schedule-status-pill ui-status ui-attention" title="Adjusted after period finalization">Adjusted</span>
@@ -46,6 +54,13 @@
                     }
                 </p>
             </header>
+            @if (billingChanges.Count > 0)
+            {
+                <p class="ui-panel ui-body ui-attention">
+                    <strong>Flagged for review:</strong>
+                    @string.Join(" · ", billingChanges.Select(c => string.IsNullOrWhiteSpace(c.Before) ? $"{c.Label}: {c.After}" : $"{c.Label}: {c.Before} → {c.After}"))
+                </p>
+            }
             @if (Model.ApprovedAt.HasValue)
             {
                 <p class="ui-caption ui-muted">Approved by @(Model.ApprovedByUser?.UserName ?? Model.ApprovedByUserId) · revision @Model.ApprovedRevision · @Model.ApprovedAt.Value.ToString("dd MMM yyyy HH:mm")</p>

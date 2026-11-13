@@ -233,6 +233,41 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             return "B000001";
         }
 
+        public async Task<string> GetSuggestedBirBillingNumberAsync(string company, int year, CancellationToken cancellationToken = default)
+        {
+            var numbers = await _db.MsapBillings
+                .AsNoTracking()
+                .Where(b => b.Company == company && b.Year == year && !b.IsUndocumented && !string.IsNullOrEmpty(b.MsapBillingNumber))
+                .Select(b => b.MsapBillingNumber)
+                .ToListAsync(cancellationToken);
+
+            var bestValue = -1;
+            string? bestRaw = null;
+            foreach (var raw in numbers)
+            {
+                if (int.TryParse(raw.Trim(), out var parsed) && parsed >= 0 && parsed > bestValue)
+                {
+                    bestValue = parsed;
+                    bestRaw = raw.Trim();
+                }
+            }
+
+            return bestRaw == null ? "1" : IncrementBillingSeries(bestRaw);
+        }
+
+        public string IncrementBillingSeries(string currentNumber)
+        {
+            var trimmed = (currentNumber ?? "").Trim();
+            if (int.TryParse(trimmed, out var parsed) && parsed >= 0)
+            {
+                var next = parsed + 1;
+                var hasLeadingZero = trimmed.Length > 1 && trimmed[0] == '0';
+                return hasLeadingZero ? next.ToString($"D{trimmed.Length}") : next.ToString();
+            }
+
+            return "1";
+        }
+
         public Billing ProcessAddress(Billing model, CancellationToken cancellationToken = default)
         {
             // ... (rest of ProcessAddress implementation)

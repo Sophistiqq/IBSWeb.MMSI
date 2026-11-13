@@ -163,6 +163,16 @@ namespace IBS.Services.MSAP
                         model.MsapBillingId = existingDraft.MsapBillingId;
                         return;
                     }
+                    string? expectedBirBasic = null;
+                    string? expectedBirBaf = null;
+                    if (!model.IsUndocumented)
+                    {
+                        expectedBirBasic = await unitOfWork.Billing.GetSuggestedBirBillingNumberAsync(company, model.Date.Year, cancellationToken);
+                        if (model.SeparateBaf)
+                        {
+                            expectedBirBaf = unitOfWork.Billing.IncrementBillingSeries(expectedBirBasic);
+                        }
+                    }
                     foreach (var bill in prepared.Data)
                     {
                         await unitOfWork.Billing.AddAsync(bill, cancellationToken);
@@ -174,9 +184,38 @@ namespace IBS.Services.MSAP
                     await unitOfWork.SaveAsync(cancellationToken);
                     foreach (var bill in prepared.Data)
                     {
+                        var expectedNumber = bill.BasicBillingId.HasValue ? expectedBirBaf : expectedBirBasic;
+                        var isSeriesOverride = !model.IsUndocumented
+                            && !string.IsNullOrWhiteSpace(expectedNumber)
+                            && !string.Equals(bill.MsapBillingNumber, expectedNumber, StringComparison.OrdinalIgnoreCase);
+                        var overrideNote = isSeriesOverride
+                            ? $" [Series override: expected {expectedNumber}, prepared {bill.MsapBillingNumber}]"
+                            : "";
+                        if (isSeriesOverride)
+                        {
+                            await unitOfWork.MsapAdjustmentLog.AddAsync(new MsapAdjustmentLog
+                            {
+                                DocumentType = "Billing",
+                                RecordId = bill.MsapBillingId,
+                                ReferenceNumber = bill.MsapBillingNumber,
+                                Reason = $"BIR invoice series override (expected {expectedNumber}, prepared {bill.MsapBillingNumber})",
+                                ChangesJson = System.Text.Json.JsonSerializer.Serialize(new[]
+                                {
+                                    new MsapFieldChange
+                                    {
+                                        Field = nameof(Billing.MsapBillingNumber),
+                                        Label = "Billing Number (Series Override)",
+                                        Before = $"Expected {expectedNumber}",
+                                        After = bill.MsapBillingNumber
+                                    }
+                                }),
+                                EditedBy = username,
+                                EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
+                            }, cancellationToken);
+                        }
                         await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
                             $"Created Billing #{bill.MsapBillingNumber}" + (model.SeparateBaf ? " (separate Basic/BAF preparation)" : "")
-                            + $". COS discount: {model.CosDiscountPercent}; skipped: {model.SkipCosDiscount}; SBMA: {model.SbmaEnabled}.",
+                            + $". COS discount: {model.CosDiscountPercent}; skipped: {model.SkipCosDiscount}; SBMA: {model.SbmaEnabled}.{overrideNote}",
                             "Billing", bill.MsapBillingId, bill.MsapBillingNumber), cancellationToken);
                     }
                     await unitOfWork.SaveAsync(cancellationToken);
@@ -254,6 +293,10 @@ namespace IBS.Services.MSAP
             {
                 model.MsapBillingNumber = await unitOfWork.Billing.GenerateBillingNumber(model.Date.Year, cancellationToken);
             }
+            else if (!model.IsUndocumented && string.IsNullOrWhiteSpace(model.MsapBillingNumber))
+            {
+                model.MsapBillingNumber = await unitOfWork.Billing.GetSuggestedBirBillingNumberAsync(company, model.Date.Year, cancellationToken);
+            }
             string basicNumber = model.MsapBillingNumber?.Trim() ?? "";
             string bafNumber = model.BafBillingNumber?.Trim() ?? "";
             if (model.IsUndocumented && model.SeparateBaf)
@@ -263,6 +306,10 @@ namespace IBS.Services.MSAP
                     return ServiceResult<List<Billing>>.Failure("Unable to generate the separate BAF billing number.");
                 }
                 bafNumber = $"B{sequence + 1:D6}";
+            }
+            else if (!model.IsUndocumented && model.SeparateBaf && string.IsNullOrWhiteSpace(bafNumber))
+            {
+                bafNumber = unitOfWork.Billing.IncrementBillingSeries(basicNumber);
             }
             if (basicNumber.Length is 0 or > 10 || (model.SeparateBaf && (bafNumber.Length is 0 or > 10)))
             {

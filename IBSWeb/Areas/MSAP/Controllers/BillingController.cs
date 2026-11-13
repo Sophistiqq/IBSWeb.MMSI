@@ -88,6 +88,16 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     model.BafBillingNumber = existingDraft.BafBilling?.MsapBillingNumber;
                 }
             }
+            var company = User.Claims.FirstOrDefault(c => c.Type == "Company")?.Value ?? MsapConstants.Company_MMSI;
+            var year = model.Date != default ? model.Date.Year : DateTimeHelper.GetCurrentPhilippineTime().Year;
+            var suggestedBir = await unitOfWork.Billing.GetSuggestedBirBillingNumberAsync(company, year, cancellationToken);
+            var suggestedBirBaf = unitOfWork.Billing.IncrementBillingSeries(suggestedBir);
+            ViewData["SuggestedBirNumber"] = suggestedBir;
+            ViewData["SuggestedBirBafNumber"] = suggestedBirBaf;
+            if (!model.IsUndocumented && string.IsNullOrWhiteSpace(model.MsapBillingNumber))
+            {
+                model.MsapBillingNumber = suggestedBir;
+            }
             model = await billingService.PopulateBillingSelectListsAsync(model, cancellationToken);
             return View(model);
         }
@@ -212,6 +222,30 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ViewData["CanDiscardBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteBilling) && isUnapprovedDraft && !isPeriodClosed;
             ViewData["PostingBlocker"] = await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, model, JobProgressCalculator.PostingStage, cancellationToken);
             ViewData["IsPeriodClosed"] = isPeriodClosed && !isReopenedRevision;
+            var adjustmentLogs = await unitOfWork.MsapAdjustmentLog.GetAllAsync(
+                a => a.DocumentType == "Billing" && a.RecordId == id, cancellationToken);
+            List<MsapFieldChange> billingChanges = [];
+            foreach (var log in adjustmentLogs.OrderByDescending(a => a.EditedDate).ThenByDescending(a => a.Id))
+            {
+                if (string.IsNullOrWhiteSpace(log.ChangesJson))
+                {
+                    continue;
+                }
+                try
+                {
+                    var parsed = System.Text.Json.JsonSerializer.Deserialize<List<MsapFieldChange>>(log.ChangesJson);
+                    if (parsed is { Count: > 0 })
+                    {
+                        billingChanges = parsed;
+                        break;
+                    }
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // Ignore malformed change JSON.
+                }
+            }
+            ViewBag.BillingChanges = billingChanges;
             return View(model);
         }
 

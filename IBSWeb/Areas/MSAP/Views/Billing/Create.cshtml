@@ -20,7 +20,9 @@
           data-initial-cos="@Model.CustomerOrderSlipId"
           data-editing-draft="@isEditingDraft.ToString().ToLowerInvariant()"
           data-initial-billed-to="@Model.BilledTo"
-          data-initial-principal="@Model.PrincipalId">
+          data-initial-principal="@Model.PrincipalId"
+          data-suggested-bir-number="@ViewData["SuggestedBirNumber"]"
+          data-suggested-bir-baf-number="@ViewData["SuggestedBirBafNumber"]">
         @Html.AntiForgeryToken()
         <main class="billing-workspace">
             <aside class="ui-panel schedule-details-progress billing-progress" aria-label="Job Progress">
@@ -107,10 +109,12 @@
                         <div class="ui-field">
                             <label for="MsapBillingNumber" id="basicNumberLabel" class="ui-label">Billing number *</label>
                             <input asp-for="MsapBillingNumber" class="modern-input" placeholder="B000000" maxlength="10" required />
+                            <small id="seriesOverrideHint" class="ui-caption schedule-review-attention" hidden></small>
                         </div>
                         <div class="ui-field" id="bafNumberField" hidden>
                             <label asp-for="BafBillingNumber" class="ui-label">BAF billing number *</label>
                             <input asp-for="BafBillingNumber" class="modern-input" maxlength="10" disabled />
+                            <small id="bafSeriesOverrideHint" class="ui-caption schedule-review-attention" hidden></small>
                         </div>
                         <div class="ui-field">
                             <label asp-for="Date" class="ui-label">Billing date *</label>

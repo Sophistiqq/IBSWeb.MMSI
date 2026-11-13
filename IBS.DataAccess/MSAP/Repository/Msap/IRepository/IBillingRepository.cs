@@ -30,6 +30,10 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
 
         Task<string> GenerateBillingNumber(int year, CancellationToken cancellationToken = default);
 
+        Task<string> GetSuggestedBirBillingNumberAsync(string company, int year, CancellationToken cancellationToken = default);
+
+        string IncrementBillingSeries(string currentNumber);
+
         Billing ProcessAddress(Billing model, CancellationToken cancellationToken = default);
 
         Task<(IEnumerable<Billing> Data, int RecordsFiltered, int TotalRecords)> GetPagedBillingsAsync(DataTablesParameters parameters, CancellationToken cancellationToken, int? customerOrderSlipId = null);

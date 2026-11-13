@@ -68,13 +68,41 @@ $(function () {
         $('#recipientNote').text(isPrincipal ? 'Both Basic and BAF statements are addressed to the selected principal.' : 'The statement is addressed to the service customer.');
     }
 
+    function incrementSeries(value) {
+        const trimmed = (value || '').trim();
+        if (!/^\d+$/.test(trimmed)) return '';
+        const next = String(parseInt(trimmed, 10) + 1);
+        return trimmed.length > 1 && trimmed.startsWith('0')
+            ? next.padStart(trimmed.length, '0')
+            : next;
+    }
+
     function updateSummary() {
         const split = $('#SeparateBaf').is(':checked');
         const undocumented = $('#IsUndocumented').is(':checked');
-        if (undocumented) $('#MsapBillingNumber, #BafBillingNumber').val('');
-        $('#MsapBillingNumber').prop('required', !undocumented).prop('disabled', undocumented).attr('placeholder', undocumented ? 'Generated when saved' : 'B000000');
+        const suggestedBir = form.dataset.suggestedBirNumber || '';
+        const suggestedBaf = form.dataset.suggestedBirBafNumber || '';
+        if (undocumented) {
+            $('#MsapBillingNumber, #BafBillingNumber').val('');
+        } else {
+            if (!$('#MsapBillingNumber').val()?.trim() && suggestedBir) {
+                $('#MsapBillingNumber').val(suggestedBir);
+            }
+            if (split && !$('#BafBillingNumber').val()?.trim()) {
+                const nextBaf = incrementSeries($('#MsapBillingNumber').val()) || suggestedBaf;
+                if (nextBaf) $('#BafBillingNumber').val(nextBaf);
+            }
+        }
+        $('#MsapBillingNumber').prop('required', !undocumented).prop('disabled', undocumented).attr('placeholder', undocumented ? 'Generated when saved' : (suggestedBir || 'Invoice number'));
         $('#bafNumberField, .split-only').prop('hidden', !split);
-        $('#BafBillingNumber').prop('disabled', !split || undocumented).prop('required', split && !undocumented).attr('placeholder', undocumented ? 'Generated when saved' : 'BAF billing number');
+        $('#BafBillingNumber').prop('disabled', !split || undocumented).prop('required', split && !undocumented).attr('placeholder', undocumented ? 'Generated when saved' : (suggestedBaf || 'BAF billing number'));
+        const currentBir = $('#MsapBillingNumber').val()?.trim() || '';
+        const isSeriesOverride = !undocumented && form.dataset.editingDraft !== 'true' && suggestedBir && currentBir && currentBir !== suggestedBir;
+        $('#seriesOverrideHint').prop('hidden', !isSeriesOverride).text(isSeriesOverride ? `Series override (expected ${suggestedBir}) — flagged for reviewer.` : '');
+        const currentBaf = $('#BafBillingNumber').val()?.trim() || '';
+        const expectedBaf = incrementSeries(currentBir) || suggestedBaf;
+        const isBafSeriesOverride = split && !undocumented && form.dataset.editingDraft !== 'true' && expectedBaf && currentBaf && currentBaf !== expectedBaf;
+        $('#bafSeriesOverrideHint').prop('hidden', !isBafSeriesOverride).text(isBafSeriesOverride ? `Series override (expected ${expectedBaf}) — flagged for reviewer.` : '');
         $('#basicNumberLabel').text((split ? 'Basic billing number' : 'Billing number') + (undocumented ? ' · Automatic' : ' *'));
         $('label[for="BafBillingNumber"]').text(undocumented ? 'BAF billing number · Automatic' : 'BAF billing number *');
         $('#basicSummaryHeading').text('Basic' + (split && $('#MsapBillingNumber').val() ? ' · ' + $('#MsapBillingNumber').val() : ''));
