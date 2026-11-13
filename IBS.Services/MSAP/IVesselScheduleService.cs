@@ -14,8 +14,6 @@ namespace IBS.Services.MSAP
         Task<ServiceResult<int>> ConfirmAsync(int id, DateTime reviewedAt, string username, CancellationToken ct = default, bool allowConflicts = false, string? userId = null);
         Task<ServiceResult> ChangeStatusAsync(int id, string status, string username, CancellationToken ct = default);
         Task<ServiceResult> ChangeStatusAsync(int id, string status, string username, string? reason, CancellationToken ct = default);
-        Task<ServiceResult> SaveSpotQuotationAsync(SpotQuotationViewModel model, string username, CancellationToken ct = default);
-        Task<SpotQuotationViewModel?> GetSpotQuotationViewModelAsync(int scheduleId, int entryId, CancellationToken ct = default);
         Task<VesselSchedule?> GetByIdAsync(int id, CancellationToken ct = default);
         Task<IEnumerable<VesselSchedule>> GetSchedulesAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
         Task<List<ScheduleConflict>> CheckConflictsAsync(VesselSchedule schedule, CancellationToken ct = default,

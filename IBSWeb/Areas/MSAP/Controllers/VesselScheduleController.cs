@@ -495,32 +495,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
-        [RequireAnyAccess(ProcedureEnum.ApproveSchedule, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload)]
-        public async Task<IActionResult> GetSpotQuotation(int scheduleId, int entryId, CancellationToken ct)
-        {
-            var vm = await scheduleService.GetSpotQuotationViewModelAsync(scheduleId, entryId, ct);
-            if (vm == null)
-            {
-                return NotFound();
-            }
-            return PartialView("_SpotQuotationModal", vm);
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [RequireAnyAccess(ProcedureEnum.ApproveSchedule, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload)]
-        public async Task<IActionResult> SaveSpotQuotation(SpotQuotationViewModel vm, CancellationToken ct)
-        {
-            if (!ModelState.IsValid)
-            {
-                var errors = string.Join("; ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
-                return Json(new { success = false, message = errors });
-            }
-            var result = await scheduleService.SaveSpotQuotationAsync(vm, User.Identity?.Name ?? "system", ct);
-            return Json(new { success = result.IsSuccess, message = result.Message });
-        }
-
-        [HttpGet]
         [RequireAccess(ProcedureEnum.ApproveSchedule)]
         public async Task<IActionResult> Confirm(int id, CancellationToken ct)
         {

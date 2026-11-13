@@ -13,8 +13,7 @@ namespace IBS.Services.MSAP
     public class VesselScheduleService(
         IUnitOfWork unitOfWork,
         CustomerOrderSlipService customerOrderSlipService,
-        ILogger<VesselScheduleService> logger,
-        ICloudStorageService? cloudStorageService = null) : IVesselScheduleService
+        ILogger<VesselScheduleService> logger) : IVesselScheduleService
     {
         public async Task<ServiceResult<VesselScheduleBoardViewModel>> GetCalendarAsync(VesselScheduleBoardViewModel filters, CancellationToken ct = default)
         {
@@ -1020,134 +1019,6 @@ namespace IBS.Services.MSAP
             }
 
             return conflicts;
-        }
-
-        public async Task<SpotQuotationViewModel?> GetSpotQuotationViewModelAsync(int scheduleId, int entryId, CancellationToken ct = default)
-        {
-            var schedule = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(scheduleId, ct);
-            if (schedule == null) return null;
-            var entry = schedule.ServiceEntries.FirstOrDefault(e => e.VesselScheduleServiceEntryId == entryId);
-            if (entry == null) return null;
-
-            return new SpotQuotationViewModel
-            {
-                VesselScheduleId = scheduleId,
-                VesselScheduleServiceEntryId = entryId,
-                VesselName = schedule.Vessel?.VesselName,
-                TugboatName = entry.Tugboat?.TugboatName,
-                ServiceName = entry.Service?.ServiceName,
-                CustomerName = schedule.Customer?.CustomerName,
-                TariffRate = entry.ManualTariffRate ?? 0,
-                TariffBasis = entry.TariffBasis ?? TariffChargeBasis.PerHour,
-                BafRate = entry.ManualBafRate ?? 0,
-                BafMethod = entry.BafMethod ?? BafCalculationMethod.PerHour
-            };
-        }
-
-        public async Task<ServiceResult> SaveSpotQuotationAsync(SpotQuotationViewModel model, string username, CancellationToken ct = default)
-        {
-            if (model.TariffRate <= 0)
-            {
-                return ServiceResult.Failure("Basic Tariff rate must be greater than zero.", ServiceResultStatus.ValidationError);
-            }
-            if (model.BafRate < 0)
-            {
-                return ServiceResult.Failure("BAF rate cannot be negative.", ServiceResultStatus.ValidationError);
-            }
-            if (string.IsNullOrWhiteSpace(model.QuotationReference))
-            {
-                return ServiceResult.Failure("Quotation reference number is required.", ServiceResultStatus.ValidationError);
-            }
-
-            var result = ServiceResult.Failure("Failed to apply spot quotation.");
-            try
-            {
-                await unitOfWork.ExecuteInTransactionAsync(async () =>
-                {
-                    var schedule = await unitOfWork.VesselSchedule.GetForUpdateAsync(model.VesselScheduleId, ct);
-                    if (schedule == null)
-                    {
-                        result = ServiceResult.Failure("Schedule not found.", ServiceResultStatus.NotFound);
-                        return;
-                    }
-                    if (schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
-                    {
-                        result = ServiceResult.Failure("Cannot set spot quotation for completed or cancelled schedules.", ServiceResultStatus.ValidationError);
-                        return;
-                    }
-
-                    var entry = schedule.ServiceEntries.FirstOrDefault(e => e.VesselScheduleServiceEntryId == model.VesselScheduleServiceEntryId);
-                    if (entry == null || entry.CancelledAt.HasValue)
-                    {
-                        result = ServiceResult.Failure("Expected service entry not found or cancelled.", ServiceResultStatus.NotFound);
-                        return;
-                    }
-
-                    string? savedAttachmentUrl = null;
-                    if (model.QuotationFile != null && model.QuotationFile.Length > 0 && cloudStorageService != null)
-                    {
-                        var ext = Path.GetExtension(model.QuotationFile.FileName).ToLowerInvariant();
-                        var allowedExts = new[] { ".pdf", ".png", ".jpg", ".jpeg" };
-                        if (!allowedExts.Contains(ext))
-                        {
-                            result = ServiceResult.Failure("Attachment must be a PDF, PNG, or JPG file.", ServiceResultStatus.ValidationError);
-                            return;
-                        }
-                        var fileName = $"SpotQuotation_{model.VesselScheduleId}_{model.VesselScheduleServiceEntryId}_{DateTime.UtcNow.Ticks}{ext}";
-                        savedAttachmentUrl = await cloudStorageService.UploadFileAsync(model.QuotationFile, fileName);
-                    }
-
-                    var priorTariff = entry.ManualTariffRate;
-                    var priorBaf = entry.ManualBafRate;
-
-                    entry.ManualTariffRate = model.TariffRate;
-                    entry.TariffBasis = model.TariffBasis;
-                    entry.ManualBafRate = model.BafRate;
-                    entry.BafMethod = model.BafMethod;
-                    entry.IsManualTariffOverride = true;
-
-                    var quotationNote = $"[Spot Quotation Ref: {model.QuotationReference.Trim()}] Approved by {username} on {DateTimeHelper.GetCurrentPhilippineTime():dd MMM yyyy HH:mm}. Basic: ₱{model.TariffRate:N2} ({model.TariffBasis}), BAF: ₱{model.BafRate:N2} ({model.BafMethod}){(string.IsNullOrWhiteSpace(model.Remarks) ? "" : $". Remarks: {model.Remarks.Trim()}")}{(savedAttachmentUrl == null ? "" : $". Document: {savedAttachmentUrl}")}";
-                    schedule.Notes = string.IsNullOrWhiteSpace(schedule.Notes) ? quotationNote : $"{schedule.Notes}\n{quotationNote}";
-                    schedule.EditedBy = username;
-                    schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-
-                    // Requirement 3: Move related dispatch tickets forward without re-encoding by Operations
-                    var ticketsRecalculated = 0;
-                    if (schedule.CustomerOrderSlipId.HasValue)
-                    {
-                        var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId && t.Status != MsapConstants.DispatchTicketStatus.Deleted, ct)).ToList();
-                        foreach (var ticket in tickets)
-                        {
-                            var blocker = await ScheduledTicketCharges.ApplyAsync(unitOfWork, ticket, schedule, username, ct);
-                            if (blocker == null)
-                            {
-                                ticket.Status = MsapConstants.DispatchTicketStatus.ForBilling;
-                            }
-                            ticket.EditedBy = username;
-                            ticket.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                            ticketsRecalculated++;
-                        }
-                    }
-
-                    // Requirement 6: Audit trail
-                    var auditActivity = $"Commercial spot quotation {model.QuotationReference.Trim()} approved by {username} for schedule #{schedule.VesselScheduleId}, entry #{entry.VesselScheduleServiceEntryId}: Basic ₱{model.TariffRate:N2} ({model.TariffBasis}), BAF ₱{model.BafRate:N2} ({model.BafMethod}) [Prior: Basic {priorTariff?.ToString("N2") ?? "None"}, BAF {priorBaf?.ToString("N2") ?? "None"}]. Recalculated {ticketsRecalculated} ticket(s).";
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, auditActivity, "Vessel Schedule", schedule.VesselScheduleId), ct);
-
-                    if (schedule.CustomerOrderSlipId.HasValue)
-                    {
-                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, auditActivity, "COS", schedule.CustomerOrderSlipId.Value), ct);
-                    }
-
-                    await unitOfWork.SaveAsync(ct);
-                    result = ServiceResult.Success($"Spot quotation {model.QuotationReference.Trim()} applied successfully. Basic: ₱{model.TariffRate:N2}, BAF: ₱{model.BafRate:N2}. {(ticketsRecalculated > 0 ? $"{ticketsRecalculated} ticket(s) updated to For Billing." : "")}");
-                }, ct);
-                return result;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to save spot quotation for schedule {ScheduleId}, entry {EntryId}", model.VesselScheduleId, model.VesselScheduleServiceEntryId);
-                return result.IsSuccess ? ServiceResult.Failure("Failed to apply spot quotation. Please try again.") : result;
-            }
         }
     }
 }
