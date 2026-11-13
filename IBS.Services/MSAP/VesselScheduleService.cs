@@ -232,45 +232,93 @@ namespace IBS.Services.MSAP
                     await SetTariffOverridesAsync(model, existing, ct);
 
                     var changes = new List<string>();
+                    List<MsapFieldChange> fieldDiffs = [];
                     if (existing.PlannedStart != model.PlannedStart)
                     {
+                        var before = existing.PlannedStart.ToString("dd MMM yyyy, HH:mm");
+                        var after = model.PlannedStart.ToString("dd MMM yyyy, HH:mm");
                         changes.Add($"Planned start '{existing.PlannedStart:dd MMM yyyy HH:mm}' -> '{model.PlannedStart:dd MMM yyyy HH:mm}'");
+                        fieldDiffs.Add(new MsapFieldChange { Field = nameof(VesselSchedule.PlannedStart), Label = "Planned start", Before = before, After = after });
                     }
                     if (existing.PlannedEnd != model.PlannedEnd)
                     {
+                        var before = existing.PlannedEnd.ToString("dd MMM yyyy, HH:mm");
+                        var after = model.PlannedEnd.ToString("dd MMM yyyy, HH:mm");
                         changes.Add($"Planned end '{existing.PlannedEnd:dd MMM yyyy HH:mm}' -> '{model.PlannedEnd:dd MMM yyyy HH:mm}'");
+                        fieldDiffs.Add(new MsapFieldChange { Field = nameof(VesselSchedule.PlannedEnd), Label = "Planned end", Before = before, After = after });
                     }
                     if ((existing.VoyageNumber ?? "") != (model.VoyageNumber ?? ""))
                     {
                         changes.Add($"Voyage '{existing.VoyageNumber ?? "—"}' -> '{model.VoyageNumber ?? "—"}'");
+                        fieldDiffs.Add(new MsapFieldChange { Field = nameof(VesselSchedule.VoyageNumber), Label = "Voyage number", Before = existing.VoyageNumber ?? "—", After = model.VoyageNumber ?? "—" });
                     }
                     if (existing.CustomerId != model.CustomerId)
                     {
+                        var newCustomer = model.CustomerId.HasValue
+                            ? await unitOfWork.Customer.GetAsync(c => c.CustomerId == model.CustomerId.Value, ct)
+                            : null;
                         changes.Add($"Customer ID {existing.CustomerId} -> {model.CustomerId}");
+                        fieldDiffs.Add(new MsapFieldChange { Field = nameof(VesselSchedule.CustomerId), Label = "Customer", Before = existing.Customer?.CustomerName ?? $"#{existing.CustomerId}", After = newCustomer?.CustomerName ?? $"#{model.CustomerId}" });
                     }
                     if (existing.VesselId != model.VesselId)
                     {
+                        var newVessel = await unitOfWork.Vessel.GetAsync(v => v.VesselId == model.VesselId, ct);
                         changes.Add($"Vessel ID {existing.VesselId} -> {model.VesselId}");
+                        fieldDiffs.Add(new MsapFieldChange { Field = nameof(VesselSchedule.VesselId), Label = "Vessel", Before = existing.Vessel?.VesselName ?? $"#{existing.VesselId}", After = newVessel?.VesselName ?? $"#{model.VesselId}" });
                     }
                     if (existing.PortId != model.PortId)
                     {
+                        var newPort = await unitOfWork.Port.GetAsync(p => p.PortId == model.PortId, ct);
                         changes.Add($"Port ID {existing.PortId} -> {model.PortId}");
+                        fieldDiffs.Add(new MsapFieldChange { Field = nameof(VesselSchedule.PortId), Label = "Port", Before = existing.Port?.PortName ?? $"#{existing.PortId}", After = newPort?.PortName ?? $"#{model.PortId}" });
                     }
                     if (existing.TerminalId != model.TerminalId)
                     {
+                        var newTerminal = await unitOfWork.Terminal.GetAsync(t => t.TerminalId == model.TerminalId, ct);
                         changes.Add($"Terminal ID {existing.TerminalId} -> {model.TerminalId}");
+                        fieldDiffs.Add(new MsapFieldChange { Field = nameof(VesselSchedule.TerminalId), Label = "Terminal", Before = existing.Terminal?.TerminalName ?? $"#{existing.TerminalId}", After = newTerminal?.TerminalName ?? $"#{model.TerminalId}" });
                     }
                     if ((existing.AssignedTugboatIds ?? "[]") != (model.AssignedTugboatIds ?? "[]"))
                     {
+                        var oldTugIds = JsonSerializer.Deserialize<List<int>>(existing.AssignedTugboatIds ?? "[]") ?? [];
+                        var newTugIds = JsonSerializer.Deserialize<List<int>>(model.AssignedTugboatIds ?? "[]") ?? [];
+                        var combinedTugIds = oldTugIds.Concat(newTugIds).Distinct().ToList();
+                        var tugNameMap = combinedTugIds.Count > 0
+                            ? (await unitOfWork.Tugboat.GetAllAsync(t => combinedTugIds.Contains(t.TugboatId), ct))
+                                .ToDictionary(t => t.TugboatId, t => t.TugboatName)
+                            : new Dictionary<int, string>();
+                        static string FormatTugNames(List<int> ids, Dictionary<int, string> map) =>
+                            ids.Count == 0 ? "None" : string.Join(", ", ids.Select(id => map.TryGetValue(id, out var name) ? name : $"Tug #{id}"));
+
                         changes.Add($"Assigned tugboats {existing.AssignedTugboatIds ?? "[]"} -> {model.AssignedTugboatIds ?? "[]"}");
+                        fieldDiffs.Add(new MsapFieldChange
+                        {
+                            Field = nameof(VesselSchedule.AssignedTugboatIds),
+                            Label = "Assigned tugboats",
+                            Before = FormatTugNames(oldTugIds, tugNameMap),
+                            After = FormatTugNames(newTugIds, tugNameMap)
+                        });
+                        var addedTugIds = newTugIds.Except(oldTugIds).ToList();
+                        if (addedTugIds.Count > 0)
+                        {
+                            fieldDiffs.Add(new MsapFieldChange
+                            {
+                                Field = "_AddedTugboatIds",
+                                Label = "_AddedTugboatIds",
+                                Before = "",
+                                After = string.Join(",", addedTugIds)
+                            });
+                        }
                     }
                     if (existing.SbmaEnabled != model.SbmaEnabled)
                     {
                         changes.Add($"SBMA share {existing.SbmaEnabled} -> {model.SbmaEnabled}");
+                        fieldDiffs.Add(new MsapFieldChange { Field = nameof(VesselSchedule.SbmaEnabled), Label = "SBMA share", Before = existing.SbmaEnabled ? "Enabled" : "Disabled", After = model.SbmaEnabled ? "Enabled" : "Disabled" });
                     }
                     if ((existing.Notes ?? "") != (model.Notes ?? ""))
                     {
                         changes.Add("Notes updated");
+                        fieldDiffs.Add(new MsapFieldChange { Field = nameof(VesselSchedule.Notes), Label = "Notes", Before = string.IsNullOrWhiteSpace(existing.Notes) ? "—" : existing.Notes, After = string.IsNullOrWhiteSpace(model.Notes) ? "—" : model.Notes });
                     }
 
                     var incomingEntries = model.ServiceEntries ?? [];
@@ -289,7 +337,9 @@ namespace IBS.Services.MSAP
                         if (addedCount > 0) sParts.Add($"{addedCount} added");
                         if (toRemove.Count > 0) sParts.Add($"{toRemove.Count} removed");
                         if (modifiedServices > 0) sParts.Add($"{modifiedServices} modified");
-                        changes.Add($"Services updated ({string.Join(", ", sParts)})");
+                        var serviceSummary = string.Join(", ", sParts);
+                        changes.Add($"Services updated ({serviceSummary})");
+                        fieldDiffs.Add(new MsapFieldChange { Field = nameof(VesselSchedule.ServiceEntries), Label = "Tugboats & services", Before = $"{existing.ServiceEntries.Count} entries", After = serviceSummary });
                     }
 
                     var changeSummary = changes.Count > 0 ? string.Join("; ", changes) : "No field values changed";
@@ -350,12 +400,17 @@ namespace IBS.Services.MSAP
                         }
                         unitOfWork.VesselSchedule.RemoveServiceEntries(toRemove);
                     }
+                    List<int> modifiedEntryIds = [];
                     foreach (var existingEntry in existing.ServiceEntries)
                     {
                         var matching = incomingEntries.FirstOrDefault(e => e.VesselScheduleServiceEntryId == existingEntry.VesselScheduleServiceEntryId);
                         if (matching != null)
                         {
                             var serviceChanged = existingEntry.ServiceId != matching.ServiceId;
+                            if (serviceChanged || existingEntry.TugboatId != matching.TugboatId)
+                            {
+                                modifiedEntryIds.Add(existingEntry.VesselScheduleServiceEntryId);
+                            }
                             existingEntry.TugboatId = matching.TugboatId;
                             existingEntry.ServiceId = matching.ServiceId;
                             if (serviceChanged)
@@ -373,9 +428,10 @@ namespace IBS.Services.MSAP
                             }
                         }
                     }
+                    List<VesselScheduleServiceEntry> addedEntries = [];
                     foreach (var newEntry in incomingEntries.Where(e => e.VesselScheduleServiceEntryId == 0))
                     {
-                        existing.ServiceEntries.Add(new VesselScheduleServiceEntry
+                        var createdEntry = new VesselScheduleServiceEntry
                         {
                             VesselScheduleId = existing.VesselScheduleId,
                             TugboatId = newEntry.TugboatId,
@@ -385,7 +441,9 @@ namespace IBS.Services.MSAP
                             ManualTariffRate = null,
                             IsManualTariffOverride = false,
                             ManualBafRate = null
-                        });
+                        };
+                        existing.ServiceEntries.Add(createdEntry);
+                        addedEntries.Add(createdEntry);
                     }
 
                     var auditText = existing.CustomerOrderSlipId.HasValue
@@ -393,6 +451,32 @@ namespace IBS.Services.MSAP
                         : $"Updated tentative vessel schedule #{model.VesselScheduleId}. Changes: {changeSummary}. Overlap override: {allowConflicts}";
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, auditText, "Vessel Schedule", model.VesselScheduleId), ct);
                     await unitOfWork.SaveAsync(ct);
+
+                    if (existing.CustomerOrderSlipId.HasValue && fieldDiffs.Count > 0)
+                    {
+                        var changedEntryIds = addedEntries.Select(e => e.VesselScheduleServiceEntryId).Concat(modifiedEntryIds).Distinct().ToList();
+                        if (changedEntryIds.Count > 0)
+                        {
+                            fieldDiffs.Add(new MsapFieldChange
+                            {
+                                Field = "_AddedServiceEntryIds",
+                                Label = "_AddedServiceEntryIds",
+                                Before = "",
+                                After = string.Join(",", changedEntryIds)
+                            });
+                        }
+                        await unitOfWork.MsapAdjustmentLog.AddAsync(new MsapAdjustmentLog
+                        {
+                            DocumentType = "VesselSchedule",
+                            RecordId = existing.VesselScheduleId,
+                            ReferenceNumber = job?.CustomerOrderSlipNumber ?? $"#{existing.VesselScheduleId}",
+                            Reason = $"Schedule revised (Rev {previousRevision} -> Rev {existing.Revision})",
+                            ChangesJson = JsonSerializer.Serialize(fieldDiffs),
+                            EditedBy = username,
+                            EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
+                        }, ct);
+                        await unitOfWork.SaveAsync(ct);
+                    }
                     result = ServiceResult.Success(existing.CustomerOrderSlipId.HasValue
                         ? $"Schedule updated (Revision {existing.Revision}). Reapproval is required before ticket entry."
                         : "Schedule updated. Review and confirm the booking before creating its COS.");

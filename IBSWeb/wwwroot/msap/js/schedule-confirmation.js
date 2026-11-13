@@ -63,7 +63,7 @@
     });
 
     const review = document.getElementById('scheduleReview');
-    if (!review) return;
+    if (!review || !review.dataset.rateUrl) return;
     review.querySelectorAll('[data-review-service]').forEach(async row => {
         const cells = [...row.querySelectorAll('[data-review-rate]')];
         if (!cells.length) return;

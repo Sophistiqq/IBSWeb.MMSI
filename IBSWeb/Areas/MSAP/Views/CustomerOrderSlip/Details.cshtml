@@ -27,6 +27,7 @@
     var ticketEntry = ViewBag.ActualTicketEntry as DispatchTicketViewModel;
     var viewedTicket = ViewData["ViewedTicket"] as DispatchTicket;
     var selectedEntry = entries.FirstOrDefault(entry => entry.VesselScheduleServiceEntryId == ticketEntry?.VesselScheduleServiceEntryId);
+    var canViewRates = ViewData["CanViewRates"] is true;
     var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
     var msapRole = userId is not null ? await MsapRoleService.GetUserRoleAsync(userId) : null;
     var canViewAuditHistory = msapRole == MsapRoles.Admin;
@@ -55,7 +56,7 @@
         {
             if (isReapproval)
             {
-                <p class="ui-panel ui-body ui-attention">Schedule revision pending reapproval by Sir RML · Ticket recording and charge calculations are blocked until reapproved.</p>
+                <p class="ui-panel ui-body ui-attention">Schedule revision pending commercial reapproval · Ticket recording and charge calculations are blocked until reapproved.</p>
             }
             else
             {
@@ -71,7 +72,10 @@
                 <div class="cos-planned-window"><dt class="ui-caption ui-muted">Planned window · Philippine time</dt><dd class="ui-value">@(Model.PlannedStartTime?.ToString("dd MMM yyyy, HH:mm") ?? "Not scheduled") @(Model.PlannedEndTime.HasValue ? $"– {Model.PlannedEndTime:dd MMM yyyy, HH:mm}" : "")</dd></div>
                 @if (booking != null)
                 {
-                    <div><dt class="ui-caption ui-muted">COS discount</dt><dd class="ui-value">@(booking.SkipCosDiscount ? "0% · Skipped" : $"{booking.CosDiscountPercent.GetValueOrDefault():0.##}% · Applied")</dd></div>
+                    @if (canViewRates)
+                    {
+                        <div><dt class="ui-caption ui-muted">COS discount</dt><dd class="ui-value">@(booking.SkipCosDiscount ? "0% · Skipped" : $"{booking.CosDiscountPercent.GetValueOrDefault():0.##}% · Applied")</dd></div>
+                    }
                     <div><dt class="ui-caption ui-muted">SBMA share</dt><dd class="ui-value">@(booking.SbmaEnabled ? "Enabled · Actual time" : "Disabled")</dd></div>
                 }
             </dl>
@@ -343,11 +347,11 @@
         }
         <footer class="cos-details-footer">
             <span class="ui-caption ui-muted">@progress.Guidance</span>
-            <span class="ui-body">@Model.DispatchTickets.Count(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted) ticket(s) · Calculated billing ₱ @Model.DispatchTickets.Where(ticket => ticket.Status != MsapConstants.DispatchTicketStatus.CalculationPending && ticket.Status != MsapConstants.DispatchTicketStatus.Deleted).Sum(ticket => ticket.TotalBilling).ToString("N2")
+            <span class="ui-body">@Model.DispatchTickets.Count(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted) ticket(s)@if (canViewRates) {<text> · Calculated billing ₱ @Model.DispatchTickets.Where(ticket => ticket.Status != MsapConstants.DispatchTicketStatus.CalculationPending && ticket.Status != MsapConstants.DispatchTicketStatus.Deleted).Sum(ticket => ticket.TotalBilling).ToString("N2")</text>
                 @if (Model.DispatchTickets.Any(ticket => ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending))
                 {
                     <span class="ui-caption ui-muted">· Unresolved charges excluded</span>
-                }</span>
+                }}</span>
         </footer>
     </main>
 </div>

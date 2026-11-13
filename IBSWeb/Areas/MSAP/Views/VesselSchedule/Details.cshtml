@@ -3,6 +3,7 @@
     var closed = Model.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
     var pending = !closed && (!Model.CustomerOrderSlipId.HasValue || Model.ApprovedRevision != Model.Revision || Model.Status == MsapConstants.VesselScheduleStatus.Tentative);
     var canApprove = pending && ViewBag.CanConfirm == true;
+    var canViewRates = ViewBag.CanConfirm == true || ViewBag.CanManageRates == true;
     var reapproval = Model.ApprovedRevision.HasValue;
     ViewData["Title"] = pending ? "Review schedule" : "Schedule details";
     ViewData["IsFullWidth"] = true;
@@ -18,6 +19,12 @@
     var sbmaOverride = Model.SbmaEnabled != subicPort;
     var manualEntries = Model.ServiceEntries.Where(entry => entry.ManualTariffRate.HasValue || entry.ManualBafRate.HasValue).ToList();
     var captures = ViewBag.RateCaptures as List<ScheduleRateCaptureViewModel> ?? new List<ScheduleRateCaptureViewModel>();
+    var revisionChanges = (ViewBag.RevisionChanges as List<MsapFieldChange> ?? new List<MsapFieldChange>())
+        .GroupBy(c => c.Field, StringComparer.Ordinal)
+        .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+    var addedTugboatIds = ViewBag.AddedTugboatIds as HashSet<int> ?? new HashSet<int>();
+    var addedEntryIds = ViewBag.AddedServiceEntryIds as HashSet<int> ?? new HashSet<int>();
+    var hasRevisionChanges = pending && reapproval && revisionChanges.Count > 0;
 }
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
@@ -25,8 +32,8 @@
     <partial name="_WorkflowProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
     <main class="schedule-main-workspace schedule-review-workspace" id="scheduleReview"
           data-schedule-id="@Model.VesselScheduleId"
-          data-adopt-url="@Url.Action("AdoptTableRate")"
-          data-rate-url="@Url.Action("GetTariffRate")" data-customer-id="@Model.CustomerId"
+          data-adopt-url="@(canViewRates ? Url.Action("AdoptTableRate") : "")"
+          data-rate-url="@(canViewRates ? Url.Action("GetTariffRate") : "")" data-customer-id="@Model.CustomerId"
           data-terminal-id="@Model.TerminalId" data-planned-start="@Model.PlannedStart.ToString("yyyy-MM-ddTHH:mm")">
         <header class="schedule-header-stack ui-page-header">
             <nav aria-label="Breadcrumb">
@@ -49,33 +56,53 @@
                 }
                 <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
             </div>
-            <p class="ui-body ui-muted ui-page-description">@(pending ? "Review the booking, service rates and commercial terms before approval." : "Booking details, service requirements and commercial terms.")</p>
+            <p class="ui-body ui-muted ui-page-description">@(canViewRates ? (pending ? "Review the booking, service rates and commercial terms before approval." : "Booking details, service requirements and commercial terms.") : "Booking details, assigned tugboats and expected services.")</p>
             <div class="schedule-status-banner ui-page-description">
                 <span class="schedule-status-pill ui-status @(pending ? "ui-attention" : "")">@(pending ? reapproval ? "Pending reapproval" : "Pending review" : MsapConstants.VesselScheduleStatus.GetDisplayName(Model.Status))</span>
-                <span class="ui-body ui-muted">Booking #@Model.VesselScheduleId@if (Model.Revision > 1) {<text> · Revision @(Model.Revision - 1)</text>}</span>
+                <span class="ui-body ui-muted">Booking #@Model.VesselScheduleId@if (Model.Revision > 1) {<text> · Revision @Model.Revision</text>}</span>
             </div>
         </header>
         <div class="schedule-review-content ui-stack">
             <section class="ui-panel ui-panel--compact ui-stack" aria-labelledby="reviewBookingTitle">
                 <h2 class="ui-section-title" id="reviewBookingTitle">Booking details</h2>
+                @if (hasRevisionChanges)
+                {
+                    <p class="ui-panel ui-body ui-attention">
+                        <strong>Revised for reapproval:</strong>
+                        @string.Join(" · ", revisionChanges.Values.Select(c => string.IsNullOrWhiteSpace(c.Before) ? $"{c.Label}: {c.After}" : $"{c.Label}: {c.Before} → {c.After}"))
+                    </p>
+                }
+                @* TODO(Linear): Make highlighted revision fields clickable to open a dedicated schedule adjustment / revision-diff page. *@
                 <dl class="schedule-review-fields schedule-review-booking-fields">
-                    <div><dt class="ui-caption ui-muted">Customer</dt><dd class="ui-value">@(Model.Customer?.CustomerName ?? "Not selected")</dd></div>
-                    <div><dt class="ui-caption ui-muted">Vessel</dt><dd class="ui-value">@Model.Vessel.VesselName</dd></div>
-                    <div><dt class="ui-caption ui-muted">Port</dt><dd class="ui-value">@Model.Port.PortName</dd></div>
-                    <div><dt class="ui-caption ui-muted">Terminal</dt><dd class="ui-value">@Model.Terminal.TerminalName</dd></div>
-                    <div><dt class="ui-caption ui-muted">Voyage number</dt><dd class="ui-value">@(Model.VoyageNumber ?? "—")</dd></div>
-                    <div><dt class="ui-caption ui-muted">Planned start · Philippine time</dt><dd class="ui-value">@Model.PlannedStart.ToString("dd MMM yyyy, HH:mm")</dd></div>
-                    <div><dt class="ui-caption ui-muted">Planned end · Philippine time</dt><dd class="ui-value">@Model.PlannedEnd.ToString("dd MMM yyyy, HH:mm")</dd></div>
+                    @{
+                        revisionChanges.TryGetValue(nameof(VesselSchedule.CustomerId), out var customerChange);
+                        revisionChanges.TryGetValue(nameof(VesselSchedule.VesselId), out var vesselChange);
+                        revisionChanges.TryGetValue(nameof(VesselSchedule.PortId), out var portChange);
+                        revisionChanges.TryGetValue(nameof(VesselSchedule.TerminalId), out var terminalChange);
+                        revisionChanges.TryGetValue(nameof(VesselSchedule.VoyageNumber), out var voyageChange);
+                        revisionChanges.TryGetValue(nameof(VesselSchedule.PlannedStart), out var plannedStartChange);
+                        revisionChanges.TryGetValue(nameof(VesselSchedule.PlannedEnd), out var plannedEndChange);
+                    }
+                    <div class="@(hasRevisionChanges && customerChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Customer</dt><dd class="ui-value">@(Model.Customer?.CustomerName ?? "Not selected")</dd>@if (hasRevisionChanges && customerChange != null) {<small class="ui-caption">Revised from @customerChange.Before</small>}</div>
+                    <div class="@(hasRevisionChanges && vesselChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Vessel</dt><dd class="ui-value">@Model.Vessel.VesselName</dd>@if (hasRevisionChanges && vesselChange != null) {<small class="ui-caption">Revised from @vesselChange.Before</small>}</div>
+                    <div class="@(hasRevisionChanges && portChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Port</dt><dd class="ui-value">@Model.Port.PortName</dd>@if (hasRevisionChanges && portChange != null) {<small class="ui-caption">Revised from @portChange.Before</small>}</div>
+                    <div class="@(hasRevisionChanges && terminalChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Terminal</dt><dd class="ui-value">@Model.Terminal.TerminalName</dd>@if (hasRevisionChanges && terminalChange != null) {<small class="ui-caption">Revised from @terminalChange.Before</small>}</div>
+                    <div class="@(hasRevisionChanges && voyageChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Voyage number</dt><dd class="ui-value">@(Model.VoyageNumber ?? "—")</dd>@if (hasRevisionChanges && voyageChange != null) {<small class="ui-caption">Revised from @voyageChange.Before</small>}</div>
+                    <div class="@(hasRevisionChanges && plannedStartChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Planned start · Philippine time</dt><dd class="ui-value">@Model.PlannedStart.ToString("dd MMM yyyy, HH:mm")</dd>@if (hasRevisionChanges && plannedStartChange != null) {<small class="ui-caption">Revised from @plannedStartChange.Before</small>}</div>
+                    <div class="@(hasRevisionChanges && plannedEndChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Planned end · Philippine time</dt><dd class="ui-value">@Model.PlannedEnd.ToString("dd MMM yyyy, HH:mm")</dd>@if (hasRevisionChanges && plannedEndChange != null) {<small class="ui-caption">Revised from @plannedEndChange.Before</small>}</div>
                 </dl>
             </section>
             <section class="ui-panel ui-panel--compact ui-stack" aria-labelledby="reviewCommercialTitle">
-                <h2 class="ui-section-title" id="reviewCommercialTitle">Commercial settings</h2>
+                <h2 class="ui-section-title" id="reviewCommercialTitle">@(canViewRates ? "Commercial settings" : "Operational classification")</h2>
                 <dl class="schedule-review-fields schedule-review-commercial-fields">
-                    <div class="@(discountOverride ? "schedule-review-attention" : "")">
-                        <dt class="ui-caption ui-muted">Customer discount</dt>
-                        <dd class="ui-value">@appliedDiscount.ToString("0.####")%</dd>
-                        <small class="ui-caption">@(discountOverride ? appliedDiscount == 0 ? $"Skipped customer default of {defaultDiscount:0.####}%." : $"Overrides customer default of {defaultDiscount:0.####}%." : "Customer default.")</small>
-                    </div>
+                    @if (canViewRates)
+                    {
+                        <div class="@(discountOverride ? "schedule-review-attention" : "")">
+                            <dt class="ui-caption ui-muted">Customer discount</dt>
+                            <dd class="ui-value">@appliedDiscount.ToString("0.####")%</dd>
+                            <small class="ui-caption">@(discountOverride ? appliedDiscount == 0 ? $"Skipped customer default of {defaultDiscount:0.####}%." : $"Overrides customer default of {defaultDiscount:0.####}%." : "Customer default.")</small>
+                        </div>
+                    }
                     <div class="@(iocOverride ? "schedule-review-attention" : "")">
                         <dt class="ui-caption ui-muted">IOC / Non-IOC</dt>
                         <dd class="ui-value">@(isIoc ? "IOC · Insular Oil Corporation" : "Non-IOC")</dd>
@@ -91,7 +118,7 @@
             <section class="ui-stack" aria-labelledby="reviewServicesTitle">
                 <div class="ui-field">
                     <h2 class="ui-section-title" id="reviewServicesTitle">Tugboats &amp; services</h2>
-                    <p class="ui-caption ui-muted">Table estimates use the planned date. Final rates use actual service start; actual ticket details are recorded after service.</p>
+                    <p class="ui-caption ui-muted">@(canViewRates ? "Table estimates use the planned date. Final rates use actual service start; actual ticket details are recorded after service." : "Assigned tugboats and expected services for this booking. Actual ticket details are recorded after service.")</p>
                 </div>
                 @if (tugs.Count == 0)
                 {
@@ -100,17 +127,22 @@
                 @foreach (var tug in tugs)
                 {
                     var entries = Model.ServiceEntries.Where(entry => entry.TugboatId == tug.TugboatId).ToList();
-                    <section class="ui-panel ui-stack" aria-label="@tug.TugboatName services">
+                    var isAddedTug = hasRevisionChanges && addedTugboatIds.Contains(tug.TugboatId);
+                    <section class="ui-panel ui-stack @(isAddedTug ? "schedule-review-attention" : "")" aria-label="@tug.TugboatName services">
                         <div class="schedule-review-tug-heading">
                             <h3 class="ui-section-title">@tug.TugboatName</h3>
                             <span class="schedule-pill-badge">@(tug.IsCompanyOwned ? "Company-owned" : "Subcontractor")</span>
+                            @if (isAddedTug)
+                            {
+                                <span class="ui-status ui-attention">Added in revision</span>
+                            }
                             <span class="ui-caption ui-muted">@entries.Count expected services</span>
                         </div>
                         @if (entries.Count == 0)
                         {
                             <p class="ui-body ui-muted">No expected services recorded for this tugboat.</p>
                         }
-                        else
+                        else if (canViewRates)
                         {
                             <div class="schedule-services-table" role="region" aria-label="@tug.TugboatName service rates" tabindex="0">
                                 <table class="schedule-review-table">
@@ -118,8 +150,9 @@
                                     <tbody>
                                         @foreach (var entry in entries)
                                         {
-                                            <tr data-review-service="@entry.ServiceId" data-entry-id="@entry.VesselScheduleServiceEntryId">
-                                                <td>@(entry.Service?.ServiceName ?? $"Service #{entry.ServiceId}")@if (entry.CancelledAt.HasValue) { <small class="ui-caption ui-muted">Cancelled · @entry.CancellationReason</small> }</td>
+                                            var isRevisedEntry = hasRevisionChanges && (addedEntryIds.Contains(entry.VesselScheduleServiceEntryId) || addedTugboatIds.Contains(entry.TugboatId));
+                                            <tr class="@(isRevisedEntry ? "ui-attention" : "")" data-review-service="@entry.ServiceId" data-entry-id="@entry.VesselScheduleServiceEntryId">
+                                                <td>@(entry.Service?.ServiceName ?? $"Service #{entry.ServiceId}")@if (isRevisedEntry) { <small class="ui-caption">Revised / added</small> }@if (entry.CancelledAt.HasValue) { <small class="ui-caption ui-muted">Cancelled · @entry.CancellationReason</small> }</td>
                                                 <td>@(entry.TariffBasis == TariffChargeBasis.PerMove ? "Per move" : entry.TariffBasis == TariffChargeBasis.PerHour ? "Per hour" : "Not specified")</td>
                                                 <td class="schedule-review-rate-cell">
                                                     <span class="@(entry.ManualTariffRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="tariff" data-manual="@entry.ManualTariffRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("N2") : "Checking table…")</span>
@@ -144,6 +177,39 @@
                                 </table>
                             </div>
                         }
+                        else
+                        {
+                            <div class="schedule-services-table" role="region" aria-label="@tug.TugboatName assigned services" tabindex="0">
+                                <table class="schedule-review-table">
+                                    <thead><tr><th>Service</th><th>Tariff basis</th><th>BAF method</th><th>Status</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var entry in entries)
+                                        {
+                                            var isRevisedEntry = hasRevisionChanges && (addedEntryIds.Contains(entry.VesselScheduleServiceEntryId) || addedTugboatIds.Contains(entry.TugboatId));
+                                            <tr class="@(isRevisedEntry ? "ui-attention" : "")">
+                                                <td>@(entry.Service?.ServiceName ?? $"Service #{entry.ServiceId}")@if (isRevisedEntry) { <small class="ui-caption">Revised / added</small> }</td>
+                                                <td>@(entry.TariffBasis == TariffChargeBasis.PerMove ? "Per move" : entry.TariffBasis == TariffChargeBasis.PerHour ? "Per hour" : "Not specified")</td>
+                                                <td>@(entry.BafMethod == BafCalculationMethod.PerMove ? "Per move" : entry.BafMethod == BafCalculationMethod.PerHour ? "Per hour" : entry.BafMethod.HasValue ? entry.BafMethod.Value.ToString() : "Not specified")</td>
+                                                <td>
+                                                    @if (entry.CancelledAt.HasValue)
+                                                    {
+                                                        <span class="ui-status ui-critical">Cancelled</span>
+                                                        if (!string.IsNullOrWhiteSpace(entry.CancellationReason))
+                                                        {
+                                                            <small class="ui-caption ui-muted">@entry.CancellationReason</small>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="ui-status">Scheduled</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
                     </section>
                 }
             </section>
@@ -159,11 +225,14 @@
                 <div class="schedule-metrics-list">
                     <div class="schedule-metric-row"><span>Tugboats</span><strong>@tugs.Count</strong></div>
                     <div class="schedule-metric-row"><span>Expected services</span><strong>@Model.ServiceEntries.Count</strong></div>
-                    <div class="schedule-metric-row"><span>Manual tariff rates</span><strong>@Model.ServiceEntries.Count(entry => entry.ManualTariffRate.HasValue)</strong></div>
-                    <div class="schedule-metric-row"><span>Manual BAF rates</span><strong>@Model.ServiceEntries.Count(entry => entry.ManualBafRate.HasValue)</strong></div>
+                    @if (canViewRates)
+                    {
+                        <div class="schedule-metric-row"><span>Manual tariff rates</span><strong>@Model.ServiceEntries.Count(entry => entry.ManualTariffRate.HasValue)</strong></div>
+                        <div class="schedule-metric-row"><span>Manual BAF rates</span><strong>@Model.ServiceEntries.Count(entry => entry.ManualBafRate.HasValue)</strong></div>
+                    }
                 </div>
             </section>
-            @if (manualEntries.Count > 0)
+            @if (canViewRates && manualEntries.Count > 0)
             {
                 <section class="ui-panel ui-stack schedule-review-attention">
                     <h2 class="ui-section-title">@(pending ? "Manual rates to review" : "Saved manual rates")</h2>
@@ -206,48 +275,51 @@
                     }
                 </section>
             }
-            <section class="ui-panel ui-stack schedule-review-actions" aria-labelledby="bookingActionsTitle">
-                <h2 class="ui-section-title" id="bookingActionsTitle">Booking actions</h2>
-                @if (!closed && ViewBag.CanEdit == true && ViewBag.CanComplete == true)
-                {
-                    <div class="schedule-action-item ui-stack">
-                        <h3 class="ui-label">Finish vessel service</h3>
-                        <p class="ui-body ui-muted">All recorded services have actual end times. Complete service when no more Dispatch Tickets are expected. Billing and collection continue separately.</p>
-                        <form asp-action="Complete" method="post" data-schedule-action="Complete">
-                            <input type="hidden" name="id" value="@Model.VesselScheduleId" />
-                            <button type="submit" class="modern-btn-complete"><span class="material-symbols-outlined" aria-hidden="true">task_alt</span> Complete Service</button>
-                        </form>
-                    </div>
-                }
-                @if (!closed && ViewBag.CanEdit == true)
-                {
-                    @if (ViewBag.CanRevise == true)
+            @if (closed || ViewBag.CanEdit == true)
+            {
+                <section class="ui-panel ui-stack schedule-review-actions" aria-labelledby="bookingActionsTitle">
+                    <h2 class="ui-section-title" id="bookingActionsTitle">Booking actions</h2>
+                    @if (!closed && ViewBag.CanEdit == true && ViewBag.CanComplete == true)
                     {
                         <div class="schedule-action-item ui-stack">
-                            <h3 class="ui-label">Adjust the booking</h3><p class="ui-body ui-muted">Editing the schedule returns it to Tentative for review and reapproval while preserving the COS. Bookings with actual tickets or billing cannot be revised.</p>
-                            <a asp-action="Edit" asp-route-id="@Model.VesselScheduleId" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">edit_calendar</span> Revise Schedule</a>
+                            <h3 class="ui-label">Finish vessel service</h3>
+                            <p class="ui-body ui-muted">All recorded services have actual end times. Complete service when no more Dispatch Tickets are expected. Billing and collection continue separately.</p>
+                            <form asp-action="Complete" method="post" data-schedule-action="Complete">
+                                <input type="hidden" name="id" value="@Model.VesselScheduleId" />
+                                <button type="submit" class="modern-btn-complete"><span class="material-symbols-outlined" aria-hidden="true">task_alt</span> Complete Service</button>
+                            </form>
                         </div>
                     }
-                    <div class="schedule-action-item schedule-action-cancel">
-                        @if (ViewBag.CanCancel != true)
+                    @if (!closed && ViewBag.CanEdit == true)
+                    {
+                        @if (ViewBag.CanRevise == true)
                         {
-                            <h3 class="ui-label">Cancellation unavailable</h3><p class="ui-body ui-muted">Resolve active Dispatch Tickets and billing before cancelling this schedule.</p>
+                            <div class="schedule-action-item ui-stack">
+                                <h3 class="ui-label">Adjust the booking</h3><p class="ui-body ui-muted">Editing the schedule returns it to Tentative for review and reapproval while preserving the COS. Bookings with actual tickets or billing cannot be revised.</p>
+                                <a asp-action="Edit" asp-route-id="@Model.VesselScheduleId" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">edit_calendar</span> Revise Schedule</a>
+                            </div>
                         }
-                        else
-                        {
-                            <h3 class="ui-label">Cancel this booking</h3><p class="ui-body ui-muted">@(Model.CustomerOrderSlipId.HasValue ? "Cancels the schedule and its COS together. Records are retained." : "Release the tug bookings and keep this plan on record.")</p>
-                            <form asp-action="Cancel" method="post" data-schedule-action="Cancel">
-                                <input type="hidden" name="id" value="@Model.VesselScheduleId" />
-                                <button type="submit" class="modern-btn-error"><span class="material-symbols-outlined" aria-hidden="true">event_busy</span> Cancel Booking</button>
-                            </form>
-                        }
-                    </div>
-                }
-                @if (closed)
-                {
-                    <p class="ui-body ui-muted">@(Model.Status == MsapConstants.VesselScheduleStatus.Completed ? "Service is completed. Charge calculation, billing approval and collection can continue." : "This booking is cancelled. Schedule changes are no longer available.")</p>
-                }
-            </section>
+                        <div class="schedule-action-item schedule-action-cancel">
+                            @if (ViewBag.CanCancel != true)
+                            {
+                                <h3 class="ui-label">Cancellation unavailable</h3><p class="ui-body ui-muted">Resolve active Dispatch Tickets and billing before cancelling this schedule.</p>
+                            }
+                            else
+                            {
+                                <h3 class="ui-label">Cancel this booking</h3><p class="ui-body ui-muted">@(Model.CustomerOrderSlipId.HasValue ? "Cancels the schedule and its COS together. Records are retained." : "Release the tug bookings and keep this plan on record.")</p>
+                                <form asp-action="Cancel" method="post" data-schedule-action="Cancel">
+                                    <input type="hidden" name="id" value="@Model.VesselScheduleId" />
+                                    <button type="submit" class="modern-btn-error"><span class="material-symbols-outlined" aria-hidden="true">event_busy</span> Cancel Booking</button>
+                                </form>
+                            }
+                        </div>
+                    }
+                    @if (closed)
+                    {
+                        <p class="ui-body ui-muted">@(Model.Status == MsapConstants.VesselScheduleStatus.Completed ? "Service is completed. Charge calculation, billing approval and collection can continue." : "This booking is cancelled. Schedule changes are no longer available.")</p>
+                    }
+                </section>
+            }
         </aside>
 
         @if (canApprove)
@@ -257,7 +329,7 @@
                 <input type="hidden" name="id" value="@Model.VesselScheduleId" />
                 <input type="hidden" name="reviewedAt" value="@((Model.EditedDate ?? Model.CreatedDate).ToString("O"))" />
                 <input type="hidden" name="allowConflicts" value="false" />
-                <span class="ui-caption ui-muted">@(Model.Revision > 1 ? $"Approval applies to Revision {Model.Revision - 1} of this booking." : "Approval applies to this booking.")</span>
+                <span class="ui-caption ui-muted">@(Model.Revision > 1 ? $"Approval applies to Revision {Model.Revision} of this booking." : "Approval applies to this booking.")</span>
                 <div class="schedule-action-buttons">
                     <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary" data-ui-back>Back</a>
                     <button type="submit" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">check_circle</span> @(reapproval ? "Reapprove schedule" : "Approve schedule")</button>

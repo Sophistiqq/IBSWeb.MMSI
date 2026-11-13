@@ -185,11 +185,14 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return NotFound();
             }
             await SetActionPermissionsAsync();
-            ViewBag.RateCaptures = await rates.GetScheduleCapturesAsync(schedule, ct);
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewBag.CanManageRates = userId != null
                 && await accessControl.HasAnyAccessAsync(userId, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload);
             ViewBag.CanCaptureRates = ViewBag.CanManageRates;
+            var canViewRates = ViewBag.CanConfirm == true || ViewBag.CanManageRates == true;
+            ViewBag.RateCaptures = canViewRates
+                ? await rates.GetScheduleCapturesAsync(schedule, ct)
+                : new List<ScheduleRateCaptureViewModel>();
             ViewData["JobProgressActionStage"] = 1;
             ViewData["JobProgressActionTargetId"] = id;
             var job = schedule.CustomerOrderSlipId.HasValue
@@ -211,7 +214,219 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 && ((JobProgressViewModel)ViewBag.JobProgress).Stage >= JobProgressCalculator.TariffStage
                 && CustomerOrderSlipService.CanCompleteService(await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == job.CustomerOrderSlipId, ct));
             ViewBag.CanCancel = schedule.CustomerOrderSlipId == null || (job?.Status == MsapConstants.CustomerOrderSlipStatus.Open && !hasActiveTickets && !hasBilling);
+            var isPendingReapproval = !closed && schedule.ApprovedRevision.HasValue
+                && (!schedule.CustomerOrderSlipId.HasValue || schedule.ApprovedRevision != schedule.Revision || schedule.Status == MsapConstants.VesselScheduleStatus.Tentative);
+            if (isPendingReapproval)
+            {
+                var (changes, addedTugboatIds, addedEntryIds) = await LoadRevisionChangesAsync(id, ct);
+                ViewBag.RevisionChanges = changes;
+                ViewBag.AddedTugboatIds = addedTugboatIds;
+                ViewBag.AddedServiceEntryIds = addedEntryIds;
+            }
+            else
+            {
+                ViewBag.RevisionChanges = new List<MsapFieldChange>();
+                ViewBag.AddedTugboatIds = new HashSet<int>();
+                ViewBag.AddedServiceEntryIds = new HashSet<int>();
+            }
             return View(schedule);
+        }
+
+        private async Task<(List<MsapFieldChange> Changes, HashSet<int> AddedTugboatIds, HashSet<int> AddedEntryIds)> LoadRevisionChangesAsync(int scheduleId, CancellationToken ct)
+        {
+            List<MsapFieldChange> rawChanges = [];
+            var adjustmentLogs = await unitOfWork.MsapAdjustmentLog.GetAllAsync(
+                a => a.DocumentType == "VesselSchedule" && a.RecordId == scheduleId, ct);
+            var latestAdjustment = adjustmentLogs
+                .OrderByDescending(a => a.EditedDate)
+                .ThenByDescending(a => a.Id)
+                .FirstOrDefault();
+            if (latestAdjustment != null && !string.IsNullOrWhiteSpace(latestAdjustment.ChangesJson))
+            {
+                try
+                {
+                    var parsed = JsonSerializer.Deserialize<List<MsapFieldChange>>(latestAdjustment.ChangesJson);
+                    if (parsed is { Count: > 0 })
+                    {
+                        rawChanges = parsed;
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Fall back to AuditTrail activity text if ChangesJson is malformed.
+                }
+            }
+
+            if (rawChanges.Count == 0)
+            {
+                var logs = await unitOfWork.AuditTrail.GetAllAsync(
+                    a => a.DocumentType == "Vessel Schedule" && a.RecordId == scheduleId, ct);
+                var latestRevisionLog = logs
+                    .Where(a => a.Activity.StartsWith("Re-approval revision:", StringComparison.Ordinal))
+                    .OrderByDescending(a => a.Date)
+                    .ThenByDescending(a => a.Id)
+                    .FirstOrDefault();
+                if (latestRevisionLog != null)
+                {
+                    rawChanges = ParseRevisionChangesFromActivity(latestRevisionLog.Activity);
+                    await ResolveFallbackTugboatNamesAsync(rawChanges, ct);
+                }
+            }
+
+            HashSet<int> addedTugboatIds = [];
+            HashSet<int> addedEntryIds = [];
+            List<MsapFieldChange> visibleChanges = [];
+            foreach (var change in rawChanges)
+            {
+                if (change.Field == "_AddedTugboatIds")
+                {
+                    foreach (var part in (change.After ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        if (int.TryParse(part, out var tugId))
+                        {
+                            addedTugboatIds.Add(tugId);
+                        }
+                    }
+                    continue;
+                }
+                if (change.Field == "_AddedServiceEntryIds")
+                {
+                    foreach (var part in (change.After ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        if (int.TryParse(part, out var entryId))
+                        {
+                            addedEntryIds.Add(entryId);
+                        }
+                    }
+                    continue;
+                }
+                visibleChanges.Add(change);
+            }
+
+            return (visibleChanges, addedTugboatIds, addedEntryIds);
+        }
+
+        private async Task ResolveFallbackTugboatNamesAsync(List<MsapFieldChange> changes, CancellationToken ct)
+        {
+            var tugChange = changes.FirstOrDefault(c => c.Field == nameof(VesselSchedule.AssignedTugboatIds));
+            if (tugChange == null || string.IsNullOrWhiteSpace(tugChange.Before) || !tugChange.Before.StartsWith("[", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            try
+            {
+                var oldIds = JsonSerializer.Deserialize<List<int>>(tugChange.Before) ?? [];
+                var newIds = string.IsNullOrWhiteSpace(tugChange.After)
+                    ? []
+                    : JsonSerializer.Deserialize<List<int>>(tugChange.After) ?? [];
+                var allIds = oldIds.Concat(newIds).Distinct().ToList();
+                var tugNames = allIds.Count > 0
+                    ? (await unitOfWork.Tugboat.GetAllAsync(t => allIds.Contains(t.TugboatId), ct))
+                        .ToDictionary(t => t.TugboatId, t => t.TugboatName)
+                    : new Dictionary<int, string>();
+                tugChange.Before = oldIds.Count == 0 ? "None" : string.Join(", ", oldIds.Select(i => tugNames.TryGetValue(i, out var n) ? n : $"Tug #{i}"));
+                tugChange.After = newIds.Count == 0 ? "None" : string.Join(", ", newIds.Select(i => tugNames.TryGetValue(i, out var n) ? n : $"Tug #{i}"));
+                var addedIds = newIds.Except(oldIds).ToList();
+                if (addedIds.Count > 0)
+                {
+                    changes.Add(new MsapFieldChange { Field = "_AddedTugboatIds", Label = "_AddedTugboatIds", Before = "", After = string.Join(",", addedIds) });
+                }
+            }
+            catch (JsonException)
+            {
+                // Leave original text if not JSON IDs.
+            }
+        }
+
+        private static List<MsapFieldChange> ParseRevisionChangesFromActivity(string activity)
+        {
+            const string marker = "Changes: ";
+            var start = activity.IndexOf(marker, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                return [];
+            }
+
+            start += marker.Length;
+            var end = activity.IndexOf(". Overlap override:", start, StringComparison.Ordinal);
+            var summary = (end >= 0 ? activity[start..end] : activity[start..]).Trim();
+            if (string.IsNullOrWhiteSpace(summary) || summary.Equals("No field values changed", StringComparison.Ordinal))
+            {
+                return [];
+            }
+
+            List<MsapFieldChange> changes = [];
+            foreach (var rawPart in summary.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (TryParseArrowChange(rawPart, "Planned start ", nameof(VesselSchedule.PlannedStart), "Planned start", out var plannedStart))
+                {
+                    changes.Add(plannedStart);
+                }
+                else if (TryParseArrowChange(rawPart, "Planned end ", nameof(VesselSchedule.PlannedEnd), "Planned end", out var plannedEnd))
+                {
+                    changes.Add(plannedEnd);
+                }
+                else if (TryParseArrowChange(rawPart, "Voyage ", nameof(VesselSchedule.VoyageNumber), "Voyage number", out var voyage))
+                {
+                    changes.Add(voyage);
+                }
+                else if (TryParseArrowChange(rawPart, "Customer ID ", nameof(VesselSchedule.CustomerId), "Customer", out var customer))
+                {
+                    changes.Add(customer);
+                }
+                else if (TryParseArrowChange(rawPart, "Vessel ID ", nameof(VesselSchedule.VesselId), "Vessel", out var vessel))
+                {
+                    changes.Add(vessel);
+                }
+                else if (TryParseArrowChange(rawPart, "Port ID ", nameof(VesselSchedule.PortId), "Port", out var port))
+                {
+                    changes.Add(port);
+                }
+                else if (TryParseArrowChange(rawPart, "Terminal ID ", nameof(VesselSchedule.TerminalId), "Terminal", out var terminal))
+                {
+                    changes.Add(terminal);
+                }
+                else if (TryParseArrowChange(rawPart, "Assigned tugboats ", nameof(VesselSchedule.AssignedTugboatIds), "Assigned tugboats", out var tugs))
+                {
+                    changes.Add(tugs);
+                }
+                else if (TryParseArrowChange(rawPart, "SBMA share ", nameof(VesselSchedule.SbmaEnabled), "SBMA share", out var sbma))
+                {
+                    changes.Add(sbma);
+                }
+                else if (rawPart.StartsWith("Notes updated", StringComparison.Ordinal))
+                {
+                    changes.Add(new MsapFieldChange { Field = nameof(VesselSchedule.Notes), Label = "Notes", Before = "", After = "Updated" });
+                }
+                else if (rawPart.StartsWith("Services updated", StringComparison.Ordinal))
+                {
+                    changes.Add(new MsapFieldChange { Field = nameof(VesselSchedule.ServiceEntries), Label = "Tugboats & services", Before = "", After = rawPart });
+                }
+            }
+
+            return changes;
+        }
+
+        private static bool TryParseArrowChange(string part, string prefix, string field, string label, out MsapFieldChange change)
+        {
+            change = default!;
+            if (!part.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var rest = part[prefix.Length..];
+            var arrow = rest.IndexOf(" -> ", StringComparison.Ordinal);
+            if (arrow < 0)
+            {
+                return false;
+            }
+
+            var before = rest[..arrow].Trim().Trim('\'');
+            var after = rest[(arrow + 4)..].Trim().Trim('\'');
+            change = new MsapFieldChange { Field = field, Label = label, Before = before, After = after };
+            return true;
         }
 
         private async Task SetActionPermissionsAsync()
@@ -401,7 +616,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
-        [RequireAccess(ProcedureEnum.ViewOperations)]
+        [RequireAnyAccess(ProcedureEnum.ApproveSchedule, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload)]
         public async Task<IActionResult> GetCustomerDiscount(int customerId, CancellationToken ct)
         {
             var customer = await unitOfWork.Customer.GetAsync(c => c.CustomerId == customerId, ct);
@@ -409,7 +624,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
-        [RequireAccess(ProcedureEnum.ViewOperations)]
+        [RequireAnyAccess(ProcedureEnum.ApproveSchedule, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload)]
         public async Task<IActionResult> GetTariffRate(int customerId, int terminalId, int serviceId, DateTime? date, CancellationToken ct)
         {
             if (customerId <= 0 || serviceId <= 0)

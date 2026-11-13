@@ -37,6 +37,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ViewBag.FilterType = filterType;
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewBag.CanEditTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditDispatchTicket);
+            ViewData["CanViewRates"] = userId != null && await accessControl.HasAnyAccessAsync(
+                userId,
+                ProcedureEnum.ApproveSchedule,
+                ProcedureEnum.ManageRates,
+                ProcedureEnum.ApproveRateUpload,
+                ProcedureEnum.ViewBillings);
             return View(Enumerable.Empty<DispatchTicket>());
         }
 
@@ -159,6 +165,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewBag.CanEditTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditDispatchTicket);
+            ViewData["CanViewRates"] = userId != null && await accessControl.HasAnyAccessAsync(
+                userId,
+                ProcedureEnum.ApproveSchedule,
+                ProcedureEnum.ManageRates,
+                ProcedureEnum.ApproveRateUpload,
+                ProcedureEnum.ViewBillings);
 
             return View(model);
         }

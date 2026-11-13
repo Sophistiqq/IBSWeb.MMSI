@@ -100,7 +100,7 @@ namespace IBS.Services.MSAP
                     scheduled = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(scheduled.VesselScheduleId, cancellationToken);
                     if (scheduled != null && scheduled.ApprovedRevision.HasValue && (scheduled.ApprovedRevision != scheduled.Revision || scheduled.Status == MsapConstants.VesselScheduleStatus.Tentative))
                     {
-                        return ServiceResult<int>.Failure("This vessel schedule was revised and requires commercial re-approval by Sir RML before ticket recording.");
+                        return ServiceResult<int>.Failure("This vessel schedule was revised and requires commercial re-approval before ticket recording.");
                     }
                 }
                 if (scheduled?.ServiceEntries.Count > 0 || viewModel.VesselScheduleServiceEntryId.HasValue)

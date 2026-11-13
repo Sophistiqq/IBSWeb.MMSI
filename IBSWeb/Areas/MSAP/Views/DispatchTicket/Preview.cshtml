@@ -189,76 +189,89 @@
 
             <!-- Right Column: Tariff Details -->
             <div class="modern-col-8">
-                <div class="modern-card ui-card">
-                    <div class="modern-card-header-info ui-card-header">
-                        <span class="material-symbols-outlined">receipt_long</span>
-                        <h2 class="modern-headline-md ui-section-title">Tariff Summary</h2>
-                    </div>
-                    <div class="modern-card-body ui-card-body">
-                        <div class="modern-table-container" style="border: 1px solid var(--outline-variant);">
-                            <table class="modern-table ui-table">
-                                <thead>
-                                    <tr>
-                                        <th>Service Description</th>
-                                        <th class="text-right">Rate</th>
-                                        <th class="text-right">Disc. (%)</th>
-                                        <th class="text-right">Billing Amount</th>
-                                        <th class="text-right">Net Revenue</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td class="font-bold">Dispatch Service</td>
-                                        <td class="text-right">@Model.DispatchRate.ToString("N2")</td>
-                                        <td class="text-right text-error font-bold">@Model.DispatchDiscount.ToString("N2")%</td>
-                                        <td class="text-right font-bold">@Model.DispatchBillingAmount.ToString("N2")</td>
-                                        <td class="text-right font-bold text-success">@Model.DispatchNetRevenue.ToString("N2")</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="font-bold">BAF (Bunker Adjustment)</td>
-                                        <td class="text-right">@Model.BAFRate.ToString("N2")</td>
-                                        <td class="text-right text-error font-bold">@Model.BAFDiscount.ToString("N2")%</td>
-                                        <td class="text-right font-bold">@Model.BAFBillingAmount.ToString("N2")</td>
-                                        <td class="text-right font-bold text-success">@Model.BAFNetRevenue.ToString("N2")</td>
-                                    </tr>
-                                    @if (Model.Tugboat is { IsCompanyOwned: false })
-                                    {
-                                        <tr style="background-color: var(--surface-container-low)">
-                                            <td colspan="3" class="italic">
-                                                Outsourced Provider: <span class="font-bold">@Model.Tugboat.TugboatOwner?.TugboatOwnerName</span>
-                                            </td>
-                                            <td class="text-right modern-label ui-label" style="vertical-align: middle">AP Other Tugs:</td>
-                                            <td class="text-right font-bold text-error">(@Model.ApOtherTugs.ToString("N2"))</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
+                @if (ViewData["CanViewRates"] is true)
+                {
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
+                            <span class="material-symbols-outlined">receipt_long</span>
+                            <h2 class="modern-headline-md ui-section-title">Tariff Summary</h2>
                         </div>
-
-                        <!-- Financial Summary Card -->
-                        <div class="financial-summary-card mt-4">
-                            <div class="financial-item">
-                                <span class="financial-label">Grand Total Billing</span>
-                                <span class="financial-value primary">₱ @Model.TotalBilling.ToString("N2")</span>
+                        <div class="modern-card-body ui-card-body">
+                            <div class="modern-table-container" style="border: 1px solid var(--outline-variant);">
+                                <table class="modern-table ui-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Service Description</th>
+                                            <th class="text-right">Rate</th>
+                                            <th class="text-right">Disc. (%)</th>
+                                            <th class="text-right">Billing Amount</th>
+                                            <th class="text-right">Net Revenue</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td class="font-bold">Dispatch Service</td>
+                                            <td class="text-right">@Model.DispatchRate.ToString("N2")</td>
+                                            <td class="text-right text-error font-bold">@Model.DispatchDiscount.ToString("N2")%</td>
+                                            <td class="text-right font-bold">@Model.DispatchBillingAmount.ToString("N2")</td>
+                                            <td class="text-right font-bold text-success">@Model.DispatchNetRevenue.ToString("N2")</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="font-bold">BAF (Bunker Adjustment)</td>
+                                            <td class="text-right">@Model.BAFRate.ToString("N2")</td>
+                                            <td class="text-right text-error font-bold">@Model.BAFDiscount.ToString("N2")%</td>
+                                            <td class="text-right font-bold">@Model.BAFBillingAmount.ToString("N2")</td>
+                                            <td class="text-right font-bold text-success">@Model.BAFNetRevenue.ToString("N2")</td>
+                                        </tr>
+                                        @if (Model.Tugboat is { IsCompanyOwned: false })
+                                        {
+                                            <tr style="background-color: var(--surface-container-low)">
+                                                <td colspan="3" class="italic">
+                                                    Outsourced Provider: <span class="font-bold">@Model.Tugboat.TugboatOwner?.TugboatOwnerName</span>
+                                                </td>
+                                                <td class="text-right modern-label ui-label" style="vertical-align: middle">AP Other Tugs:</td>
+                                                <td class="text-right font-bold text-error">(@Model.ApOtherTugs.ToString("N2"))</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
                             </div>
-                            @if (Model.Tugboat is { IsCompanyOwned: false } && Model.ApOtherTugs > 0)
-                            {
+
+                            <!-- Financial Summary Card -->
+                            <div class="financial-summary-card mt-4">
+                                <div class="financial-item">
+                                    <span class="financial-label">Grand Total Billing</span>
+                                    <span class="financial-value primary">₱ @Model.TotalBilling.ToString("N2")</span>
+                                </div>
+                                @if (Model.Tugboat is { IsCompanyOwned: false } && Model.ApOtherTugs > 0)
+                                {
+                                    <div class="financial-divider"></div>
+                                    <div class="financial-item">
+                                        <span class="financial-label">Outsourced Tug Cost</span>
+                                        <span class="financial-value text-error">₱ (@Model.ApOtherTugs.ToString("N2"))</span>
+                                    </div>
+                                }
                                 <div class="financial-divider"></div>
                                 <div class="financial-item">
-                                    <span class="financial-label">Outsourced Tug Cost</span>
-                                    <span class="financial-value text-error">₱ (@Model.ApOtherTugs.ToString("N2"))</span>
+                                    <span class="financial-label">Net Revenue Realized</span>
+                                    <span class="financial-value secondary">₱ @Model.TotalNetRevenue.ToString("N2")</span>
                                 </div>
-                            }
-                            <div class="financial-divider"></div>
-                            <div class="financial-item">
-                                <span class="financial-label">Net Revenue Realized</span>
-                                <span class="financial-value secondary">₱ @Model.TotalNetRevenue.ToString("N2")</span>
                             </div>
                         </div>
-
-
                     </div>
-                </div>
+                }
+                else
+                {
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
+                            <span class="material-symbols-outlined">lock</span>
+                            <h2 class="modern-headline-md ui-section-title">Tariff &amp; Billing Summary</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <p class="ui-body ui-muted">Tariff rates, commercial discounts, and billing revenue are restricted to Commercial and Finance.</p>
+                        </div>
+                    </div>
+                }
             </div>
         </div>
     </main>

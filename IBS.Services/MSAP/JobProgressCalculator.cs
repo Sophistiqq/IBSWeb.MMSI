@@ -217,7 +217,7 @@ namespace IBS.Services.MSAP
                 result.Stage = 1;
                 var isReapproval = schedule.ApprovedRevision.HasValue;
                 result.Guidance = isReapproval
-                    ? "This schedule was revised and requires commercial re-approval by Sir RML before ticket recording or charge calculation."
+                    ? "This schedule was revised and requires commercial re-approval before ticket recording or charge calculation."
                     : "Actual service tickets may be recorded while approval is pending. Billing remains blocked until the current schedule is approved.";
                 SetAction(result, isReapproval ? "Review and Reapprove" : "Review and Approve", "VesselSchedule", "Details", schedule.VesselScheduleId,
                     ProcedureEnum.ApproveSchedule, isReapproval ? "schedule re-approval" : "schedule approval");

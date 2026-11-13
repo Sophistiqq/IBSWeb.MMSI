@@ -142,11 +142,26 @@ namespace Checks.MSAP
                 };
                 reviewData["JobProgress"] = new JobProgressViewModel { HasSchedule = true, VesselScheduleId = 5, Stage = 1 };
                 reviewData["JobProgressActionStage"] = 1;
+                if (reapproval)
+                {
+                    reviewData["RevisionChanges"] = new List<MsapFieldChange>
+                    {
+                        new() { Field = nameof(VesselSchedule.PlannedStart), Label = "Planned start", Before = "12 Oct 2026, 08:00", After = "13 Oct 2026, 08:00" }
+                    };
+                }
                 var reviewView = engine.GetView(null, "/Areas/MSAP/Views/VesselSchedule/Details.cshtml", false);
                 using var reviewOutput = new StringWriter();
                 await reviewView.View!.RenderAsync(new ViewContext(context, reviewView.View, reviewData,
                     services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), reviewOutput, new HtmlHelperOptions()));
                 string reviewHtml = reviewOutput.ToString();
+                Check(!reviewHtml.Contains("Booking actions", StringComparison.Ordinal), "Empty Booking actions card should be hidden when CanEdit is false.");
+                if (reapproval)
+                {
+                    Check(reviewHtml.Contains("Revision 2", StringComparison.Ordinal)
+                        && !reviewHtml.Contains("Revision 1", StringComparison.Ordinal), "Reapproval must display Revision 2 instead of Revision 1.");
+                    Check(reviewHtml.Contains("Revised from 12 Oct 2026, 08:00", StringComparison.Ordinal)
+                        && reviewHtml.Contains("Revised for reapproval:", StringComparison.Ordinal), "Reapproval must highlight revised schedule fields.");
+                }
                 Check(Regex.Matches(reviewHtml, "RateUpload/Editor").Count == 2
                     && reviewHtml.Contains("Open Basic in rate editor", StringComparison.Ordinal)
                     && reviewHtml.Contains("Open BAF in rate editor", StringComparison.Ordinal), "Authorized rate editor actions were missing.");
@@ -175,8 +190,13 @@ namespace Checks.MSAP
             using var viewerOutput = new StringWriter();
             await detailsView.View!.RenderAsync(new ViewContext(context, detailsView.View, viewerData,
                 services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(http), viewerOutput, new HtmlHelperOptions()));
-            Check(!viewerOutput.ToString().Contains("id=\"confirmSchedule\"", StringComparison.Ordinal)
-                && viewerOutput.ToString().Contains("Waiting for an authorized reviewer", StringComparison.Ordinal), "A viewer received an approval action.");
+            var viewerHtml = viewerOutput.ToString();
+            Check(!viewerHtml.Contains("id=\"confirmSchedule\"", StringComparison.Ordinal)
+                && viewerHtml.Contains("Waiting for an authorized reviewer", StringComparison.Ordinal), "A viewer received an approval action.");
+            Check(!viewerHtml.Contains("Tariff rate (₱)", StringComparison.Ordinal)
+                && !viewerHtml.Contains("BAF rate (₱)", StringComparison.Ordinal)
+                && !viewerHtml.Contains("29,000.00", StringComparison.Ordinal)
+                && !viewerHtml.Contains("Manual rates", StringComparison.Ordinal), "Non-approver Operations view leaked rate information.");
             foreach (string status in new[] { MsapConstants.VesselScheduleStatus.Confirmed, MsapConstants.VesselScheduleStatus.Cancelled })
             {
                 schedule.Status = status;

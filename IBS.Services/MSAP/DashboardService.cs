@@ -86,7 +86,11 @@ namespace IBS.Services.MSAP
                     model.ScheduleReviews = await reviews.CountAsync(ct);
                     model.ScheduleReapprovals = await reviews.CountAsync(s => s.ApprovedRevision != null, ct);
                     model.ScheduleReviewItems = await reviews.Include(s => s.Customer).Include(s => s.Vessel)
-                        .OrderBy(s => s.CreatedDate).ThenBy(s => s.VesselScheduleId).Take(6).ToListAsync(ct);
+                        .OrderByDescending(s => s.ApprovedRevision != null)
+                        .ThenBy(s => s.CreatedDate)
+                        .ThenBy(s => s.VesselScheduleId)
+                        .Take(6)
+                        .ToListAsync(ct);
                 }
                 if (model.CanApproveBilling)
                 {

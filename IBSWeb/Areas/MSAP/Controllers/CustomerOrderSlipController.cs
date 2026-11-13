@@ -126,6 +126,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 && await accessControl.HasAccessAsync(userId, ProcedureEnum.ConfirmOtherTugCharges);
             ViewData["OtherTugCharges"] = await otherTugCharges.GetForCosAsync(id, cancellationToken);
             ViewData["CanViewActualTicket"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ViewOperations);
+            ViewData["CanViewRates"] = userId != null && await accessControl.HasAnyAccessAsync(
+                userId,
+                ProcedureEnum.ApproveSchedule,
+                ProcedureEnum.ManageRates,
+                ProcedureEnum.ApproveRateUpload,
+                ProcedureEnum.ViewBillings);
             var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == id, cancellationToken);
             if (schedule != null)
             {
