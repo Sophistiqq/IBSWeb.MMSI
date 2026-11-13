@@ -4,6 +4,7 @@ using IBS.Models.MSAP.Enums;
 using IBS.Services.MSAP.AccessControl;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.Extensions.Logging;
 using IBS.DTOs.MSAP;
@@ -15,7 +16,8 @@ namespace IBS.Services.MSAP
         IUnitOfWork unitOfWork,
         CustomerOrderSlipService customerOrderSlipService,
         ILogger<BillingService> logger,
-        IAccessControlService accessControl)
+        IAccessControlService accessControl,
+        ICloudStorageService? cloudStorageService = null)
     {
         public static bool CanPrint(Billing billing)
         {
@@ -566,8 +568,9 @@ namespace IBS.Services.MSAP
             }
         }
 
-        public async Task<ServiceResult> ReopenBillingForRevisionAsync(int id, string reason, string username, string approverUserId, CancellationToken cancellationToken)
+        public async Task<ServiceResult> ReopenBillingForRevisionAsync(int id, string reason, string username, string approverUserId, CancellationToken cancellationToken, IFormFile? authorizationFile = null)
         {
+            string? uploadedAttachment = null;
             try
             {
                 if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
@@ -591,10 +594,34 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Cannot reopen billing: it has recorded collections or has already been collected. Void or cancel the collections first.", ServiceResultStatus.ValidationError);
                 }
 
+                var related = billing.BasicBilling ?? billing.BafBilling;
+                var targetBillsPreview = new[] { billing, related }.Where(b => b != null).Distinct().ToList();
+                bool requiresAuthorizationDoc = targetBillsPreview.Any(b => b!.PeriodStatus == MsapPeriodStatus.Final);
+
+                if (requiresAuthorizationDoc && authorizationFile is not { Length: > 0 })
+                {
+                    return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to reopen a finalized-period billing.", ServiceResultStatus.ValidationError);
+                }
+
+                if (authorizationFile is { Length: > 0 })
+                {
+                    if (!await OtherTugChargeService.IsSupportedDocumentAsync(authorizationFile, cancellationToken))
+                    {
+                        return ServiceResult.Failure("Upload a valid PDF, PNG, or JPEG authorization document of up to 10 MB.", ServiceResultStatus.ValidationError);
+                    }
+                    if (cloudStorageService == null)
+                    {
+                        return ServiceResult.Failure("Storage service is not configured for authorization documents.");
+                    }
+                    string extension = Path.GetExtension(authorizationFile.FileName).ToLowerInvariant();
+                    uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
+                    await cloudStorageService.UploadFileAsync(authorizationFile, uploadedAttachment);
+                }
+
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    var related = billing.BasicBilling ?? billing.BafBilling;
-                    var targetBills = new[] { billing, related }.Where(b => b != null).Distinct().ToList();
+                    var relatedInTx = billing.BasicBilling ?? billing.BafBilling;
+                    var targetBills = new[] { billing, relatedInTx }.Where(b => b != null).Distinct().ToList();
 
                     foreach (var bill in targetBills)
                     {
@@ -626,6 +653,7 @@ namespace IBS.Services.MSAP
                                 RecordId = bill.MsapBillingId,
                                 ReferenceNumber = bill.MsapBillingNumber,
                                 Reason = reason.Trim(),
+                                AttachmentUrl = uploadedAttachment,
                                 ChangesJson = System.Text.Json.JsonSerializer.Serialize(new[]
                                 {
                                     new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted },

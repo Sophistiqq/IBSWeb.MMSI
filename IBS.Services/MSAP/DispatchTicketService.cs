@@ -795,7 +795,7 @@ namespace IBS.Services.MSAP
             }
         }
 
-        public async Task<ServiceResult> VoidTicketAsync(int id, string reason, string username, CancellationToken cancellationToken)
+        public async Task<ServiceResult> VoidTicketAsync(int id, string reason, string username, CancellationToken cancellationToken, IFormFile? authorizationFile = null)
         {
             try
             {
@@ -808,6 +808,23 @@ namespace IBS.Services.MSAP
                 if (model == null)
                 {
                     return ServiceResult.Failure("Ticket not found.", ServiceResultStatus.NotFound);
+                }
+
+                if (model.PeriodStatus == MsapPeriodStatus.Final && authorizationFile is not { Length: > 0 })
+                {
+                    return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to void a finalized-period dispatch ticket.", ServiceResultStatus.ValidationError);
+                }
+
+                string? uploadedAttachment = null;
+                if (authorizationFile is { Length: > 0 })
+                {
+                    if (!await OtherTugChargeService.IsSupportedDocumentAsync(authorizationFile, cancellationToken))
+                    {
+                        return ServiceResult.Failure("Upload a valid PDF, PNG, or JPEG authorization document of up to 10 MB.", ServiceResultStatus.ValidationError);
+                    }
+                    string extension = Path.GetExtension(authorizationFile.FileName).ToLowerInvariant();
+                    uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
+                    await cloudStorageService.UploadFileAsync(authorizationFile, uploadedAttachment);
                 }
 
                 if (model.Status == MsapConstants.DispatchTicketStatus.Billed)
@@ -883,6 +900,7 @@ namespace IBS.Services.MSAP
                         RecordId = model.DispatchTicketId,
                         ReferenceNumber = model.DispatchNumber,
                         Reason = reason.Trim(),
+                        AttachmentUrl = uploadedAttachment,
                         ChangesJson = System.Text.Json.JsonSerializer.Serialize(new[]
                         {
                             new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = priorPeriodStatus, After = MsapPeriodStatus.Adjusted },

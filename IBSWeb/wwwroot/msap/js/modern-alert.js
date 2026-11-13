@@ -338,6 +338,80 @@ const ModernAlert = {
     },
 
     /**
+     * Show a prompt dialog with reason and optional/required authorization document upload
+     */
+    promptAdjustment: function({
+        title = 'Authorization Required',
+        text = 'Please provide a reason:',
+        placeholder = 'Reason for adjustment',
+        confirmText = 'Submit',
+        cancelText = 'Cancel',
+        icon = 'warning',
+        requireAttachment = false,
+        minReasonLength = 5,
+        maxReasonLength = 500
+    } = {}) {
+        const attachmentHtml = requireAttachment
+            ? `
+                <div class="text-start mt-3" style="max-width: 320px; margin: 0 auto;">
+                    <label for="swalAdjustmentFile" class="modern-label d-block mb-1" style="font-size: 12px; color: var(--on-surface);">
+                        Approved Authorization Document <span style="color: var(--error);">*</span>
+                    </label>
+                    <input id="swalAdjustmentFile" type="file" accept=".pdf,.png,.jpg,.jpeg" class="form-control" style="font-size: 12px; border: 1px solid var(--outline-variant); border-radius: var(--radius-lg); padding: 8px;" />
+                    <div style="font-size: 11px; color: var(--on-surface-variant); margin-top: 4px;">PDF, PNG, or JPEG (max 10 MB)</div>
+                </div>
+            `
+            : '';
+
+        return Swal.fire({
+            ...this._baseConfig,
+            width: requireAttachment ? '440px' : this._baseConfig.width,
+            title: title,
+            html: `
+                ${this._getHeroIcon(icon)}
+                <div class="modern-value-md text-center mx-auto leading-relaxed mb-3" style="max-width: 320px; color: var(--on-surface-variant)">${text}</div>
+                <div style="max-width: 320px; margin: 0 auto;">
+                    <textarea id="swalAdjustmentReason" rows="3" maxlength="${maxReasonLength}" placeholder="${placeholder}" class="form-control w-full" style="border: 1px solid var(--outline-variant); border-radius: var(--radius-xl); padding: 10px 14px; font-size: 13px;"></textarea>
+                </div>
+                ${attachmentHtml}
+            `,
+            showCancelButton: true,
+            confirmButtonText: confirmText,
+            cancelButtonText: cancelText,
+            preConfirm: () => {
+                const reasonEl = document.getElementById('swalAdjustmentReason');
+                const reason = reasonEl ? reasonEl.value.trim() : '';
+                if (!reason || reason.length < minReasonLength || reason.length > maxReasonLength) {
+                    Swal.showValidationMessage(`Enter a reason between ${minReasonLength} and ${maxReasonLength} characters.`);
+                    return false;
+                }
+
+                let file = null;
+                if (requireAttachment) {
+                    const fileEl = document.getElementById('swalAdjustmentFile');
+                    file = fileEl && fileEl.files && fileEl.files.length > 0 ? fileEl.files[0] : null;
+                    if (!file) {
+                        Swal.showValidationMessage('Upload an approved authorization document (PDF, PNG, or JPEG).');
+                        return false;
+                    }
+                    const allowed = ['.pdf', '.png', '.jpg', '.jpeg'];
+                    const lowerName = file.name.toLowerCase();
+                    if (!allowed.some(ext => lowerName.endsWith(ext))) {
+                        Swal.showValidationMessage('Only PDF, PNG, or JPEG files are supported.');
+                        return false;
+                    }
+                    if (file.size <= 0 || file.size > 10 * 1024 * 1024) {
+                        Swal.showValidationMessage('Authorization document must be 10 MB or smaller.');
+                        return false;
+                    }
+                }
+
+                return { reason, file };
+            }
+        });
+    },
+
+    /**
      * Hide current SweetAlert
      */
     close: function() {

@@ -7,6 +7,7 @@ using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.MasterFile;
 using IBS.Services.MSAP;
 using IBS.Utility.MSAP.Constants;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -148,14 +149,20 @@ namespace Checks.MSAP
                         Check(reloaded1.PeriodStatus == MsapPeriodStatus.Final, $"Expected ticket1 PeriodStatus to be 'Final', got '{reloaded1.PeriodStatus}'");
                         Check(reloaded2.PeriodStatus == null, $"Expected ticket2 PeriodStatus to remain null, got '{reloaded2.PeriodStatus}'");
 
-                        // 4. Test Voiding Finalized Ticket produces Adjusted tag & AdjustmentLog
+                        // 4. Test Voiding Finalized Ticket requires authorization document and produces Adjusted tag & AdjustmentLog
                         var appDbOptions = new DbContextOptionsBuilder<IBS.DataAccess.Data.ApplicationDbContext>()
                             .UseNpgsql(connectionString)
                             .Options;
                         await using var appDb = new IBS.DataAccess.Data.ApplicationDbContext(appDbOptions);
                         var uow = new UnitOfWork(db, appDb);
-                        var dtService = new DispatchTicketService(uow, null!, NullLogger<DispatchTicketService>.Instance);
-                        var voidResult = await dtService.VoidTicketAsync(ticket1.DispatchTicketId, "Correction of duplicate ticket entry", "TestUser", CancellationToken.None);
+                        var stubStorage = new StubCloudStorageService();
+                        var dtService = new DispatchTicketService(uow, stubStorage, NullLogger<DispatchTicketService>.Instance);
+
+                        var missingDocVoidResult = await dtService.VoidTicketAsync(ticket1.DispatchTicketId, "Correction of duplicate ticket entry", "TestUser", CancellationToken.None);
+                        Check(!missingDocVoidResult.IsSuccess, "Expected finalized ticket void without authorization document to be rejected");
+
+                        var authPdf = CreateDummyPdfFormFile("memo.pdf");
+                        var voidResult = await dtService.VoidTicketAsync(ticket1.DispatchTicketId, "Correction of duplicate ticket entry", "TestUser", CancellationToken.None, authPdf);
                         Check(voidResult.IsSuccess, $"Expected ticket void to succeed, got: {voidResult.Message}");
 
                         var voidedTicket = await db.MsapDispatchTickets.AsNoTracking().FirstAsync(t => t.DispatchTicketId == ticket1.DispatchTicketId);
@@ -165,6 +172,7 @@ namespace Checks.MSAP
                         var log = await db.MsapAdjustmentLogs.AsNoTracking().FirstOrDefaultAsync(l => l.DocumentType == "DispatchTicket" && l.RecordId == ticket1.DispatchTicketId);
                         Check(log != null, "Expected adjustment log for voided finalized ticket");
                         Check(log!.Reason == "Correction of duplicate ticket entry", "Expected adjustment log reason to match");
+                        Check(!string.IsNullOrWhiteSpace(log.AttachmentUrl), "Expected adjustment log attachment URL to be recorded");
                         Check(log.ChangesJson.Contains("Adjusted"), "Expected adjustment log changes to mention Adjusted");
 
                         // 5. Test Collection Banking Reversion produces Adjusted tag & AdjustmentLog
@@ -186,8 +194,12 @@ namespace Checks.MSAP
 
                         try
                         {
-                            var collService = new CollectionService(uow, NullLogger<CollectionService>.Instance);
-                            var revertResult = await collService.RevertCollectionBankingStepAsync(testCollection.MsapCollectionId, "Premature clearing entry", "Tester", CancellationToken.None);
+                            var collService = new CollectionService(uow, NullLogger<CollectionService>.Instance, stubStorage);
+                            var missingDocRevert = await collService.RevertCollectionBankingStepAsync(testCollection.MsapCollectionId, "Premature clearing entry", "Tester", CancellationToken.None);
+                            Check(!missingDocRevert.IsSuccess, "Expected finalized collection banking revert without authorization document to be rejected");
+
+                            var collAuthPdf = CreateDummyPdfFormFile("collection-memo.pdf");
+                            var revertResult = await collService.RevertCollectionBankingStepAsync(testCollection.MsapCollectionId, "Premature clearing entry", "Tester", CancellationToken.None, collAuthPdf);
                             Check(revertResult.IsSuccess, $"Expected revert to succeed: {revertResult.Message}");
 
                             var reloadedColl = await db.MsapCollections.AsNoTracking().FirstAsync(c => c.MsapCollectionId == testCollection.MsapCollectionId);
@@ -198,6 +210,7 @@ namespace Checks.MSAP
                             var collLog = await db.MsapAdjustmentLogs.AsNoTracking().FirstOrDefaultAsync(l => l.DocumentType == "Collection" && l.RecordId == testCollection.MsapCollectionId);
                             Check(collLog != null, "Expected adjustment log for collection banking revert");
                             Check(collLog!.Reason == "Premature clearing entry", "Expected collection adjustment log reason to match");
+                            Check(!string.IsNullOrWhiteSpace(collLog.AttachmentUrl), "Expected collection adjustment log attachment URL to be recorded");
                             Check(collLog.ChangesJson.Contains("Adjusted"), "Expected collection adjustment log changes to mention Adjusted");
                         }
                         finally
@@ -220,6 +233,26 @@ namespace Checks.MSAP
             }
 
             Console.WriteLine("PASS: Period finalization, EnforceClosedPeriods, and UserAccess permissions verified.");
+        }
+
+        private static IFormFile CreateDummyPdfFormFile(string fileName)
+        {
+            byte[] pdfBytes = "%PDF-1.4\n%EOF\n"u8.ToArray();
+            var stream = new MemoryStream(pdfBytes);
+            return new FormFile(stream, 0, pdfBytes.Length, "authorizationFile", fileName)
+            {
+                Headers = new HeaderDictionary(),
+                ContentType = "application/pdf"
+            };
+        }
+
+        private sealed class StubCloudStorageService : ICloudStorageService
+        {
+            public Task<string> GetSignedUrlAsync(string fileNameToRead, int timeOutInMinutes = 30) => Task.FromResult(fileNameToRead);
+            public Task<string> UploadFileAsync(IFormFile fileToUpload, string fileNameToSave) => Task.FromResult(fileNameToSave);
+            public Task DeleteFileAsync(string fileNameToDelete) => Task.CompletedTask;
+            public Task<Stream> DownloadFileAsync(string fileNameToDownload) => Task.FromResult<Stream>(new MemoryStream());
+            public Task<IFormFile?> GetFileAsFormFile(string fileName) => Task.FromResult<IFormFile?>(null);
         }
 
         public class RoleProxy : System.Reflection.DispatchProxy

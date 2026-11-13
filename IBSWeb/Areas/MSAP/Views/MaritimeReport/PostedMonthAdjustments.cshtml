@@ -1,0 +1,318 @@
+@model IBS.Models.MSAP.ViewModels.PostedMonthAdjustmentsViewModel
+@using System.Globalization
+@using System.Text.Json
+@using IBS.Utility.MSAP.Helpers
+@{
+    ViewData["Title"] = "Posted Month Adjustments";
+    ViewData["IsFullWidth"] = true;
+    var currentYear = DateTimeHelper.GetCurrentPhilippineTime().Year;
+    var years = Enumerable.Range(currentYear - 4, 6).Reverse().ToList();
+    var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+}
+
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
+        <div class="flex-stack ui-page-toolbar">
+            <div>
+                <nav aria-label="Breadcrumb">
+                    <ol class="ui-breadcrumb">
+                        <li>MSAP</li>
+                        <li><a asp-action="Index">Reports</a></li>
+                        <li aria-current="page">Posted Month Adjustments</li>
+                    </ol>
+                </nav>
+                <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
+                <p class="ui-caption ui-muted mb-0">Retroactive modifications to finalized periods (<code>PeriodStatus = Final</code>) with reasons, field diffs, and authorization memos.</p>
+            </div>
+            <div class="flex gap-2 ui-actions flex-wrap">
+                <form method="post" data-download asp-action="ExportPostedMonthAdjustmentsExcel" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="year" value="@Model.Year" />
+                    <input type="hidden" name="month" value="@Model.Month" />
+                    <input type="hidden" name="documentType" value="@Model.DocumentType" />
+                    <input type="hidden" name="dateFrom" value="@Model.DateFrom?.ToString("yyyy-MM-dd")" />
+                    <input type="hidden" name="dateTo" value="@Model.DateTo?.ToString("yyyy-MM-dd")" />
+                    <button type="submit" class="modern-btn-secondary ui-page-action">
+                        <span class="material-symbols-outlined">table_view</span> Export Excel
+                    </button>
+                </form>
+                <form method="post" data-download asp-action="ExportPostedMonthAdjustmentsPdf" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="year" value="@Model.Year" />
+                    <input type="hidden" name="month" value="@Model.Month" />
+                    <input type="hidden" name="documentType" value="@Model.DocumentType" />
+                    <input type="hidden" name="dateFrom" value="@Model.DateFrom?.ToString("yyyy-MM-dd")" />
+                    <input type="hidden" name="dateTo" value="@Model.DateTo?.ToString("yyyy-MM-dd")" />
+                    <button type="submit" class="modern-btn-primary ui-page-action">
+                        <span class="material-symbols-outlined">picture_as_pdf</span> Export PDF
+                    </button>
+                </form>
+                <a asp-action="Index" class="modern-btn-secondary ui-page-action">
+                    <span class="material-symbols-outlined">arrow_back</span> Reports
+                </a>
+            </div>
+        </div>
+
+        <div class="modern-card ui-card mb-3">
+            <div class="modern-card-body ui-card-body">
+                <form id="adjustmentsFilterForm" method="get" asp-action="PostedMonthAdjustments" class="d-flex flex-wrap align-items-end gap-3">
+                    <div style="min-width: 120px;">
+                        <label for="filterYear" class="modern-label ui-label">Year</label>
+                        <select id="filterYear" name="year" class="js-modern-select js-auto-filter" data-placeholder="All Years">
+                            <option value="">All Years</option>
+                            @foreach (var y in years)
+                            {
+                                <option value="@y" selected="@(Model.Year == y)">@y</option>
+                            }
+                        </select>
+                    </div>
+                    <div style="min-width: 150px;">
+                        <label for="filterMonth" class="modern-label ui-label">Month</label>
+                        <select id="filterMonth" name="month" class="js-modern-select js-auto-filter" data-placeholder="All Months">
+                            <option value="">All Months</option>
+                            @for (var m = 1; m <= 12; m++)
+                            {
+                                <option value="@m" selected="@(Model.Month == m)">@CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(m)</option>
+                            }
+                        </select>
+                    </div>
+                    <div style="min-width: 190px;">
+                        <label for="filterDocType" class="modern-label ui-label">Document Type</label>
+                        <select id="filterDocType" name="documentType" class="js-modern-select js-auto-filter" data-placeholder="All Types">
+                            <option value="">All Types</option>
+                            <option value="Billing" selected="@(Model.DocumentType == "Billing")">Billing</option>
+                            <option value="DispatchTicket" selected="@(Model.DocumentType == "DispatchTicket")">Ticket</option>
+                            <option value="Collection" selected="@(Model.DocumentType == "Collection")">Collection</option>
+                            <option value="OtherTugCharge" selected="@(Model.DocumentType == "OtherTugCharge")">Provider Charge</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filterDateFrom" class="modern-label ui-label">From</label>
+                        <input id="filterDateFrom" type="date" name="dateFrom" value="@Model.DateFrom?.ToString("yyyy-MM-dd")" class="modern-input ui-input js-auto-filter" />
+                    </div>
+                    <div>
+                        <label for="filterDateTo" class="modern-label ui-label">To</label>
+                        <input id="filterDateTo" type="date" name="dateTo" value="@Model.DateTo?.ToString("yyyy-MM-dd")" class="modern-input ui-input js-auto-filter" />
+                    </div>
+                    <div class="d-flex gap-2 ms-auto">
+                        <a asp-action="PostedMonthAdjustments" class="modern-btn-secondary">
+                            <span class="material-symbols-outlined">restart_alt</span> Reset
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="modern-card ui-card">
+            <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">fact_check</span>
+                    <h2 class="modern-headline-md ui-section-title">Audit Evidence Log</h2>
+                    <span class="modern-badge-sm status-closed">@Model.Items.Count</span>
+                </div>
+                <span class="ui-caption ui-muted">Click <strong>Inspect</strong> on any row to view full audit evidence and field comparisons.</span>
+            </div>
+            <div class="modern-card-body ui-card-body">
+                <table class="modern-table ui-table" id="adjustmentsTable">
+                    <thead>
+                        <tr>
+                            <th>EDITED</th>
+                            <th>TYPE</th>
+                            <th>REFERENCE #</th>
+                            <th>EDITED BY</th>
+                            <th>REASON</th>
+                            <th class="text-center">CHANGES</th>
+                            <th class="text-center">AUTH MEMO</th>
+                            <th class="text-center">EVIDENCE</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var i = 0; i < Model.Items.Count; i++)
+                        {
+                            var item = Model.Items[i];
+                            var badgeClass = item.DocumentType switch
+                            {
+                                "Billing" => "status-billing",
+                                "Collection" => "status-tariff",
+                                "DispatchTicket" => "status-confirmed",
+                                "OtherTugCharge" => "status-approval",
+                                "VesselSchedule" => "status-open",
+                                _ => "status-closed"
+                            };
+                            <tr>
+                                <td data-order="@item.EditedDate.ToString("yyyy-MM-dd HH:mm:ss")" style="white-space: nowrap;">
+                                    <span class="fw-semibold">@item.EditedDate.ToString("MMM dd, yyyy")</span>
+                                    <span class="ui-caption ui-muted ms-1">@item.EditedDate.ToString("HH:mm")</span>
+                                </td>
+                                <td style="white-space: nowrap;">
+                                    <span class="modern-badge-sm @badgeClass">@item.DocumentTypeLabel</span>
+                                </td>
+                                <td class="fw-semibold" style="white-space: nowrap;">@item.ReferenceNumber</td>
+                                <td style="white-space: nowrap;">@item.EditedBy</td>
+                                <td style="max-width: 280px;">
+                                    <div class="text-truncate" style="max-width: 280px;" title="@item.Reason">@item.Reason</div>
+                                </td>
+                                <td class="text-center" style="white-space: nowrap;">
+                                    <span class="modern-badge-sm status-closed">@item.Changes.Count field@(item.Changes.Count == 1 ? "" : "s")</span>
+                                </td>
+                                <td class="text-center" style="white-space: nowrap;">
+                                    @if (!string.IsNullOrWhiteSpace(item.AttachmentUrl))
+                                    {
+                                        <a asp-action="DownloadAdjustmentAttachment" asp-route-id="@item.Id" class="modern-btn-secondary btn-sm" title="Download authorization document">
+                                            <span class="material-symbols-outlined" style="font-size: 15px;">download</span> Memo
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <span class="ui-caption ui-muted">None</span>
+                                    }
+                                </td>
+                                <td class="text-center" style="white-space: nowrap;">
+                                    <button type="button" class="modern-btn-secondary btn-sm js-inspect-evidence" data-index="@i">
+                                        <span class="material-symbols-outlined" style="font-size: 15px;">visibility</span> Inspect
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            const items = @Html.Raw(JsonSerializer.Serialize(Model.Items.Select(x => new
+            {
+                x.Id,
+                x.RecordId,
+                x.DocumentType,
+                x.DocumentTypeLabel,
+                x.ReferenceNumber,
+                x.EditedBy,
+                EditedDate = x.EditedDate.ToString("MMM dd, yyyy HH:mm") + " PHT",
+                x.Reason,
+                AttachmentName = x.AttachmentUrl,
+                HasAttachment = !string.IsNullOrWhiteSpace(x.AttachmentUrl),
+                DownloadUrl = !string.IsNullOrWhiteSpace(x.AttachmentUrl) ? Url.Action("DownloadAdjustmentAttachment", "MaritimeReport", new { area = "MSAP", id = x.Id }) : null,
+                x.Changes
+            }), jsonOptions));
+
+            const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[ch]);
+
+            const rawHtml = (data) => data;
+            $(document).on('change', '.js-auto-filter', function () {
+                document.getElementById('adjustmentsFilterForm')?.submit();
+            });
+
+            $('#adjustmentsTable').DataTable(ModernTable.config({
+                serverSide: false,
+                processing: false,
+                order: [[0, 'desc']],
+                columns: [
+                    { render: rawHtml },
+                    { render: rawHtml },
+                    { render: rawHtml },
+                    { render: rawHtml },
+                    { render: rawHtml },
+                    { orderable: false, render: rawHtml },
+                    { orderable: false, render: rawHtml },
+                    { orderable: false, render: rawHtml }
+                ]
+            }));
+
+            $(document).on('click', '.js-inspect-evidence', function () {
+                const item = items[Number(this.dataset.index)];
+                if (!item) return;
+
+                const diffRows = item.changes && item.changes.length > 0
+                    ? item.changes.map((c, idx) => `
+                        <tr style="background: ${idx % 2 === 1 ? 'var(--surface-container-low)' : 'transparent'};">
+                            <td style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid var(--outline-variant); vertical-align: top;">${escapeHtml(c.label || c.field)}</td>
+                            <td style="padding: 10px 12px; color: var(--error); border-bottom: 1px solid var(--outline-variant); word-break: break-word; vertical-align: top;">${escapeHtml(c.before || '—')}</td>
+                            <td style="padding: 10px 12px; color: var(--primary); border-bottom: 1px solid var(--outline-variant); word-break: break-word; vertical-align: top;">${escapeHtml(c.after || '—')}</td>
+                        </tr>`).join('')
+                    : `<tr><td colspan="3" style="padding: 16px; text-align: center; color: var(--on-surface-variant);">No field-level diffs recorded.</td></tr>`;
+
+                const memoBlock = item.hasAttachment
+                    ? `<div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                           <span class="ui-caption" style="color: var(--on-surface); word-break: break-all;">${escapeHtml(item.attachmentName)}</span>
+                           <a href="${escapeHtml(item.downloadUrl)}" class="modern-btn-primary btn-sm"><span class="material-symbols-outlined" style="font-size: 16px;">download</span> Download Memo</a>
+                       </div>`
+                    : `<span class="modern-badge-sm status-closed">No Authorization Memo Attached</span>`;
+
+                const badgeClassMap = {
+                    Billing: 'status-billing',
+                    Collection: 'status-tariff',
+                    DispatchTicket: 'status-confirmed',
+                    OtherTugCharge: 'status-approval',
+                    VesselSchedule: 'status-open'
+                };
+                const badgeClass = badgeClassMap[item.documentType] || 'status-closed';
+                const changeCount = item.changes ? item.changes.length : 0;
+
+                Swal.fire({
+                    ...ModernAlert._baseConfig,
+                    width: 'min(92vw, 960px)',
+                    title: `Audit Evidence · ${escapeHtml(item.referenceNumber)}`,
+                    html: `
+                        <div class="text-start px-3 pb-2" style="font-size: 13px;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; padding: 12px 14px; border-radius: var(--radius-lg); background: var(--surface-container-low); border: 1px solid var(--outline-variant); margin-bottom: 14px;">
+                                <div>
+                                    <div class="modern-label mb-1" style="font-size: 10px;">Document Type</div>
+                                    <div><span class="modern-badge-sm ${badgeClass}">${escapeHtml(item.documentTypeLabel)}</span></div>
+                                </div>
+                                <div>
+                                    <div class="modern-label mb-1" style="font-size: 10px;">Reference &amp; Record ID</div>
+                                    <div class="fw-semibold" style="color: var(--on-surface);">${escapeHtml(item.referenceNumber)} <span class="ui-caption ui-muted">(#${item.recordId})</span></div>
+                                </div>
+                                <div>
+                                    <div class="modern-label mb-1" style="font-size: 10px;">Modified By</div>
+                                    <div class="fw-semibold" style="color: var(--on-surface);">${escapeHtml(item.editedBy)}</div>
+                                </div>
+                                <div>
+                                    <div class="modern-label mb-1" style="font-size: 10px;">Timestamp</div>
+                                    <div class="fw-semibold" style="color: var(--on-surface);">${escapeHtml(item.editedDate)}</div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3" style="padding: 12px 14px; border-radius: var(--radius-lg); background: var(--surface-container-low); border: 1px solid var(--outline-variant);">
+                                <div class="modern-label mb-1" style="font-size: 10px;">Supporting Authorization Document</div>
+                                ${memoBlock}
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="modern-label mb-1" style="font-size: 10px;">Business Justification Reason</div>
+                                <div style="padding: 12px 14px; border-radius: var(--radius-lg); background: var(--surface-container-low); border: 1px solid var(--outline-variant); color: var(--on-surface); line-height: 1.5; white-space: pre-wrap;">${escapeHtml(item.reason)}</div>
+                            </div>
+
+                            <div>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <div class="modern-label mb-0" style="font-size: 10px;">Before &rarr; After Field Changes</div>
+                                    <span class="modern-badge-sm status-closed">${changeCount} field${changeCount === 1 ? '' : 's'} changed</span>
+                                </div>
+                                <div style="max-height: 360px; overflow-y: auto; border: 1px solid var(--outline-variant); border-radius: var(--radius-lg);">
+                                    <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+                                        <thead>
+                                            <tr style="background: var(--surface-container-low); text-align: left; position: sticky; top: 0;">
+                                                <th style="padding: 9px 12px; border-bottom: 1px solid var(--outline-variant); width: 24%;">Field</th>
+                                                <th style="padding: 9px 12px; border-bottom: 1px solid var(--outline-variant); width: 38%;">Before</th>
+                                                <th style="padding: 9px 12px; border-bottom: 1px solid var(--outline-variant); width: 38%;">After</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>${diffRows}</tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    `,
+                    confirmButtonText: 'Close'
+                });
+            });
+        });
+    </script>
+}

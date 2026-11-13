@@ -80,9 +80,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.ConfirmOtherTugCharges)]
-        public async Task<IActionResult> Reopen(int id, int? customerOrderSlipId, string reason, CancellationToken ct)
+        public async Task<IActionResult> Reopen(int id, int? customerOrderSlipId, string reason, IFormFile? authorizationFile, CancellationToken ct)
         {
-            var result = await _charges.ReopenConfirmedChargeAsync(id, reason, UserId, ct);
+            var result = await _charges.ReopenConfirmedChargeAsync(id, reason, UserId, ct, authorizationFile);
             if (result.IsSuccess)
             {
                 TempData["success"] = result.Message;

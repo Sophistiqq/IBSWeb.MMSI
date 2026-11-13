@@ -276,10 +276,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.EditDispatchTicket)]
-        public async Task<IActionResult> VoidTicket(int id, string reason, int? customerOrderSlipId, CancellationToken cancellationToken)
+        public async Task<IActionResult> VoidTicket(int id, string reason, int? customerOrderSlipId, IFormFile? authorizationFile, CancellationToken cancellationToken)
         {
             var username = User.Identity?.Name ?? "System";
-            var result = await dispatchTicketService.VoidTicketAsync(id, reason, username, cancellationToken);
+            var result = await dispatchTicketService.VoidTicketAsync(id, reason, username, cancellationToken, authorizationFile);
             if (Request.Headers.XRequestedWith == "XMLHttpRequest")
             {
                 return Json(new { success = result.IsSuccess, message = result.Message });

@@ -195,13 +195,13 @@
             const text = isFinal
                 ? `${stepText} Because this receipt belongs to a finalized period, reverting tags it as Adjusted in the audit history.`
                 : stepText;
-            const confirmResult = await ModernAlert.prompt({
+            const confirmResult = await ModernAlert.promptAdjustment({
                 title: 'Revert banking step?',
                 text,
                 placeholder: 'Reason for reverting',
                 confirmText: 'Revert step',
                 cancelText: 'Keep current',
-                validator: value => !value?.trim() || value.trim().length < 5 || value.trim().length > 500 ? 'Enter a reason between 5 and 500 characters.' : null
+                requireAttachment: isFinal
             });
 
             if (!confirmResult.isConfirmed) return;
@@ -210,12 +210,22 @@
             const token = document.querySelector('#collectionTokenForm input[name="__RequestVerificationToken"]')?.value;
             const form = document.createElement('form');
             form.method = 'POST';
+            form.enctype = 'multipart/form-data';
             form.action = btn.dataset.action;
             form.innerHTML = `
                 <input type="hidden" name="__RequestVerificationToken" value="${token}" />
                 <input type="hidden" name="id" value="${btn.dataset.id}" />
-                <input type="hidden" name="reason" value="${confirmResult.value.trim()}" />
+                <input type="hidden" name="reason" value="${confirmResult.value.reason.replace(/"/g, '&quot;')}" />
             `;
+            if (confirmResult.value.file) {
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.name = 'authorizationFile';
+                const dt = new DataTransfer();
+                dt.items.add(confirmResult.value.file);
+                fileInput.files = dt.files;
+                form.appendChild(fileInput);
+            }
             document.body.appendChild(form);
             form.submit();
         });

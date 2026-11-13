@@ -263,11 +263,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.ReverseBilling)]
-        public async Task<IActionResult> ReopenForRevision(int id, string reason, CancellationToken cancellationToken)
+        public async Task<IActionResult> ReopenForRevision(int id, string reason, IFormFile? authorizationFile, CancellationToken cancellationToken)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
             var username = User.Identity?.Name ?? "System";
-            var result = await billingService.ReopenBillingForRevisionAsync(id, reason, username, userId, cancellationToken);
+            var result = await billingService.ReopenBillingForRevisionAsync(id, reason, username, userId, cancellationToken, authorizationFile);
             TempData[result.IsSuccess ? "success" : "error"] = result.Message;
             return RedirectToAction(nameof(Review), new { id });
         }

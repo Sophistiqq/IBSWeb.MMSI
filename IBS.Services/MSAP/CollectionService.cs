@@ -5,6 +5,7 @@ using IBS.Models.MSAP.MasterFile;
 using IBS.Models.MSAP.ViewModels;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using static IBS.Utility.MSAP.Constants.TaxConstants;
 using Microsoft.Extensions.Logging;
@@ -13,7 +14,8 @@ namespace IBS.Services.MSAP
 {
     public class CollectionService(
         IUnitOfWork unitOfWork,
-        ILogger<CollectionService> logger)
+        ILogger<CollectionService> logger,
+        ICloudStorageService? cloudStorageService = null)
     {
 
         public async Task<Collection?> GetCollectionByIdAsync(int id, CancellationToken cancellationToken)
@@ -168,13 +170,40 @@ namespace IBS.Services.MSAP
             }
         }
 
-        public async Task<ServiceResult> RevertCollectionBankingStepAsync(int id, string reason, string username, CancellationToken ct)
+        public async Task<ServiceResult> RevertCollectionBankingStepAsync(int id, string reason, string username, CancellationToken ct, IFormFile? authorizationFile = null)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
                 {
                     return ServiceResult.Failure("Please provide a valid reason for reverting this banking step (minimum 5 characters).");
+                }
+
+                var existing = await unitOfWork.Collection.GetAsync(c => c.MsapCollectionId == id, ct);
+                if (existing == null)
+                {
+                    return ServiceResult.Failure("Collection not found.");
+                }
+
+                if (existing.PeriodStatus == MsapPeriodStatus.Final && authorizationFile is not { Length: > 0 })
+                {
+                    return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to revert a finalized-period collection.");
+                }
+
+                string? uploadedAttachment = null;
+                if (authorizationFile is { Length: > 0 })
+                {
+                    if (!await OtherTugChargeService.IsSupportedDocumentAsync(authorizationFile, ct))
+                    {
+                        return ServiceResult.Failure("Upload a valid PDF, PNG, or JPEG authorization document of up to 10 MB.");
+                    }
+                    if (cloudStorageService == null)
+                    {
+                        return ServiceResult.Failure("Storage service is not configured for authorization documents.");
+                    }
+                    string extension = Path.GetExtension(authorizationFile.FileName).ToLowerInvariant();
+                    uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
+                    await cloudStorageService.UploadFileAsync(authorizationFile, uploadedAttachment);
                 }
 
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
@@ -236,6 +265,7 @@ namespace IBS.Services.MSAP
                                 RecordId = collection.MsapCollectionId,
                                 ReferenceNumber = collection.MsapCollectionNumber,
                                 Reason = reason.Trim(),
+                                AttachmentUrl = uploadedAttachment,
                                 ChangesJson = System.Text.Json.JsonSerializer.Serialize(changes),
                                 EditedBy = username,
                                 EditedDate = DateTimeHelper.GetCurrentPhilippineTime()

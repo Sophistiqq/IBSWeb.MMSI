@@ -7,5 +7,6 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
     {
         Task<List<MsapAdjustmentLog>> GetLogsForRecordAsync(string documentType, int recordId, CancellationToken cancellationToken = default);
         Task<List<MsapAdjustmentLog>> GetLogsForPeriodAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
+        Task<List<MsapAdjustmentLog>> GetFilteredLogsAsync(int? year, int? month, string? documentType, DateOnly? dateFrom, DateOnly? dateTo, CancellationToken cancellationToken = default);
     }
 }

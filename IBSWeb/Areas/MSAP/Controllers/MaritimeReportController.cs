@@ -3,6 +3,7 @@ using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.MasterFile;
+using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP;
 using IBS.Services.MSAP.Attributes;
 using IBS.Utility.MSAP.Constants;
@@ -10,14 +11,289 @@ using IBS.Utility.MSAP.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
 
 namespace IBSWeb.Areas.MSAP.Controllers
 {
     [Area("MSAP")]
     [RequireAnyAccess("Access denied. You don't have permission to view reports.", ProcedureEnum.ViewMaritimeReport)]
-public class MaritimeReportController(IUnitOfWork unitOfWork) : Controller
+public class MaritimeReportController(IUnitOfWork unitOfWork, ICloudStorageService? cloudStorageService = null) : Controller
     {
         public IActionResult Index() => View();
+
+        [HttpGet]
+        public async Task<IActionResult> PostedMonthAdjustments(
+            int? year,
+            int? month,
+            string? documentType,
+            DateOnly? dateFrom,
+            DateOnly? dateTo,
+            CancellationToken ct)
+        {
+            var viewModel = await BuildPostedMonthAdjustmentsViewModelAsync(year, month, documentType, dateFrom, dateTo, ct);
+            return View(viewModel);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ExportPostedMonthAdjustmentsExcel(
+            int? year,
+            int? month,
+            string? documentType,
+            DateOnly? dateFrom,
+            DateOnly? dateTo,
+            CancellationToken ct)
+        {
+            var viewModel = await BuildPostedMonthAdjustmentsViewModelAsync(year, month, documentType, dateFrom, dateTo, ct);
+            using var package = new ExcelPackage();
+            var sheet = package.Workbook.Worksheets.Add("Posted Month Adjustments");
+            WriteCompanyHeader(sheet);
+            sheet.Cells[2, 1].Value = $"POSTED MONTH ADJUSTMENTS & AUDIT EVIDENCE · {BuildFilterSummary(viewModel)}";
+            sheet.Cells[2, 1].Style.Font.Bold = true;
+
+            string[] headers =
+            [
+                "Edited Date/Time",
+                "Document Type",
+                "Reference #",
+                "Edited By",
+                "Reason / Justification",
+                "Before -> After Changes",
+                "Authorization Document"
+            ];
+
+            for (var column = 0; column < headers.Length; column++)
+            {
+                sheet.Cells[4, column + 1].Value = headers[column];
+            }
+            StyleHeader(sheet, 4, headers.Length);
+
+            var row = 5;
+            foreach (var item in viewModel.Items)
+            {
+                var diffSummary = item.Changes.Count == 0
+                    ? "—"
+                    : string.Join(Environment.NewLine, item.Changes.Select(c => $"{c.Label}: {c.Before ?? "—"} -> {c.After ?? "—"}"));
+
+                sheet.Cells[row, 1].Value = item.EditedDate.ToString("yyyy-MM-dd HH:mm");
+                sheet.Cells[row, 2].Value = item.DocumentTypeLabel;
+                sheet.Cells[row, 3].Value = item.ReferenceNumber;
+                sheet.Cells[row, 4].Value = item.EditedBy;
+                sheet.Cells[row, 5].Value = item.Reason;
+                sheet.Cells[row, 6].Value = diffSummary;
+                sheet.Cells[row, 7].Value = string.IsNullOrWhiteSpace(item.AttachmentUrl) ? "None" : item.AttachmentUrl;
+
+                sheet.Cells[row, 5, row, 6].Style.WrapText = true;
+                sheet.Cells[row, 1, row, 7].Style.VerticalAlignment = ExcelVerticalAlignment.Top;
+                row++;
+            }
+
+            sheet.Cells.AutoFitColumns();
+            sheet.Column(5).Width = Math.Min(Math.Max(sheet.Column(5).Width, 30), 45);
+            sheet.Column(6).Width = Math.Min(Math.Max(sheet.Column(6).Width, 35), 55);
+            sheet.View.FreezePanes(5, 1);
+
+            var stamp = DateTimeHelper.GetCurrentPhilippineTime().ToString("yyyyMMdd-HHmm");
+            return File(
+                await package.GetAsByteArrayAsync(ct),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"MSAP-Posted-Month-Adjustments-{stamp}.xlsx");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ExportPostedMonthAdjustmentsPdf(
+            int? year,
+            int? month,
+            string? documentType,
+            DateOnly? dateFrom,
+            DateOnly? dateTo,
+            CancellationToken ct)
+        {
+            var viewModel = await BuildPostedMonthAdjustmentsViewModelAsync(year, month, documentType, dateFrom, dateTo, ct);
+            var generatedAt = DateTimeHelper.GetCurrentPhilippineTime();
+            var filterSummary = BuildFilterSummary(viewModel);
+
+            var pdfBytes = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Landscape());
+                    page.Margin(24);
+                    page.DefaultTextStyle(x => x.FontSize(8.5f));
+
+                    page.Header().Column(col =>
+                    {
+                        col.Item().Text("MALAYAN MARITIME SERVICES, INC.").Bold().FontSize(13);
+                        col.Item().Text("Posted Month Adjustments & Audit Evidence Report").SemiBold().FontSize(11);
+                        col.Item().Text($"Scope: {filterSummary}   |   Generated: {generatedAt:MMM dd, yyyy HH:mm} PHT")
+                            .FontSize(8).FontColor(Colors.Grey.Darken1);
+                        col.Item().PaddingTop(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
+                    });
+
+                    page.Content().PaddingTop(8).Table(table =>
+                    {
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.ConstantColumn(78);  // Edited Date
+                            columns.ConstantColumn(68);  // Doc Type
+                            columns.ConstantColumn(76);  // Reference #
+                            columns.ConstantColumn(80);  // Edited By
+                            columns.RelativeColumn(2);   // Reason
+                            columns.RelativeColumn(2.6f); // Diffs
+                            columns.ConstantColumn(72);  // Auth Doc
+                        });
+
+                        table.Header(header =>
+                        {
+                            string[] headers = ["Edited Date", "Doc Type", "Reference #", "Edited By", "Reason", "Before -> After Changes", "Auth Doc"];
+                            foreach (var h in headers)
+                            {
+                                header.Cell().Background(Colors.Grey.Lighten3).Border(0.5f).BorderColor(Colors.Grey.Medium)
+                                    .Padding(4).Text(h).Bold().FontSize(8);
+                            }
+                        });
+
+                        if (viewModel.Items.Count == 0)
+                        {
+                            table.Cell().ColumnSpan(7).Border(0.5f).BorderColor(Colors.Grey.Lighten1).Padding(10)
+                                .AlignCenter().Text("No posted-month adjustments found for the selected filters.").FontColor(Colors.Grey.Darken1);
+                        }
+                        else
+                        {
+                            foreach (var item in viewModel.Items)
+                            {
+                                var diffSummary = item.Changes.Count == 0
+                                    ? "—"
+                                    : string.Join("\n", item.Changes.Select(c => $"• {c.Label}: {c.Before ?? "—"} -> {c.After ?? "—"}"));
+
+                                table.Cell().Border(0.5f).BorderColor(Colors.Grey.Lighten1).Padding(4).Text(item.EditedDate.ToString("yyyy-MM-dd\nHH:mm"));
+                                table.Cell().Border(0.5f).BorderColor(Colors.Grey.Lighten1).Padding(4).Text(item.DocumentTypeLabel);
+                                table.Cell().Border(0.5f).BorderColor(Colors.Grey.Lighten1).Padding(4).Text(item.ReferenceNumber).SemiBold();
+                                table.Cell().Border(0.5f).BorderColor(Colors.Grey.Lighten1).Padding(4).Text(item.EditedBy);
+                                table.Cell().Border(0.5f).BorderColor(Colors.Grey.Lighten1).Padding(4).Text(item.Reason);
+                                table.Cell().Border(0.5f).BorderColor(Colors.Grey.Lighten1).Padding(4).Text(diffSummary);
+                                table.Cell().Border(0.5f).BorderColor(Colors.Grey.Lighten1).Padding(4)
+                                    .Text(string.IsNullOrWhiteSpace(item.AttachmentUrl) ? "None" : "Attached");
+                            }
+                        }
+                    });
+
+                    page.Footer().AlignRight().Text(text =>
+                    {
+                        text.Span("Page ").FontSize(8).FontColor(Colors.Grey.Darken1);
+                        text.CurrentPageNumber().FontSize(8).FontColor(Colors.Grey.Darken1);
+                        text.Span(" of ").FontSize(8).FontColor(Colors.Grey.Darken1);
+                        text.TotalPages().FontSize(8).FontColor(Colors.Grey.Darken1);
+                    });
+                });
+            }).GeneratePdf();
+
+            var stamp = generatedAt.ToString("yyyyMMdd-HHmm");
+            return File(pdfBytes, "application/pdf", $"MSAP-Posted-Month-Adjustments-{stamp}.pdf");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DownloadAdjustmentAttachment(int id, CancellationToken ct)
+        {
+            var log = await unitOfWork.MsapAdjustmentLog.GetAsync(l => l.Id == id, ct);
+            if (log == null || string.IsNullOrWhiteSpace(log.AttachmentUrl))
+            {
+                return NotFound("Authorization document not found.");
+            }
+
+            if (cloudStorageService == null)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, "Storage service is not configured.");
+            }
+
+            var stream = await cloudStorageService.DownloadFileAsync(log.AttachmentUrl);
+            var extension = Path.GetExtension(log.AttachmentUrl).ToLowerInvariant();
+            var contentType = extension switch
+            {
+                ".pdf" => "application/pdf",
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                _ => "application/octet-stream"
+            };
+
+            return File(stream, contentType, log.AttachmentUrl);
+        }
+
+        private async Task<PostedMonthAdjustmentsViewModel> BuildPostedMonthAdjustmentsViewModelAsync(
+            int? year,
+            int? month,
+            string? documentType,
+            DateOnly? dateFrom,
+            DateOnly? dateTo,
+            CancellationToken ct)
+        {
+            var logs = await unitOfWork.MsapAdjustmentLog.GetFilteredLogsAsync(year, month, documentType, dateFrom, dateTo, ct);
+            return new PostedMonthAdjustmentsViewModel
+            {
+                Year = year,
+                Month = month,
+                DocumentType = documentType,
+                DateFrom = dateFrom,
+                DateTo = dateTo,
+                Items = logs.Select(l => new PostedMonthAdjustmentItemViewModel
+                {
+                    Id = l.Id,
+                    DocumentType = l.DocumentType,
+                    DocumentTypeLabel = FormatDocumentTypeLabel(l.DocumentType),
+                    RecordId = l.RecordId,
+                    ReferenceNumber = l.ReferenceNumber,
+                    Reason = l.Reason,
+                    EditedBy = l.EditedBy,
+                    EditedDate = l.EditedDate,
+                    AttachmentUrl = l.AttachmentUrl,
+                    Changes = ParseChanges(l.ChangesJson)
+                        .Where(c => !c.Field.StartsWith("_", StringComparison.Ordinal))
+                        .ToList()
+                }).ToList()
+            };
+        }
+
+        private static string FormatDocumentTypeLabel(string documentType) => documentType switch
+        {
+            "Billing" => "Billing",
+            "DispatchTicket" => "Ticket",
+            "Collection" => "Collection",
+            "OtherTugCharge" => "Provider Charge",
+            "VesselSchedule" => "Vessel Schedule",
+            "CustomerOrderSlip" => "Customer Order Slip",
+            _ => documentType
+        };
+
+        private static string BuildFilterSummary(PostedMonthAdjustmentsViewModel model)
+        {
+            var parts = new List<string>();
+            if (model.Year.HasValue && model.Month.HasValue)
+            {
+                parts.Add($"Period {model.Year}-{model.Month:00}");
+            }
+            else if (model.Year.HasValue)
+            {
+                parts.Add($"Year {model.Year}");
+            }
+            else if (model.Month.HasValue)
+            {
+                parts.Add($"Month {model.Month:00}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(model.DocumentType))
+            {
+                parts.Add($"Type: {FormatDocumentTypeLabel(model.DocumentType)}");
+            }
+
+            if (model.DateFrom.HasValue || model.DateTo.HasValue)
+            {
+                parts.Add($"Range: {model.DateFrom?.ToString("yyyy-MM-dd") ?? "..."} to {model.DateTo?.ToString("yyyy-MM-dd") ?? "..."}");
+            }
+
+            return parts.Count == 0 ? "All Recorded Adjustments" : string.Join(" · ", parts);
+        }
 
         [HttpPost]
         [ValidateAntiForgeryToken]

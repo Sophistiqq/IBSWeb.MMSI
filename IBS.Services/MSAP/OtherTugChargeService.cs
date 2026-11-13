@@ -395,7 +395,7 @@ namespace IBS.Services.MSAP
                 : "Provider charges confirmed and applied to AP Other Tugs reporting.");
         }
 
-        public async Task<ServiceResult> ReopenConfirmedChargeAsync(int id, string reason, string userId, CancellationToken ct)
+        public async Task<ServiceResult> ReopenConfirmedChargeAsync(int id, string reason, string userId, CancellationToken ct, IFormFile? authorizationFile = null)
         {
             try
             {
@@ -420,6 +420,23 @@ namespace IBS.Services.MSAP
                 if (!charge.ConfirmedAt.HasValue)
                 {
                     return ServiceResult.Failure("This provider charge is not confirmed.");
+                }
+
+                if (charge.PeriodStatus == MsapPeriodStatus.Final && authorizationFile is not { Length: > 0 })
+                {
+                    return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to reopen a finalized-period provider charge.");
+                }
+
+                string? uploadedAttachment = null;
+                if (authorizationFile is { Length: > 0 })
+                {
+                    if (!await IsSupportedDocumentAsync(authorizationFile, ct))
+                    {
+                        return ServiceResult.Failure("Upload a valid PDF, PNG, or JPEG authorization document of up to 10 MB.");
+                    }
+                    string extension = Path.GetExtension(authorizationFile.FileName).ToLowerInvariant();
+                    uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
+                    await _storage.UploadFileAsync(authorizationFile, uploadedAttachment);
                 }
 
                 // Check if an active (non-voided/non-canceled) Check Voucher payment exists in IBS AP
@@ -478,6 +495,7 @@ namespace IBS.Services.MSAP
                         RecordId = charge.OtherTugChargeId,
                         ReferenceNumber = charge.ProviderReference,
                         Reason = reason.Trim(),
+                        AttachmentUrl = uploadedAttachment,
                         ChangesJson = JsonSerializer.Serialize(new[]
                         {
                             new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted },

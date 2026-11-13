@@ -32,20 +32,23 @@ const initializeCosTicketEntry = () => {
             const text = isFinal
                 ? 'Voiding this ticket removes it from billing calculations and tags this finalized-period record as Adjusted in the audit history.'
                 : 'Voiding this ticket removes it from billing calculations and retains the voided row and your reason.';
-            const result = await ModernAlert.prompt({
+            const result = await ModernAlert.promptAdjustment({
                 title: dispatchNo ? `Void ticket #${dispatchNo}?` : 'Void ticket?',
                 text,
                 placeholder: 'Reason for voiding',
                 confirmText: 'Void ticket',
                 cancelText: 'Keep ticket',
-                validator: value => !value?.trim() || value.trim().length > 500 ? 'Enter a reason of up to 500 characters.' : null
+                requireAttachment: isFinal
             });
             if (!result.isConfirmed) return;
             const body = new FormData();
             body.set('__RequestVerificationToken', document.querySelector('input[name="__RequestVerificationToken"]').value);
             body.set('id', button.dataset.voidTicket);
             body.set('customerOrderSlipId', button.dataset.cosId);
-            body.set('reason', result.value.trim());
+            body.set('reason', result.value.reason);
+            if (result.value.file) {
+                body.set('authorizationFile', result.value.file);
+            }
             const response = await fetch(button.dataset.url, { method: 'POST', body, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!response.ok || response.redirected) throw new Error('Void failed');
             const saved = await response.json();
