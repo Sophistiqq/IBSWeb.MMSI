@@ -86,6 +86,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Include(b => b.Vessel)
                 .Include(b => b.Customer)
                 .Include(b => b.Principal)
+                .Include(b => b.ReviewedByUser)
+                .Include(b => b.RejectedByUser)
                 .Include(b => b.ApprovedByUser)
                 .Include(b => b.BasicBilling)
                 .Include(b => b.BafBilling)

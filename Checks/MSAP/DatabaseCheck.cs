@@ -239,6 +239,10 @@ namespace Checks.MSAP
                 Check((await audits.GetAuditTrailsByEntityAsync("Billing", bill.MsapBillingId, default)).Any(a => a.ReferenceNumber == bill.MsapBillingNumber), "Billing creation audit lost its ID.");
                 Check(!(await billingService.PostBillingAsync(bill.MsapBillingId, "check", default, "denied", bill.Revision)).IsSuccess,
                     "Billing creation access must not grant final approval.");
+                Check(!(await billingService.PostBillingAsync(bill.MsapBillingId, "check", default, "shared-check", bill.Revision)).IsSuccess,
+                    "Billing must be reviewed before final approval.");
+                var reviewedBill = await billingService.ReviewBillingAsync(bill.MsapBillingId, bill.Revision, "check", "shared-check", default);
+                Check(reviewedBill.IsSuccess, reviewedBill.Message ?? "Billing review failed.");
                 Check(!(await billingService.PostBillingAsync(bill.MsapBillingId, "check", default, "shared-check", bill.Revision + 1)).IsSuccess,
                     "A stale review must not approve a bill.");
                 bill = (await work.Billing.GetAsync(b => b.MsapBillingId == bill.MsapBillingId, default))!;
@@ -297,6 +301,7 @@ namespace Checks.MSAP
                     "Basic and BAF did not retain separate linked balances and the principal recipient.");
                 Check((await work.Billing.GetPaidDispatchTicketsAsync(splitBasic!.BafBilling!.MsapBillingId))?.Single().DispatchTicketId == splitTicket.DispatchTicketId,
                     "BAF statement did not reuse the actual service ticket.");
+                Check((await billingService.ReviewBillingAsync(splitBasic!.BafBilling!.MsapBillingId, splitBaf!.Revision, "check", "shared-check", default)).IsSuccess, "BAF could not be reviewed independently.");
                 Check((await billingService.PostBillingAsync(splitBasic!.BafBilling!.MsapBillingId, "check", default, "shared-check", splitBaf!.Revision)).IsSuccess, "BAF could not be posted independently.");
                 Check(await JobProgressCalculator.GetBillingBlockerAsync(work, splitBaf!, JobProgressCalculator.CollectionStage, default) == null,
                     "Posted BAF cannot receive collection while Basic awaits posting.");

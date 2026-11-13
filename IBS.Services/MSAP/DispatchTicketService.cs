@@ -313,7 +313,7 @@ namespace IBS.Services.MSAP
                         result = ServiceResult.Failure("The expected service ticket was not found in this COS.");
                         return;
                     }
-                    if (ticket.Status is not (MsapConstants.DispatchTicketStatus.CalculationPending or MsapConstants.DispatchTicketStatus.ForTariff or MsapConstants.DispatchTicketStatus.ForBilling
+                    if (ticket.Status is not (MsapConstants.DispatchTicketStatus.AwaitingRate or MsapConstants.DispatchTicketStatus.ForTariff or MsapConstants.DispatchTicketStatus.ForBilling
                             or MsapConstants.DispatchTicketStatus.ForApproval or MsapConstants.DispatchTicketStatus.Disapproved)
                         || await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == customerOrderSlipId && b.Status != MsapConstants.BillingStatus.ForPosting, ct) != null
                         || await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == customerOrderSlipId
@@ -667,7 +667,7 @@ namespace IBS.Services.MSAP
                     var chargeBlocker = await ScheduledTicketCharges.ApplyAsync(unitOfWork, currentModel, schedule, username, cancellationToken);
                     changes.Add(chargeBlocker == null
                         ? "Charges recalculated from approved schedule terms and service-date rates"
-                        : $"Calculation pending: {chargeBlocker}");
+                        : $"Awaiting rate: {chargeBlocker}");
                 }
 
                 await RefreshSbmaAsync(currentModel, cancellationToken);
@@ -994,7 +994,7 @@ namespace IBS.Services.MSAP
                     model.EditedBy = username;
                     model.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Restored dispatch ticket #{model.DispatchNumber}{(chargeError == null ? "" : $"; Calculation pending: {chargeError}")}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Restored dispatch ticket #{model.DispatchNumber}{(chargeError == null ? "" : $"; Awaiting rate: {chargeError}")}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
                 }, cancellationToken);
 

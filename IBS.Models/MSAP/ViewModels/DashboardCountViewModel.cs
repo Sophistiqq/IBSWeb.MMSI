@@ -23,6 +23,7 @@ namespace IBS.Models.MSAP.ViewModels
         public bool CanCreateBilling { get; set; }
         public bool CanCreateCollection { get; set; }
         public bool CanApproveSchedule { get; set; }
+        public bool CanReviewBilling { get; set; }
         public bool CanApproveBilling { get; set; }
         public bool CanApproveRates { get; set; }
         public bool CanManageRates { get; set; }

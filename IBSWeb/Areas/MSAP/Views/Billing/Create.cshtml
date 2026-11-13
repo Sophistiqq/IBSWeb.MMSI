@@ -143,10 +143,10 @@
                                 <span class="material-symbols-outlined billing-setting-check" aria-hidden="true">check</span>
                             </button>
                             <div class="billing-discount-control">
-                                <input asp-for="CosDiscountPercent" type="number" step="0.0001" min="0" max="100" class="modern-input" aria-label="Customer discount percentage" aria-describedby="discountHelp" disabled required />
+                                <input asp-for="CosDiscountPercent" type="number" step="0.0001" min="0" max="100" class="modern-input" aria-label="Customer discount percentage" aria-describedby="discountHelp" readonly disabled required />
                                 <span aria-hidden="true">%</span>
                             </div>
-                            <span id="discountHelp" class="ui-caption ui-muted">Select a COS to load its default.</span>
+                            <span id="discountHelp" class="ui-caption ui-muted">Locked to COS default. Overrides require reviewer revision.</span>
                         </div>
                         <label class="billing-setting-card" id="sbmaCard" hidden>
                             <input type="checkbox" name="SbmaEnabled" id="SbmaEnabled" value="true" disabled />

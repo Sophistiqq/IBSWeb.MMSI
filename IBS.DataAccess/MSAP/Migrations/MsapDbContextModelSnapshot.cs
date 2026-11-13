@@ -298,6 +298,11 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("MsapBillingId"));
 
+                    b.Property<string>("AdjustmentAttachmentUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("adjustment_attachment_url");
+
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
@@ -474,10 +479,35 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("print_wht");
 
+                    b.Property<DateTime?>("RejectedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("rejected_at");
+
+                    b.Property<string>("RejectedByUserId")
+                        .HasColumnType("text")
+                        .HasColumnName("rejected_by_user_id");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("rejection_reason");
+
                     b.Property<string>("Remarks")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("remarks");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<string>("ReviewedByUserId")
+                        .HasColumnType("text")
+                        .HasColumnName("reviewed_by_user_id");
+
+                    b.Property<int?>("ReviewedRevision")
+                        .HasColumnType("integer")
+                        .HasColumnName("reviewed_revision");
 
                     b.Property<int>("Revision")
                         .ValueGeneratedOnAdd()
@@ -559,6 +589,12 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.HasIndex("PrincipalId")
                         .HasDatabaseName("ix_mmsi_billings_principal_id");
 
+                    b.HasIndex("RejectedByUserId")
+                        .HasDatabaseName("ix_mmsi_billings_rejected_by_user_id");
+
+                    b.HasIndex("ReviewedByUserId")
+                        .HasDatabaseName("ix_mmsi_billings_reviewed_by_user_id");
+
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_mmsi_billings_status");
 
@@ -575,6 +611,8 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.ToTable("mmsi_billings", "msap", t =>
                         {
                             t.HasCheckConstraint("ck_billings_approval_evidence", "revision >= 1 AND ((approved_revision IS NULL AND approved_by_user_id IS NULL AND approved_at IS NULL) OR (approved_revision IS NOT NULL AND approved_revision BETWEEN 1 AND revision AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL))");
+
+                            t.HasCheckConstraint("ck_billings_review_evidence", "((reviewed_revision IS NULL AND reviewed_by_user_id IS NULL AND reviewed_at IS NULL) OR (reviewed_revision IS NOT NULL AND reviewed_revision BETWEEN 1 AND revision AND reviewed_by_user_id IS NOT NULL AND reviewed_at IS NOT NULL))");
                         });
                 });
 
@@ -2227,6 +2265,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("can_reverse_billing");
 
+                    b.Property<bool>("CanReviewBilling")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_review_billing");
+
                     b.Property<bool>("CanSetTariff")
                         .HasColumnType("boolean")
                         .HasColumnName("can_set_tariff");
@@ -3071,6 +3113,18 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_mmsi_billings_msap_principals_principal_id");
 
+                    b.HasOne("IBS.Models.ApplicationUser", "RejectedByUser")
+                        .WithMany()
+                        .HasForeignKey("RejectedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_mmsi_billings_application_user_rejected_by_user_id");
+
+                    b.HasOne("IBS.Models.ApplicationUser", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_mmsi_billings_application_user_reviewed_by_user_id");
+
                     b.HasOne("IBS.Models.MSAP.MasterFile.Terminal", "Terminal")
                         .WithMany()
                         .HasForeignKey("TerminalId")
@@ -3098,6 +3152,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Navigation("Port");
 
                     b.Navigation("Principal");
+
+                    b.Navigation("RejectedByUser");
+
+                    b.Navigation("ReviewedByUser");
 
                     b.Navigation("Terminal");
 

@@ -1,0 +1,149 @@
+@model BillingAdjustViewModel
+@{
+    ViewData["Title"] = $"Adjust billing {Model.MsapBillingNumber}";
+    ViewData["IsFullWidth"] = true;
+}
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/billing-preparation.css" asp-append-version="true" />
+
+<div class="modern-layout app-ui billing-preparation">
+    <main class="billing-content ui-stack" style="max-width: 1120px; margin: 0 auto;">
+        <header class="ui-page-header">
+            <nav aria-label="Breadcrumb">
+                <ol class="ui-breadcrumb">
+                    <li><a asp-action="Index">Billing</a></li>
+                    <li><a asp-action="Review" asp-route-id="@Model.MsapBillingId">@Model.MsapBillingNumber</a></li>
+                    <li aria-current="page">Adjust</li>
+                </ol>
+            </nav>
+            <h1 class="ui-page-title" data-page-header>Adjust billing @Model.MsapBillingNumber</h1>
+            <div class="billing-review-header-actions">
+                <a asp-action="Review" asp-route-id="@Model.MsapBillingId" class="modern-btn-secondary ui-page-action" data-ui-back>Back to review</a>
+            </div>
+            <p class="ui-page-description ui-caption ui-muted">
+                @(Model.CustomerName ?? "Customer") · @(Model.VesselName ?? "Vessel") · Authorized rate, basis, and discount adjustment
+            </p>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(Model.RejectionReason))
+        {
+            <div class="ui-panel ui-critical" role="alert">
+                <p class="ui-body mb-1"><strong>Requested revision reason:</strong></p>
+                <p class="ui-caption mb-0">@Model.RejectionReason</p>
+            </div>
+        }
+
+        <form asp-action="Adjust" method="post" enctype="multipart/form-data" class="ui-stack" id="adjustBillingForm">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="MsapBillingId" />
+            <input type="hidden" asp-for="MsapBillingNumber" />
+
+            <section class="ui-panel ui-stack" aria-labelledby="adjustDiscountHeading">
+                <h2 id="adjustDiscountHeading" class="ui-section-title">Discount adjustment</h2>
+                <div class="billing-fields">
+                    <div>
+                        <label asp-for="CosDiscountPercent" class="ui-label">Discount percentage (%)</label>
+                        <input asp-for="CosDiscountPercent" type="number" step="0.0001" min="0" max="100" class="modern-input" id="adjustDiscountPercent" />
+                        <span class="ui-caption ui-muted">COS default: @Model.CosDefaultDiscountPercent.ToString("0.####")%</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 pt-3">
+                        <input asp-for="SkipCosDiscount" type="checkbox" id="adjustSkipDiscount" />
+                        <label for="adjustSkipDiscount" class="ui-label mb-0">Skip discount (0%)</label>
+                    </div>
+                </div>
+            </section>
+
+            <section class="ui-panel ui-stack" aria-labelledby="adjustTicketsHeading">
+                <h2 id="adjustTicketsHeading" class="ui-section-title">Ticket rates &amp; billing basis</h2>
+                <div class="billing-table-scroll">
+                    <table class="billing-service-table">
+                        <thead>
+                            <tr>
+                                <th>Ticket</th>
+                                <th>Tugboat / Service</th>
+                                <th>Hours</th>
+                                <th>Basic basis</th>
+                                <th>Basic rate</th>
+                                <th>BAF basis</th>
+                                <th>BAF rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int i = 0; i < Model.Tickets.Count; i++)
+                            {
+                                <tr>
+                                    <td>
+                                        <input type="hidden" asp-for="Tickets[i].DispatchTicketId" />
+                                        <input type="hidden" asp-for="Tickets[i].DispatchNumber" />
+                                        <strong>@Model.Tickets[i].DispatchNumber</strong>
+                                    </td>
+                                    <td>@Model.Tickets[i].TugboatName<br /><span class="ui-caption ui-muted">@Model.Tickets[i].ServiceName</span></td>
+                                    <td>@Model.Tickets[i].TotalHours.ToString("N2")</td>
+                                    <td>
+                                        <select asp-for="Tickets[i].DispatchChargeType" class="modern-input">
+                                            <option value="Per hour">Per hour</option>
+                                            <option value="Per move">Per move</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input asp-for="Tickets[i].DispatchRate" type="number" step="0.01" min="0" class="modern-input" style="min-width: 110px;" required />
+                                    </td>
+                                    <td>
+                                        <select asp-for="Tickets[i].BAFChargeType" class="modern-input">
+                                            <option value="Per hour">Per hour</option>
+                                            <option value="Per move">Per move</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input asp-for="Tickets[i].BAFRate" type="number" step="0.01" min="0" class="modern-input" style="min-width: 110px;" required />
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="ui-panel ui-stack" aria-labelledby="adjustAuthHeading">
+                <h2 id="adjustAuthHeading" class="ui-section-title">Authorization &amp; justification (required)</h2>
+                <div>
+                    <label asp-for="Reason" class="ui-label">Authorized reason for adjustment</label>
+                    <textarea asp-for="Reason" class="modern-input" rows="3" minlength="5" maxlength="500" placeholder="Explain what changed and who authorized it (5–500 characters)" required></textarea>
+                </div>
+                <div>
+                    <label asp-for="AuthorizationFile" class="ui-label">Signed authorization document (.pdf, .png, .jpg, .jpeg, max 10 MB)</label>
+                    <input asp-for="AuthorizationFile" type="file" accept=".pdf,.png,.jpg,.jpeg" class="modern-input" required />
+                </div>
+            </section>
+
+            <footer class="billing-footer">
+                <p class="ui-caption ui-muted">Submitting recalculates billing totals and highlights all overridden values for the Reviewer and Approver.</p>
+                <div class="billing-footer-actions">
+                    <a asp-action="Review" asp-route-id="@Model.MsapBillingId" class="modern-btn-secondary">Cancel</a>
+                    <button type="submit" class="modern-btn-primary ui-page-action">
+                        <span class="material-symbols-outlined" aria-hidden="true">save</span> Save adjustment &amp; resubmit
+                    </button>
+                </div>
+            </footer>
+        </form>
+    </main>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const skip = document.getElementById('adjustSkipDiscount');
+            const pct = document.getElementById('adjustDiscountPercent');
+            function syncDiscount() {
+                pct.readOnly = skip.checked;
+                if (skip.checked) pct.value = '0';
+            }
+            skip.addEventListener('change', syncDiscount);
+            syncDiscount();
+
+            document.getElementById('adjustBillingForm').addEventListener('submit', function () {
+                ModernAlert.showLoading('Saving adjustment and recalculating billing...');
+            });
+        })();
+    </script>
+}

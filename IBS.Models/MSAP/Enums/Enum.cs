@@ -67,6 +67,7 @@ namespace IBS.Models.MSAP.Enums
         ApproveSchedule = 22,
         ApproveRateUpload = 23,
         ApproveFinalBilling = 24,
+        ReviewBilling = 33,
 
         #endregion -- Individual Workflow Approvals --
 

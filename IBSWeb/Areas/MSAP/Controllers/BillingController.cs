@@ -208,6 +208,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ViewData["JobProgressActionStage"] = JobProgressCalculator.PostingStage;
             ViewData["JobProgressActionTargetId"] = id;
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            ViewData["CanReviewBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ReviewBilling);
             ViewData["CanApproveFinalBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveFinalBilling);
             ViewData["CanReverseBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ReverseBilling);
             ViewData["CanCreateBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateBilling);
@@ -225,8 +226,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var adjustmentLogs = await unitOfWork.MsapAdjustmentLog.GetAllAsync(
                 a => a.DocumentType == "Billing" && a.RecordId == id, cancellationToken);
             List<MsapFieldChange> billingChanges = [];
+            string? adjustmentReason = null;
+            string? adjustmentAttachmentUrl = model.AdjustmentAttachmentUrl;
             foreach (var log in adjustmentLogs.OrderByDescending(a => a.EditedDate).ThenByDescending(a => a.Id))
             {
+                adjustmentReason ??= log.Reason;
+                adjustmentAttachmentUrl ??= log.AttachmentUrl;
                 if (string.IsNullOrWhiteSpace(log.ChangesJson))
                 {
                     continue;
@@ -246,7 +251,110 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 }
             }
             ViewBag.BillingChanges = billingChanges;
+            ViewBag.AdjustmentReason = adjustmentReason;
+            ViewBag.AdjustmentAttachmentUrl = adjustmentAttachmentUrl;
             return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.ReviewBilling)]
+        public async Task<IActionResult> EndorseReview(int id, int reviewedRevision, CancellationToken cancellationToken)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var username = User.Identity?.Name ?? "System";
+            var result = await billingService.ReviewBillingAsync(id, reviewedRevision, username, userId, cancellationToken);
+            TempData[result.IsSuccess ? "success" : "error"] = result.Message;
+            return RedirectToAction(nameof(Review), new { id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAnyAccess(ProcedureEnum.ReviewBilling, ProcedureEnum.ApproveFinalBilling)]
+        public async Task<IActionResult> Reject(int id, string reason, CancellationToken cancellationToken)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var username = User.Identity?.Name ?? "System";
+            var result = await billingService.RejectBillingAsync(id, reason, username, userId, cancellationToken);
+            TempData[result.IsSuccess ? "success" : "error"] = result.Message;
+            return RedirectToAction(nameof(Review), new { id });
+        }
+
+        [HttpGet]
+        [RequireAccess(ProcedureEnum.CreateBilling)]
+        public async Task<IActionResult> Adjust(int id, CancellationToken cancellationToken)
+        {
+            var billing = await billingService.GetBillingByIdAsync(id, cancellationToken);
+            if (billing == null)
+            {
+                return NotFound();
+            }
+
+            if (billing.Status != MsapConstants.BillingStatus.ForPosting || (!billing.RejectedAt.HasValue && !billing.UnpostedDate.HasValue))
+            {
+                TempData["error"] = "Adjust Billing is only available after the reviewer or approver requests a revision or reopens the billing.";
+                return RedirectToAction(nameof(Review), new { id });
+            }
+
+            billing = await billingService.PopulateTicketListsAsync(billing, cancellationToken);
+            var tickets = (billing.PaidDispatchTickets ?? [])
+                .DistinctBy(t => t.DispatchTicketId)
+                .OrderBy(t => t.DateLeft)
+                .ThenBy(t => t.DispatchTicketId)
+                .Select(t => new BillingAdjustTicketItemViewModel
+                {
+                    DispatchTicketId = t.DispatchTicketId,
+                    DispatchNumber = t.DispatchNumber,
+                    TugboatName = t.Tugboat?.TugboatName ?? "-",
+                    ServiceName = t.Service?.ServiceName ?? "-",
+                    TotalHours = t.TotalHours,
+                    DispatchChargeType = t.DispatchChargeType ?? "Per hour",
+                    DispatchRate = t.DispatchRate,
+                    BAFChargeType = t.BAFChargeType ?? "Per hour",
+                    BAFRate = t.BAFRate
+                })
+                .ToList();
+
+            var schedule = billing.CustomerOrderSlipId.HasValue
+                ? await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == billing.CustomerOrderSlipId.Value, cancellationToken)
+                : null;
+            var cosDefaultDiscount = schedule?.CosDiscountPercent ?? 0m;
+            var currentDiscountPercent = billing.Discount > 0m && (billing.Amount + billing.Discount) > 0m
+                ? Math.Round(billing.Discount / (billing.Amount + billing.Discount) * 100m, 2)
+                : cosDefaultDiscount;
+
+            var vm = new BillingAdjustViewModel
+            {
+                MsapBillingId = billing.MsapBillingId,
+                MsapBillingNumber = billing.MsapBillingNumber,
+                CustomerName = billing.Customer?.CustomerName,
+                VesselName = billing.Vessel?.VesselName,
+                RejectionReason = billing.RejectionReason,
+                CosDefaultDiscountPercent = cosDefaultDiscount,
+                CosDiscountPercent = currentDiscountPercent,
+                SkipCosDiscount = billing.Discount <= 0m,
+                Tickets = tickets
+            };
+
+            return View(vm);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.CreateBilling)]
+        public async Task<IActionResult> Adjust(BillingAdjustViewModel model, CancellationToken cancellationToken)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var username = User.Identity?.Name ?? "System";
+            var result = await billingService.AdjustBillingAsync(model, username, userId, cancellationToken);
+            if (!result.IsSuccess)
+            {
+                TempData["error"] = result.Message;
+                return RedirectToAction(nameof(Adjust), new { id = model.MsapBillingId });
+            }
+
+            TempData["success"] = result.Message;
+            return RedirectToAction(nameof(Review), new { id = model.MsapBillingId });
         }
 
         [HttpPost]
@@ -270,6 +378,42 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var result = await billingService.ReopenBillingForRevisionAsync(id, reason, username, userId, cancellationToken, authorizationFile);
             TempData[result.IsSuccess ? "success" : "error"] = result.Message;
             return RedirectToAction(nameof(Review), new { id });
+        }
+
+        [HttpGet]
+        [RequireAnyAccess(ProcedureEnum.ViewBillings, ProcedureEnum.ReviewBilling, ProcedureEnum.ApproveFinalBilling)]
+        public async Task<IActionResult> DownloadAdjustmentAttachment(int id, CancellationToken cancellationToken)
+        {
+            var billing = await billingService.GetBillingByIdAsync(id, cancellationToken);
+            if (billing == null)
+            {
+                return NotFound();
+            }
+
+            var objectName = billing.AdjustmentAttachmentUrl;
+            if (string.IsNullOrWhiteSpace(objectName))
+            {
+                var logs = await unitOfWork.MsapAdjustmentLog.GetAllAsync(
+                    a => a.DocumentType == "Billing" && a.RecordId == id && !string.IsNullOrEmpty(a.AttachmentUrl), cancellationToken);
+                objectName = logs.OrderByDescending(a => a.EditedDate).ThenByDescending(a => a.Id).FirstOrDefault()?.AttachmentUrl;
+            }
+
+            if (string.IsNullOrWhiteSpace(objectName))
+            {
+                return NotFound("No authorization document is attached to this billing.");
+            }
+
+            var stream = await cloudStorageService.DownloadFileAsync(objectName);
+            var extension = Path.GetExtension(objectName).ToLowerInvariant();
+            var contentType = extension switch
+            {
+                ".pdf" => "application/pdf",
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                _ => "application/octet-stream"
+            };
+
+            return File(stream, contentType, objectName);
         }
 
         #endregion

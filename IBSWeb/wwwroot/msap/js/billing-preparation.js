@@ -139,10 +139,14 @@ $(function () {
 
     function updateDiscount() {
         const enabled = commercialEnabled && !$('#SkipCosDiscount').is(':checked');
-        $('#CosDiscountPercent').prop('readOnly', !enabled);
+        $('#CosDiscountPercent').prop('readOnly', true);
+        $('#discountToggle').prop('disabled', true).attr('aria-pressed', String(enabled));
         $('#discountCard').toggleClass('is-enabled', enabled);
-        $('#discountToggle').attr('aria-pressed', String(enabled));
-        $('#discountHelp').text(!commercialEnabled ? 'No linked schedule.' : enabled ? 'Applies to tariff and BAF.' : defaultDiscount > 0 ? 'Default ' + defaultDiscount + '% skipped. Click to enable.' : 'No discount. Click to enable.');
+        $('#discountHelp').text(!commercialEnabled
+            ? 'No linked schedule.'
+            : defaultDiscount > 0
+                ? 'Locked to COS default (' + defaultDiscount + '%). Override requires reviewer revision.'
+                : 'No COS discount configured.');
         renderServices();
     }
 
@@ -286,7 +290,8 @@ $(function () {
             $('#bookingIoc').text(header.isIoc ? 'IOC' : 'Non-IOC');
             $('#SeparateBaf').prop('disabled', form.dataset.editingDraft === 'true');
             commercialEnabled = header.hasSchedule;
-            $('#CosDiscountPercent, #SkipCosDiscount, #SbmaEnabled, #sbmaFalse, #discountToggle').prop('disabled', !commercialEnabled);
+            $('#CosDiscountPercent, #SkipCosDiscount, #SbmaEnabled, #sbmaFalse').prop('disabled', !commercialEnabled);
+            $('#discountToggle').prop('disabled', true);
             defaultDiscount = Number(header.cosDiscountPercent) || 0;
             $('#CosDiscountPercent').val(header.skipCosDiscount ? 0 : defaultDiscount);
             $('#SkipCosDiscount').prop('checked', header.skipCosDiscount || defaultDiscount <= 0);
@@ -302,25 +307,7 @@ $(function () {
         }
     });
 
-    $('#discountCard').on('click', function (event) {
-        if (!commercialEnabled) return;
-        const skipped = $('#SkipCosDiscount').is(':checked');
-        if (event.target.closest('input') && !$('#CosDiscountPercent').prop('readOnly')) return;
-        if (!skipped && !event.target.closest('button')) return;
-        $('#SkipCosDiscount').prop('checked', !skipped);
-        if (!skipped) $('#CosDiscountPercent').val('0');
-        updateDiscount();
-        if (skipped) $('#CosDiscountPercent').trigger('focus');
-    });
-    $('#CosDiscountPercent').on('input', renderServices);
     $('#SbmaEnabled').on('change', updateSummary);
-    $('#CosDiscountPercent').on('blur', function () {
-        if ($('#CosDiscountPercent').val() === '' || Number($('#CosDiscountPercent').val()) === 0) {
-            $('#CosDiscountPercent').val('0');
-            $('#SkipCosDiscount').prop('checked', true);
-            updateDiscount();
-        }
-    });
     $recipient.on('change', updateRecipient);
     $principal.on('change', updateRecipient);
     $('#SeparateBaf, #IsUndocumented').on('change', updateSummary);

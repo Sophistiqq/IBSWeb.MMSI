@@ -45,7 +45,7 @@ namespace IBS.Utility.MSAP.Constants
 
         public static class DispatchTicketStatus
         {
-            public const string CalculationPending = "Calculation pending";
+            public const string AwaitingRate = "Awaiting Rate";
             public const string ForTariff = "For Tariff";
             public const string ForApproval = "For Approval";
             public const string Disapproved = "Disapproved";
@@ -53,12 +53,13 @@ namespace IBS.Utility.MSAP.Constants
             public const string Billed = "Billed";
             public const string Deleted = "Deleted";
 
-            public static readonly string[] All = [CalculationPending, ForTariff, ForApproval, Disapproved, ForBilling, Billed, Deleted];
+            public static readonly string[] All = [AwaitingRate, ForTariff, ForApproval, Disapproved, ForBilling, Billed, Deleted];
         }
 
         public static class BillingStatus
         {
             public const string ForPosting = "For Posting";
+            public const string Reviewed = "Reviewed";
             public const string ForCollection = "For Collection";
             public const string Collected = "Collected";
         }

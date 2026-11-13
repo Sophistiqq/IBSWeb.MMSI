@@ -309,7 +309,7 @@ namespace IBS.Services.MSAP
             await _db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
             return ServiceResult.Success(
-                "Selected rates approved and activated. Existing ticket amounts were not changed; pending charges can now be recalculated from the COS.");
+                "Selected rates approved and activated. Eligible unbilled tickets without a prepared billing were automatically recalculated.");
         }
 
         private async Task ActivateRowsAsync(RateUpload update, List<RateUploadRowViewModel> rows,
@@ -366,6 +366,90 @@ namespace IBS.Services.MSAP
             update.ApprovedAt = now;
             update.ApprovedBy = actor.Name.Trim();
             _db.AuditTrails.Add(CreateAudit(actor, update, "Approved selected rates", update.RowsJson, true));
+            await _db.SaveChangesAsync(ct);
+            await AutoRecalculateEligibleTicketsAsync(update, rows, actor, ct);
+        }
+
+        private async Task AutoRecalculateEligibleTicketsAsync(RateUpload update, List<RateUploadRowViewModel> rows,
+            ApplicationUser actor, CancellationToken ct)
+        {
+            if (rows.Count == 0)
+            {
+                return;
+            }
+            bool isTariff = update.RateKind == RateTableKind.Tariff;
+            List<int> customers = rows.Select(r => r.CustomerId).Distinct().ToList();
+            DateOnly minDate = rows.Min(r => r.EffectiveDate);
+
+            List<DispatchTicket> candidates = await _db.MsapDispatchTickets
+                .Include(t => t.CustomerOrderSlip)
+                .Include(t => t.ExpectedServiceEntry)
+                .Where(t => customers.Contains(t.CustomerId)
+                    && t.Customer.Company == MsapConstants.Company_MMSI
+                    && t.DateLeft != null && t.DateLeft >= minDate
+                    && t.CustomerOrderSlipId != null && t.VesselScheduleServiceEntryId != null
+                    && t.BillingId == null
+                    && t.CustomerOrderSlip!.Status == MsapConstants.CustomerOrderSlipStatus.Open
+                    && (t.Status == MsapConstants.DispatchTicketStatus.AwaitingRate || t.Status == MsapConstants.DispatchTicketStatus.ForBilling)
+                    && !_db.MsapBillings.Any(b => b.CustomerOrderSlipId == t.CustomerOrderSlipId))
+                .ToListAsync(ct);
+
+            if (candidates.Count == 0)
+            {
+                return;
+            }
+
+            string actorName = actor.Name.Trim();
+            foreach (var cosGroup in candidates.GroupBy(t => t.CustomerOrderSlipId!.Value))
+            {
+                VesselSchedule? schedule = await _work.VesselSchedule.GetScheduleWithDetailsAsync(cosGroup.Key, ct);
+                if (schedule == null || schedule.ApprovedRevision != schedule.Revision
+                    || schedule.Status is not (MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress or MsapConstants.VesselScheduleStatus.Completed))
+                {
+                    continue;
+                }
+
+                bool cosChanged = false;
+                foreach (DispatchTicket ticket in cosGroup)
+                {
+                    if (await _work.PostedPeriod.IsMonthClosedAsync(ticket.Date.Year, ticket.Date.Month, ct)
+                        || (ticket.DateLeft.HasValue && await _work.PostedPeriod.IsMonthClosedAsync(ticket.DateLeft.Value.Year, ticket.DateLeft.Value.Month, ct)))
+                    {
+                        continue;
+                    }
+                    if (ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling
+                        && isTariff && ticket.IsManualTariffRate && ticket.ExpectedServiceEntry?.IsManualTariffOverride == true)
+                    {
+                        continue;
+                    }
+
+                    string oldStatus = ticket.Status;
+                    decimal oldTariff = ticket.DispatchRate;
+                    decimal oldBaf = ticket.BAFRate;
+                    decimal oldNet = ticket.TotalNetRevenue;
+
+                    string? blocker = await ScheduledTicketCharges.ApplyAsync(_work, ticket, schedule, actorName, ct);
+                    if (ticket.Status != oldStatus || ticket.DispatchRate != oldTariff || ticket.BAFRate != oldBaf || ticket.TotalNetRevenue != oldNet)
+                    {
+                        cosChanged = true;
+                        _db.AuditTrails.Add(new AuditTrail(actorName,
+                            $"Auto-recalculated ticket #{ticket.DispatchNumber} from Rate Upload #{update.RateUploadId}: {oldStatus} -> {ticket.Status}; tariff {oldTariff} -> {ticket.DispatchRate}; BAF {oldBaf} -> {ticket.BAFRate}; net {oldNet} -> {ticket.TotalNetRevenue}. {blocker ?? "Charges calculated"}",
+                            "Dispatch Ticket", ticket.DispatchTicketId, ticket.DispatchNumber)
+                        {
+                            UserId = actor.Id,
+                            ActorName = actorName
+                        });
+                    }
+                }
+
+                if (cosChanged)
+                {
+                    List<DispatchTicket> allCosTickets = await _db.MsapDispatchTickets
+                        .Where(t => t.CustomerOrderSlipId == cosGroup.Key && t.Status != MsapConstants.DispatchTicketStatus.Deleted)
+                        .ToListAsync(ct);
+                    SbmaShareCalculator.Apply(allCosTickets, schedule.SbmaEnabled);
+                }
+            }
         }
 
         private async Task PopulateAffectedTicketsAsync(RateUploadViewModel model, CancellationToken ct)
@@ -385,7 +469,7 @@ namespace IBS.Services.MSAP
                     && (!tariff || !ticket.IsManualTariffRate
                         || ticket.ExpectedServiceEntry != null && ticket.ExpectedServiceEntry.IsManualTariffOverride == false)
                     && ticket.BillingId == null && ticket.CustomerOrderSlip!.Status == MsapConstants.CustomerOrderSlipStatus.Open
-                    && (ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling || ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending)
+                    && (ticket.Status == MsapConstants.DispatchTicketStatus.ForBilling || ticket.Status == MsapConstants.DispatchTicketStatus.AwaitingRate)
                     && !_db.MsapBillings.Any(bill => bill.CustomerOrderSlipId == ticket.CustomerOrderSlipId))
                 .OrderByDescending(ticket => ticket.DateLeft).ThenByDescending(ticket => ticket.DispatchTicketId).Take(201).ToListAsync(ct);
             model.ImpactLimitReached = candidates.Count > 200;

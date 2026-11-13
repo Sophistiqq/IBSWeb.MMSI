@@ -22,7 +22,7 @@ namespace Checks.MSAP
             var tariff = new TariffRate { Dispatch = 1120m };
             var baf = new BafRate { Amount = 100m, AsOfDate = new DateOnly(2026, 10, 6), ApprovedAt = new DateTime(2026, 10, 7) };
             Check(ScheduledTicketCharges.Apply(ticket, schedule, entry, tariff, baf) != null
-                && ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending, "Old-week BAF was used for a new-week ticket.");
+                && ticket.Status == MsapConstants.DispatchTicketStatus.AwaitingRate, "Old-week BAF was used for a new-week ticket.");
             baf.AsOfDate = new DateOnly(2026, 10, 13);
             Check(ScheduledTicketCharges.Apply(ticket, schedule, entry, tariff, baf) == null
                 && ticket.TotalHours == 1m && ticket.AccountingSourceId == identity, "Recalculation failed or replaced the accounting identity.");

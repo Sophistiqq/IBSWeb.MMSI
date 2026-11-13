@@ -118,7 +118,7 @@
             <section class="ui-stack" aria-labelledby="reviewServicesTitle">
                 <div class="ui-field">
                     <h2 class="ui-section-title" id="reviewServicesTitle">Tugboats &amp; services</h2>
-                    <p class="ui-caption ui-muted">@(canViewRates ? "Table estimates use the planned date. Final rates use actual service start; actual ticket details are recorded after service." : "Assigned tugboats and expected services for this booking. Actual ticket details are recorded after service.")</p>
+                    <p class="ui-caption ui-muted">@(canViewRates ? "Table rates use the planned date. Final rates use actual service start; actual ticket details are recorded after service." : "Assigned tugboats and expected services for this booking. Actual ticket details are recorded after service.")</p>
                 </div>
                 @if (tugs.Count == 0)
                 {
@@ -156,7 +156,7 @@
                                                 <td>@(entry.TariffBasis == TariffChargeBasis.PerMove ? "Per move" : entry.TariffBasis == TariffChargeBasis.PerHour ? "Per hour" : "Not specified")</td>
                                                 <td class="schedule-review-rate-cell">
                                                     <span class="@(entry.ManualTariffRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="tariff" data-manual="@entry.ManualTariffRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("N2") : "Checking table…")</span>
-                                                    <small class="ui-caption ui-muted" data-rate-source>@(entry.ManualTariffRate.HasValue ? (entry.ManualTariffRate.Value == 0 ? "Zero tariff" : "Saved manual rate") : "Table estimate pending")</small>
+                                                    <small class="ui-caption ui-muted" data-rate-source>@(entry.ManualTariffRate.HasValue ? (entry.ManualTariffRate.Value == 0 ? "Zero tariff" : "Saved manual rate") : "Table rate pending")</small>
                                                     <partial name="_ScheduleRateCapture" model="captures.SingleOrDefault(item => item.EntryId == entry.VesselScheduleServiceEntryId && item.Kind == RateTableKind.Tariff)" />
                                                 </td>
                                                 <td>
@@ -168,7 +168,7 @@
                                                 </td>
                                                 <td class="schedule-review-rate-cell">
                                                     <span class="@(entry.ManualBafRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="baf" data-manual="@entry.ManualBafRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualBafRate.HasValue ? entry.ManualBafRate.Value.ToString("N2") : "Checking table…")</span>
-                                                    <small class="ui-caption ui-muted" data-rate-source>@(entry.ManualBafRate.HasValue ? (entry.ManualBafRate.Value == 0 ? "Zero BAF" : "Saved manual rate") : "Table estimate pending")</small>
+                                                    <small class="ui-caption ui-muted" data-rate-source>@(entry.ManualBafRate.HasValue ? (entry.ManualBafRate.Value == 0 ? "Zero BAF" : "Saved manual rate") : "Table rate pending")</small>
                                                     <partial name="_ScheduleRateCapture" model="captures.SingleOrDefault(item => item.EntryId == entry.VesselScheduleServiceEntryId && item.Kind == RateTableKind.BAF)" />
                                                 </td>
                                             </tr>
@@ -344,7 +344,7 @@
             { selector: '.schedule-review-workspace .ui-page-header', title: 'Schedule status', text: 'Check the booking status and revision. Open COS continues ticket entry when a COS is available. Urgent service entry, when available, allows actual tickets before approval; charges and billing wait for approval.', interactive: false },
             { selector: '[aria-labelledby="reviewBookingTitle"]', title: 'Booking details', text: 'Review the customer, vessel, port, terminal, voyage and planned service window in Philippine time.', interactive: false },
             { selector: '[aria-labelledby="reviewCommercialTitle"]', title: 'Commercial defaults', text: 'Review the saved customer discount, terminal IOC / Non-IOC and port SBMA settings. Any differences from current defaults are highlighted. Discount and SBMA can be customized during billing preparation.', interactive: false },
-            { selector: '[aria-labelledby="reviewServicesTitle"]', title: 'Tugboats, services and rates', text: 'Review the services for each tugboat, rate sources and charging methods. Table estimates use the planned date; final rates use actual service start. Check any manual rates before approval.', interactive: false },
+            { selector: '[aria-labelledby="reviewServicesTitle"]', title: 'Tugboats, services and rates', text: 'Review the services for each tugboat, rate sources and charging methods. Table rates use the planned date; final rates use actual service start. Check any manual rates before approval.', interactive: false },
             { selector: '.schedule-review-actions', title: 'Available booking actions', text: 'Use the actions available for this booking and your access. Read any conditions before changing or stopping the booking.', interactive: false },
             { selector: '#confirmSchedule', title: 'Approve this schedule revision', text: 'Approve only after checking the booking, services, rates and any conflicts. Approval creates or retains the linked COS. Reapproval retains the COS and approves the revised schedule.', interactive: false }
         ].filter(function (step) {

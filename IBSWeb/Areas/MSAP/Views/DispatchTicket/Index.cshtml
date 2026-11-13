@@ -25,7 +25,7 @@
         <!-- Filter Group -->
         <div class="flex flex-wrap gap-2">
             <button id="filterAll" class="modern-btn-secondary active">ALL</button>
-            <button id="filterCalculationPending" class="modern-btn-secondary">CALCULATION PENDING</button>
+            <button id="filterCalculationPending" class="modern-btn-secondary">AWAITING RATE</button>
             <button id="filterForBilling" class="modern-btn-secondary">FOR BILLING</button>
             <button id="filterBilled" class="modern-btn-secondary">BILLED</button>
         </div>
@@ -77,7 +77,7 @@
 @section Scripts {
     <script>
         window.IBS_TOUR_STEPS = [
-            { selector: '#filterAll', title: 'Ticket status filters', text: 'Use Calculation pending for unresolved charges, For billing for calculated tickets awaiting billing, or Billed for tickets already linked to a bill. All returns to the full registry.', interactive: false },
+            { selector: '#filterAll', title: 'Ticket status filters', text: 'Use Awaiting rate for tickets waiting on an approved rate, For billing for calculated tickets awaiting billing, or Billed for tickets already linked to a bill. All returns to the full registry.', interactive: false },
             { selector: '#dateFilter', title: 'Filter by date', text: 'Filter tickets by dispatch date. A date range may also be applied from another screen and can be cleared above the registry.', interactive: false },
             { selector: '#paginatedTable', title: 'Ticket registry', text: 'Review the actual service times, tugboat, customer, vessel and status. Open a ticket number or View Details to inspect its service, charges and supporting files. Use the COS and billing references to identify the related order and bill.', interactive: false }
         ];
@@ -142,7 +142,7 @@
                         className: "text-center",
                         render: (data) => {
                             let statusClass = "";
-                            if (data === "@MsapConstants.DispatchTicketStatus.CalculationPending") return ModernTable.render.badge("Calculation pending", "ui-status ui-critical");
+                            if (data === "@MsapConstants.DispatchTicketStatus.AwaitingRate") return ModernTable.render.badge("Awaiting rate", "ui-status ui-critical");
                             if (data === "@MsapConstants.DispatchTicketStatus.ForTariff") statusClass = "ui-status ui-attention";
                             else if (data === "@MsapConstants.DispatchTicketStatus.ForApproval") statusClass = "ui-status ui-attention";
                             else if (data === "@MsapConstants.DispatchTicketStatus.Disapproved") statusClass = "ui-status ui-critical";
@@ -188,7 +188,7 @@
             $('.modern-btn-secondary[id^="filter"]').on('click', function() {
                 const id = $(this).attr('id');
                 let status = '';
-                if (id === 'filterCalculationPending') status = '@MsapConstants.DispatchTicketStatus.CalculationPending';
+                if (id === 'filterCalculationPending') status = '@MsapConstants.DispatchTicketStatus.AwaitingRate';
                 else if (id === 'filterForBilling') status = '@MsapConstants.DispatchTicketStatus.ForBilling';
                 else if (id === 'filterBilled') status = '@MsapConstants.DispatchTicketStatus.Billed';
 
@@ -208,7 +208,7 @@
             function updateFilterButtons(status) {
                 $('.modern-btn-secondary').removeClass('active');
                 if (!status) $('#filterAll').addClass('active');
-                else if (status === "@MsapConstants.DispatchTicketStatus.CalculationPending") $('#filterCalculationPending').addClass('active');
+                else if (status === "@MsapConstants.DispatchTicketStatus.AwaitingRate") $('#filterCalculationPending').addClass('active');
                 else if (status === "@MsapConstants.DispatchTicketStatus.ForBilling") $('#filterForBilling').addClass('active');
                 else if (status === "@MsapConstants.DispatchTicketStatus.Billed") $('#filterBilled').addClass('active');
             }

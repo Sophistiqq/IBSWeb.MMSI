@@ -30,6 +30,7 @@ namespace IBS.Services.MSAP
             model.CanCreateBilling = await access.HasAccessAsync(userId, ProcedureEnum.CreateBilling);
             model.CanCreateCollection = await access.HasAccessAsync(userId, ProcedureEnum.CreateCollection);
             model.CanApproveSchedule = await access.HasAccessAsync(userId, ProcedureEnum.ApproveSchedule);
+            model.CanReviewBilling = await access.HasAccessAsync(userId, ProcedureEnum.ReviewBilling);
             model.CanApproveBilling = await access.HasAccessAsync(userId, ProcedureEnum.ApproveFinalBilling);
             model.CanApproveRates = await access.HasAccessAsync(userId, ProcedureEnum.ApproveRateUpload);
             model.CanManageRates = await access.HasAccessAsync(userId, ProcedureEnum.ManageRates);
@@ -50,12 +51,12 @@ namespace IBS.Services.MSAP
             model.CanFollowUpTickets = await access.HasAnyAccessAsync(userId, ProcedureEnum.CreateDispatchTicket,
                 ProcedureEnum.EditDispatchTicket);
             model.CanViewBilling = await access.HasAnyAccessAsync(userId, ProcedureEnum.CreateBilling,
-                ProcedureEnum.DeleteBilling, ProcedureEnum.ApproveFinalBilling, ProcedureEnum.ViewMaritimeReport);
+                ProcedureEnum.DeleteBilling, ProcedureEnum.ReviewBilling, ProcedureEnum.ApproveFinalBilling, ProcedureEnum.ViewMaritimeReport);
             model.CanViewCollections = await access.HasAnyAccessAsync(userId, ProcedureEnum.CreateCollection,
                 ProcedureEnum.AccessTreasury, ProcedureEnum.ViewMaritimeReport);
             model.CanViewBanking = await access.HasAnyAccessAsync(userId, ProcedureEnum.AccessTreasury, ProcedureEnum.ViewMaritimeReport);
             model.CanReviewCalculations = await access.HasAnyAccessAsync(userId, ProcedureEnum.EditDispatchTicket,
-                ProcedureEnum.CreateBilling, ProcedureEnum.ApproveFinalBilling,
+                ProcedureEnum.CreateBilling, ProcedureEnum.ReviewBilling, ProcedureEnum.ApproveFinalBilling,
                 ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload, ProcedureEnum.ViewMaritimeReport);
             model.CanViewFinance = model.CanViewBilling || model.CanViewCollections;
         }
@@ -92,9 +93,11 @@ namespace IBS.Services.MSAP
                         .Take(6)
                         .ToListAsync(ct);
                 }
-                if (model.CanApproveBilling)
+                if (model.CanReviewBilling || model.CanApproveBilling)
                 {
-                    var reviews = bills.Where(b => b.Status == MsapConstants.BillingStatus.ForPosting);
+                    var reviews = bills.Where(b =>
+                        (model.CanReviewBilling && b.Status == MsapConstants.BillingStatus.ForPosting) ||
+                        (model.CanApproveBilling && b.Status == MsapConstants.BillingStatus.Reviewed));
                     model.ForPosting = await reviews.CountAsync(ct);
                     model.BillingReviewItems = await reviews.Include(b => b.Customer).Include(b => b.Vessel).Include(b => b.BafBilling)
                         .OrderBy(b => b.CreatedDate).ThenBy(b => b.MsapBillingId).Take(6).ToListAsync(ct);
@@ -146,7 +149,7 @@ namespace IBS.Services.MSAP
                 }
                 if (model.CanReviewCalculations)
                 {
-                    var pending = tickets.Where(t => t.BillingId == null && t.Status == MsapConstants.DispatchTicketStatus.CalculationPending);
+                    var pending = tickets.Where(t => t.BillingId == null && t.Status == MsapConstants.DispatchTicketStatus.AwaitingRate);
                     model.PendingCalculationCount = await pending.Select(t => t.CustomerOrderSlipId).Where(id => id != null).Distinct().CountAsync(ct);
                     model.PendingCalculationTickets = await pending.Include(t => t.CustomerOrderSlip).Include(t => t.ExpectedServiceEntry)
                         .Include(t => t.Customer).Include(t => t.Terminal).Include(t => t.Service)
@@ -154,7 +157,7 @@ namespace IBS.Services.MSAP
                 }
                 if (model.CanApproveSchedule || model.CanManageRates || model.CanViewRates || model.CanReviewCalculations)
                 {
-                    var pendingList = await tickets.Where(t => t.BillingId == null && t.Status == MsapConstants.DispatchTicketStatus.CalculationPending)
+                    var pendingList = await tickets.Where(t => t.BillingId == null && t.Status == MsapConstants.DispatchTicketStatus.AwaitingRate)
                         .Include(t => t.CustomerOrderSlip).Include(t => t.ExpectedServiceEntry)
                         .Include(t => t.Customer).Include(t => t.Terminal).Include(t => t.Service).Include(t => t.Tugboat).Include(t => t.Vessel)
                         .OrderBy(t => t.CreatedDate).Take(15).ToListAsync(ct);
@@ -188,7 +191,7 @@ namespace IBS.Services.MSAP
                 if (model.CanViewDispatch || model.CanViewReports)
                 {
                     var activity = await tickets.Where(t => t.DateLeft >= monthStart && t.DateLeft <= today
-                            && (t.Status == MsapConstants.DispatchTicketStatus.CalculationPending
+                            && (t.Status == MsapConstants.DispatchTicketStatus.AwaitingRate
                                 || t.Status == MsapConstants.DispatchTicketStatus.ForBilling || t.Status == MsapConstants.DispatchTicketStatus.Billed)
                             && t.DateLeft != null && t.TimeLeft != null && t.DateArrived != null && t.TimeArrived != null
                             && (t.DateArrived > t.DateLeft || t.DateArrived == t.DateLeft && t.TimeArrived > t.TimeLeft))

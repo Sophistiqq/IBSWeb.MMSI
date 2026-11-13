@@ -10,10 +10,21 @@
     string? blocker = ViewData["PostingBlocker"] as string;
     bool canPrint = BillingService.CanPrint(Model);
     bool isReopenedOrFinalized = Model.UnpostedDate.HasValue || Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
-    bool canPost = ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && (ViewData["IsPeriodClosed"] is not true || isReopenedOrFinalized);
+    bool canReview = ViewData["CanReviewBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && (ViewData["IsPeriodClosed"] is not true || isReopenedOrFinalized);
+    bool canPost = ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.Reviewed && blocker == null && (ViewData["IsPeriodClosed"] is not true || isReopenedOrFinalized);
+    bool canReject = (ViewData["CanReviewBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting)
+        || (ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.Reviewed);
+    bool canAdjust = ViewData["CanCreateBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && (Model.RejectedAt.HasValue || Model.UnpostedDate.HasValue);
     bool canEditDraft = ViewData["CanCreateBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && Model.CustomerOrderSlipId.HasValue && (ViewData["IsPeriodClosed"] is not true || isReopenedOrFinalized);
     bool canReverse = ViewData["CanReverseBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForCollection && Model.AmountPaid == 0;
     bool canDiscard = ViewData["CanDiscardBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && ViewData["IsPeriodClosed"] is not true;
+    var statusLabel = Model.Status == MsapConstants.BillingStatus.ForPosting
+        ? "For commercial review"
+        : Model.Status == MsapConstants.BillingStatus.Reviewed
+            ? "Reviewed · Awaiting final approval"
+            : "Approved";
+    var adjustmentReason = ViewBag.AdjustmentReason as string;
+    var adjustmentAttachmentUrl = ViewBag.AdjustmentAttachmentUrl as string;
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/billing-preparation.css" asp-append-version="true" />
@@ -35,7 +46,7 @@
                     <a asp-action="Preview" asp-route-id="@Model.MsapBillingId" asp-route-printCopy="@canPrint" target="_blank" class="modern-btn-primary ui-page-action">Preview statements</a>
                 </div>
                 <p class="ui-page-description ui-caption ui-muted">
-                    @Model.MsapBillingNumber · @component · @(Model.Status == MsapConstants.BillingStatus.ForPosting ? "Awaiting final approval" : "Approved") · @(Model.IsUndocumented ? "Undocumented" : "Documented")
+                    @Model.MsapBillingNumber · @component · @statusLabel · @(Model.IsUndocumented ? "Undocumented" : "Documented")
                     @{
                         var billingChanges = ViewBag.BillingChanges as List<MsapFieldChange> ?? new List<MsapFieldChange>();
                         var hasSeriesOverride = billingChanges.Any(c => c.Field == nameof(Billing.MsapBillingNumber));
@@ -54,17 +65,54 @@
                     }
                 </p>
             </header>
+            @if (Model.RejectedAt.HasValue && Model.Status == MsapConstants.BillingStatus.ForPosting)
+            {
+                <div class="ui-panel ui-critical" role="alert">
+                    <p class="ui-body mb-1">
+                        <strong>Revision requested</strong> by @(Model.RejectedByUser?.UserName ?? Model.RejectedByUserId) on @Model.RejectedAt.Value.ToString("dd MMM yyyy HH:mm")
+                    </p>
+                    <p class="ui-caption mb-0">@Model.RejectionReason</p>
+                </div>
+            }
             @if (billingChanges.Count > 0)
             {
-                <p class="ui-panel ui-body ui-attention">
-                    <strong>Flagged for review:</strong>
-                    @string.Join(" · ", billingChanges.Select(c => string.IsNullOrWhiteSpace(c.Before) ? $"{c.Label}: {c.After}" : $"{c.Label}: {c.Before} → {c.After}"))
-                </p>
+                <div class="ui-panel ui-attention" style="border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.08);">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                        <div>
+                            <p class="ui-body mb-1">
+                                <strong>Overridden values flagged for review &amp; approval:</strong>
+                            </p>
+                            <ul class="ui-caption mb-1" style="padding-left: 1.25rem;">
+                                @foreach (var change in billingChanges)
+                                {
+                                    <li><strong>@change.Label:</strong> @(string.IsNullOrWhiteSpace(change.Before) ? change.After : $"{change.Before} → {change.After}")</li>
+                                }
+                            </ul>
+                            @if (!string.IsNullOrWhiteSpace(adjustmentReason))
+                            {
+                                <p class="ui-caption ui-muted mb-0"><strong>Authorized reason:</strong> @adjustmentReason</p>
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(adjustmentAttachmentUrl))
+                        {
+                            <a asp-action="DownloadAdjustmentAttachment" asp-route-id="@Model.MsapBillingId" target="_blank" class="modern-btn-secondary">
+                                <span class="material-symbols-outlined" aria-hidden="true">attach_file</span> View authorization document
+                            </a>
+                        }
+                    </div>
+                </div>
             }
-            @if (Model.ApprovedAt.HasValue)
-            {
-                <p class="ui-caption ui-muted">Approved by @(Model.ApprovedByUser?.UserName ?? Model.ApprovedByUserId) · revision @Model.ApprovedRevision · @Model.ApprovedAt.Value.ToString("dd MMM yyyy HH:mm")</p>
-            }
+            <p class="ui-caption ui-muted">
+                Encoder: @Model.CreatedBy
+                @if (Model.ReviewedAt.HasValue)
+                {
+                    <span> · Reviewer: @(Model.ReviewedByUser?.UserName ?? Model.ReviewedByUserId) (rev @Model.ReviewedRevision · @Model.ReviewedAt.Value.ToString("dd MMM yyyy HH:mm"))</span>
+                }
+                @if (Model.ApprovedAt.HasValue)
+                {
+                    <span> · Approver: @(Model.ApprovedByUser?.UserName ?? Model.ApprovedByUserId) (rev @Model.ApprovedRevision · @Model.ApprovedAt.Value.ToString("dd MMM yyyy HH:mm"))</span>
+                }
+            </p>
             @if (related != null)
             {
                 <section class="ui-panel billing-section-heading" aria-label="Related billing">
@@ -108,11 +156,26 @@
                                 <tr class="billing-tugboat-row"><th colspan="6" scope="rowgroup">@group.Key<span class="billing-tugboat-owner ui-caption ui-muted">@(group.First().Tugboat.IsCompanyOwned ? "Company-owned" : "Subcontractor")</span></th></tr>
                                 @foreach (var ticket in group)
                                 {
-                                    <tr>
-                                        <td>@ticket.Service.ServiceName<span class="billing-ticket-number">@ticket.DispatchNumber</span></td>
+                                    var ticketHasOverride = billingChanges.Any(c =>
+                                        c.Field.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase)
+                                        || c.Label.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase));
+                                    var basicRateOverridden = ticketHasOverride && billingChanges.Any(c =>
+                                        (c.Field.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase) || c.Label.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase))
+                                        && c.Field.Contains("Dispatch", StringComparison.OrdinalIgnoreCase));
+                                    var bafRateOverridden = ticketHasOverride && billingChanges.Any(c =>
+                                        (c.Field.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase) || c.Label.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase))
+                                        && c.Field.Contains("BAF", StringComparison.OrdinalIgnoreCase));
+                                    <tr style="@(ticketHasOverride ? "background: rgba(245, 158, 11, 0.08);" : "")">
+                                        <td>
+                                            @ticket.Service.ServiceName<span class="billing-ticket-number">@ticket.DispatchNumber</span>
+                                            @if (ticketHasOverride)
+                                            {
+                                                <span class="schedule-status-pill ui-status ui-attention" style="margin-left: 0.35rem;">Overridden</span>
+                                            }
+                                        </td>
                                         <td>@(ticket.RawDurationHours?.ToString("N2") ?? "—") / @ticket.TotalHours.ToString("N2")</td>
-                                        <td>@(bafOnly ? "—" : ticket.DispatchRate.ToString("N2"))</td>
-                                        <td>@(basicOnly ? "—" : ticket.BAFRate.ToString("N2"))</td>
+                                        <td style="@(basicRateOverridden ? "background: rgba(245, 158, 11, 0.18); font-weight: 700;" : "")">@(bafOnly ? "—" : $"{ticket.DispatchRate:N2} ({ticket.DispatchChargeType ?? "Per hour"})")</td>
+                                        <td style="@(bafRateOverridden ? "background: rgba(245, 158, 11, 0.18); font-weight: 700;" : "")">@(basicOnly ? "—" : $"{ticket.BAFRate:N2} ({ticket.BAFChargeType ?? "Per hour"})")</td>
                                         <td>@(bafOnly ? "—" : ticket.IsManualTariffRate ? "Manual" : "Table") / @(basicOnly ? "—" : ticket.IsManualBafRate ? "Manual" : "Table")</td>
                                         <td>@(bafOnly ? ticket.BAFNetRevenue.ToString("N2") : basicOnly ? ticket.DispatchNetRevenue.ToString("N2") : ticket.TotalNetRevenue.ToString("N2"))</td>
                                     </tr>
@@ -124,6 +187,13 @@
             </section>
             <section class="ui-panel ui-stack" aria-label="Saved billing totals">
                 <h2 class="ui-section-title">@Model.MsapBillingNumber · @component amounts</h2>
+                @{
+                    var discountOverridden = billingChanges.Any(c => c.Field.Contains("Discount", StringComparison.OrdinalIgnoreCase));
+                }
+                <div class="billing-amount" style="@(discountOverridden ? "background: rgba(245, 158, 11, 0.14); padding: 0.25rem 0.5rem; border-radius: 4px;" : "")">
+                    <span>Discount applied @(discountOverridden ? "(Overridden)" : "")</span>
+                    <strong>@Model.Discount.ToString("N2")</strong>
+                </div>
                 <div class="billing-amount"><span>Basic charges after discount</span><strong>@Model.DispatchAmount.ToString("N2")</strong></div>
                 <div class="billing-amount"><span>BAF charges after discount</span><strong>@Model.BAFAmount.ToString("N2")</strong></div>
                 <div class="billing-amount billing-summary-total"><strong>Statement total</strong><strong>@Model.Amount.ToString("N2")</strong></div>
@@ -147,7 +217,7 @@
             <footer class="billing-footer">
                 @if (Model.Status == MsapConstants.BillingStatus.ForPosting)
                 {
-                    <p class="ui-caption ui-muted">Final approval applies to @Model.MsapBillingNumber only.</p>
+                    <p class="ui-caption ui-muted">Stage 1 of 2: Commercial review for @Model.MsapBillingNumber.</p>
                     <div class="billing-footer-actions">
                         <div class="d-flex align-items-center gap-2 flex-wrap">
                             @if (canDiscard)
@@ -164,8 +234,56 @@
                                     <span class="material-symbols-outlined" aria-hidden="true">edit</span> Edit billing
                                 </a>
                             }
+                            @if (canAdjust)
+                            {
+                                <a asp-action="Adjust" asp-route-id="@Model.MsapBillingId" class="modern-btn-secondary">
+                                    <span class="material-symbols-outlined" aria-hidden="true">tune</span> Adjust billing
+                                </a>
+                            }
                         </div>
-                        <div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            @if (canReject)
+                            {
+                                <button type="button" class="modern-btn-secondary" id="btnRejectBilling"
+                                    data-action="@Url.Action("Reject", "Billing")"
+                                    data-id="@Model.MsapBillingId"
+                                    data-billing-number="@Model.MsapBillingNumber">
+                                    <span class="material-symbols-outlined" aria-hidden="true">reply</span> Request revision
+                                </button>
+                            }
+                            @if (canReview)
+                            {
+                                <form asp-action="EndorseReview" asp-route-id="@Model.MsapBillingId" method="post" id="endorseReviewedBilling" class="d-inline">
+                                    <input type="hidden" name="reviewedRevision" value="@Model.Revision" />
+                                    <button class="modern-btn-primary ui-page-action" type="submit">
+                                        <span class="material-symbols-outlined" aria-hidden="true">fact_check</span> Endorse for approval
+                                    </button>
+                                </form>
+                            }
+                            else
+                            {
+                                <span class="@(blocker != null || (ViewData["IsPeriodClosed"] is true && !isReopenedOrFinalized) ? "ui-notice ui-critical" : "ui-caption ui-muted")">@(blocker ?? (ViewData["IsPeriodClosed"] is true && !isReopenedOrFinalized ? "This accounting period is closed." : "Waiting for an authorized commercial reviewer."))</span>
+                            }
+                        </div>
+                    </div>
+                }
+                else if (Model.Status == MsapConstants.BillingStatus.Reviewed)
+                {
+                    <p class="ui-caption ui-muted">Stage 2 of 2: Final approval applies to @Model.MsapBillingNumber only.</p>
+                    <div class="billing-footer-actions">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="ui-caption ui-muted">Reviewed by @(Model.ReviewedByUser?.UserName ?? Model.ReviewedByUserId) on @Model.ReviewedAt?.ToString("dd MMM yyyy HH:mm")</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            @if (canReject)
+                            {
+                                <button type="button" class="modern-btn-secondary" id="btnRejectBilling"
+                                    data-action="@Url.Action("Reject", "Billing")"
+                                    data-id="@Model.MsapBillingId"
+                                    data-billing-number="@Model.MsapBillingNumber">
+                                    <span class="material-symbols-outlined" aria-hidden="true">reply</span> Request revision
+                                </button>
+                            }
                             @if (canPost)
                             {
                                 <form asp-action="Review" asp-route-id="@Model.MsapBillingId" method="post" id="postReviewedBilling" class="d-inline">
@@ -277,6 +395,47 @@
                 const form = document.getElementById('discardBillingForm');
                 form.action = `${btn.dataset.action}/${btn.dataset.id}`;
                 form.submit();
+            }
+        });
+
+        $('#btnRejectBilling').on('click', async function () {
+            const btn = this;
+            const billingNo = btn.dataset.billingNumber;
+            const confirmResult = await ModernAlert.prompt({
+                title: `Request revision for billing #${billingNo}?`,
+                text: 'Provide a clear reason for returning this billing to the encoder. This unlocks rate and discount adjustments with a required authorization document.',
+                inputPlaceholder: 'Reason for revision (minimum 5 characters)',
+                confirmText: 'Return to encoder',
+                cancelText: 'Cancel',
+                required: true
+            });
+            if (!confirmResult.isConfirmed) return;
+
+            ModernAlert.showLoading('Returning billing for revision...');
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = btn.dataset.action;
+            form.innerHTML = `
+                <input type="hidden" name="__RequestVerificationToken" value="${token}" />
+                <input type="hidden" name="id" value="${btn.dataset.id}" />
+                <input type="hidden" name="reason" value="${String(confirmResult.value || '').replace(/"/g, '&quot;')}" />
+            `;
+            document.body.appendChild(form);
+            form.submit();
+        });
+
+        $('#endorseReviewedBilling').on('submit', async function (event) {
+            event.preventDefault();
+            const form = this;
+            const button = form.querySelector('button');
+            if (button.disabled) return;
+            button.disabled = true;
+            try {
+                const result = await ModernAlert.confirm({ title: 'Endorse billing for final approval?', text: 'Confirm you have reviewed the commercial rates, discounts, and supporting tickets.', confirmText: 'Endorse for approval', cancelText: 'Keep reviewing' });
+                if (result.isConfirmed) form.submit();
+            } finally {
+                button.disabled = false;
             }
         });
 

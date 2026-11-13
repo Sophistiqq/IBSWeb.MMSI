@@ -599,7 +599,7 @@ namespace IBS.Services.MSAP
                         var existingTickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct)).ToList();
                         if (job?.Status != MsapConstants.CustomerOrderSlipStatus.Open
                             || existingTickets.Any(t => t.BillingId.HasValue
-                                || t.Status != MsapConstants.DispatchTicketStatus.CalculationPending
+                                || t.Status != MsapConstants.DispatchTicketStatus.AwaitingRate
                                 || !schedule.ServiceEntries.Any(e => e.VesselScheduleServiceEntryId == t.VesselScheduleServiceEntryId
                                     && e.TugboatId == t.TugBoatId && e.ServiceId == t.ServiceId))
                             || await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct) != null)

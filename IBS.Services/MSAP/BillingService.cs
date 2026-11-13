@@ -1,6 +1,7 @@
 using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.Enums;
+using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP.AccessControl;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
@@ -339,10 +340,18 @@ namespace IBS.Services.MSAP
             {
                 return ServiceResult<List<Billing>>.Failure("Commercial settings require a linked schedule.");
             }
+            var canOverrideCommercial = existingDraft != null
+                && (existingDraft.RejectedAt.HasValue || existingDraft.UnpostedDate.HasValue);
             if (schedule != null && ((model.CosDiscountPercent.HasValue
                 && (model.CosDiscountPercent != schedule.CosDiscountPercent || model.SkipCosDiscount != schedule.SkipCosDiscount))
                 || (model.SbmaEnabled.HasValue && model.SbmaEnabled != schedule.SbmaEnabled)))
             {
+                if (model.CosDiscountPercent.HasValue
+                    && (model.CosDiscountPercent != schedule.CosDiscountPercent || model.SkipCosDiscount != schedule.SkipCosDiscount)
+                    && !canOverrideCommercial)
+                {
+                    return ServiceResult<List<Billing>>.Failure("Discount overrides require a Reviewer or Approver revision request. Use Adjust Billing after rejection.");
+                }
                 if (!isAuthorizedRevision)
                 {
                     foreach (var period in tickets.Select(t => t.Date).Distinct())
@@ -459,6 +468,323 @@ namespace IBS.Services.MSAP
             model.PrintDiscount = model.Customer.PrintDiscount;
         }
 
+        public async Task<ServiceResult> ReviewBillingAsync(int id, int reviewedRevision, string username, string reviewerUserId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var billing = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == id, cancellationToken);
+                if (billing == null)
+                {
+                    return ServiceResult.Failure("Billing not found.", ServiceResultStatus.NotFound);
+                }
+
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    _ = await unitOfWork.Billing.GetForUpdateAsync(billing.MsapBillingId, cancellationToken)
+                        ?? throw new InvalidOperationException("This billing preparation no longer exists.");
+
+                    if (string.IsNullOrEmpty(reviewerUserId) || !await accessControl.HasAccessAsync(reviewerUserId, ProcedureEnum.ReviewBilling))
+                    {
+                        throw new InvalidOperationException("You do not have permission to review prepared billings.");
+                    }
+                    if (billing.Revision != reviewedRevision)
+                    {
+                        throw new InvalidOperationException("This bill changed. Refresh and review the current revision before endorsing.");
+                    }
+                    if (billing.Status != MsapConstants.BillingStatus.ForPosting)
+                    {
+                        throw new InvalidOperationException($"Billing #{billing.MsapBillingNumber} is already {billing.Status}.");
+                    }
+
+                    string? blocker = await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, billing, JobProgressCalculator.PostingStage, cancellationToken);
+                    if (blocker != null)
+                    {
+                        throw new InvalidOperationException(blocker);
+                    }
+
+                    DateTime reviewedAt = DateTimeHelper.GetCurrentPhilippineTime();
+                    billing.ReviewedRevision = billing.Revision;
+                    billing.ReviewedByUserId = reviewerUserId;
+                    billing.ReviewedAt = reviewedAt;
+                    billing.Status = MsapConstants.BillingStatus.Reviewed;
+
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Reviewed and endorsed billing #{billing.MsapBillingNumber} (rev {billing.Revision}) for final approval.", "Billing", billing.MsapBillingId, billing.MsapBillingNumber)
+                    {
+                        UserId = reviewerUserId,
+                        ActorName = username
+                    }, cancellationToken);
+                    await unitOfWork.SaveAsync(cancellationToken);
+                }, cancellationToken);
+
+                return ServiceResult.Success($"Billing #{billing.MsapBillingNumber} endorsed for final approval.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to review billing {Id}", id);
+                return ServiceResult.Failure(ExceptionHelper.GetErrorMessage(ex));
+            }
+        }
+
+        public async Task<ServiceResult> RejectBillingAsync(int id, string reason, string username, string actorUserId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5 || reason.Trim().Length > 500)
+                {
+                    return ServiceResult.Failure("Please provide a valid rejection reason (5 to 500 characters).", ServiceResultStatus.ValidationError);
+                }
+
+                var billing = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == id, cancellationToken);
+                if (billing == null)
+                {
+                    return ServiceResult.Failure("Billing not found.", ServiceResultStatus.NotFound);
+                }
+
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    var related = billing.BasicBilling ?? billing.BafBilling;
+                    foreach (int billingId in new[] { billing.MsapBillingId, related?.MsapBillingId ?? billing.MsapBillingId }.Distinct().OrderBy(v => v))
+                    {
+                        _ = await unitOfWork.Billing.GetForUpdateAsync(billingId, cancellationToken)
+                            ?? throw new InvalidOperationException("This billing preparation no longer exists.");
+                    }
+
+                    bool canReview = !string.IsNullOrEmpty(actorUserId) && await accessControl.HasAccessAsync(actorUserId, ProcedureEnum.ReviewBilling);
+                    bool canApprove = !string.IsNullOrEmpty(actorUserId) && await accessControl.HasAccessAsync(actorUserId, ProcedureEnum.ApproveFinalBilling);
+
+                    if (billing.Status == MsapConstants.BillingStatus.ForPosting && !canReview)
+                    {
+                        throw new InvalidOperationException("You do not have permission to reject billings at the Reviewer stage.");
+                    }
+                    if (billing.Status == MsapConstants.BillingStatus.Reviewed && !canApprove && !canReview)
+                    {
+                        throw new InvalidOperationException("You do not have permission to reject billings at the Approver stage.");
+                    }
+                    if (billing.Status is not (MsapConstants.BillingStatus.ForPosting or MsapConstants.BillingStatus.Reviewed))
+                    {
+                        throw new InvalidOperationException($"Cannot reject billing #{billing.MsapBillingNumber} because its status is {billing.Status}.");
+                    }
+
+                    DateTime rejectedAt = DateTimeHelper.GetCurrentPhilippineTime();
+                    string stage = billing.Status == MsapConstants.BillingStatus.Reviewed ? "Approver" : "Reviewer";
+                    var targetBills = new[] { billing, related }.Where(b => b != null).Distinct().ToList();
+
+                    foreach (var bill in targetBills)
+                    {
+                        if (bill!.Status is MsapConstants.BillingStatus.ForCollection or MsapConstants.BillingStatus.Collected)
+                        {
+                            continue;
+                        }
+                        bill.Revision += 1;
+                        bill.Status = MsapConstants.BillingStatus.ForPosting;
+                        bill.ReviewedRevision = null;
+                        bill.ReviewedByUserId = null;
+                        bill.ReviewedAt = null;
+                        bill.ApprovedRevision = null;
+                        bill.ApprovedByUserId = null;
+                        bill.ApprovedAt = null;
+                        bill.RejectedByUserId = actorUserId;
+                        bill.RejectedAt = rejectedAt;
+                        bill.RejectionReason = reason.Trim();
+
+                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"{stage} rejected billing #{bill.MsapBillingNumber} (rev {bill.Revision}). Reason: {reason.Trim()}", "Billing", bill.MsapBillingId, bill.MsapBillingNumber)
+                        {
+                            UserId = actorUserId,
+                            ActorName = username
+                        }, cancellationToken);
+                    }
+
+                    await unitOfWork.SaveAsync(cancellationToken);
+                }, cancellationToken);
+
+                return ServiceResult.Success($"Billing #{billing.MsapBillingNumber} returned to Encoder for revision.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to reject billing {Id}", id);
+                return ServiceResult.Failure(ExceptionHelper.GetErrorMessage(ex));
+            }
+        }
+
+        public async Task<ServiceResult> AdjustBillingAsync(BillingAdjustViewModel model, string username, string userId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(model.Reason) || model.Reason.Trim().Length < 5 || model.Reason.Trim().Length > 500)
+                {
+                    return ServiceResult.Failure("Please provide a justification reason between 5 and 500 characters.", ServiceResultStatus.ValidationError);
+                }
+                if (model.AuthorizationFile is not { Length: > 0 })
+                {
+                    return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to adjust billing rates, basis, or discounts.", ServiceResultStatus.ValidationError);
+                }
+                if (!await OtherTugChargeService.IsSupportedDocumentAsync(model.AuthorizationFile, cancellationToken))
+                {
+                    return ServiceResult.Failure("Upload a valid PDF, PNG, or JPEG authorization document of up to 10 MB.", ServiceResultStatus.ValidationError);
+                }
+                if (cloudStorageService == null)
+                {
+                    return ServiceResult.Failure("Storage service is not configured for authorization documents.");
+                }
+
+                var billing = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == model.MsapBillingId, cancellationToken);
+                if (billing == null)
+                {
+                    return ServiceResult.Failure("Billing not found.", ServiceResultStatus.NotFound);
+                }
+                if (billing.Status != MsapConstants.BillingStatus.ForPosting)
+                {
+                    return ServiceResult.Failure($"Billing #{billing.MsapBillingNumber} must be in For Posting status to adjust.", ServiceResultStatus.ValidationError);
+                }
+                if (!billing.RejectedAt.HasValue && !billing.UnpostedDate.HasValue)
+                {
+                    return ServiceResult.Failure("Adjust Billing is only unlocked after a Reviewer/Approver rejection or Finance Head reopening.", ServiceResultStatus.ValidationError);
+                }
+                if (model.CosDiscountPercent is < 0 or > 100)
+                {
+                    return ServiceResult.Failure("Discount must be between 0% and 100%.", ServiceResultStatus.ValidationError);
+                }
+
+                string extension = Path.GetExtension(model.AuthorizationFile.FileName).ToLowerInvariant();
+                string uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
+                await cloudStorageService.UploadFileAsync(model.AuthorizationFile, uploadedAttachment);
+
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    int sourceId = billing.BasicBillingId ?? billing.MsapBillingId;
+                    var primaryBill = billing.BasicBillingId.HasValue
+                        ? await unitOfWork.Billing.GetForUpdateAsync(sourceId, cancellationToken) ?? throw new InvalidOperationException("Primary billing not found.")
+                        : await unitOfWork.Billing.GetForUpdateAsync(billing.MsapBillingId, cancellationToken) ?? throw new InvalidOperationException("Billing not found.");
+                    var bafBill = primaryBill.BafBilling != null
+                        ? await unitOfWork.Billing.GetForUpdateAsync(primaryBill.BafBilling.MsapBillingId, cancellationToken)
+                        : null;
+
+                    var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.BillingId == sourceId, cancellationToken)).ToList();
+                    var schedule = primaryBill.CustomerOrderSlipId.HasValue
+                        ? await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == primaryBill.CustomerOrderSlipId.Value, cancellationToken)
+                        : null;
+
+                    var fieldDiffs = new List<MsapFieldChange>();
+                    decimal effectiveDiscount = model.SkipCosDiscount ? 0m : model.CosDiscountPercent;
+
+                    if (schedule != null)
+                    {
+                        decimal prevDiscount = schedule.SkipCosDiscount ? 0m : (schedule.CosDiscountPercent ?? 0m);
+                        if (prevDiscount != effectiveDiscount)
+                        {
+                            fieldDiffs.Add(new MsapFieldChange
+                            {
+                                Field = "CosDiscountPercent",
+                                Label = "Customer Discount %",
+                                Before = $"{prevDiscount:N2}%",
+                                After = $"{effectiveDiscount:N2}%"
+                            });
+                        }
+                        schedule.CosDiscountPercent = model.CosDiscountPercent;
+                        schedule.SkipCosDiscount = model.SkipCosDiscount;
+                    }
+
+                    foreach (var ticketInput in model.Tickets)
+                    {
+                        var ticket = tickets.FirstOrDefault(t => t.DispatchTicketId == ticketInput.DispatchTicketId);
+                        if (ticket == null)
+                        {
+                            continue;
+                        }
+
+                        string newDispatchType = ticketInput.DispatchChargeType == "Per move" ? "Per move" : "Per hour";
+                        string newBafType = ticketInput.BAFChargeType == "Per move" ? "Per move" : "Per hour";
+
+                        if (!string.Equals(ticket.DispatchChargeType, newDispatchType, StringComparison.Ordinal))
+                        {
+                            fieldDiffs.Add(new MsapFieldChange { Field = $"Ticket_{ticket.DispatchTicketId}_DispatchBasis", Label = $"{ticket.DispatchNumber} Dispatch Basis", Before = ticket.DispatchChargeType ?? "—", After = newDispatchType });
+                        }
+                        if (ticket.DispatchRate != ticketInput.DispatchRate)
+                        {
+                            fieldDiffs.Add(new MsapFieldChange { Field = $"Ticket_{ticket.DispatchTicketId}_DispatchRate", Label = $"{ticket.DispatchNumber} Tariff Rate", Before = ticket.DispatchRate.ToString("N2"), After = ticketInput.DispatchRate.ToString("N2") });
+                            ticket.IsManualTariffRate = true;
+                        }
+                        if (!string.Equals(ticket.BAFChargeType, newBafType, StringComparison.Ordinal))
+                        {
+                            fieldDiffs.Add(new MsapFieldChange { Field = $"Ticket_{ticket.DispatchTicketId}_BafBasis", Label = $"{ticket.DispatchNumber} BAF Basis", Before = ticket.BAFChargeType ?? "—", After = newBafType });
+                        }
+                        if (ticket.BAFRate != ticketInput.BAFRate)
+                        {
+                            fieldDiffs.Add(new MsapFieldChange { Field = $"Ticket_{ticket.DispatchTicketId}_BafRate", Label = $"{ticket.DispatchNumber} BAF Rate", Before = ticket.BAFRate.ToString("N2"), After = ticketInput.BAFRate.ToString("N2") });
+                        }
+
+                        ticket.DispatchChargeType = newDispatchType;
+                        ticket.DispatchRate = ticketInput.DispatchRate;
+                        ticket.BAFChargeType = newBafType;
+                        ticket.BAFRate = ticketInput.BAFRate;
+                        ticket.EditedBy = username;
+                        ticket.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+
+                        ScheduledTicketCharges.ApplyDiscount(ticket, effectiveDiscount);
+                    }
+
+                    decimal oldTotal = primaryBill.Amount + (bafBill?.Amount ?? 0m);
+                    primaryBill.DispatchAmount = tickets.Sum(t => t.DispatchNetRevenue);
+                    decimal totalBaf = tickets.Sum(t => t.BAFNetRevenue);
+                    if (bafBill != null)
+                    {
+                        primaryBill.BAFAmount = 0m;
+                        primaryBill.Amount = primaryBill.Balance = primaryBill.DispatchAmount;
+                        bafBill.BAFAmount = totalBaf;
+                        bafBill.Amount = bafBill.Balance = totalBaf;
+                    }
+                    else
+                    {
+                        primaryBill.BAFAmount = totalBaf;
+                        primaryBill.Amount = primaryBill.Balance = primaryBill.DispatchAmount + totalBaf;
+                    }
+                    decimal newTotal = primaryBill.Amount + (bafBill?.Amount ?? 0m);
+                    if (oldTotal != newTotal)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange { Field = "Amount", Label = "Total Billing Amount", Before = oldTotal.ToString("N2"), After = newTotal.ToString("N2") });
+                    }
+
+                    var editedAt = DateTimeHelper.GetCurrentPhilippineTime();
+                    foreach (var bill in new[] { primaryBill, bafBill }.Where(b => b != null))
+                    {
+                        bill!.EditedBy = username;
+                        bill.EditedDate = editedAt;
+                        bill.AdjustmentAttachmentUrl = uploadedAttachment;
+
+                        if (fieldDiffs.Count > 0)
+                        {
+                            await unitOfWork.MsapAdjustmentLog.AddAsync(new MsapAdjustmentLog
+                            {
+                                DocumentType = "Billing",
+                                RecordId = bill.MsapBillingId,
+                                ReferenceNumber = bill.MsapBillingNumber,
+                                Reason = model.Reason.Trim(),
+                                AttachmentUrl = uploadedAttachment,
+                                ChangesJson = System.Text.Json.JsonSerializer.Serialize(fieldDiffs),
+                                EditedBy = username,
+                                EditedDate = editedAt
+                            }, cancellationToken);
+                        }
+
+                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Adjusted billing #{bill.MsapBillingNumber} (rev {bill.Revision}). Reason: {model.Reason.Trim()}", "Billing", bill.MsapBillingId, bill.MsapBillingNumber)
+                        {
+                            UserId = userId,
+                            ActorName = username
+                        }, cancellationToken);
+                    }
+
+                    await unitOfWork.SaveAsync(cancellationToken);
+                }, cancellationToken);
+
+                return ServiceResult.Success($"Billing #{billing.MsapBillingNumber} adjusted and ready for Reviewer re-review.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to adjust billing {Id}", model.MsapBillingId);
+                return ServiceResult.Failure(ExceptionHelper.GetErrorMessage(ex));
+            }
+        }
+
         public async Task<ServiceResult> PostBillingAsync(int id, string username, CancellationToken cancellationToken, string approverUserId, int reviewedRevision)
         {
             try
@@ -510,9 +836,15 @@ namespace IBS.Services.MSAP
                         throw new InvalidOperationException(lockedGuard?.Message ?? lockedBlocker);
                     }
 
-                    if (model.Status != MsapConstants.BillingStatus.ForPosting)
+                    if (model.Status != MsapConstants.BillingStatus.Reviewed)
                     {
-                        throw new InvalidOperationException($"Billing #{model.MsapBillingNumber} is already {model.Status}.");
+                        throw new InvalidOperationException(model.Status == MsapConstants.BillingStatus.ForPosting
+                            ? $"Billing #{model.MsapBillingNumber} must be endorsed by a Reviewer before final approval."
+                            : $"Billing #{model.MsapBillingNumber} is already {model.Status}.");
+                    }
+                    if (model.ReviewedRevision != model.Revision || string.IsNullOrEmpty(model.ReviewedByUserId) || !model.ReviewedAt.HasValue)
+                    {
+                        throw new InvalidOperationException("This billing must be reviewed at the current revision before final approval.");
                     }
 
                     // Actual tickets become billed after both numbered components are approved.
@@ -638,6 +970,9 @@ namespace IBS.Services.MSAP
                         bill.UnpostedBy = username;
                         bill.UnpostedDate = DateTimeHelper.GetCurrentPhilippineTime();
                         bill.UnpostRemarks = reason.Trim();
+                        bill.ReviewedRevision = null;
+                        bill.ReviewedByUserId = null;
+                        bill.ReviewedAt = null;
                         bill.ApprovedRevision = null;
                         bill.ApprovedByUserId = null;
                         bill.ApprovedAt = null;

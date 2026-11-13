@@ -46,6 +46,7 @@
             <p class="ui-caption ui-muted">Eligible draft preparations can be discarded and prepared again. Final approval does not bypass completeness and revision checks.</p>
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanCreateBilling" class="form-check-input" /> <span>Prepare billing</span></label>
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanDeleteBilling" class="form-check-input" /> <span>Discard draft preparation</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanReviewBilling" class="form-check-input" /> <span>Review prepared billing (Commercial Reviewer)</span></label>
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanApproveFinalBilling" class="form-check-input" /> <span>Approve final billing</span></label>
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanReverseBilling" class="form-check-input" /> <span>Reopen approved billing for revision</span></label>
         </fieldset>

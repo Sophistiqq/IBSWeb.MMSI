@@ -48,7 +48,7 @@ namespace IBS.Services.MSAP
             }
 
             bool canViewBillings = userAccess.CanCreateBilling || userAccess.CanDeleteBilling
-                || userAccess.CanApproveFinalBilling || userAccess.CanCreateCollection || userAccess.CanAccessTreasury
+                || userAccess.CanReviewBilling || userAccess.CanApproveFinalBilling || userAccess.CanCreateCollection || userAccess.CanAccessTreasury
                 || userAccess.CanViewMaritimeReport;
             bool canViewCollections = userAccess.CanCreateCollection || userAccess.CanAccessTreasury || userAccess.CanViewMaritimeReport;
             bool canViewOperations = userAccess.CanCreateCustomerOrderSlip || userAccess.CanEditCustomerOrderSlip
@@ -81,6 +81,7 @@ namespace IBS.Services.MSAP
                 ProcedureEnum.ManageOtherTugCharges => userAccess.CanManageOtherTugCharges,
                 ProcedureEnum.ConfirmOtherTugCharges => userAccess.CanConfirmOtherTugCharges,
                 ProcedureEnum.ApproveRateUpload => userAccess.CanApproveRateUpload,
+                ProcedureEnum.ReviewBilling => userAccess.CanReviewBilling,
                 ProcedureEnum.ApproveFinalBilling => userAccess.CanApproveFinalBilling,
                 ProcedureEnum.AccessTreasury => userAccess.CanAccessTreasury,
                 ProcedureEnum.ManageCustomerMasterFile => userAccess.CanManageCustomerMasterFile,
@@ -154,7 +155,7 @@ namespace IBS.Services.MSAP
                     await unitOfWork.UserAccess.AddAsync(model, cancellationToken);
                     await unitOfWork.SaveAsync(cancellationToken);
 
-                    AuditTrail auditTrail = await CreateAuditAsync(username, $"Created User Access for {model.DisplayName}. Schedule: prepare={model.CanCreateCustomerOrderSlip}, edit={model.CanEditCustomerOrderSlip}, approve={model.CanApproveSchedule}. Tickets: record={model.CanCreateDispatchTicket}, edit/recalculate={model.CanEditDispatchTicket}, void={model.CanDeleteDispatchTicket}. Billing: prepare={model.CanCreateBilling}, discard draft={model.CanDeleteBilling}, reopen={model.CanReverseBilling}, approve={model.CanApproveFinalBilling}. Collections: prepare={model.CanCreateCollection}, banking={model.CanAccessTreasury}. Rates: view={model.CanViewRates}, prepare={model.CanManageRates}, approve={model.CanApproveRateUpload}. Other Tug Charges: prepare={model.CanManageOtherTugCharges}, confirm={model.CanConfirmOtherTugCharges}. Master files: customer={model.CanManageCustomerMasterFile}, service={model.CanManageServiceMasterFile}, port={model.CanManagePortMasterFile}, terminal={model.CanManageTerminalMasterFile}, vessel={model.CanManageVesselMasterFile}, tugboat={model.CanManageTugboatMasterFile}, tugboat owner={model.CanManageTugboatOwnerMasterFile}, tug master={model.CanManageTugMasterMasterFile}, principal={model.CanManagePrincipalMasterFile}, bank account={model.CanManageBankAccountMasterFile}. Import={model.CanManageMsapImport}, reports={model.CanViewMaritimeReport}.", model.Id, model.UserId);
+                    AuditTrail auditTrail = await CreateAuditAsync(username, $"Created User Access for {model.DisplayName}. Schedule: prepare={model.CanCreateCustomerOrderSlip}, edit={model.CanEditCustomerOrderSlip}, approve={model.CanApproveSchedule}. Tickets: record={model.CanCreateDispatchTicket}, edit/recalculate={model.CanEditDispatchTicket}, void={model.CanDeleteDispatchTicket}. Billing: prepare={model.CanCreateBilling}, discard draft={model.CanDeleteBilling}, reopen={model.CanReverseBilling}, review={model.CanReviewBilling}, approve={model.CanApproveFinalBilling}. Collections: prepare={model.CanCreateCollection}, banking={model.CanAccessTreasury}. Rates: view={model.CanViewRates}, prepare={model.CanManageRates}, approve={model.CanApproveRateUpload}. Other Tug Charges: prepare={model.CanManageOtherTugCharges}, confirm={model.CanConfirmOtherTugCharges}. Master files: customer={model.CanManageCustomerMasterFile}, service={model.CanManageServiceMasterFile}, port={model.CanManagePortMasterFile}, terminal={model.CanManageTerminalMasterFile}, vessel={model.CanManageVesselMasterFile}, tugboat={model.CanManageTugboatMasterFile}, tugboat owner={model.CanManageTugboatOwnerMasterFile}, tug master={model.CanManageTugMasterMasterFile}, principal={model.CanManagePrincipalMasterFile}, bank account={model.CanManageBankAccountMasterFile}. Import={model.CanManageMsapImport}, reports={model.CanViewMaritimeReport}.", model.Id, model.UserId);
                     await unitOfWork.AuditTrail.AddAsync(auditTrail, cancellationToken);
 
                     await unitOfWork.SaveAsync(cancellationToken);
@@ -224,6 +225,10 @@ namespace IBS.Services.MSAP
                 {
                     changes.Add($"Approve Schedule: {existing.CanApproveSchedule} → {model.CanApproveSchedule}");
                 }
+                if (existing.CanReviewBilling != model.CanReviewBilling)
+                {
+                    changes.Add($"Review Billing: {existing.CanReviewBilling} → {model.CanReviewBilling}");
+                }
                 if (existing.CanApproveFinalBilling != model.CanApproveFinalBilling)
                 {
                     changes.Add($"Approve Final Billing: {existing.CanApproveFinalBilling} → {model.CanApproveFinalBilling}");
@@ -271,6 +276,7 @@ namespace IBS.Services.MSAP
                     existing.CanManageOtherTugCharges = model.CanManageOtherTugCharges;
                     existing.CanConfirmOtherTugCharges = model.CanConfirmOtherTugCharges;
                     existing.CanApproveRateUpload = model.CanApproveRateUpload;
+                    existing.CanReviewBilling = model.CanReviewBilling;
                     existing.CanApproveFinalBilling = model.CanApproveFinalBilling;
                     existing.CanAccessTreasury = model.CanAccessTreasury;
                     existing.CanCreateDisbursement = model.CanCreateDisbursement;

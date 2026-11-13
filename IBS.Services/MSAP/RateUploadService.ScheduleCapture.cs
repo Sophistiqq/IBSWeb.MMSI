@@ -55,10 +55,15 @@ namespace IBS.Services.MSAP
 
                     bool isPending = !amount.HasValue && (!tableRate.HasValue || (kind == RateTableKind.Tariff && tableRate <= 0));
 
+                    DateOnly today = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime());
+                    DateOnly defaultEffectiveDate = kind == RateTableKind.BAF
+                        ? ScheduledTicketCharges.BafCycleStart(plannedDate)
+                        : (plannedDate > today ? today : plannedDate);
+
                     result.Add(new ScheduleRateCaptureViewModel
                     {
                         ScheduleId = schedule.VesselScheduleId, EntryId = entry.VesselScheduleServiceEntryId, Kind = kind,
-                        EffectiveDate = kind == RateTableKind.BAF ? ScheduledTicketCharges.BafCycleStart(plannedDate) : plannedDate,
+                        EffectiveDate = defaultEffectiveDate,
                         PublishedUpdateId = captured?.RateUploadId,
                         CanCapture = captured == null && (eligible || isPending) && schedule.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled),
                         CustomerId = schedule.CustomerId,
@@ -195,7 +200,7 @@ namespace IBS.Services.MSAP
             }
             await _db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
-            return ServiceResult<Guid>.Success(update.RateUploadId, "Rate approved for reuse. Saved schedule and ticket amounts are unchanged.");
+            return ServiceResult<Guid>.Success(update.RateUploadId, "Rate approved for reuse and eligible unbilled tickets were automatically recalculated.");
         }
 
         public async Task<(ServiceResult<int> Result, string? Acknowledgement)> ConfirmScheduleAsync(IVesselScheduleService schedules,

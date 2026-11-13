@@ -186,9 +186,17 @@ namespace IBS.DataAccess.MSAP.Data
             builder.Entity<Billing>(b =>
             {
                 b.Property(x => x.Revision).HasDefaultValue(1);
-                b.ToTable(table => table.HasCheckConstraint("ck_billings_approval_evidence",
-                    "revision >= 1 AND ((approved_revision IS NULL AND approved_by_user_id IS NULL AND approved_at IS NULL)"
-                    + " OR (approved_revision IS NOT NULL AND approved_revision BETWEEN 1 AND revision AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL))"));
+                b.ToTable(table =>
+                {
+                    table.HasCheckConstraint("ck_billings_approval_evidence",
+                        "revision >= 1 AND ((approved_revision IS NULL AND approved_by_user_id IS NULL AND approved_at IS NULL)"
+                        + " OR (approved_revision IS NOT NULL AND approved_revision BETWEEN 1 AND revision AND approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL))");
+                    table.HasCheckConstraint("ck_billings_review_evidence",
+                        "((reviewed_revision IS NULL AND reviewed_by_user_id IS NULL AND reviewed_at IS NULL)"
+                        + " OR (reviewed_revision IS NOT NULL AND reviewed_revision BETWEEN 1 AND revision AND reviewed_by_user_id IS NOT NULL AND reviewed_at IS NOT NULL))");
+                });
+                b.HasOne(x => x.ReviewedByUser).WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(x => x.RejectedByUser).WithMany().HasForeignKey(x => x.RejectedByUserId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(x => x.ApprovedByUser).WithMany().HasForeignKey(x => x.ApprovedByUserId).OnDelete(DeleteBehavior.Restrict);
                 b.HasIndex(x => new { x.Year, x.MsapBillingNumber, x.Company }).IsUnique();
                 b.HasIndex(x => x.Date);

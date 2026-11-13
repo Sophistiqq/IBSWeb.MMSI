@@ -228,7 +228,7 @@ namespace Checks.MSAP
                 var result = await dispatch.CreateDispatchTicketAsync(input, null, null, "Check", default);
                 Check(result.IsSuccess, $"Valid actual details could not be saved pending calculation: {result.Message}");
                 var pending = await db.MsapDispatchTickets.SingleAsync(x => x.DispatchTicketId == result.Data);
-                Check(pending.Status == MsapConstants.DispatchTicketStatus.CalculationPending && pending.TotalBilling == 0m,
+                Check(pending.Status == MsapConstants.DispatchTicketStatus.AwaitingRate && pending.TotalBilling == 0m,
                     "Missing approval or rates unlocked billing or retained calculated amounts.");
                 db.Remove(pending);
                 await db.SaveChangesAsync();

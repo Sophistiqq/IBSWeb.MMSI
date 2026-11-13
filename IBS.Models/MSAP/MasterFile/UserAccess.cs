@@ -61,6 +61,8 @@ namespace IBS.Models.MSAP.MasterFile
 
         public bool CanConfirmOtherTugCharges { get; set; }
 
+        public bool CanReviewBilling { get; set; }
+
         public bool CanApproveFinalBilling { get; set; }
 
         #endregion -- MSAP Workflow --

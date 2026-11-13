@@ -81,7 +81,7 @@ namespace IBS.Services.MSAP
                         ? await unitOfWork.BafTable.GetApplicableRateAsync(ticket.CustomerId, ticket.TerminalId, ticket.ServiceId, ticket.DateLeft.Value, ct)
                         : null;
                     var reason = ScheduledTicketCharges.GetBlocker(ticket, schedule, entry, rate, bafRate)
-                        ?? "Rates and terms are available. Recalculate charges to complete this ticket.";
+                        ?? "Rates and terms are available; charges are pending refresh.";
                     progress.CalculationBlockers[ticket.DispatchTicketId] = $"{entry.Tugboat.TugboatName} / {entry.Service.ServiceName} ({ticket.DispatchNumber}): {reason}";
                 }
             }
@@ -228,7 +228,10 @@ namespace IBS.Services.MSAP
             if (unknown.Count > 0 || missingBills.Count > 0
                 || job.Status is not (MsapConstants.CustomerOrderSlipStatus.Open or MsapConstants.CustomerOrderSlipStatus.Closed)
                 || (job.Status == MsapConstants.CustomerOrderSlipStatus.Closed && active.Any(t => t.Status != MsapConstants.DispatchTicketStatus.Billed))
-                || bills.Any(b => b.Status is not (MsapConstants.BillingStatus.ForPosting or MsapConstants.BillingStatus.ForCollection or MsapConstants.BillingStatus.Collected)
+                || bills.Any(b => b.Status is not (MsapConstants.BillingStatus.ForPosting
+                or MsapConstants.BillingStatus.Reviewed
+                or MsapConstants.BillingStatus.ForCollection
+                or MsapConstants.BillingStatus.Collected)
                     || (b.Status == MsapConstants.BillingStatus.Collected && b.Balance > 0)))
             {
                 result.Stage = 2;
@@ -306,8 +309,17 @@ namespace IBS.Services.MSAP
             {
                 result.Stage = PostingStage;
                 result.Billings = posting;
-                result.Guidance = $"{posting.Count} billing(s) await final approval.";
-                SetAction(result, "Review final bill", "Billing", "Review", posting[0].MsapBillingId, ProcedureEnum.ApproveFinalBilling, "final bill approval");
+                result.Guidance = $"{posting.Count} billing(s) await commercial review.";
+                SetAction(result, "Review bill", "Billing", "Review", posting[0].MsapBillingId, ProcedureEnum.ReviewBilling, "commercial bill review");
+                return result;
+            }
+            List<Billing> reviewed = bills.Where(b => b.Status == MsapConstants.BillingStatus.Reviewed).ToList();
+            if (reviewed.Count > 0)
+            {
+                result.Stage = PostingStage;
+                result.Billings = reviewed;
+                result.Guidance = $"{reviewed.Count} billing(s) await final approval.";
+                SetAction(result, "Approve final bill", "Billing", "Review", reviewed[0].MsapBillingId, ProcedureEnum.ApproveFinalBilling, "final bill approval");
                 return result;
             }
             if (bills.Count == 0 || active.Any(t => t.Status != MsapConstants.DispatchTicketStatus.Billed || !t.BillingId.HasValue))

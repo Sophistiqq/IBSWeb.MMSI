@@ -93,6 +93,11 @@ namespace Checks.MSAP
             saved = await db.MsapBillings.SingleAsync(x => x.MsapBillingId == id);
             int revision = saved.Revision;
 
+            Check(!(await billing.PostBillingAsync(id, "Billing check", default, actor, revision)).IsSuccess,
+                "Billing allowed final approval before commercial review.");
+            var reviewed = await billing.ReviewBillingAsync(id, revision, "Billing check", actor, default);
+            Check(reviewed.IsSuccess, reviewed.Message ?? "Commercial review failed.");
+
             var closed = new MsapPostedPeriod { Year = saved.Date.Year, Month = saved.Date.Month, IsClosed = true, ClosedBy = "Billing check" };
             db.Add(closed);
             await db.SaveChangesAsync();

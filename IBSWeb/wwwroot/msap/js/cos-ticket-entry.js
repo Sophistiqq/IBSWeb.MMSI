@@ -59,48 +59,6 @@ const initializeCosTicketEntry = () => {
             await ModernAlert.error('Unable to void the ticket. Refresh the COS and try again.');
         } finally { button.disabled = false; }
     }));
-    const recalculate = document.querySelector('[data-recalculate-ticket]');
-    recalculate?.addEventListener('click', async () => {
-        if (recalculate.disabled) return;
-        recalculate.disabled = true;
-        try {
-            const params = new URLSearchParams({ id: recalculate.dataset.recalculateTicket, customerOrderSlipId: recalculate.dataset.cosId });
-            const previewResponse = await fetch(`${recalculate.dataset.previewUrl}?${params}`);
-            if (!previewResponse.ok || previewResponse.redirected) throw new Error('Comparison failed');
-            const review = await previewResponse.json();
-            if (!review.success || !review.data?.fingerprint) { await ModernAlert.error(review.message || 'Unable to compare charges.'); return; }
-            const amount = value => Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            const data = review.data;
-            const savedAmount = value => data.hasSavedCharges ? amount(value) : 'Pending';
-            const confirmation = await ModernAlert.confirm({
-                title: 'Apply reviewed ticket charges?',
-                text: `Basic tariff: ${savedAmount(data.savedTariffRate)} → ${amount(data.proposedTariffRate)}<br>BAF rate: ${savedAmount(data.savedBafRate)} → ${amount(data.proposedBafRate)}<br>Gross charges: ${savedAmount(data.savedGross)} → ${amount(data.proposedGross)}<br>After COS discount: ${savedAmount(data.savedNet)} → ${amount(data.proposedNet)}<br>Uses actual service-date rates. Missing-match manual tariffs follow approved table rates; job-specific tariff overrides remain fixed. Applicable approved weekly table BAF replaces manual BAF.`,
-                confirmText: 'Recalculate charges',
-                cancelText: 'Keep reviewing'
-            });
-            if (!confirmation.isConfirmed) return;
-            ModernAlert.showLoading('Recalculating charges…');
-            const body = new FormData(recalculate.form);
-            body.set('id', recalculate.dataset.recalculateTicket);
-            body.set('reviewedFingerprint', data.fingerprint);
-            body.set('CustomerOrderSlipId', recalculate.dataset.cosId);
-            const response = await fetch(recalculate.dataset.url, {
-                method: 'POST', body, headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            });
-            if (!response.ok || response.redirected) throw new Error('Recalculation failed');
-            const result = await response.json();
-            if (!result.success || !result.redirectUrl) {
-                await ModernAlert.error(result.message || 'Charges could not be recalculated.');
-                return;
-            }
-            await ModernAlert.success(result.message);
-            window.location.href = result.redirectUrl;
-        } catch {
-            ModernAlert.error('Unable to recalculate charges. Check your connection and access, then try again.');
-        } finally {
-            recalculate.disabled = false;
-        }
-    });
     const form = document.getElementById('cosActualTicketForm');
     if (!form) return;
 

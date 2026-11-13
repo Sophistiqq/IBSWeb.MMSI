@@ -50,9 +50,13 @@ namespace Checks.MSAP
             var splitReview = JobProgressCalculator.Calculate(job, null, [first, second], [bill, split]);
             Check(splitReview.Stage == 6 && splitReview.ActionName == "Review" && splitReview.TargetId == split.MsapBillingId,
                 "Pending split bills must link directly to the selected billing review page.");
-            Check(splitReview.Permission == IBS.Models.MSAP.Enums.ProcedureEnum.ApproveFinalBilling
+            Check(splitReview.Permission == IBS.Models.MSAP.Enums.ProcedureEnum.ReviewBilling
                 && splitReview.LinkedBillings.Count == 2 && splitReview.RecordedTicketCount == 2,
-                "Progress must preserve both split bills and require final-approval access.");
+                "Progress must preserve both split bills and require commercial-review access.");
+            split.Status = MsapConstants.BillingStatus.Reviewed;
+            var splitFinalReview = JobProgressCalculator.Calculate(job, null, [first, second], [bill, split]);
+            Check(splitFinalReview.Stage == 6 && splitFinalReview.Permission == IBS.Models.MSAP.Enums.ProcedureEnum.ApproveFinalBilling,
+                "Reviewed split bills must require final-approval access.");
             split.Status = "For Collection";
             job.Status = MsapConstants.CustomerOrderSlipStatus.Closed;
             schedule.Status = MsapConstants.VesselScheduleStatus.Completed;

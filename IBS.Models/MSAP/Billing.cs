@@ -31,6 +31,39 @@ namespace IBS.Models.MSAP
         public int Revision { get; set; } = 1;
 
         [BindNever, JsonIgnore]
+        public int? ReviewedRevision { get; set; }
+
+        [BindNever, JsonIgnore]
+        public string? ReviewedByUserId { get; set; }
+
+        [BindNever, JsonIgnore]
+        public ApplicationUser? ReviewedByUser { get; set; }
+
+        [BindNever, JsonIgnore]
+        [Column(TypeName = "timestamp without time zone")]
+        public DateTime? ReviewedAt { get; set; }
+
+        [BindNever, JsonIgnore]
+        public string? RejectedByUserId { get; set; }
+
+        [BindNever, JsonIgnore]
+        public ApplicationUser? RejectedByUser { get; set; }
+
+        [BindNever, JsonIgnore]
+        [Column(TypeName = "timestamp without time zone")]
+        public DateTime? RejectedAt { get; set; }
+
+        [BindNever, JsonIgnore]
+        [Column(TypeName = "varchar(500)")]
+        [MaxLength(500)]
+        public string? RejectionReason { get; set; }
+
+        [BindNever, JsonIgnore]
+        [Column(TypeName = "varchar(500)")]
+        [MaxLength(500)]
+        public string? AdjustmentAttachmentUrl { get; set; }
+
+        [BindNever, JsonIgnore]
         public int? ApprovedRevision { get; set; }
 
         [BindNever, JsonIgnore]

@@ -81,8 +81,8 @@
         }
         <section class="ui-panel ui-stack rate-review-notes">
             <h2 class="ui-section-title">Ticket charges and billing</h2>
-            <p class="ui-body">Approval activates rates for the applicable service dates. It does not rewrite saved ticket charges, approved manual COS amounts, existing bills or posted records.</p>
-            <p class="ui-caption ui-muted">For recorded tickets awaiting rates, open the COS and use Recalculate charges after approval. Missing actual tickets still keep the job pending. Corrections affecting already calculated charges require separate review.</p>
+            <p class="ui-body">Approval activates rates for the applicable service dates and automatically recalculates eligible unbilled tickets without a prepared billing.</p>
+            <p class="ui-caption ui-muted">Existing prepared bills, posted records, and approved manual tariff overrides are left unchanged; any changes after billing preparation go through Adjust Billing.</p>
             @if (update.RateKind == RateTableKind.BAF) { <p class="ui-caption ui-muted">Per hour uses billable hours. Per Move, Lumpsum and Industry apply the final BAF amount once per service entry. Existing COS discounts and tax rules still apply.</p> }
         </section>
         <div class="rate-upload-actions">

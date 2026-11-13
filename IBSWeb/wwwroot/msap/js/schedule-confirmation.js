@@ -93,7 +93,7 @@
                         : isZeroTariff
                             ? (found ? 'Zero tariff · table estimate: ' + formattedRate : 'Zero tariff')
                             : (found ? 'Manual override · table estimate: ' + formattedRate : 'Manual rate · no table match')
-                    : found ? 'Table estimate · planned date' : 'Rate pending · no table match';
+                    : found ? 'Table rate · planned date' : 'Rate pending · no table match';
 
                 if (manual && found && review.dataset.adoptUrl && row.dataset.entryId) {
                     let adoptBtn = cell.parentElement.querySelector('.schedule-adopt-rate');
@@ -124,7 +124,7 @@
                                 cell.dataset.manual = 'false';
                                 cell.classList.remove('schedule-review-manual');
                                 cell.parentElement.classList.remove('schedule-review-attention', 'schedule-review-override');
-                                sourceEl.textContent = 'Table estimate · planned date';
+                                sourceEl.textContent = 'Table rate · planned date';
                                 cell.parentElement.querySelectorAll('.schedule-adopt-rate, .schedule-adopt-sep').forEach(el => el.remove());
                                 const captureWrapper = cell.parentElement.querySelector('.schedule-rate-capture-wrapper');
                                 if (captureWrapper) {

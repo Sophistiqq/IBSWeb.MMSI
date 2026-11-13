@@ -164,63 +164,39 @@ namespace Checks.MSAP
                 ServiceResult<Guid> draft = await rates.SaveDraftAsync(correction, actor.Id, default);
                 Check(draft.IsSuccess && (await rates.SaveAsync(draft.Data, actor.Id, false, [1], default)).IsSuccess
                     && (await rates.ApproveAsync(draft.Data, actor.Id, default)).IsSuccess, "Existing editor approval failed.");
-                RateUploadViewModel? impact = await rates.GetAsync(draft.Data, actor.Id, default);
-                Check(impact!.AffectedTickets.Any(item => item.DispatchTicketId == ticket.DispatchTicketId), "Rate correction lost the affected-ticket list.");
-                Check(ticket.DispatchRate == 123.4567m && ticket.BAFRate == 0m, "Rate editing silently repriced a saved ticket.");
+                await db.Entry(ticket).ReloadAsync();
                 if (kind == RateTableKind.Tariff)
                 {
-                    var dispatch = new DispatchTicketService(work, null!, NullLogger<DispatchTicketService>.Instance);
-                    JobProgressViewModel progress = await JobProgressCalculator.LoadAsync(work, job, tableSchedule, default);
-                    Check(progress.CalculationBlockers.ContainsKey(ticket.DispatchTicketId), "A tariff correction did not block unreviewed billing.");
-                    ServiceResult<TicketChargeReviewViewModel> review = await dispatch.PreviewChargesAsync(ticket.DispatchTicketId, job.CustomerOrderSlipId, default);
-                    Check(review.IsSuccess && review.Data!.SavedTariffRate == 123.4567m && review.Data.ProposedTariffRate == 150m,
-                        "Tariff review did not show the saved and corrected amounts.");
-                    Check(!(await dispatch.RecalculateChargesAsync(ticket.DispatchTicketId, job.CustomerOrderSlipId, actor.UserName!, default, "stale")).IsSuccess
-                        && ticket.DispatchRate == 123.4567m, "A stale tariff review changed saved charges.");
-                    ServiceResult recalculated = await dispatch.RecalculateChargesAsync(ticket.DispatchTicketId, job.CustomerOrderSlipId, actor.UserName!, default, review.Data!.Fingerprint);
-                    Check(recalculated.IsSuccess && ticket.DispatchRate == 150m && !ticket.IsManualTariffRate
-                        && tableEntry.ManualTariffRate == 123.4567m, recalculated.Message ?? "Reviewed tariff recalculation failed.");
+                    Check(ticket.DispatchRate == 150m && !ticket.IsManualTariffRate
+                        && tableEntry.ManualTariffRate == 123.4567m, "Rate approval did not automatically recalculate unbilled table-rate ticket.");
                     Check(await db.AuditTrails.AnyAsync(audit => audit.RecordId == ticket.DispatchTicketId
-                        && audit.DocumentType == "Dispatch Ticket" && audit.Activity.Contains("tariff 123.4567 -> 150")),
-                        "Recalculation did not audit the tariff correction.");
-                    progress = await JobProgressCalculator.LoadAsync(work, job, tableSchedule, default);
-                    Check(!progress.CalculationBlockers.ContainsKey(ticket.DispatchTicketId), "Reviewed tariff correction left an obsolete billing blocker.");
+                        && audit.DocumentType == "Dispatch Ticket" && audit.Activity.Contains("Auto-recalculated ticket")),
+                        "Auto-recalculation did not audit the tariff correction.");
+                    JobProgressViewModel progress = await JobProgressCalculator.LoadAsync(work, job, tableSchedule, default);
+                    Check(!progress.CalculationBlockers.ContainsKey(ticket.DispatchTicketId), "Auto-recalculated tariff correction left an obsolete billing blocker.");
                     correction.Rows[0].EffectiveDate = date.AddDays(1);
                     correction.Rows[0].Amount = 200m;
                     ServiceResult<Guid> futureDraft = await rates.SaveDraftAsync(correction, actor.Id, default);
                     Check(futureDraft.IsSuccess && (await rates.SaveAsync(futureDraft.Data, actor.Id, false, [1], default)).IsSuccess
                         && (await rates.ApproveAsync(futureDraft.Data, actor.Id, default)).IsSuccess, "New dated tariff approval failed.");
-                    RateUploadViewModel? futureImpact = await rates.GetAsync(futureDraft.Data, actor.Id, default);
-                    Check(!futureImpact!.AffectedTickets.Any(item => item.DispatchTicketId == ticket.DispatchTicketId)
+                    await db.Entry(ticket).ReloadAsync();
+                    Check(ticket.DispatchRate == 150m
                         && !ScheduledTicketCharges.HasChanges(ticket, (await ScheduledTicketCharges.PreviewAsync(work, ticket, tableSchedule, default)).Ticket),
                         "A future tariff affected an earlier actual service.");
                     ticket.DateLeft = ticket.DateArrived = date.AddDays(1);
                     await db.SaveChangesAsync();
-                    futureImpact = await rates.GetAsync(futureDraft.Data, actor.Id, default);
-                    Check(futureImpact!.AffectedTickets.Any(item => item.DispatchTicketId == ticket.DispatchTicketId)
-                        && (await ScheduledTicketCharges.PreviewAsync(work, ticket, tableSchedule, default)).Ticket.DispatchRate == 200m,
+                    Check((await ScheduledTicketCharges.PreviewAsync(work, ticket, tableSchedule, default)).Ticket.DispatchRate == 200m,
                         "A new tariff was ignored on its effective actual service date.");
-                    ticket.Status = MsapConstants.DispatchTicketStatus.Billed;
-                    await db.SaveChangesAsync();
-                    Check(!(await dispatch.RecalculateChargesAsync(ticket.DispatchTicketId, job.CustomerOrderSlipId, actor.UserName!, default, review.Data.Fingerprint)).IsSuccess,
-                        "A billed ticket allowed tariff recalculation.");
-                    ticket.Status = MsapConstants.DispatchTicketStatus.ForBilling;
                     ticket.DateLeft = ticket.DateArrived = date;
                     await db.SaveChangesAsync();
                 }
                 if (kind == RateTableKind.BAF)
                 {
-                    var dispatch = new DispatchTicketService(work, null!, NullLogger<DispatchTicketService>.Instance);
-                    var review = await dispatch.PreviewChargesAsync(ticket.DispatchTicketId, job.CustomerOrderSlipId, default);
-                    Check(review.IsSuccess && review.Data!.ProposedBafRate == 10m, "Manual BAF review did not propose the updated table amount.");
-                    Check(!(await dispatch.RecalculateChargesAsync(ticket.DispatchTicketId, job.CustomerOrderSlipId, actor.UserName!, default, "stale")).IsSuccess
-                        && ticket.BAFRate == 0m, "A stale review changed saved manual charges.");
-                    var recalculated = await dispatch.RecalculateChargesAsync(ticket.DispatchTicketId, job.CustomerOrderSlipId, actor.UserName!, default, review.Data!.Fingerprint);
-                    Check(recalculated.IsSuccess && ticket.BAFRate == 10m && !ticket.IsManualBafRate
-                        && ticket.DispatchRate == 123.4567m && ticket.IsManualTariffRate, recalculated.Message ?? "Reviewed BAF recalculation failed.");
-                    Check(tableEntry.ManualBafRate == 0m, "Recalculation rewrote approved schedule terms.");
+                    Check(ticket.BAFRate == 10m && !ticket.IsManualBafRate
+                        && ticket.DispatchRate == 150m, "Rate approval did not automatically recalculate unbilled BAF ticket.");
+                    Check(tableEntry.ManualBafRate == 0m, "Auto-recalculation rewrote approved schedule terms.");
                     var progress = await JobProgressCalculator.LoadAsync(work, job, tableSchedule, default);
-                    Check(!progress.CalculationBlockers.ContainsKey(ticket.DispatchTicketId), "Recalculated BAF remained blocked by the old manual amount.");
+                    Check(!progress.CalculationBlockers.ContainsKey(ticket.DispatchTicketId), "Auto-recalculated BAF remained blocked by the old manual amount.");
                 }
             }
             var schedules = new VesselScheduleService(work, new CustomerOrderSlipService(work, NullLogger<CustomerOrderSlipService>.Instance), NullLogger<VesselScheduleService>.Instance);

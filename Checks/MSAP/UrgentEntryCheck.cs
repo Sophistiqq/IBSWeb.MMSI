@@ -35,7 +35,7 @@ namespace Checks.MSAP
                 TimeLeft = new TimeOnly(8, 0), TimeArrived = new TimeOnly(8, 30), TotalBilling = 999
             };
             Check(ScheduledTicketCharges.Apply(ticket, schedule, entry, null, null) != null
-                && ticket.Status == MsapConstants.DispatchTicketStatus.CalculationPending && ticket.TotalBilling == 0,
+                && ticket.Status == MsapConstants.DispatchTicketStatus.AwaitingRate && ticket.TotalBilling == 0,
                 "An unapproved preview must block charges and clear calculated amounts.");
             var progress = JobProgressCalculator.Calculate(job, schedule, [ticket], []);
             Check(progress.Stage == 1 && progress.Permission == ProcedureEnum.ApproveSchedule,
@@ -138,26 +138,26 @@ namespace Checks.MSAP
             var created = await service.CreateDispatchTicketAsync(input, null, null, "Check", default);
             Check(created.IsSuccess, $"Urgent actual ticket must save before approval: {created.Message}");
             var actual = saved.Single();
-            Check(actual.Status == MsapConstants.DispatchTicketStatus.CalculationPending && actual.TotalBilling == 0
+            Check(actual.Status == MsapConstants.DispatchTicketStatus.AwaitingRate && actual.TotalBilling == 0
                 && actual.RawDurationMinutes == 30 && audits == 1, "Urgent save lost its pending status, actual duration or audit.");
             Check(JobProgressCalculator.Calculate(job, schedule, saved, []).Stage == 1, "Urgent save unlocked billing before approval.");
             Check(!(await service.CreateDispatchTicketAsync(input, null, null, "Check", default)).IsSuccess, "Duplicate urgent service was accepted.");
             input.FromEntity(actual);
             input.TimeArrived = new TimeOnly(8, 45);
             Check((await service.UpdateDispatchTicketAsync(input, null, null, "Check", default)).IsSuccess
-                && actual.RawDurationMinutes == 45 && actual.Status == MsapConstants.DispatchTicketStatus.CalculationPending,
+                && actual.RawDurationMinutes == 45 && actual.Status == MsapConstants.DispatchTicketStatus.AwaitingRate,
                 "Urgent actual-ticket edit must save while approval is pending.");
             Check(!(await service.RecalculateChargesAsync(actual.DispatchTicketId, 1, "Check", default)).IsSuccess,
                 "Recalculation bypassed COS approval.");
             actual.Status = MsapConstants.DispatchTicketStatus.Deleted;
             Check((await service.RestoreTicketAsync(actual.DispatchTicketId, "Check", default)).IsSuccess
-                && actual.Status == MsapConstants.DispatchTicketStatus.CalculationPending, "Restoring urgent actuals required charge readiness.");
+                && actual.Status == MsapConstants.DispatchTicketStatus.AwaitingRate, "Restoring urgent actuals required charge readiness.");
             schedule.ApprovedRevision = schedule.Revision;
             schedule.Status = MsapConstants.VesselScheduleStatus.Confirmed;
             input.FromEntity(actual);
             input.TimeArrived = new TimeOnly(9, 0);
             Check((await service.UpdateDispatchTicketAsync(input, null, null, "Check", default)).IsSuccess
-                && actual.Status == MsapConstants.DispatchTicketStatus.CalculationPending, "Missing rates prevented saving valid actual details.");
+                && actual.Status == MsapConstants.DispatchTicketStatus.AwaitingRate, "Missing rates prevented saving valid actual details.");
             Check(JobProgressCalculator.Calculate(job, schedule, saved, []).Stage < JobProgressCalculator.BillingStage,
                 "Approval alone unlocked billing before charge calculation.");
             entry.ManualTariffRate = 100;

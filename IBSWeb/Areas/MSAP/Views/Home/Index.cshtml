@@ -17,7 +17,7 @@
         + (Model.CanViewBanking ? Model.BankingCounts.GetValueOrDefault("Returned") : 0);
 
     int approvalsActionCount = (Model.CanApproveSchedule ? Model.ScheduleReviews : 0)
-        + (Model.CanApproveBilling ? Model.ForPosting : 0)
+        + ((Model.CanReviewBilling || Model.CanApproveBilling) ? Model.ForPosting : 0)
         + (Model.CanApproveRates ? Model.RateUploadReviews : 0)
         + ((Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges) ? Model.OtherTugChargeReviewCount : 0);
 
@@ -26,7 +26,7 @@
 
     int totalActionCount = 0;
     if (Model.CanApproveSchedule) totalActionCount += Model.ScheduleReviews;
-    if (Model.CanApproveBilling) totalActionCount += Model.ForPosting;
+    if (Model.CanReviewBilling || Model.CanApproveBilling) totalActionCount += Model.ForPosting;
     if (Model.CanApproveRates) totalActionCount += Model.RateUploadReviews;
     if (Model.CanFollowUpTickets) totalActionCount += Model.MissingTicketCount;
     if (Model.CanReviewCalculations) totalActionCount += Model.PendingCalculationCount;
@@ -164,7 +164,7 @@ else
                                 Billing <span class="dashboard-filter-badge">@billingActionCount</span>
                             </button>
                         }
-                        @if (approvalsActionCount > 0 || Model.CanApproveSchedule || Model.CanApproveBilling)
+                        @if (approvalsActionCount > 0 || Model.CanApproveSchedule || Model.CanReviewBilling || Model.CanApproveBilling)
                         {
                             <button type="button" class="dashboard-filter-tab" data-sidebar-filter="approvals" role="tab" aria-selected="false">
                                 Approvals <span class="dashboard-filter-badge">@approvalsActionCount</span>
@@ -204,15 +204,18 @@ else
                             }
                         }
 
-                        @* 2. Final Bill Review Items *@
-                        @if (Model.CanApproveBilling)
+                        @* 2. Commercial Review / Final Bill Approval Items *@
+                        @if (Model.CanReviewBilling || Model.CanApproveBilling)
                         {
                             @foreach (var bill in Model.BillingReviewItems)
                             {
+                                var billBadge = bill.Status == MsapConstants.BillingStatus.Reviewed
+                                    ? (bill.UnpostedDate.HasValue || bill.Revision > 1 ? "Reapproval" : "For Approval")
+                                    : (bill.RejectedAt.HasValue || bill.UnpostedDate.HasValue || bill.Revision > 1 ? "Resubmitted" : "For Review");
                                 <article class="dashboard-action-item ui-attention" data-categories="approvals" data-hover-id="hover-bill-@bill.MsapBillingId">
                                     <div class="dashboard-action-item-header">
                                         <span class="dashboard-action-item-ref">Bill @bill.MsapBillingNumber</span>
-                                        <span class="dashboard-action-item-badge">@(bill.UnpostedDate.HasValue || bill.Revision > 1 ? "Reapproval" : "For Approval")</span>
+                                        <span class="dashboard-action-item-badge">@billBadge</span>
                                     </div>
                                     <div class="dashboard-action-item-main">
                                         <div class="dashboard-action-item-title">@(bill.Customer?.CustomerName ?? "Customer pending")</div>
@@ -297,7 +300,7 @@ else
                                         }
                                         else
                                         {
-                                            <a asp-controller="DispatchTicket" asp-action="Index" asp-route-status="@MsapConstants.DispatchTicketStatus.CalculationPending" class="dashboard-action-item-btn">Inspect &rarr;</a>
+                                            <a asp-controller="DispatchTicket" asp-action="Index" asp-route-status="@MsapConstants.DispatchTicketStatus.AwaitingRate" class="dashboard-action-item-btn">Inspect &rarr;</a>
                                         }
                                     </div>
                                 </article>
@@ -668,14 +671,17 @@ else
                 }
             }
 
-            @if (Model.CanApproveBilling)
+            @if (Model.CanReviewBilling || Model.CanApproveBilling)
             {
                 @foreach (var bill in Model.BillingReviewItems)
                 {
+                    var billHoverBadge = bill.Status == MsapConstants.BillingStatus.Reviewed
+                        ? (bill.UnpostedDate.HasValue || bill.Revision > 1 ? "Reapproval" : "For Approval")
+                        : (bill.RejectedAt.HasValue || bill.UnpostedDate.HasValue || bill.Revision > 1 ? "Resubmitted" : "For Review");
                     <div id="hover-bill-@bill.MsapBillingId" class="dashboard-hover-card" popover="manual" role="dialog" aria-label="Bill #@bill.MsapBillingNumber preview">
                         <div class="dashboard-hover-card-header">
                             <h4>Bill #@bill.MsapBillingNumber</h4>
-                            <span class="dashboard-hover-card-status">@(bill.UnpostedDate.HasValue || bill.Revision > 1 ? "Reapproval" : "For Approval")</span>
+                            <span class="dashboard-hover-card-status">@billHoverBadge</span>
                         </div>
                         <dl>
                             <dt>Customer</dt>
@@ -767,7 +773,7 @@ else
                             }
                             else
                             {
-                                <a asp-controller="DispatchTicket" asp-action="Index" asp-route-status="@MsapConstants.DispatchTicketStatus.CalculationPending">Open dispatch registry &rarr;</a>
+                                <a asp-controller="DispatchTicket" asp-action="Index" asp-route-status="@MsapConstants.DispatchTicketStatus.AwaitingRate">Open dispatch registry &rarr;</a>
                             }
                         </div>
                     </div>

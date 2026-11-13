@@ -122,25 +122,12 @@
             _ => "Not specified"
         };
         var canViewRates = ViewData["CanViewRates"] is true;
-        var canRecalculate = !editing && canViewRates && savedTicket.VesselScheduleServiceEntryId.HasValue
-            && ViewData["CanEditTicket"] is true && ViewData["HasBilling"] is not true
-            && cos != null && cos.Status == MsapConstants.CustomerOrderSlipStatus.Open
-            && !cos.DispatchTickets.Any(t => t.Status == MsapConstants.DispatchTicketStatus.Billed)
-            && booking != null && booking.ApprovedRevision == booking.Revision
-            && booking.Status is MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress or MsapConstants.VesselScheduleStatus.Completed;
 
         @if (canViewRates)
         {
             <section class="cos-ticket-charges ui-stack" aria-labelledby="ticketChargesTitle">
                 <div class="cos-section-heading">
                     <h3 class="ui-section-title" id="ticketChargesTitle">Ticket charges</h3>
-                    @if (canRecalculate)
-                    {
-                        <button type="button" class="modern-btn-secondary" data-recalculate-ticket="@savedTicket.DispatchTicketId"
-                                data-cos-id="@savedTicket.CustomerOrderSlipId" data-preview-url="@Url.Action("PreviewCharges", "DispatchTicket")" data-url="@Url.Action("RecalculateCharges", "DispatchTicket")">
-                            <span class="material-symbols-outlined" aria-hidden="true">sync</span> Recalculate charges
-                        </button>
-                    }
                 </div>
                 <p class="ui-caption ui-muted">Service date: @(savedTicket.DateLeft?.ToString("dd MMM yyyy") ?? "Not entered") · @(approvalPending ? "Proposed COS discount" : "Approved COS discount"): @(booking?.SkipCosDiscount == true ? "0% · Skipped" : $"{cosDiscount:0.##}%")</p>
                 @if (blocker != null)

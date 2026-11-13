@@ -45,7 +45,8 @@
         <!-- Filter Group -->
         <div class="flex flex-wrap gap-2">
             <button id="filterAll" class="modern-btn-secondary active">ALL</button>
-            <button id="filterForPosting" class="modern-btn-secondary">AWAITING APPROVAL</button>
+            <button id="filterForPosting" class="modern-btn-secondary">FOR REVIEW</button>
+            <button id="filterReviewed" class="modern-btn-secondary">FOR APPROVAL</button>
             <button id="filterForCollection" class="modern-btn-secondary">FOR COLLECTION</button>
             <button id="filterCollected" class="modern-btn-secondary">COLLECTED</button>
         </div>
@@ -147,7 +148,8 @@
                         className: "text-center",
                         render: (data) => {
                             let statusClass = "ui-status";
-                            if (data === "@MsapConstants.BillingStatus.ForPosting") return ModernTable.render.badge("Awaiting final approval", "ui-status ui-attention");
+                            if (data === "@MsapConstants.BillingStatus.ForPosting") return ModernTable.render.badge("For review", "ui-status ui-attention");
+                            else if (data === "@MsapConstants.BillingStatus.Reviewed") return ModernTable.render.badge("For approval", "ui-status ui-attention");
                             else if (data === "@MsapConstants.BillingStatus.ForCollection") statusClass = "ui-status ui-attention";
                             else if (data === "@MsapConstants.BillingStatus.Collected") statusClass = "ui-status ui-complete";
                             return ModernTable.render.badge(data, statusClass);
@@ -158,7 +160,7 @@
                         orderable: false,
                         className: "text-center",
                         render: (data, type, row) => {
-                            if (row.status === "@MsapConstants.BillingStatus.ForPosting") {
+                            if (row.status === "@MsapConstants.BillingStatus.ForPosting" || row.status === "@MsapConstants.BillingStatus.Reviewed") {
                                 return ModernTable.render.dropdown([
                                     { label: 'Review billing', icon: 'visibility', url: `${reviewUrl}?id=${row.msapBillingId}` },
                                     { label: 'Discard draft', icon: 'delete', isError: true, onclick: `confirmDiscard(${row.msapBillingId})`, condition: row.canDiscard && canDelete }
@@ -195,6 +197,7 @@
                 const id = $(this).attr('id');
                 let status = '';
                 if (id === 'filterForPosting') status = "@MsapConstants.BillingStatus.ForPosting";
+                else if (id === 'filterReviewed') status = "@MsapConstants.BillingStatus.Reviewed";
                 else if (id === 'filterForCollection') status = "@MsapConstants.BillingStatus.ForCollection";
                 else if (id === 'filterCollected') status = "@MsapConstants.BillingStatus.Collected";
 
@@ -214,6 +217,7 @@
                 $('.modern-btn-secondary').removeClass('active');
                 if (!status) $('#filterAll').addClass('active');
                 else if (status === "@MsapConstants.BillingStatus.ForPosting") $('#filterForPosting').addClass('active');
+                else if (status === "@MsapConstants.BillingStatus.Reviewed") $('#filterReviewed').addClass('active');
                 else if (status === "@MsapConstants.BillingStatus.ForCollection") $('#filterForCollection').addClass('active');
                 else if (status === "@MsapConstants.BillingStatus.Collected") $('#filterCollected').addClass('active');
             }

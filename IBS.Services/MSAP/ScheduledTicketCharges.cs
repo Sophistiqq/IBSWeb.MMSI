@@ -83,7 +83,7 @@ namespace IBS.Services.MSAP
 
         public static string? Apply(DispatchTicket ticket, VesselSchedule schedule, VesselScheduleServiceEntry entry, TariffRate? rate, BafRate? bafRate)
         {
-            ticket.Status = MsapConstants.DispatchTicketStatus.CalculationPending;
+            ticket.Status = MsapConstants.DispatchTicketStatus.AwaitingRate;
             ticket.DispatchChargeType = null;
             ticket.BAFChargeType = null;
             ticket.DispatchDiscount = 0;
