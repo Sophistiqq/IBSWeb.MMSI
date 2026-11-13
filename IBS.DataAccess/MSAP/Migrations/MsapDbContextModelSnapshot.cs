@@ -466,6 +466,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("principal_id");
 
+                    b.Property<bool>("PrintDiscount")
+                        .HasColumnType("boolean")
+                        .HasColumnName("print_discount");
+
                     b.Property<bool>("PrintWht")
                         .HasColumnType("boolean")
                         .HasColumnName("print_wht");
@@ -1636,6 +1640,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("varchar(10)")
                         .HasColumnName("msap_recid");
+
+                    b.Property<bool>("PrintDiscount")
+                        .HasColumnType("boolean")
+                        .HasColumnName("print_discount");
 
                     b.Property<string>("Type")
                         .IsRequired()

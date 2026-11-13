@@ -80,7 +80,7 @@
                         <p class="ui-body" style="margin: 0.25rem 0 0; white-space: pre-wrap;">@Model.Remarks</p>
                     </div>
                 }
-                <p class="ui-caption ui-muted">@(Model.IsVatable ? "VAT" : "Non-VAT") · @(Model.IsVatInclusive ? "VAT inclusive" : "VAT exclusive") · @(Model.PrintWht ? "Print withholding" : "No printed withholding")</p>
+                <p class="ui-caption ui-muted">@(Model.IsVatable ? "VAT" : "Non-VAT") · @(Model.IsVatInclusive ? "VAT inclusive" : "VAT exclusive") · @(Model.PrintWht ? "Print withholding" : "No printed withholding") · @(Model.PrintDiscount ? "Print discount" : "Confidential discount")</p>
             </section>
             <section class="ui-panel ui-stack" aria-labelledby="reviewChargesHeading">
                 <h2 id="reviewChargesHeading" class="ui-section-title">@component charges for review</h2>

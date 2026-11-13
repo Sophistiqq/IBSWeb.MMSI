@@ -82,6 +82,11 @@
                             <span class="material-symbols-outlined billing-setting-check" aria-hidden="true">check</span>
                             <span class="ui-label">Print withholding</span>
                         </label>
+                        <label class="billing-setting-card">
+                            <input type="checkbox" id="customerPrintDiscount" disabled />
+                            <span class="material-symbols-outlined billing-setting-check" aria-hidden="true">check</span>
+                            <span class="ui-label">Print discount</span>
+                        </label>
                     </div>
                 </section>
 
@@ -89,6 +94,7 @@
                     <div class="billing-section-heading billing-details-heading">
                         <h2 id="billingHeading" class="ui-section-title">Billing details</h2>
                         <div class="billing-options">
+                            <label class="billing-option"><input asp-for="PrintDiscount" id="billingPrintDiscount" /> Print discount</label>
                             <label class="billing-option"><input asp-for="IsUndocumented" /> Undocumented</label>
                             <label class="billing-option" title="@(isEditingDraft ? "Discard draft first to change Basic and BAF split." : null)"><input asp-for="SeparateBaf" disabled="@isEditingDraft" /> Separate Basic and BAF</label>
                             @if (isEditingDraft)
@@ -181,7 +187,6 @@
                         <div class="billing-amount billing-discount-row" hidden><span>Net basic amount</span><strong id="basicCharges">0.00</strong></div>
                         <div class="billing-amount" id="basicVatRow" hidden><span>VAT included</span><strong id="basicVat">0.00</strong></div>
                         <div class="billing-amount" id="basicEwtRow" hidden><span>Less: withholding tax</span><strong id="basicEwt">0.00</strong></div>
-                        <div class="billing-amount" id="basicWvatRow" hidden><span>Less: withholding VAT</span><strong id="basicWvat">0.00</strong></div>
                         <div class="billing-amount billing-summary-total"><strong>Amount due</strong><strong id="basicDue">0.00</strong></div>
                         <div class="billing-amount billing-summary-note"><span>SBMA share</span><strong id="sbmaAmount">0.00</strong></div>
                     </section>
@@ -192,7 +197,6 @@
                         <div class="billing-amount billing-discount-row" hidden><span>Net BAF amount</span><strong id="bafCharges">0.00</strong></div>
                         <div class="billing-amount" id="bafVatRow" hidden><span>VAT included</span><strong id="bafVat">0.00</strong></div>
                         <div class="billing-amount" id="bafEwtRow" hidden><span>Less: withholding tax</span><strong id="bafEwt">0.00</strong></div>
-                        <div class="billing-amount" id="bafWvatRow" hidden><span>Less: withholding VAT</span><strong id="bafWvat">0.00</strong></div>
                         <div class="billing-amount billing-summary-total"><strong>Amount due</strong><strong id="bafDue">0.00</strong></div>
                         <p id="balanceNote" class="ui-caption ui-muted">The charges are included in one billing balance.</p>
                     </section>

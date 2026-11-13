@@ -334,14 +334,16 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 billing.PaidDispatchTickets = await unitOfWork.Billing.GetPaidDispatchTicketsAsync(billing.MsapBillingId, cancellationToken);
                 billing.UniqueTugboats = await unitOfWork.Billing.GetUniqueTugboatsListAsync(billing.MsapBillingId, cancellationToken);
 
+                var printDiscount = billing.PrintDiscount;
+
                 using var package = new ExcelPackage();
                 var worksheet = package.Workbook.Worksheets.Add($"Billing #{billing.MsapBillingNumber}");
                 worksheet.Cells.Style.Font.Name = "Calibri";
-                worksheet.Cells["B2"].Value = billing.Principal?.PrincipalName ?? billing.Customer.CustomerName;
+                worksheet.Cells["B2"].Value = billing.Principal?.PrincipalName ?? billing.Customer?.CustomerName ?? string.Empty;
                 worksheet.Cells["E2"].Value = $"{billing.Date}";
                 worksheet.Cells["E2"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
-                worksheet.Cells["B3"].Value = $"{billing.Principal?.Address ?? billing.Customer.CustomerAddress} TERMS: {billing.Terms}";
-                worksheet.Cells["B4"].Value = billing.Principal?.TIN ?? billing.Customer.CustomerTin;
+                worksheet.Cells["B3"].Value = $"{(billing.Principal?.Address ?? billing.Customer?.CustomerAddress ?? string.Empty)} TERMS: {billing.Terms}";
+                worksheet.Cells["B4"].Value = billing.Principal?.TIN ?? billing.Customer?.CustomerTin ?? string.Empty;
                 worksheet.Cells["E4"].Value = $"VOYAGE NO. {billing.VoyageNumber}";
                 worksheet.Cells["B6"].Value = $"FOR THE SERVICE RE: {billing.Vessel.VesselName}";
                 worksheet.Cells["B7"].Value = $"LOCATION PORT: {billing.Port.PortName}";
@@ -356,14 +358,28 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
                         foreach (var ticket in billing.PaidDispatchTickets!.Where(t => t.Tugboat.TugboatName == tugboat))
                         {
+                            var hasTicketDiscount = ticket.DispatchDiscount > 0 && ticket.DispatchBillingAmount > ticket.DispatchNetRevenue;
+                            var effectiveRate = ticket.TotalHours > 0 ? Math.Round(ticket.DispatchNetRevenue / ticket.TotalHours, 2) : ticket.DispatchRate;
+
                             worksheet.Cells[row, 1].Value = "1";
                             worksheet.Cells[row, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
                             worksheet.Cells[row, 2].Value = $"{ticket.Service.ServiceName}          {ticket.DateLeft} {ticket.TimeLeft}          {ticket.DateArrived} {ticket.TimeArrived}";
-                            worksheet.Cells[row, 4].Value = $"{ticket.DispatchRate}";
+                            worksheet.Cells[row, 4].Value = printDiscount ? ticket.DispatchRate : effectiveRate;
+                            worksheet.Cells[row, 4].Style.Numberformat.Format = "#,##0.00";
                             worksheet.Cells[row, 4].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
-                            worksheet.Cells[row, 5].Value = $"{ticket.DispatchBillingAmount}";
+                            worksheet.Cells[row, 5].Value = printDiscount && hasTicketDiscount ? ticket.DispatchBillingAmount : ticket.DispatchNetRevenue;
+                            worksheet.Cells[row, 5].Style.Numberformat.Format = "#,##0.00";
                             worksheet.Cells[row, 5].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
                             row++;
+
+                            if (printDiscount && hasTicketDiscount)
+                            {
+                                worksheet.Cells[row, 2].Value = "    Less: Customer Discount";
+                                worksheet.Cells[row, 5].Value = -(ticket.DispatchBillingAmount - ticket.DispatchNetRevenue);
+                                worksheet.Cells[row, 5].Style.Numberformat.Format = "(#,##0.00)";
+                                worksheet.Cells[row, 5].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
+                                row++;
+                            }
                         }
                         row++;
                     }
@@ -373,16 +389,30 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 {
                     foreach (var ticket in billing.PaidDispatchTickets.Where(t => t.BAFNetRevenue != 0))
                     {
+                        var hasBafDiscount = ticket.BAFDiscount > 0 && ticket.BAFBillingAmount > ticket.BAFNetRevenue;
+                        var effectiveBafRate = ticket.TotalHours > 0 ? Math.Round(ticket.BAFNetRevenue / ticket.TotalHours, 2) : ticket.BAFRate;
+
                         worksheet.Cells[row, 2].Value = "NAME OF TUGBOAT: BUNKER ADJUSTMENT FACTOR";
                         row++;
                         worksheet.Cells[row, 1].Value = "1";
                         worksheet.Cells[row, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
                         worksheet.Cells[row, 2].Value = $"{ticket.Service.ServiceName}          {ticket.DateLeft} {ticket.TimeLeft}          {ticket.DateArrived} {ticket.TimeArrived}";
-                        worksheet.Cells[row, 4].Value = $"{ticket.BAFRate}";
+                        worksheet.Cells[row, 4].Value = printDiscount ? ticket.BAFRate : effectiveBafRate;
+                        worksheet.Cells[row, 4].Style.Numberformat.Format = "#,##0.00";
                         worksheet.Cells[row, 4].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
-                        worksheet.Cells[row, 5].Value = $"{ticket.BAFNetRevenue}";
+                        worksheet.Cells[row, 5].Value = printDiscount && hasBafDiscount ? ticket.BAFBillingAmount : ticket.BAFNetRevenue;
+                        worksheet.Cells[row, 5].Style.Numberformat.Format = "#,##0.00";
                         worksheet.Cells[row, 5].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
                         row++;
+
+                        if (printDiscount && hasBafDiscount)
+                        {
+                            worksheet.Cells[row, 2].Value = "    Less: BAF Discount";
+                            worksheet.Cells[row, 5].Value = -(ticket.BAFBillingAmount - ticket.BAFNetRevenue);
+                            worksheet.Cells[row, 5].Style.Numberformat.Format = "(#,##0.00)";
+                            worksheet.Cells[row, 5].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
+                            row++;
+                        }
                     }
                 }
 
@@ -398,7 +428,27 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     vatAmount = subTotal - vatableSales;
                 }
 
-                worksheet.Cells[row, 4].Value = "SUBTOTAL";
+                if (printDiscount)
+                {
+                    var totalGross = billing.BasicBillingId == null
+                        ? (billing.PaidDispatchTickets?.Sum(t => t.DispatchBillingAmount + (billing.BafBilling == null ? t.BAFBillingAmount : 0)) ?? billing.Amount)
+                        : (billing.PaidDispatchTickets?.Sum(t => t.BAFBillingAmount) ?? billing.Amount);
+                    var totalDiscount = totalGross - billing.Amount;
+                    if (totalDiscount > 0)
+                    {
+                        worksheet.Cells[row, 4].Value = "GROSS SALES";
+                        worksheet.Cells[row, 5].Value = totalGross;
+                        worksheet.Cells[row, 5].Style.Numberformat.Format = "#,##0.00";
+                        row++;
+
+                        worksheet.Cells[row, 4].Value = "LESS: DISCOUNT";
+                        worksheet.Cells[row, 5].Value = -totalDiscount;
+                        worksheet.Cells[row, 5].Style.Numberformat.Format = "(#,##0.00)";
+                        row++;
+                    }
+                }
+
+                worksheet.Cells[row, 4].Value = "TOTAL SALES";
                 worksheet.Cells[row, 5].Value = subTotal;
                 worksheet.Cells[row, 5].Style.Numberformat.Format = "#,##0.00";
                 row++;
@@ -419,18 +469,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     worksheet.Cells[row, 5].Style.Numberformat.Format = "(#,##0.00)";
                     row++;
 
-                    decimal wvatAmount = 0;
-                    if (billing.Customer.WithHoldingVat)
-                    {
-                        wvatAmount = vatableSales * 0.05m;
-                        worksheet.Cells[row, 4].Value = "LESS 5% WVAT";
-                        worksheet.Cells[row, 5].Value = wvatAmount;
-                        worksheet.Cells[row, 5].Style.Numberformat.Format = "(#,##0.00)";
-                        row++;
-                    }
+                    // 5% WVAT is removed from invoice statement per BIR & meeting rule (settled at collection via 2306)
 
                     worksheet.Cells[row, 4].Value = "NET AMOUNT DUE";
-                    worksheet.Cells[row, 5].Value = subTotal - whtAmount - wvatAmount;
+                    worksheet.Cells[row, 5].Value = subTotal - whtAmount;
                     worksheet.Cells[row, 5].Style.Numberformat.Format = "#,##0.00";
                     worksheet.Cells[row, 5].Style.Font.Bold = true;
                 }

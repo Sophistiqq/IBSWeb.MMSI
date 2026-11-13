@@ -98,6 +98,7 @@ namespace IBS.Services.MSAP
                         existingDraft.IsVatable = model.IsVatable;
                         existingDraft.IsVatInclusive = model.IsVatInclusive;
                         existingDraft.PrintWht = model.PrintWht;
+                        existingDraft.PrintDiscount = model.PrintDiscount;
                         existingDraft.IsUndocumented = model.IsUndocumented;
                         existingDraft.DispatchAmount = model.DispatchAmount;
                         existingDraft.BAFAmount = model.BAFAmount;
@@ -121,6 +122,7 @@ namespace IBS.Services.MSAP
                             existingDraft.BafBilling.IsVatable = model.BafBilling.IsVatable;
                             existingDraft.BafBilling.IsVatInclusive = model.BafBilling.IsVatInclusive;
                             existingDraft.BafBilling.PrintWht = model.BafBilling.PrintWht;
+                            existingDraft.BafBilling.PrintDiscount = model.BafBilling.PrintDiscount;
                             existingDraft.BafBilling.IsUndocumented = model.BafBilling.IsUndocumented;
                             existingDraft.BafBilling.BAFAmount = model.BafBilling.BAFAmount;
                             existingDraft.BafBilling.Amount = model.BafBilling.Amount;
@@ -378,6 +380,7 @@ namespace IBS.Services.MSAP
                     IsVatable = model.IsVatable,
                     IsVatInclusive = model.IsVatInclusive,
                     PrintWht = model.PrintWht,
+                    PrintDiscount = model.PrintDiscount,
                     IsUndocumented = model.IsUndocumented,
                     Company = company,
                     Status = model.Status,
@@ -404,6 +407,7 @@ namespace IBS.Services.MSAP
             // shortcut: VAT-inclusive stays fixed until customer settings provide this preference.
             model.IsVatInclusive = true;
             model.PrintWht = model.Customer.WithHoldingTax;
+            model.PrintDiscount = model.Customer.PrintDiscount;
         }
 
         public async Task<ServiceResult> PostBillingAsync(int id, string username, CancellationToken cancellationToken, string approverUserId, int reviewedRevision)
@@ -863,6 +867,7 @@ namespace IBS.Services.MSAP
                 businessStyle = customer.BusinessStyle ?? "-",
                 withholdingTax = customer.WithHoldingTax,
                 withholdingVat = customer.WithHoldingVat,
+                printDiscount = customer.PrintDiscount,
                 hasPrincipal
             });
         }

@@ -67,6 +67,10 @@ namespace IBS.Models.MSAP.MasterFile
         [Display(Name = "Creditable Withholding Tax 2307")]
         public bool WithHoldingTax { get; set; }
 
+        [Display(Name = "Print Discount on Statement")]
+        [Column("print_discount")]
+        public bool PrintDiscount { get; set; }
+
         public bool IsActive { get; set; } = true;
 
         [Display(Name = "Created By")]

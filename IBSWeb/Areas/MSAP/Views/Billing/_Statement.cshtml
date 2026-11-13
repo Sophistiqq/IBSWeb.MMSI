@@ -1,11 +1,13 @@
 @model Billing
 @{
+    var printDiscount = Model.PrintDiscount;
+
     var gross = Model.Amount;
     var vatAmt = Model.IsVatable ? Math.Round(gross * 0.12m / 1.12m, 2) : 0m;
     var netVat = gross - vatAmt;
     var whtAmt = Model.PrintWht ? Math.Round(netVat * 0.02m, 2) : 0m;
-    var wvatAmt = Model is { PrintWht: true, Customer.WithHoldingVat: true } ? Math.Round(netVat * 0.05m, 2) : 0m;
-    var amtDue = netVat - whtAmt - wvatAmt;
+    // 5% WVAT is removed from invoice statement per BIR & meeting rule (settled at collection via 2306)
+    var amtDue = netVat - whtAmt;
     var totalDue = amtDue + vatAmt;
 
     var bafTickets = Model.BafBilling != null ? null : Model.PaidDispatchTickets?.Where(dt => dt.BAFNetRevenue > 0).ToList();
@@ -36,7 +38,7 @@
                     <tbody>
                         <tr>
                             <td style="width: 10%; padding: 0; margin: 0;"><b>BILLED TO:</b></td>
-                            <td class="border-bottom-dark"><b>@(Model.PrincipalId != null ? Model.Principal?.PrincipalName : Model.Customer.CustomerName)</b></td>
+                            <td class="border-bottom-dark"><b>@(Model.PrincipalId != null ? Model.Principal?.PrincipalName : (Model.Customer?.CustomerName ?? string.Empty))</b></td>
                             <td style="width: 40px;"></td>
                             <td style="width: 80px;"><b>DATE:</b></td>
                             <td class="border-bottom-dark">@Model.Date.ToString("MM/dd/yyyy")</td>
@@ -46,21 +48,21 @@
                             <td class="border-bottom-dark" style="width: 40%;">@Model.AddressLine1</td>
                             <td></td>
                             <td><b>TIN:</b></td>
-                            <td class="border-bottom-dark">@(Model.PrincipalId != null ? Model.Principal?.TIN : Model.Customer.CustomerTin)</td>
+                            <td class="border-bottom-dark">@(Model.PrincipalId != null ? Model.Principal?.TIN : (Model.Customer?.CustomerTin ?? string.Empty))</td>
                         </tr>
                         <tr>
                             <td></td>
                             <td class="border-bottom-dark">@Model.AddressLine2</td>
                             <td></td>
                             <td style="text-wrap: nowrap"><b>BUSINESS STYLE:</b></td>
-                            <td class="border-bottom-dark">@(Model.PrincipalId != null ? Model.Principal?.BusinessType : Model.Customer.BusinessStyle)</td>
+                            <td class="border-bottom-dark">@(Model.PrincipalId != null ? Model.Principal?.BusinessType : (Model.Customer?.BusinessStyle ?? string.Empty))</td>
                         </tr>
                         <tr>
                             <td></td>
                             <td class="border-bottom-dark">@Model.AddressLine3</td>
                             <td></td>
                             <td><b>TERMS:</b></td>
-                            <td class="border-bottom-dark">@(string.IsNullOrWhiteSpace(Model.Terms) ? (Model.PrincipalId != null ? Model.Principal?.Terms : Model.Customer.CustomerTerms) : Model.Terms)</td>
+                            <td class="border-bottom-dark">@(string.IsNullOrWhiteSpace(Model.Terms) ? (Model.PrincipalId != null ? Model.Principal?.Terms : (Model.Customer?.CustomerTerms ?? string.Empty)) : Model.Terms)</td>
                         </tr>
                     </tbody>
                 </table>
@@ -109,15 +111,25 @@
                                 </tr>
                                 @foreach (var dt in dispatchNetTickets)
                                 {
+                                    var hasTicketDiscount = dt.DispatchDiscount > 0 && dt.DispatchBillingAmount > dt.DispatchNetRevenue;
+                                    var effectiveRate = dt.TotalHours > 0 ? Math.Round(dt.DispatchNetRevenue / dt.TotalHours, 2) : dt.DispatchRate;
                                     <tr>
                                         <td class="text-left">@dt.Date.ToString("dd-MMM")</td>
                                         <td>@dt.Service.ServiceName</td>
                                         <td class="text-left">@dt.DateLeft?.ToString("MM/dd/yyyy") @dt.TimeLeft?.ToString(@"HH\:mm")</td>
                                         <td class="text-left">@dt.DateArrived?.ToString("MM/dd/yyyy") @dt.TimeArrived?.ToString(@"HH\:mm")</td>
                                         <td class="text-center">@dt.TotalHours.ToString("N2")</td>
-                                        <td class="text-right">@dt.DispatchRate.ToString("N2")</td>
-                                        <td class="text-right">@dt.DispatchNetRevenue.ToString("N2")</td>
+                                        <td class="text-right">@(printDiscount ? dt.DispatchRate.ToString("N2") : effectiveRate.ToString("N2"))</td>
+                                        <td class="text-right">@(printDiscount && hasTicketDiscount ? dt.DispatchBillingAmount.ToString("N2") : dt.DispatchNetRevenue.ToString("N2"))</td>
                                     </tr>
+                                    @if (printDiscount && hasTicketDiscount)
+                                    {
+                                        <tr class="philsim-discount-row text-xs italic" style="font-size: 10px;">
+                                            <td></td>
+                                            <td colspan="5" class="text-right" style="padding-right: 10px;">Less: Customer Discount</td>
+                                            <td class="text-right text-error">(@((dt.DispatchBillingAmount - dt.DispatchNetRevenue).ToString("N2")))</td>
+                                        </tr>
+                                    }
                                 }
                             }
                         }
@@ -129,27 +141,50 @@
                             </tr>
                             @foreach (var dt in bafTickets!)
                             {
+                                var hasBafDiscount = dt.BAFDiscount > 0 && dt.BAFBillingAmount > dt.BAFNetRevenue;
+                                var effectiveBafRate = dt.TotalHours > 0 ? Math.Round(dt.BAFNetRevenue / dt.TotalHours, 2) : dt.BAFRate;
                                 <tr class="baf-row">
                                     <td class="text-left">@dt.Date.ToString("dd-MMM")</td>
                                     <td>@dt.Service.ServiceName (BAF)</td>
                                     <td class="text-left">@dt.DateLeft?.ToString("MM/dd/yyyy") @dt.TimeLeft?.ToString(@"HH\:mm")</td>
                                     <td class="text-left">@dt.DateArrived?.ToString("MM/dd/yyyy") @dt.TimeArrived?.ToString(@"HH\:mm")</td>
                                     <td class="text-center">@dt.TotalHours.ToString("N2")</td>
-                                    <td class="text-right">@dt.BAFRate.ToString("N2")</td>
-                                    <td class="text-right">@dt.BAFNetRevenue.ToString("N2")</td>
+                                    <td class="text-right">@(printDiscount ? dt.BAFRate.ToString("N2") : effectiveBafRate.ToString("N2"))</td>
+                                    <td class="text-right">@(printDiscount && hasBafDiscount ? dt.BAFBillingAmount.ToString("N2") : dt.BAFNetRevenue.ToString("N2"))</td>
                                 </tr>
+                                @if (printDiscount && hasBafDiscount)
+                                {
+                                    <tr class="philsim-discount-row text-xs italic" style="font-size: 10px;">
+                                        <td></td>
+                                        <td colspan="5" class="text-right" style="padding-right: 10px;">Less: BAF Discount</td>
+                                        <td class="text-right text-error">(@((dt.BAFBillingAmount - dt.BAFNetRevenue).ToString("N2")))</td>
+                                    </tr>
+                                }
                             }
                             @foreach (var group in bafTickets!.GroupBy(t => new { t.BAFRate, t.BAFChargeType, t.BAFDiscount }))
                             {
+                                var groupGross = group.Sum(t => t.BAFBillingAmount);
+                                var groupNet = group.Sum(t => t.BAFNetRevenue);
+                                var groupHours = group.Sum(t => t.TotalHours);
+                                var groupEffectiveRate = groupHours > 0 ? Math.Round(groupNet / groupHours, 2) : group.Key.BAFRate;
+                                var hasGroupDiscount = groupGross > groupNet;
                                 <tr class="combined-baf-row" style="display:none;">
                                     <td></td>
                                     <td class="text-left pt-3 pb-1">BUNKER ADJUSTMENT FACTORS (@group.Key.BAFChargeType)</td>
                                     <td class="text-left pt-3 pb-1">@group.Min(t => t.DateLeft)?.ToString("MM/dd/yyyy")</td>
                                     <td class="text-left pt-3 pb-1">@group.Max(t => t.DateArrived)?.ToString("MM/dd/yyyy")</td>
-                                    <td class="text-center pt-3 pb-1">@group.Sum(t => t.TotalHours).ToString("N2")</td>
-                                    <td class="text-right pt-3 pb-1">@group.Key.BAFRate.ToString("N2")</td>
-                                    <td class="text-right pt-3 pb-1">@group.Sum(t => t.BAFNetRevenue).ToString("N2")</td>
+                                    <td class="text-center pt-3 pb-1">@groupHours.ToString("N2")</td>
+                                    <td class="text-right pt-3 pb-1">@(printDiscount ? group.Key.BAFRate.ToString("N2") : groupEffectiveRate.ToString("N2"))</td>
+                                    <td class="text-right pt-3 pb-1">@(printDiscount && hasGroupDiscount ? groupGross.ToString("N2") : groupNet.ToString("N2"))</td>
                                 </tr>
+                                @if (printDiscount && hasGroupDiscount)
+                                {
+                                    <tr class="combined-baf-row philsim-discount-row text-xs italic" style="display:none; font-size: 10px;">
+                                        <td></td>
+                                        <td colspan="5" class="text-right" style="padding-right: 10px;">Less: BAF Discount</td>
+                                        <td class="text-right text-error">(@((groupGross - groupNet).ToString("N2")))</td>
+                                    </tr>
+                                }
                             }
                         }
                         <tr>
@@ -172,6 +207,24 @@
                     </div>
                     <div class="flex-grow">
                         <table class="statement-table statement-totals" style="font-size: 12px; margin-left: 0;">
+                            @if (printDiscount)
+                            {
+                                var totalGross = Model.BasicBilling == null && !Model.BasicBillingId.HasValue
+                                    ? (Model.PaidDispatchTickets?.Sum(t => t.DispatchBillingAmount + (Model.BafBilling == null ? t.BAFBillingAmount : 0)) ?? Model.Amount)
+                                    : (Model.PaidDispatchTickets?.Sum(t => t.BAFBillingAmount) ?? Model.Amount);
+                                var totalDiscount = totalGross - Model.Amount;
+                                if (totalDiscount > 0)
+                                {
+                                    <tr>
+                                        <td style="padding-top: 4px;">GROSS SALES@(Model.IsVatable ? " (VAT INCLUSIVE)" : "")</td>
+                                        <td class="text-right border-bottom-dark" style="padding-top: 4px;"><b>@totalGross.ToString("N2")</b></td>
+                                    </tr>
+                                    <tr>
+                                        <td>LESS: DISCOUNT</td>
+                                        <td class="text-right border-bottom-dark text-error"><b>(@totalDiscount.ToString("N2"))</b></td>
+                                    </tr>
+                                }
+                            }
                             <tr>
                                 <td style="padding-top: 4px;">TOTAL SALES@(Model.IsVatable ? " (VAT INCLUSIVE)" : "")</td>
                                 <td class="text-right border-bottom-dark" style="padding-top: 4px;"><b>@gross.ToString("N2")</b></td>
@@ -187,10 +240,6 @@
                             <tr>
                                 <td>LESS: WITHHOLDING TAX</td>
                                 <td class="text-right border-bottom-dark"><b>@whtAmt.ToString("N2")</b></td>
-                            </tr>
-                            <tr @(wvatAmt > 0 ? "" : "style='display:none'")>
-                                <td>LESS: 5% WVAT</td>
-                                <td class="text-right border-bottom-dark"><b>@wvatAmt.ToString("N2")</b></td>
                             </tr>
                             <tr>
                                 <td>AMOUNT DUE</td>

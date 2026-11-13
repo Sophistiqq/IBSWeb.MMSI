@@ -20,6 +20,7 @@ namespace IBS.Models.MSAP.MasterFile
             VatType = entity.VatType;
             WithHoldingVat = entity.WithHoldingVat;
             WithHoldingTax = entity.WithHoldingTax;
+            PrintDiscount = entity.PrintDiscount;
             IsActive = entity.IsActive;
             CreatedBy = entity.CreatedBy;
             CreatedDate = entity.CreatedDate;

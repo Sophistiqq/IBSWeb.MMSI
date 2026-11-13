@@ -130,6 +130,9 @@ namespace IBS.Models.MSAP
 
         public bool PrintWht { get; set; }
 
+        [Column("print_discount")]
+        public bool PrintDiscount { get; set; }
+
         public bool IsPrinted { get; set; }
 
         [Column(TypeName = "numeric(18,4)")]

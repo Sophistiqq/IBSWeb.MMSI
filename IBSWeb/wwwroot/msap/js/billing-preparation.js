@@ -98,8 +98,6 @@ $(function () {
             $('#' + kind + 'Vat').text(money(totals.vat));
             $('#' + kind + 'EwtRow').prop('hidden', totals.ewt === 0);
             $('#' + kind + 'Ewt').text(money(totals.ewt));
-            $('#' + kind + 'WvatRow').prop('hidden', totals.wvat === 0);
-            $('#' + kind + 'Wvat').text(money(totals.wvat));
             $('#' + kind + 'Due').text(money(totals.due));
         }
         const sbma = $('#SbmaEnabled').is(':checked')
@@ -130,8 +128,7 @@ $(function () {
         const vat = customer?.vatType === 'Vatable' ? roundMoney(gross * 0.12 / 1.12) : 0;
         const net = roundMoney(gross - vat);
         const ewt = customer?.withholdingTax ? roundMoney(net * 0.02) : 0;
-        const wvat = customer?.withholdingTax && customer?.withholdingVat ? roundMoney(net * 0.05) : 0;
-        return { vat, ewt, wvat, due: roundMoney(gross - ewt - wvat) };
+        return { vat, ewt, due: roundMoney(gross - ewt) };
     }
 
     function appliedDiscount(ticket) {
@@ -201,7 +198,7 @@ $(function () {
         $principal.empty().append('<option value="">Select principal</option>');
         $recipient.empty().append('<option value="LOCAL">Customer</option>').val('LOCAL').trigger('change');
         updateRecipient();
-        $('#customerVat, #customerWithholding').prop('checked', false);
+        $('#customerVat, #customerWithholding, #customerPrintDiscount').prop('checked', false);
         const id = $customer.val();
         if (!id) return;
         try {
@@ -219,6 +216,7 @@ $(function () {
             if (principals.length) $recipient.append('<option value="PRINCIPAL">Principal</option>');
             $('#customerVat').prop('checked', customer.vatType === 'Vatable');
             $('#customerWithholding').prop('checked', !!customer.withholdingTax);
+            $('#customerPrintDiscount, #billingPrintDiscount').prop('checked', !!customer.printDiscount);
             const isInitialEdit = Boolean(initialCos) && form.dataset.editingDraft === 'true';
             if (!isInitialEdit) {
                 $('#IsUndocumented').prop('checked', customer.isUndoc === 'Undocumented');
