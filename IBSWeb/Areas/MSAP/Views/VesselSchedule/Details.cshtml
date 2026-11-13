@@ -32,7 +32,7 @@
     <partial name="_WorkflowProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
     <main class="schedule-main-workspace schedule-review-workspace" id="scheduleReview"
           data-schedule-id="@Model.VesselScheduleId"
-          data-adopt-url="@(canViewRates ? Url.Action("AdoptTableRate") : "")"
+          data-adopt-url="@(ViewBag.CanAdoptTableRate == true ? Url.Action("AdoptTableRate") : "")"
           data-rate-url="@(canViewRates ? Url.Action("GetTariffRate") : "")" data-customer-id="@Model.CustomerId"
           data-terminal-id="@Model.TerminalId" data-planned-start="@Model.PlannedStart.ToString("yyyy-MM-ddTHH:mm")">
         <header class="schedule-header-stack ui-page-header">

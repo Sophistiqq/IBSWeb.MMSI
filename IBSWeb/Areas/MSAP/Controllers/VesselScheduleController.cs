@@ -214,8 +214,14 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 && ((JobProgressViewModel)ViewBag.JobProgress).Stage >= JobProgressCalculator.TariffStage
                 && CustomerOrderSlipService.CanCompleteService(await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == job.CustomerOrderSlipId, ct));
             ViewBag.CanCancel = schedule.CustomerOrderSlipId == null || (job?.Status == MsapConstants.CustomerOrderSlipStatus.Open && !hasActiveTickets && !hasBilling);
-            var isPendingReapproval = !closed && schedule.ApprovedRevision.HasValue
+            var isPendingReview = !closed
                 && (!schedule.CustomerOrderSlipId.HasValue || schedule.ApprovedRevision != schedule.Revision || schedule.Status == MsapConstants.VesselScheduleStatus.Tentative);
+            ViewBag.CanAdoptTableRate = ViewBag.CanConfirm == true
+                && isPendingReview
+                && !hasTickets
+                && !hasBilling
+                && (job == null || job.Status == MsapConstants.CustomerOrderSlipStatus.Open);
+            var isPendingReapproval = isPendingReview && schedule.ApprovedRevision.HasValue;
             if (isPendingReapproval)
             {
                 var (changes, addedTugboatIds, addedEntryIds) = await LoadRevisionChangesAsync(id, ct);
@@ -463,6 +469,22 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 return BadRequest(new { message = "Completed or cancelled schedules cannot be modified." });
             }
+            if (schedule.CustomerOrderSlipId.HasValue
+                && schedule.ApprovedRevision == schedule.Revision
+                && schedule.Status != MsapConstants.VesselScheduleStatus.Tentative)
+            {
+                return BadRequest(new { message = "Only schedules pending approval or reapproval can adopt table rates." });
+            }
+            var job = schedule.CustomerOrderSlipId.HasValue
+                ? await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == schedule.CustomerOrderSlipId.Value, ct)
+                : null;
+            var hasTickets = (schedule.CustomerOrderSlipId.HasValue && await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == schedule.CustomerOrderSlipId.Value, ct) != null)
+                || (schedule.ServiceEntries.Count > 0 && await unitOfWork.DispatchTicket.GetAsync(t => schedule.ServiceEntries.Select(e => (int?)e.VesselScheduleServiceEntryId).Contains(t.VesselScheduleServiceEntryId), ct) != null);
+            var hasBilling = schedule.CustomerOrderSlipId.HasValue && await unitOfWork.Billing.GetAsync(b => b.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct) != null;
+            if (hasTickets || hasBilling || (job != null && job.Status != MsapConstants.CustomerOrderSlipStatus.Open))
+            {
+                return BadRequest(new { message = "Cannot adopt table rates once Dispatch Tickets, billing, or a closed COS exist." });
+            }
             var entry = schedule.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == entryId);
             if (entry == null || entry.CancelledAt.HasValue)
             {
@@ -484,7 +506,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
             else
             {
                 var rate = await unitOfWork.BafTable.GetApplicableRateAsync(schedule.CustomerId.GetValueOrDefault(), schedule.TerminalId, entry.ServiceId, rateDate, ct);
-                tableRate = rate?.Amount ?? 0m;
+                if (rate == null)
+                {
+                    return BadRequest(new { message = "No valid BAF rate found in rate table to adopt." });
+                }
+                tableRate = rate.Amount;
                 entry.ManualBafRate = null;
             }
             await unitOfWork.AuditTrail.AddAsync(new AuditTrail(User.Identity?.Name ?? "system",

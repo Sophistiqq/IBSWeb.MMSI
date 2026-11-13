@@ -48,7 +48,7 @@ namespace IBS.Services.MSAP
                 ProcedureEnum.EditCustomerOrderSlip, ProcedureEnum.ApproveSchedule, ProcedureEnum.CreateDispatchTicket,
                 ProcedureEnum.EditDispatchTicket, ProcedureEnum.ViewMaritimeReport);
             model.CanFollowUpTickets = await access.HasAnyAccessAsync(userId, ProcedureEnum.CreateDispatchTicket,
-                ProcedureEnum.EditDispatchTicket, ProcedureEnum.ViewMaritimeReport);
+                ProcedureEnum.EditDispatchTicket);
             model.CanViewBilling = await access.HasAnyAccessAsync(userId, ProcedureEnum.CreateBilling,
                 ProcedureEnum.DeleteBilling, ProcedureEnum.ApproveFinalBilling, ProcedureEnum.ViewMaritimeReport);
             model.CanViewCollections = await access.HasAnyAccessAsync(userId, ProcedureEnum.CreateCollection,
