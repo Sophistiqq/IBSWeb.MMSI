@@ -28,6 +28,10 @@ namespace IBS.Models.MSAP
         [Column(TypeName = "jsonb")]
         public string ChangesJson { get; set; } = "[]";
 
+        [Column("attachment_url", TypeName = "varchar(500)")]
+        [MaxLength(500)]
+        public string? AttachmentUrl { get; set; }
+
         [Required]
         [Column(TypeName = "varchar(100)")]
         [MaxLength(100)]

@@ -215,9 +215,12 @@ namespace IBS.Services.MSAP
             if (schedule != null && (schedule.ApprovedRevision != schedule.Revision || schedule.Status == MsapConstants.VesselScheduleStatus.Tentative))
             {
                 result.Stage = 1;
-                result.Guidance = "Actual service tickets may be recorded while approval is pending. Billing remains blocked until the current schedule is approved.";
-                SetAction(result, schedule.ApprovedRevision.HasValue ? "Review and Reapprove" : "Review and Approve", "VesselSchedule", "Details", schedule.VesselScheduleId,
-                    ProcedureEnum.ApproveSchedule, "schedule approval");
+                var isReapproval = schedule.ApprovedRevision.HasValue;
+                result.Guidance = isReapproval
+                    ? "This schedule was revised and requires commercial re-approval by Sir RML before ticket recording or charge calculation."
+                    : "Actual service tickets may be recorded while approval is pending. Billing remains blocked until the current schedule is approved.";
+                SetAction(result, isReapproval ? "Review and Reapprove" : "Review and Approve", "VesselSchedule", "Details", schedule.VesselScheduleId,
+                    ProcedureEnum.ApproveSchedule, isReapproval ? "schedule re-approval" : "schedule approval");
                 return result;
             }
             List<DispatchTicket> unknown = active.Where(t => !MsapConstants.DispatchTicketStatus.All.Contains(t.Status)).ToList();

@@ -78,6 +78,9 @@ namespace IBS.Services.MSAP
                         TrackDiff("Date", "Billing Date", existingDraft.Date.ToString("yyyy-MM-dd"), model.Date.ToString("yyyy-MM-dd"));
                         TrackDiff("BilledTo", "Billed To", existingDraft.BilledTo, model.BilledTo);
                         TrackDiff("PrincipalId", "Principal", existingDraft.PrincipalId, model.PrincipalId);
+                        TrackDiff("Terms", "Payment Terms", existingDraft.Terms, model.Terms);
+                        TrackDiff("DueDate", "Due Date", existingDraft.DueDate.ToString("yyyy-MM-dd"), model.DueDate.ToString("yyyy-MM-dd"));
+                        TrackDiff("Remarks", "Billing Remarks", existingDraft.Remarks, model.Remarks);
                         TrackDiff("DispatchAmount", "Dispatch Amount", existingDraft.DispatchAmount.ToString("N2"), model.DispatchAmount.ToString("N2"));
                         TrackDiff("BAFAmount", "BAF Amount", existingDraft.BAFAmount.ToString("N2"), model.BAFAmount.ToString("N2"));
                         TrackDiff("Amount", "Total Amount", existingDraft.Amount.ToString("N2"), model.Amount.ToString("N2"));
@@ -91,6 +94,7 @@ namespace IBS.Services.MSAP
                         existingDraft.Principal = model.Principal;
                         existingDraft.IsPrincipal = model.IsPrincipal;
                         existingDraft.Terms = model.Terms;
+                        existingDraft.Remarks = model.Remarks;
                         existingDraft.IsVatable = model.IsVatable;
                         existingDraft.IsVatInclusive = model.IsVatInclusive;
                         existingDraft.PrintWht = model.PrintWht;
@@ -113,6 +117,7 @@ namespace IBS.Services.MSAP
                             existingDraft.BafBilling.Principal = model.BafBilling.Principal;
                             existingDraft.BafBilling.IsPrincipal = model.BafBilling.IsPrincipal;
                             existingDraft.BafBilling.Terms = model.BafBilling.Terms;
+                            existingDraft.BafBilling.Remarks = model.BafBilling.Remarks;
                             existingDraft.BafBilling.IsVatable = model.BafBilling.IsVatable;
                             existingDraft.BafBilling.IsVatInclusive = model.BafBilling.IsVatInclusive;
                             existingDraft.BafBilling.PrintWht = model.BafBilling.PrintWht;
@@ -324,7 +329,12 @@ namespace IBS.Services.MSAP
             model.VoyageNumber = job.VoyageNumber;
             model.COSNumber = job.CustomerOrderSlipNumber;
             ApplyCustomerTaxSettings(model);
-            model.Terms = (model.Principal?.Terms ?? customer.CustomerTerms) ?? "COD";
+            if (string.IsNullOrWhiteSpace(model.Terms))
+            {
+                model.Terms = (model.Principal?.Terms ?? customer.CustomerTerms) ?? "COD";
+            }
+            model.Terms = model.Terms.Trim();
+            model.Remarks = model.Remarks?.Trim();
             model.DueDate = await unitOfWork.Terms.ComputeDueDateAsync(model.Terms, model.Date, cancellationToken);
             model.Year = model.Date.Year;
             model.Company = company;
@@ -347,6 +357,8 @@ namespace IBS.Services.MSAP
                     MsapBillingNumber = bafNumber,
                     Date = model.Date,
                     DueDate = model.DueDate,
+                    Terms = model.Terms,
+                    Remarks = model.Remarks,
                     Year = model.Year,
                     CustomerId = model.CustomerId,
                     Customer = customer,
@@ -367,7 +379,6 @@ namespace IBS.Services.MSAP
                     IsVatInclusive = model.IsVatInclusive,
                     PrintWht = model.PrintWht,
                     IsUndocumented = model.IsUndocumented,
-                    Terms = model.Terms,
                     Company = company,
                     Status = model.Status,
                     CreatedBy = username,
@@ -816,6 +827,7 @@ namespace IBS.Services.MSAP
 
         public async Task<Billing> PopulateBillingSelectListsAsync(Billing model, CancellationToken cancellationToken)
         {
+            model.PaymentTerms = await unitOfWork.Terms.GetFilprideTermsListAsyncByCode(cancellationToken);
             model.Vessels = await unitOfWork.Vessel.GetMsapVesselsSelectList(cancellationToken);
             model.Ports = await unitOfWork.Port.GetMsapPortsSelectList(cancellationToken);
             model.Customers = await unitOfWork.Billing.GetMsapCustomersWithBillablesSelectList(model.CustomerId, "", cancellationToken);

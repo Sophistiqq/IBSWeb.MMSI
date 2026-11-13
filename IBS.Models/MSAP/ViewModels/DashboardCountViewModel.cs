@@ -43,6 +43,9 @@ namespace IBS.Models.MSAP.ViewModels
         public List<VesselSchedule> MissingTicketSchedules { get; set; } = [];
         public int PendingCalculationCount { get; set; }
         public List<DispatchTicket> PendingCalculationTickets { get; set; } = [];
+        public int RatePendingCount { get; set; }
+        public int RatePendingOverdueCount { get; set; }
+        public List<RatePendingItemViewModel> RatePendingItems { get; set; } = [];
         public decimal KnownUnbilledCharges { get; set; }
         public decimal OutstandingBalance { get; set; }
         public Dictionary<string, int> BankingCounts { get; set; } = [];

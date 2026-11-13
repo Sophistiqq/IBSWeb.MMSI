@@ -1,6 +1,7 @@
 using System.Text.Json;
 using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
+using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.ViewModels;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
@@ -12,7 +13,8 @@ namespace IBS.Services.MSAP
     public class VesselScheduleService(
         IUnitOfWork unitOfWork,
         CustomerOrderSlipService customerOrderSlipService,
-        ILogger<VesselScheduleService> logger) : IVesselScheduleService
+        ILogger<VesselScheduleService> logger,
+        ICloudStorageService? cloudStorageService = null) : IVesselScheduleService
     {
         public async Task<ServiceResult<VesselScheduleBoardViewModel>> GetCalendarAsync(VesselScheduleBoardViewModel filters, CancellationToken ct = default)
         {
@@ -102,6 +104,15 @@ namespace IBS.Services.MSAP
                 model.ApprovedRevision = null;
                 model.ApprovedByUserId = null;
                 model.ApprovedAt = null;
+
+                foreach (var entry in model.ServiceEntries)
+                {
+                    entry.TariffBasis ??= TariffChargeBasis.PerHour;
+                    entry.BafMethod ??= BafCalculationMethod.PerHour;
+                    entry.ManualTariffRate = null;
+                    entry.ManualBafRate = null;
+                    entry.IsManualTariffOverride = false;
+                }
 
                 var error = await ValidateAsync(model, allowConflicts, ct);
                 if (error != null) return ServiceResult<int>.Failure(error, ServiceResultStatus.ValidationError);
@@ -202,7 +213,16 @@ namespace IBS.Services.MSAP
                     }
 
                     model.Status = MsapConstants.VesselScheduleStatus.Tentative;
-                    var error = await ValidateAsync(model, allowConflicts, ct);
+                    foreach (var entry in model.ServiceEntries)
+                {
+                    entry.TariffBasis ??= TariffChargeBasis.PerHour;
+                    entry.BafMethod ??= BafCalculationMethod.PerHour;
+                    entry.ManualTariffRate = null;
+                    entry.ManualBafRate = null;
+                    entry.IsManualTariffOverride = false;
+                }
+
+                var error = await ValidateAsync(model, allowConflicts, ct);
                     if (error != null)
                     {
                         result = ServiceResult.Failure(error, ServiceResultStatus.ValidationError);
@@ -210,6 +230,70 @@ namespace IBS.Services.MSAP
                     }
 
                     await SetTariffOverridesAsync(model, existing, ct);
+
+                    var changes = new List<string>();
+                    if (existing.PlannedStart != model.PlannedStart)
+                    {
+                        changes.Add($"Planned start '{existing.PlannedStart:dd MMM yyyy HH:mm}' -> '{model.PlannedStart:dd MMM yyyy HH:mm}'");
+                    }
+                    if (existing.PlannedEnd != model.PlannedEnd)
+                    {
+                        changes.Add($"Planned end '{existing.PlannedEnd:dd MMM yyyy HH:mm}' -> '{model.PlannedEnd:dd MMM yyyy HH:mm}'");
+                    }
+                    if ((existing.VoyageNumber ?? "") != (model.VoyageNumber ?? ""))
+                    {
+                        changes.Add($"Voyage '{existing.VoyageNumber ?? "—"}' -> '{model.VoyageNumber ?? "—"}'");
+                    }
+                    if (existing.CustomerId != model.CustomerId)
+                    {
+                        changes.Add($"Customer ID {existing.CustomerId} -> {model.CustomerId}");
+                    }
+                    if (existing.VesselId != model.VesselId)
+                    {
+                        changes.Add($"Vessel ID {existing.VesselId} -> {model.VesselId}");
+                    }
+                    if (existing.PortId != model.PortId)
+                    {
+                        changes.Add($"Port ID {existing.PortId} -> {model.PortId}");
+                    }
+                    if (existing.TerminalId != model.TerminalId)
+                    {
+                        changes.Add($"Terminal ID {existing.TerminalId} -> {model.TerminalId}");
+                    }
+                    if ((existing.AssignedTugboatIds ?? "[]") != (model.AssignedTugboatIds ?? "[]"))
+                    {
+                        changes.Add($"Assigned tugboats {existing.AssignedTugboatIds ?? "[]"} -> {model.AssignedTugboatIds ?? "[]"}");
+                    }
+                    if (existing.SbmaEnabled != model.SbmaEnabled)
+                    {
+                        changes.Add($"SBMA share {existing.SbmaEnabled} -> {model.SbmaEnabled}");
+                    }
+                    if ((existing.Notes ?? "") != (model.Notes ?? ""))
+                    {
+                        changes.Add("Notes updated");
+                    }
+
+                    var incomingEntries = model.ServiceEntries ?? [];
+                    var incomingIds = incomingEntries.Where(e => e.VesselScheduleServiceEntryId > 0).Select(e => e.VesselScheduleServiceEntryId).ToHashSet();
+                    var toRemove = existing.ServiceEntries.Where(e => !incomingIds.Contains(e.VesselScheduleServiceEntryId)).ToList();
+                    var addedCount = incomingEntries.Count(e => e.VesselScheduleServiceEntryId == 0);
+                    var modifiedServices = existing.ServiceEntries.Count(e =>
+                    {
+                        var matching = incomingEntries.FirstOrDefault(m => m.VesselScheduleServiceEntryId == e.VesselScheduleServiceEntryId);
+                        return matching != null && (matching.ServiceId != e.ServiceId || matching.TugboatId != e.TugboatId);
+                    });
+
+                    if (toRemove.Count > 0 || addedCount > 0 || modifiedServices > 0)
+                    {
+                        var sParts = new List<string>();
+                        if (addedCount > 0) sParts.Add($"{addedCount} added");
+                        if (toRemove.Count > 0) sParts.Add($"{toRemove.Count} removed");
+                        if (modifiedServices > 0) sParts.Add($"{modifiedServices} modified");
+                        changes.Add($"Services updated ({string.Join(", ", sParts)})");
+                    }
+
+                    var changeSummary = changes.Count > 0 ? string.Join("; ", changes) : "No field values changed";
+                    var previousRevision = existing.Revision;
 
                     if (existing.CustomerOrderSlipId.HasValue && job != null)
                     {
@@ -232,7 +316,7 @@ namespace IBS.Services.MSAP
                         job.EditedBy = username;
                         job.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
                         await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
-                            $"Updated COS #{job.CustomerOrderSlipNumber} for revised vessel schedule #{existing.VesselScheduleId} (Revision {existing.Revision}).", "COS", job.CustomerOrderSlipId, job.CustomerOrderSlipNumber), ct);
+                            $"Re-approval revision: Updated COS #{job.CustomerOrderSlipNumber} for vessel schedule #{existing.VesselScheduleId} (Rev {previousRevision} -> Rev {existing.Revision}, requires re-approval). Changes: {changeSummary}", "COS", job.CustomerOrderSlipId, job.CustomerOrderSlipNumber), ct);
                     }
                     else
                     {
@@ -258,9 +342,6 @@ namespace IBS.Services.MSAP
                     existing.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
                     // Sync expected service entries
-                    var incomingEntries = model.ServiceEntries ?? [];
-                    var incomingIds = incomingEntries.Where(e => e.VesselScheduleServiceEntryId > 0).Select(e => e.VesselScheduleServiceEntryId).ToHashSet();
-                    var toRemove = existing.ServiceEntries.Where(e => !incomingIds.Contains(e.VesselScheduleServiceEntryId)).ToList();
                     if (toRemove.Count > 0)
                     {
                         foreach (var rem in toRemove)
@@ -274,13 +355,22 @@ namespace IBS.Services.MSAP
                         var matching = incomingEntries.FirstOrDefault(e => e.VesselScheduleServiceEntryId == existingEntry.VesselScheduleServiceEntryId);
                         if (matching != null)
                         {
+                            var serviceChanged = existingEntry.ServiceId != matching.ServiceId;
                             existingEntry.TugboatId = matching.TugboatId;
                             existingEntry.ServiceId = matching.ServiceId;
-                            existingEntry.TariffBasis = matching.TariffBasis;
-                            existingEntry.BafMethod = matching.BafMethod;
-                            existingEntry.ManualTariffRate = matching.ManualTariffRate;
-                            existingEntry.IsManualTariffOverride = matching.IsManualTariffOverride;
-                            existingEntry.ManualBafRate = matching.ManualBafRate;
+                            if (serviceChanged)
+                            {
+                                existingEntry.TariffBasis = TariffChargeBasis.PerHour;
+                                existingEntry.BafMethod = BafCalculationMethod.PerHour;
+                                existingEntry.ManualTariffRate = null;
+                                existingEntry.IsManualTariffOverride = false;
+                                existingEntry.ManualBafRate = null;
+                            }
+                            else
+                            {
+                                existingEntry.TariffBasis ??= TariffChargeBasis.PerHour;
+                                existingEntry.BafMethod ??= BafCalculationMethod.PerHour;
+                            }
                         }
                     }
                     foreach (var newEntry in incomingEntries.Where(e => e.VesselScheduleServiceEntryId == 0))
@@ -290,15 +380,18 @@ namespace IBS.Services.MSAP
                             VesselScheduleId = existing.VesselScheduleId,
                             TugboatId = newEntry.TugboatId,
                             ServiceId = newEntry.ServiceId,
-                            TariffBasis = newEntry.TariffBasis,
-                            BafMethod = newEntry.BafMethod,
-                            ManualTariffRate = newEntry.ManualTariffRate,
-                            IsManualTariffOverride = newEntry.IsManualTariffOverride,
-                            ManualBafRate = newEntry.ManualBafRate
+                            TariffBasis = TariffChargeBasis.PerHour,
+                            BafMethod = BafCalculationMethod.PerHour,
+                            ManualTariffRate = null,
+                            IsManualTariffOverride = false,
+                            ManualBafRate = null
                         });
                     }
 
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Updated vessel schedule #{model.VesselScheduleId} (Revision {existing.Revision}). Overlap override: {allowConflicts}", "Vessel Schedule", model.VesselScheduleId), ct);
+                    var auditText = existing.CustomerOrderSlipId.HasValue
+                        ? $"Re-approval revision: Vessel schedule #{model.VesselScheduleId} (Rev {previousRevision} -> Rev {existing.Revision}, requires re-approval). Changes: {changeSummary}. Overlap override: {allowConflicts}"
+                        : $"Updated tentative vessel schedule #{model.VesselScheduleId}. Changes: {changeSummary}. Overlap override: {allowConflicts}";
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, auditText, "Vessel Schedule", model.VesselScheduleId), ct);
                     await unitOfWork.SaveAsync(ct);
                     result = ServiceResult.Success(existing.CustomerOrderSlipId.HasValue
                         ? $"Schedule updated (Revision {existing.Revision}). Reapproval is required before ticket entry."
@@ -494,7 +587,12 @@ namespace IBS.Services.MSAP
             }
         }
 
-        public async Task<ServiceResult> ChangeStatusAsync(int id, string status, string username, CancellationToken ct = default)
+        public Task<ServiceResult> ChangeStatusAsync(int id, string status, string username, CancellationToken ct = default)
+        {
+            return ChangeStatusAsync(id, status, username, null, ct);
+        }
+
+        public async Task<ServiceResult> ChangeStatusAsync(int id, string status, string username, string? reason, CancellationToken ct = default)
         {
             if (status is not (MsapConstants.VesselScheduleStatus.Cancelled or MsapConstants.VesselScheduleStatus.Completed))
             {
@@ -517,10 +615,19 @@ namespace IBS.Services.MSAP
                         result = ServiceResult.Failure("This schedule cannot make that transition.", ServiceResultStatus.ValidationError);
                         return;
                     }
+                    if (status == MsapConstants.VesselScheduleStatus.Cancelled)
+                    {
+                        var entryIds = schedule.ServiceEntries.Select(e => e.VesselScheduleServiceEntryId).ToList();
+                        if (entryIds.Count > 0 && await unitOfWork.DispatchTicket.GetAsync(t => t.VesselScheduleServiceEntryId.HasValue && entryIds.Contains(t.VesselScheduleServiceEntryId.Value) && t.Status != MsapConstants.DispatchTicketStatus.Deleted, ct) != null)
+                        {
+                            result = ServiceResult.Failure("Cannot cancel schedule with active Dispatch Tickets. Resolve or void active tickets first.", ServiceResultStatus.ValidationError);
+                            return;
+                        }
+                    }
                     if (schedule.CustomerOrderSlipId.HasValue)
                     {
                         result = status == MsapConstants.VesselScheduleStatus.Cancelled
-                            ? await customerOrderSlipService.CancelCustomerOrderSlipAsync(schedule.CustomerOrderSlipId.Value, username, ct)
+                            ? await customerOrderSlipService.CancelCustomerOrderSlipAsync(schedule.CustomerOrderSlipId.Value, username, reason, ct)
                             : await customerOrderSlipService.CompleteBookingAsync(schedule.CustomerOrderSlipId.Value, username, ct);
                         if (!result.IsSuccess)
                         {
@@ -531,7 +638,11 @@ namespace IBS.Services.MSAP
                     schedule.Status = status;
                     schedule.EditedBy = username;
                     schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Vessel schedule #{id} marked {status}; booking records retained.", "Vessel Schedule", id), ct);
+                    var reasonSuffix = string.IsNullOrWhiteSpace(reason) ? "" : $". Reason: {reason.Trim()}";
+                    var cancelAudit = status == MsapConstants.VesselScheduleStatus.Cancelled
+                        ? $"User-initiated cancellation: Vessel schedule #{id} cancelled by {username}{reasonSuffix}; booking records retained."
+                        : $"Vessel schedule #{id} marked {status}; booking records retained.";
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, cancelAudit, "Vessel Schedule", id), ct);
                     await unitOfWork.SaveAsync(ct);
                     result = ServiceResult.Success($"Schedule marked {status.ToLowerInvariant()}. Linked operational records were retained.");
                 }, ct);
@@ -825,6 +936,134 @@ namespace IBS.Services.MSAP
             }
 
             return conflicts;
+        }
+
+        public async Task<SpotQuotationViewModel?> GetSpotQuotationViewModelAsync(int scheduleId, int entryId, CancellationToken ct = default)
+        {
+            var schedule = await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(scheduleId, ct);
+            if (schedule == null) return null;
+            var entry = schedule.ServiceEntries.FirstOrDefault(e => e.VesselScheduleServiceEntryId == entryId);
+            if (entry == null) return null;
+
+            return new SpotQuotationViewModel
+            {
+                VesselScheduleId = scheduleId,
+                VesselScheduleServiceEntryId = entryId,
+                VesselName = schedule.Vessel?.VesselName,
+                TugboatName = entry.Tugboat?.TugboatName,
+                ServiceName = entry.Service?.ServiceName,
+                CustomerName = schedule.Customer?.CustomerName,
+                TariffRate = entry.ManualTariffRate ?? 0,
+                TariffBasis = entry.TariffBasis ?? TariffChargeBasis.PerHour,
+                BafRate = entry.ManualBafRate ?? 0,
+                BafMethod = entry.BafMethod ?? BafCalculationMethod.PerHour
+            };
+        }
+
+        public async Task<ServiceResult> SaveSpotQuotationAsync(SpotQuotationViewModel model, string username, CancellationToken ct = default)
+        {
+            if (model.TariffRate <= 0)
+            {
+                return ServiceResult.Failure("Basic Tariff rate must be greater than zero.", ServiceResultStatus.ValidationError);
+            }
+            if (model.BafRate < 0)
+            {
+                return ServiceResult.Failure("BAF rate cannot be negative.", ServiceResultStatus.ValidationError);
+            }
+            if (string.IsNullOrWhiteSpace(model.QuotationReference))
+            {
+                return ServiceResult.Failure("Quotation reference number is required.", ServiceResultStatus.ValidationError);
+            }
+
+            var result = ServiceResult.Failure("Failed to apply spot quotation.");
+            try
+            {
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    var schedule = await unitOfWork.VesselSchedule.GetForUpdateAsync(model.VesselScheduleId, ct);
+                    if (schedule == null)
+                    {
+                        result = ServiceResult.Failure("Schedule not found.", ServiceResultStatus.NotFound);
+                        return;
+                    }
+                    if (schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+                    {
+                        result = ServiceResult.Failure("Cannot set spot quotation for completed or cancelled schedules.", ServiceResultStatus.ValidationError);
+                        return;
+                    }
+
+                    var entry = schedule.ServiceEntries.FirstOrDefault(e => e.VesselScheduleServiceEntryId == model.VesselScheduleServiceEntryId);
+                    if (entry == null || entry.CancelledAt.HasValue)
+                    {
+                        result = ServiceResult.Failure("Expected service entry not found or cancelled.", ServiceResultStatus.NotFound);
+                        return;
+                    }
+
+                    string? savedAttachmentUrl = null;
+                    if (model.QuotationFile != null && model.QuotationFile.Length > 0 && cloudStorageService != null)
+                    {
+                        var ext = Path.GetExtension(model.QuotationFile.FileName).ToLowerInvariant();
+                        var allowedExts = new[] { ".pdf", ".png", ".jpg", ".jpeg" };
+                        if (!allowedExts.Contains(ext))
+                        {
+                            result = ServiceResult.Failure("Attachment must be a PDF, PNG, or JPG file.", ServiceResultStatus.ValidationError);
+                            return;
+                        }
+                        var fileName = $"SpotQuotation_{model.VesselScheduleId}_{model.VesselScheduleServiceEntryId}_{DateTime.UtcNow.Ticks}{ext}";
+                        savedAttachmentUrl = await cloudStorageService.UploadFileAsync(model.QuotationFile, fileName);
+                    }
+
+                    var priorTariff = entry.ManualTariffRate;
+                    var priorBaf = entry.ManualBafRate;
+
+                    entry.ManualTariffRate = model.TariffRate;
+                    entry.TariffBasis = model.TariffBasis;
+                    entry.ManualBafRate = model.BafRate;
+                    entry.BafMethod = model.BafMethod;
+                    entry.IsManualTariffOverride = true;
+
+                    var quotationNote = $"[Spot Quotation Ref: {model.QuotationReference.Trim()}] Approved by {username} on {DateTimeHelper.GetCurrentPhilippineTime():dd MMM yyyy HH:mm}. Basic: ₱{model.TariffRate:N2} ({model.TariffBasis}), BAF: ₱{model.BafRate:N2} ({model.BafMethod}){(string.IsNullOrWhiteSpace(model.Remarks) ? "" : $". Remarks: {model.Remarks.Trim()}")}{(savedAttachmentUrl == null ? "" : $". Document: {savedAttachmentUrl}")}";
+                    schedule.Notes = string.IsNullOrWhiteSpace(schedule.Notes) ? quotationNote : $"{schedule.Notes}\n{quotationNote}";
+                    schedule.EditedBy = username;
+                    schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+
+                    // Requirement 3: Move related dispatch tickets forward without re-encoding by Operations
+                    var ticketsRecalculated = 0;
+                    if (schedule.CustomerOrderSlipId.HasValue)
+                    {
+                        var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId && t.Status != MsapConstants.DispatchTicketStatus.Deleted, ct)).ToList();
+                        foreach (var ticket in tickets)
+                        {
+                            var blocker = await ScheduledTicketCharges.ApplyAsync(unitOfWork, ticket, schedule, username, ct);
+                            if (blocker == null)
+                            {
+                                ticket.Status = MsapConstants.DispatchTicketStatus.ForBilling;
+                            }
+                            ticket.EditedBy = username;
+                            ticket.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                            ticketsRecalculated++;
+                        }
+                    }
+
+                    // Requirement 6: Audit trail
+                    var auditActivity = $"Commercial spot quotation {model.QuotationReference.Trim()} approved by {username} for schedule #{schedule.VesselScheduleId}, entry #{entry.VesselScheduleServiceEntryId}: Basic ₱{model.TariffRate:N2} ({model.TariffBasis}), BAF ₱{model.BafRate:N2} ({model.BafMethod}) [Prior: Basic {priorTariff?.ToString("N2") ?? "None"}, BAF {priorBaf?.ToString("N2") ?? "None"}]. Recalculated {ticketsRecalculated} ticket(s).";
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, auditActivity, "Vessel Schedule", schedule.VesselScheduleId), ct);
+
+                    if (schedule.CustomerOrderSlipId.HasValue)
+                    {
+                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, auditActivity, "COS", schedule.CustomerOrderSlipId.Value), ct);
+                    }
+
+                    await unitOfWork.SaveAsync(ct);
+                    result = ServiceResult.Success($"Spot quotation {model.QuotationReference.Trim()} applied successfully. Basic: ₱{model.TariffRate:N2}, BAF: ₱{model.BafRate:N2}. {(ticketsRecalculated > 0 ? $"{ticketsRecalculated} ticket(s) updated to For Billing." : "")}");
+                }, ct);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to save spot quotation for schedule {ScheduleId}, entry {EntryId}", model.VesselScheduleId, model.VesselScheduleServiceEntryId);
+                return result.IsSuccess ? ServiceResult.Failure("Failed to apply spot quotation. Please try again.") : result;
+            }
         }
     }
 }

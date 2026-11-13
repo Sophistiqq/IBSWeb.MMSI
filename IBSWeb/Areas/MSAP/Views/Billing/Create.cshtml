@@ -149,7 +149,13 @@
                     <div class="billing-recipient">
                         <div><span class="ui-caption ui-muted">Statement address</span><p id="recipientAddress" class="ui-body">—</p></div>
                         <div><span class="ui-caption ui-muted">Statement TIN</span><p id="recipientTin" class="ui-body">—</p></div>
-                        <div><span class="ui-caption ui-muted">Payment terms</span><p id="recipientTerms" class="ui-body">—</p></div>
+                        <div>
+                            <span class="ui-caption ui-muted">Payment terms override</span>
+                            <select asp-for="Terms" asp-items="@Model.PaymentTerms" class="modern-input js-modern-select" id="billingTerms">
+                                <option value="">-- Customer Default --</option>
+                            </select>
+                            <span class="ui-caption ui-muted" style="display:block;margin-top:2px;">Master file default: <strong id="recipientTerms">—</strong></span>
+                        </div>
                     </div>
                     <p id="recipientNote" class="ui-caption ui-muted">The statement is addressed to the service customer.</p>
                 </section>
@@ -194,6 +200,20 @@
                         <strong>Combined amount due</strong><strong id="combinedDue">0.00</strong>
                     </section>
                 </div>
+
+                <section class="ui-panel ui-stack" aria-labelledby="remarksHeading">
+                    <div class="billing-section-heading">
+                        <h2 id="remarksHeading" class="ui-section-title flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary" aria-hidden="true">notes</span>
+                            Encoder Remarks / Notes for Approvers
+                        </h2>
+                        <span class="ui-caption ui-muted">Special terms, tariff basis clarifications, or instructions for Sir RML & Ma'am Kim</span>
+                    </div>
+                    <div class="ui-field">
+                        <textarea asp-for="Remarks" class="modern-input" rows="2" maxlength="500" placeholder="e.g. Rate approved by Sir RML via email; 30D terms granted per customer request..."></textarea>
+                        <span asp-validation-for="Remarks" class="text-error"></span>
+                    </div>
+                </section>
 
                 <footer class="billing-footer">
                     <p id="preparationNote" class="ui-caption ui-muted">One preparation · One billing number</p>

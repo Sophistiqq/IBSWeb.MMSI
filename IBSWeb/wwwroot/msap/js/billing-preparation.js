@@ -62,6 +62,9 @@ $(function () {
         $('#recipientAddress').text(selected?.address || '—');
         $('#recipientTin').text(selected?.tinNo || '—');
         $('#recipientTerms, #bookingTerms').text(selected?.terms || '—');
+        if (selected?.terms && !$('#billingTerms').data('user-overridden')) {
+            $('#billingTerms').val(selected.terms).trigger('change');
+        }
         $('#recipientNote').text(isPrincipal ? 'Both Basic and BAF statements are addressed to the selected principal.' : 'The statement is addressed to the service customer.');
     }
 

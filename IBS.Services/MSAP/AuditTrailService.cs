@@ -37,10 +37,18 @@ namespace IBS.Services.MSAP
             // 2. Fetch related audits in segmented batches to avoid massive SQL OR chains that can timeout
             var allAudits = new List<AuditTrail>();
 
-            // COS Audits
+            // COS & Linked Vessel Schedule Audits
             allAudits.AddRange(await unitOfWork.AuditTrail.GetAllAsync(a =>
                 a.DocumentType == "COS" && (a.RecordId == customerOrderSlipId || a.ReferenceNumber == joNumber || a.Activity.Contains(joNumber)),
                 cancellationToken));
+
+            var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
+            if (schedule != null)
+            {
+                allAudits.AddRange(await unitOfWork.AuditTrail.GetAllAsync(a =>
+                    a.DocumentType == "Vessel Schedule" && a.RecordId == schedule.VesselScheduleId,
+                    cancellationToken));
+            }
 
             // Dispatch & Tariff Audits
             if (dtIds.Any() || dtNumbers.Any())

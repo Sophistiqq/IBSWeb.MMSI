@@ -10,9 +10,10 @@
     var activeEntries = entries.Where(entry => !entry.CancelledAt.HasValue && !(Model.DispatchTickets.Any(t => t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId && t.Status == MsapConstants.DispatchTicketStatus.Deleted) && !Model.DispatchTickets.Any(t => t.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId && t.Status != MsapConstants.DispatchTicketStatus.Deleted))).ToList();
     var pendingServices = activeEntries.Where(entry => !Model.DispatchTickets.Any(ticket => ticket.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId && ticket.Status != MsapConstants.DispatchTicketStatus.Deleted)).ToList();
     var approvalPending = booking != null && (booking.ApprovedRevision != booking.Revision || booking.Status == MsapConstants.VesselScheduleStatus.Tentative);
+    var isReapproval = booking != null && booking.ApprovedRevision.HasValue && (booking.ApprovedRevision != booking.Revision || booking.Status == MsapConstants.VesselScheduleStatus.Tentative);
     var bookingClosed = booking?.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
     var canRecord = ViewBag.CanCreateDispatchTicket == true && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open
-        && !bookingClosed && ViewBag.HasBilling != true;
+        && !bookingClosed && ViewBag.HasBilling != true && !isReapproval;
     ViewData["CanRecordExpectedService"] = canRecord;
     ViewData["CanCancelExpectedService"] = ViewBag.CanEditCustomerOrderSlip == true && !bookingClosed
         && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && ViewBag.HasBilling != true;
@@ -52,7 +53,14 @@
         </header>
         @if (approvalPending)
         {
-            <p class="ui-panel ui-body ui-attention">Approval pending · Actual ticket entry is allowed. Charges and billing remain pending until schedule approval.</p>
+            if (isReapproval)
+            {
+                <p class="ui-panel ui-body ui-attention">Schedule revision pending reapproval by Sir RML · Ticket recording and charge calculations are blocked until reapproved.</p>
+            }
+            else
+            {
+                <p class="ui-panel ui-body ui-attention">Approval pending · Actual ticket entry is allowed. Charges and billing remain pending until schedule approval.</p>
+            }
         }
         <section class="ui-panel ui-panel--compact ui-stack" id="cosBookingDetails" aria-label="COS booking details">
             <dl class="schedule-review-fields cos-details-fields">

@@ -470,6 +470,11 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("print_wht");
 
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("remarks");
+
                     b.Property<int>("Revision")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -2291,6 +2296,11 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AttachmentUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("attachment_url");
 
                     b.Property<string>("ChangesJson")
                         .IsRequired()

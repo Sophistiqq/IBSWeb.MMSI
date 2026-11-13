@@ -10,6 +10,16 @@
     else if (Model.IsPendingRate)
     {
         <small class="ui-caption schedule-review-attention">Rate pending</small>
+        @if (ViewBag.CanConfirm == true || ViewBag.CanManageRates == true || ViewBag.CanCaptureRates == true)
+        {
+            <button type="button" class="modern-btn-secondary" style="padding: 2px 6px; font-size: 11px; margin-left: 4px;"
+                    data-spot-quotation
+                    data-schedule-id="@Model.ScheduleId"
+                    data-entry-id="@Model.EntryId"
+                    title="Enter 24h Spot Quotation Rate">
+                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">request_quote</span> Spot Rate
+            </button>
+        }
         @if (Model.CanCapture && (ViewBag.CanManageRates == true || ViewBag.CanCaptureRates == true))
         {
             <a asp-controller="RateUpload" asp-action="Editor"

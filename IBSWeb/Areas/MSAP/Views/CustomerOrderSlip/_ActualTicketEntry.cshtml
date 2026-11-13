@@ -150,16 +150,16 @@
                     <tbody>
                         <tr>
                             <th scope="row">Basic tariff</th><td>@tariffMethod</td>
-                            <td>@(calculated ? savedTicket.DispatchRate.ToString("N2") : entry?.ManualTariffRate?.ToString("N2") ?? "Pending")</td>
-                            <td>@((calculated ? savedTicket.IsManualTariffRate : entry?.ManualTariffRate.HasValue == true) ? approvalPending ? "Proposed manual" : "Approved manual" : "Rate table")</td>
+                            <td>@(calculated ? savedTicket.DispatchRate.ToString("N2") : "Pending")</td>
+                            <td>@(calculated ? (savedTicket.IsManualTariffRate ? "Manual rate" : "Rate table") : "Rate table")</td>
                             <td>@(calculated ? savedTicket.DispatchBillingAmount.ToString("N2") : "Pending")</td>
                             <td>@(calculated ? $"{savedTicket.DispatchDiscount:0.##}%" : "—")</td>
                             <td>@(calculated ? savedTicket.DispatchNetRevenue.ToString("N2") : "Pending")</td>
                         </tr>
                         <tr>
                             <th scope="row">BAF</th><td>@bafMethod</td>
-                            <td>@(calculated ? savedTicket.BAFRate.ToString("N2") : entry?.ManualBafRate?.ToString("N2") ?? "Pending")</td>
-                            <td>@((calculated ? savedTicket.IsManualBafRate : entry?.ManualBafRate.HasValue == true) ? approvalPending ? "Proposed manual" : "Approved manual" : "Rate table")</td>
+                            <td>@(calculated ? savedTicket.BAFRate.ToString("N2") : "Pending")</td>
+                            <td>@(calculated ? (savedTicket.IsManualBafRate ? "Manual rate" : "Rate table") : "Rate table")</td>
                             <td>@(calculated ? savedTicket.BAFBillingAmount.ToString("N2") : "Pending")</td>
                             <td>@(calculated ? $"{savedTicket.BAFDiscount:0.##}%" : "—")</td>
                             <td>@(calculated ? savedTicket.BAFNetRevenue.ToString("N2") : "Pending")</td>

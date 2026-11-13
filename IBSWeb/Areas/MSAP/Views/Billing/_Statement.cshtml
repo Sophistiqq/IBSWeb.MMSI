@@ -60,7 +60,7 @@
                             <td class="border-bottom-dark">@Model.AddressLine3</td>
                             <td></td>
                             <td><b>TERMS:</b></td>
-                            <td class="border-bottom-dark">@(Model.PrincipalId != null ? Model.Principal?.Terms : Model.Customer.CustomerTerms)</td>
+                            <td class="border-bottom-dark">@(string.IsNullOrWhiteSpace(Model.Terms) ? (Model.PrincipalId != null ? Model.Principal?.Terms : Model.Customer.CustomerTerms) : Model.Terms)</td>
                         </tr>
                     </tbody>
                 </table>

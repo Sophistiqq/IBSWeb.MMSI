@@ -141,6 +141,10 @@ namespace IBS.Models.MSAP
         [StringLength(15)]
         public string? Terms { get; set; }
 
+        [Column("remarks")]
+        [StringLength(500)]
+        public string? Remarks { get; set; }
+
         [Column("billing_year")]
         public int Year { get; set; }
 
@@ -167,6 +171,9 @@ namespace IBS.Models.MSAP
         #endregion
 
         #region ---Select Lists---
+
+        [NotMapped]
+        public List<SelectListItem>? PaymentTerms { get; set; }
 
         [NotMapped]
         public List<SelectListItem>? Customers { get; set; }

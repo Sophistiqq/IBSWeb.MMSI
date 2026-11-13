@@ -155,7 +155,6 @@
         <aside class="schedule-summary-sidebar" aria-label="Review summary">
             <section class="schedule-summary-card ui-panel ui-stack">
                 <h2 class="ui-section-title">@(pending ? "Review summary" : "Booking summary")</h2>
-                <span class="schedule-status-pill">@(manualEntries.Count > 0 ? "Non-recurring" : "Recurring")</span>
                 <div class="ui-field"><span class="ui-caption ui-muted">Booking reference</span><span class="ui-value">Booking #@Model.VesselScheduleId</span></div>
                 <div class="schedule-metrics-list">
                     <div class="schedule-metric-row"><span>Tugboats</span><strong>@tugs.Count</strong></div>
@@ -282,4 +281,5 @@
     </script>
     <script src="~/msap/js/schedule-confirmation.js" asp-append-version="true"></script>
     <script src="~/msap/js/schedule-actions.js" asp-append-version="true"></script>
+    <script src="~/msap/js/spot-quotation.js" asp-append-version="true"></script>
 }

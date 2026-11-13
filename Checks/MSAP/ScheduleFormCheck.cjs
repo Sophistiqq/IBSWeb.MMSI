@@ -4,9 +4,14 @@ const vm = require('node:vm');
 const path = require('node:path');
 const source = fs.readFileSync(path.resolve(__dirname, '../../IBSWeb/wwwroot/msap/js/vessel-schedule-form.js'), 'utf8');
 const view = fs.readFileSync(path.resolve(__dirname, '../../IBSWeb/Areas/MSAP/Views/VesselSchedule/_ScheduleForm.cshtml'), 'utf8');
-for (const role of ['js-service-select', 'js-tariff-basis', 'js-baf-method']) {
+for (const role of ['js-service-select']) {
     assert.equal(view.split(`class="js-modern-select ${role}"`).length - 1, 2, `${role} must use ModernSelect in saved rows and the template.`);
 }
+assert(!view.includes('js-tariff-basis'), 'Tariff basis selector must be removed from Operations scheduling form.');
+assert(!view.includes('js-baf-method'), 'BAF method selector must be removed from Operations scheduling form.');
+assert(!view.includes('js-tariff-rate'), 'Manual tariff rate input must be removed from Operations scheduling form.');
+assert(!view.includes('js-baf-rate'), 'Manual BAF rate input must be removed from Operations scheduling form.');
+assert(!view.includes('id="RateMode"'), 'Rate mode toggle must be removed from Operations scheduling form.');
 const addRow = source.slice(source.indexOf('    function addServiceRow('), source.indexOf('    if (addTugboatBtn'));
 {
     const newRow = {querySelectorAll: () => []};
@@ -50,92 +55,13 @@ for (const valid of [true, false]) {
     assert.equal(nativeChecks, valid ? 1 : 0, 'Hidden invalid selects must be handled before native reportValidity tries to focus them.');
     if (!valid) assert.equal(message, 'Please choose a value for Tugboat.');
 }
-const rates = source.slice(source.indexOf('    function updateRateProvenance('), source.indexOf('    function refreshAllRates('));
-const pending = [];
-let recurring = true;
-let currentRow = null;
-const context = vm.createContext({
-    AbortController, URLSearchParams,
-    form: {dataset: {rateUrl: '/rates'}},
-    getScheduleContext: () => ({customerId: 1, terminalId: 2, date: '2026-10-16T08:00'}),
-    updateSummary() {}, manualRates: () => !recurring,
-    servicesContainer: {querySelectorAll: () => currentRow ? [currentRow] : []},
-    fetch: () => new Promise(resolve => pending.push(resolve))
-});
-vm.runInContext(rates + '\nthis.lookup = fetchTariffAndBaf; this.provenance = updateRateProvenance; this.applyLock = applyRateLock;', context);
-function row() {
-    const elements = Object.fromEntries(['tariff-rate', 'baf-rate', 'tariff-provenance', 'baf-provenance'].map(key => ['.js-' + key, {value: '', dataset: {}, classList: {toggle() {}}}]));
-    return {isConnected: true, querySelector: selector => elements[selector],
-        querySelectorAll: () => [elements['.js-tariff-rate'], elements['.js-baf-rate']]};
-}
-function respond(data) { pending.shift()({ok: true, json: async () => data}); }
-(async () => {
-    const entry = row();
-    currentRow = entry;
-    const first = context.lookup(entry, 1);
-    assert.equal(entry.querySelector('.js-tariff-rate').dataset.lookup, 'loading');
-    respond({exists: true, tariffRate: 10000, bafRate: 29000});
-    await first;
-    assert.equal(entry.querySelector('.js-tariff-rate').value, '', 'A table estimate must never submit as a manual override.');
-    assert.equal(entry.querySelector('.js-baf-rate').placeholder, '29,000.00');
-    assert.equal(entry.querySelector('.js-baf-rate').dataset.lookup, 'found');
-    assert.equal(entry.querySelector('.js-baf-rate').readOnly, true, 'Detected table rates must be read-only.');
-
-    const noMatch = context.lookup(entry, 3);
-    respond({exists: false});
-    await noMatch;
-    assert.equal(entry.querySelector('.js-baf-rate').readOnly, false, 'Manual entry is available only without a table match.');
-    entry.querySelector('.js-baf-rate').value = '0';
-    context.provenance(entry);
-    assert.equal(entry.querySelector('.js-baf-provenance').textContent, 'Manual rate', 'Zero is a valid manual rate.');
-    const old = context.lookup(entry, 1);
-    const latest = context.lookup(entry, 2);
-    respond({exists: true, tariffRate: 1, bafRate: 2});
-    respond({exists: true, tariffRate: 35000, bafRate: 1200});
-    await Promise.all([old, latest]);
-    assert.equal(entry.querySelector('.js-tariff-rate').placeholder, '35,000.00', 'An old lookup must not overwrite a newer selection.');
-    assert.equal(entry.querySelector('.js-baf-rate').value, '0', 'A lookup must preserve a previously entered manual amount.');
-    assert.equal(entry.querySelector('.js-baf-rate').readOnly, false);
-    assert.equal(entry.querySelector('.js-baf-provenance').textContent, 'Overrides table rate');
-
-    const missing = context.lookup(entry, 3);
-    respond({exists: false});
-    await missing;
-    assert.equal(entry.querySelector('.js-tariff-provenance').textContent, 'No table match');
-    await context.lookup(entry, 0);
-    assert.equal(entry.querySelector('.js-tariff-rate').placeholder, 'From table', 'Clearing a service must remove its old estimate.');
-    assert.equal(entry.querySelector('.js-tariff-rate').dataset.lookup, 'unchecked');
-    const unavailable = context.lookup(entry, 1);
-    pending.shift()({ok: false});
-    await unavailable;
-    assert.equal(entry.querySelector('.js-tariff-provenance').textContent, 'Lookup unavailable');
-    assert.equal(entry.querySelector('.js-tariff-rate').readOnly, true, 'A failed lookup is not proof of a missing table rate.');
-    entry.querySelector('.js-baf-rate').value = '999';
-    recurring = false;
-    const override = context.lookup(entry, 4);
-    respond({exists: true, tariffRate: 7000, bafRate: 1200});
-    await override;
-    assert.equal(entry.querySelector('.js-baf-rate').readOnly, false, 'Non-recurring keeps a detected table rate editable.');
-    assert.equal(entry.querySelector('.js-baf-rate').value, '999', 'A detected rate must not wipe a manual entry in non-recurring mode.');
-    assert.equal(entry.querySelector('.js-baf-rate').placeholder, '1,200.00', 'The table estimate stays visible as the placeholder.');
-    assert.equal(entry.querySelector('.js-baf-provenance').textContent, 'Overrides table rate', 'A typed override over a table estimate is reported as an override in non-recurring mode.');
-    recurring = true;
-    context.applyLock();
-    assert.equal(entry.querySelector('.js-baf-rate').readOnly, true, 'Recurring locks detected table rates again.');
-    assert.equal(entry.querySelector('.js-baf-rate').value, '', 'Switching back to recurring lets the detected rate supersede the manual entry.');
-    recurring = false;
-    for (const state of ['found', 'unchecked', 'loading', 'missing', 'error']) {
-        for (const selector of ['.js-tariff-rate', '.js-baf-rate']) {
-            entry.querySelector(selector).dataset.lookup = state;
-        }
-        context.applyLock();
-        for (const selector of ['.js-tariff-rate', '.js-baf-rate']) {
-            assert.equal(entry.querySelector(selector).readOnly, false, 'Non-recurring must allow both rates regardless of lookup state.');
-        }
-    }
-    assert(source.includes("$(servicesContainer).on('change'"), 'ModernSelect emits jQuery change events; tug assignments must receive them.');
-    console.log('PASS: recurring mode keeps detected rates read-only and out of manual fields; missing matches allow zero/manual entry; stale responses are ignored; failed lookups stay locked; non-recurring keeps every rate editable even when a table rate is found.');
-})().catch(error => { console.error(error); process.exitCode = 1; });
+assert(!source.includes('updateRateProvenance'), 'updateRateProvenance must be removed from scheduling form JS.');
+assert(!source.includes('fetchTariffAndBaf'), 'fetchTariffAndBaf must be removed from scheduling form JS.');
+assert(!source.includes('manualRates'), 'manualRates must be removed from scheduling form JS.');
+assert(!source.includes('applyRateLock'), 'applyRateLock must be removed from scheduling form JS.');
+assert(!source.includes('refreshAllRates'), 'refreshAllRates must be removed from scheduling form JS.');
+assert(source.includes("$(servicesContainer).on('change'"), 'ModernSelect emits jQuery change events; tug assignments must receive them.');
+console.log('PASS: Operations scheduling form strictly decouples rates, removes recurrence toggles, and initializes ModernSelect cleanly.');
 assert(!view.includes('id="iocToggle"') && !view.includes('id="commercialHeading"'));
 assert(view.includes('id="summaryIoc"') && view.includes('id="summarySbma"'));
 console.log('PASS: Scheduling shows commercial defaults as summary information without editors.');

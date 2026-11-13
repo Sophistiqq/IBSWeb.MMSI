@@ -5,17 +5,22 @@
     var day = Model.UpdatedAt.Date;
     var dateValue = day.ToString("yyyy-MM-dd");
 
+    var canCommercialRateReview = Model.CanApproveSchedule || Model.CanManageRates || Model.CanViewRates;
+    int ratePendingActionCount = canCommercialRateReview ? Model.RatePendingCount : 0;
+
     int opsActionCount = (Model.CanApproveSchedule ? Model.ScheduleReviews : 0)
         + (Model.CanFollowUpTickets ? Model.MissingTicketCount : 0);
 
     int billingActionCount = (Model.CanApproveBilling ? Model.ForPosting : 0)
         + (Model.CanApproveRates ? Model.RateUploadReviews : 0)
         + (Model.CanReviewCalculations ? Model.PendingCalculationCount : 0)
+        + ratePendingActionCount
         + (Model.CanViewBanking ? Model.BankingCounts.GetValueOrDefault("Returned") : 0);
 
     int approvalsActionCount = (Model.CanApproveSchedule ? Model.ScheduleReviews : 0)
         + (Model.CanApproveBilling ? Model.ForPosting : 0)
         + (Model.CanApproveRates ? Model.RateUploadReviews : 0)
+        + ratePendingActionCount
         + ((Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges) ? Model.OtherTugChargeReviewCount : 0);
 
     int apActionCount = ((Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges) ? Model.OtherTugChargeReviewCount : 0)
@@ -27,6 +32,7 @@
     if (Model.CanApproveRates) totalActionCount += Model.RateUploadReviews;
     if (Model.CanFollowUpTickets) totalActionCount += Model.MissingTicketCount;
     if (Model.CanReviewCalculations) totalActionCount += Model.PendingCalculationCount;
+    if (canCommercialRateReview) totalActionCount += Model.RatePendingCount;
     if (Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges) totalActionCount += Model.OtherTugChargeReviewCount;
     if (Model.CanManageOtherTugCharges) totalActionCount += Model.MissingOtherTugTicketCount;
     if (Model.CanViewBanking) totalActionCount += Model.BankingCounts.GetValueOrDefault("Returned");
@@ -300,7 +306,42 @@ else
                             }
                         }
 
-                        @* 6. Provider Bills Awaiting Confirmation *@
+                        @* 6. 24h Spot Rate Pending Queue (Commercial) *@
+                        @if (canCommercialRateReview && Model.RatePendingItems.Count > 0)
+                        {
+                            @foreach (var item in Model.RatePendingItems)
+                            {
+                                <article class="dashboard-action-item @(item.IsPast24h ? "ui-critical" : "ui-attention")" data-categories="billing approvals" data-hover-id="hover-spot-@item.ScheduleId-@item.EntryId">
+                                    <div class="dashboard-action-item-header">
+                                        <span class="dashboard-action-item-ref">@(string.IsNullOrEmpty(item.DispatchNumber) ? $"Booking #{item.ScheduleId}" : $"Ticket #{item.DispatchNumber}")</span>
+                                        <span class="dashboard-action-item-badge @(item.IsPast24h ? "ui-critical" : "ui-attention")">
+                                            @(item.IsPast24h ? "⚠ >24h Overdue" : $"{Math.Floor(item.HoursPending)}h Pending")
+                                        </span>
+                                    </div>
+                                    <div class="dashboard-action-item-main">
+                                        <div class="dashboard-action-item-title">@item.VesselName · @item.ServiceName</div>
+                                    </div>
+                                    <div class="dashboard-action-item-meta">
+                                        @item.CustomerName · @item.TerminalName
+                                    </div>
+                                    <div class="dashboard-action-item-footer">
+                                        <span class="dashboard-action-item-hint">
+                                            @(item.IsPast24h ? "24h SLA Breached · Spot quote required" : $"Pending {Math.Floor(item.HoursPending)}h of 24h SLA")
+                                        </span>
+                                        @if (item.ScheduleId > 0)
+                                        {
+                                            <a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@item.ScheduleId" class="dashboard-action-item-btn">Set Spot Rate &rarr;</a>
+                                        }
+                                        else if (item.CustomerOrderSlipId.HasValue)
+                                        {
+                                            <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@item.CustomerOrderSlipId" class="dashboard-action-item-btn">Inspect COS &rarr;</a>
+                                        }
+                                    </div>
+                                </article>
+                            }
+                        }
+
+                        @* 7. Provider Bills Awaiting Confirmation *@
                         @if (Model.CanManageOtherTugCharges || Model.CanConfirmOtherTugCharges)
                         {
                             @foreach (var charge in Model.OtherTugChargeReviews)
@@ -729,6 +770,41 @@ else
                             else
                             {
                                 <a asp-controller="DispatchTicket" asp-action="Index" asp-route-status="@MsapConstants.DispatchTicketStatus.CalculationPending">Open dispatch registry &rarr;</a>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+
+            @if (canCommercialRateReview)
+            {
+                @foreach (var item in Model.RatePendingItems)
+                {
+                    <div id="hover-spot-@item.ScheduleId-@item.EntryId" class="dashboard-hover-card" popover="manual" role="dialog" aria-label="Spot rate preview for @item.VesselName">
+                        <div class="dashboard-hover-card-header">
+                            <h4>@(string.IsNullOrEmpty(item.DispatchNumber) ? $"Booking #{item.ScheduleId}" : $"Ticket #{item.DispatchNumber}")</h4>
+                            <span class="dashboard-hover-card-status @(item.IsPast24h ? "ui-critical" : "")">@(item.IsPast24h ? "Overdue (>24h SLA)" : "Rate Pending")</span>
+                        </div>
+                        <dl>
+                            <dt>Customer</dt>
+                            <dd>@item.CustomerName</dd>
+                            <dt>Vessel / Service</dt>
+                            <dd>@item.VesselName · @item.ServiceName (@item.TugboatName)</dd>
+                            <dt>Terminal</dt>
+                            <dd>@item.TerminalName</dd>
+                            <dt>Service / Planned Date</dt>
+                            <dd>@item.PlannedDate.ToString("dd MMMM yyyy")</dd>
+                            <dt>Time in Queue</dt>
+                            <dd class="@(item.IsPast24h ? "text-danger font-bold" : "")">@item.HoursPending hours pending @(item.IsPast24h ? "(24h spot quotation SLA breached)" : "")</dd>
+                        </dl>
+                        <div class="dashboard-hover-card-footer">
+                            @if (item.ScheduleId > 0)
+                            {
+                                <a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@item.ScheduleId">Open Schedule &rarr;</a>
+                            }
+                            else if (item.CustomerOrderSlipId.HasValue)
+                            {
+                                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@item.CustomerOrderSlipId">Open COS &rarr;</a>
                             }
                         </div>
                     </div>

@@ -5,9 +5,6 @@
     form.noValidate = true;
 
     function validateForm() {
-        form.querySelectorAll('[data-service-row]').forEach(row => {
-            updateRateProvenance(row);
-        });
         const invalidSelect = [...form.querySelectorAll('select.js-modern-select')].find(select => !select.checkValidity());
         if (invalidSelect) {
             const label = invalidSelect.getAttribute('aria-label') || invalidSelect.labels?.[0]?.textContent.trim() || 'tugboat';
@@ -48,10 +45,6 @@
 
     const port = document.getElementById('PortId');
     const terminal = document.getElementById('TerminalId');
-    const rateMode = document.getElementById('RateMode');
-    function manualRates() {
-        return rateMode?.checked === false;
-    }
     const message = document.getElementById('terminalMessage');
     let terminalRequest;
 
@@ -173,30 +166,6 @@
             summaryServiceCount.textContent = allServiceRows.length;
         }
 
-        const selectedRows = allServiceRows.filter(row => row.querySelector('.js-service-select')?.value);
-        let manualCount = 0;
-        function rateSummary(selector) {
-            if (!selectedRows.length) return 'No services selected';
-            let manual = 0;
-            let found = 0;
-            selectedRows.forEach(row => {
-                const input = row.querySelector(selector);
-                if (input.value !== '') manual++;
-                else if (input.dataset.lookup === 'found') found++;
-            });
-            manualCount += manual;
-            const unchecked = selectedRows.length - manual - found;
-            return `${found} table estimate · ${manual} manual` + (unchecked ? ` · ${unchecked} unresolved` : '');
-        }
-        document.getElementById('summaryTariffRates').textContent = rateSummary('.js-tariff-rate');
-        document.getElementById('summaryBafRates').textContent = rateSummary('.js-baf-rate');
-        document.getElementById('summaryRecurringBadge').textContent = manualRates() || manualCount ? 'Non-recurring' : 'Recurring';
-        const summaryNotice = document.getElementById('summaryRatesNotice');
-        summaryNotice.textContent = manualCount
-            ? 'Manual rates need review. Table estimates use the planned date; final rates use actual service start.'
-            : 'Table estimates use the planned date. Final rates use actual service start.';
-        summaryNotice.classList.toggle('schedule-rate-warning', manualCount > 0);
-
         if (noTugsNotice) {
             noTugsNotice.hidden = tugCards.length > 0;
         }
@@ -301,90 +270,6 @@
         };
     }
 
-    function updateRateProvenance(row) {
-        for (const kind of ['tariff', 'baf']) {
-            const input = row.querySelector(`.js-${kind}-rate`);
-            input.required = false;
-            const isFilled = input.value !== '';
-            const valNum = isFilled ? Number(input.value) : null;
-            const isZero = valNum === 0;
-            const overridesTable = isFilled && input.dataset.lookup === 'found';
-            input.classList.toggle('schedule-rate-override', overridesTable);
-            input.classList.toggle('schedule-rate-missing', isFilled && input.dataset.lookup === 'missing');
-
-            let provText;
-            if (isFilled) {
-                if (kind === 'baf' && isZero) {
-                    provText = overridesTable ? 'Zero BAF · overrides table' : 'Zero BAF';
-                } else if (kind === 'tariff' && isZero) {
-                    provText = overridesTable ? 'Zero tariff · overrides table' : 'Zero tariff';
-                } else {
-                    provText = overridesTable ? 'Overrides table rate' : 'Manual rate';
-                }
-            } else {
-                provText = ({ found: 'Table estimate · planned date', missing: 'Rate pending', loading: 'Checking table…', error: 'Lookup unavailable' }[input.dataset.lookup] || 'Rate not checked');
-            }
-            row.querySelector(`.js-${kind}-provenance`).textContent = provText;
-        }
-    }
-
-    async function fetchTariffAndBaf(row, serviceId) {
-        row.rateRequest?.abort();
-        const request = row.rateRequest = new AbortController();
-        const inputs = [row.querySelector('.js-tariff-rate'), row.querySelector('.js-baf-rate')];
-        const ctx = getScheduleContext();
-        const canLookup = form.dataset.rateUrl && ctx.customerId && ctx.terminalId && ctx.date && serviceId;
-        inputs.forEach(input => {
-            input.dataset.lookup = canLookup ? 'loading' : 'unchecked';
-            input.placeholder = 'From table';
-            input.readOnly = !manualRates();
-        });
-        updateRateProvenance(row);
-        updateSummary();
-        if (!canLookup) return;
-        const params = new URLSearchParams({ customerId: ctx.customerId, terminalId: ctx.terminalId, serviceId, date: ctx.date });
-        try {
-            const response = await fetch(form.dataset.rateUrl + '?' + params, { signal: request.signal });
-            if (!response.ok) throw new Error('Unable to check rates.');
-            const data = await response.json();
-            if (request.signal.aborted || !row.isConnected) return;
-            inputs.forEach((input, index) => {
-                const rate = index === 0 ? data.tariffRate : data.bafRate;
-                input.dataset.lookup = data.exists && rate != null && (index !== 0 || Number(rate) > 0) ? 'found' : 'missing';
-                input.readOnly = !manualRates() && input.value === '' && input.dataset.lookup === 'found';
-                // Estimates stay out of Manual* fields so saving cannot turn a table rate into a manual override.
-                input.placeholder = input.dataset.lookup === 'found'
-                    ? Number(rate).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-                    : 'Pending rate';
-            });
-        } catch (error) {
-            if (error.name === 'AbortError') return;
-            inputs.forEach(input => input.dataset.lookup = 'error');
-        }
-        updateRateProvenance(row);
-        updateSummary();
-    }
-
-    function applyRateLock() {
-        if (!servicesContainer) return;
-        servicesContainer.querySelectorAll('[data-service-row]').forEach(row => {
-            row.querySelectorAll('.js-tariff-rate, .js-baf-rate').forEach(input => {
-                input.readOnly = !manualRates() && input.dataset.lookup !== 'missing';
-                if (input.readOnly && input.dataset.lookup === 'found') input.value = '';
-            });
-            updateRateProvenance(row);
-        });
-        updateSummary();
-    }
-
-    function refreshAllRates() {
-        if (!servicesContainer) return;
-        servicesContainer.querySelectorAll('[data-service-row]').forEach(row => {
-            const svcSelect = row.querySelector('.js-service-select');
-            fetchTariffAndBaf(row, parseInt(svcSelect?.value || '0', 10));
-        });
-    }
-
     function addServiceRow(tugId, targetContainer) {
         if (!serviceRowTemplate) return;
         const uniqueKey = 'srv_' + tugId + '_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
@@ -393,10 +278,8 @@
         temp.innerHTML = html.trim();
         const newRow = temp.firstElementChild;
         targetContainer.appendChild(newRow);
-        newRow.querySelectorAll('.js-tariff-rate, .js-baf-rate').forEach(input => input.readOnly = !manualRates());
         ModernSelect.init($(newRow).find('.js-modern-select'));
         updateSummary();
-        // No auto-fetch on new row: service not yet selected
     }
 
     if (addTugboatBtn && tugboatCardTemplate && servicesContainer) {
@@ -441,27 +324,8 @@
 
             const svcSelect = e.target.closest('.js-service-select');
             if (svcSelect) {
-                const row = svcSelect.closest('[data-service-row]');
-                if (row) fetchTariffAndBaf(row, parseInt(svcSelect.value || '0', 10));
                 updateSummary();
                 return;
-            }
-
-            const bafSelect = e.target.closest('.js-baf-method');
-            if (bafSelect) {
-                const notice = bafSelect.closest('.col-baf-method')?.querySelector('.schedule-pending-notice');
-                if (notice) {
-                    notice.hidden = !(bafSelect.value === 'Lumpsum' || bafSelect.value === 'Industry');
-                }
-                updateSummary();
-                return;
-            }
-        });
-
-        servicesContainer.addEventListener('input', e => {
-            if (e.target.matches('.js-tariff-rate, .js-baf-rate')) {
-                updateRateProvenance(e.target.closest('[data-service-row]'));
-                updateSummary();
             }
         });
 
@@ -501,25 +365,17 @@
     }
 
     $(customer).on('change', () => {
-        refreshAllRates();
+        updateSummary();
     });
 
     $(terminal).on('change', () => {
         updateSummary();
-        refreshAllRates();
-    });
-
-    rateMode.addEventListener('change', () => {
-        document.getElementById('rateModeLabel').textContent = manualRates() ? 'Non-recurring' : 'Recurring';
-        document.getElementById('rateModeHelp').textContent = manualRates() ? 'Enter manual tariff and BAF rates.' : 'Use tariff and BAF table rates.';
-        applyRateLock();
     });
 
     start.addEventListener('input', () => {
         validateTime();
         updateSummary();
         refreshTugBookings();
-        refreshAllRates();
     });
 
     end.addEventListener('input', () => {
@@ -558,5 +414,4 @@
     // Initialize summary metrics and bookings check
     loadCustomerDiscount();
     refreshTugBookings();
-    refreshAllRates();
 })();

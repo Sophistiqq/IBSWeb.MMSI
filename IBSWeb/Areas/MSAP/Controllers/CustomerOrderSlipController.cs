@@ -231,9 +231,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.EditCustomerOrderSlip)]
-        public async Task<IActionResult> Cancel(int id, CancellationToken cancellationToken)
+        public async Task<IActionResult> Cancel(int id, string? reason, CancellationToken cancellationToken)
         {
-            var result = await customerOrderSlipService.CancelCustomerOrderSlipAsync(id, User.Identity?.Name ?? "Unknown", cancellationToken);
+            var result = await customerOrderSlipService.CancelCustomerOrderSlipAsync(id, User.Identity?.Name ?? "Unknown", reason, cancellationToken);
             TempData[result.IsSuccess ? "success" : "error"] = result.Message;
             return RedirectToAction(nameof(Details), new { id });
         }

@@ -70,9 +70,9 @@ namespace Checks.MSAP
                 && html.Contains("id=\"summaryIoc\">Non-IOC", StringComparison.Ordinal),
                 "Scheduling must display the terminal classification without commercial editors.");
             Check(Regex.IsMatch(html, "<option(?=[^>]*data-is-ioc=\"false\")(?=[^>]*selected=\"selected\")[^>]*>Terminal</option>"), "Selected terminal lost its IOC default.");
-            Check(html.Contains("id=\"RateMode\"", StringComparison.Ordinal), "Rate mode selection is missing from the form.");
-            Check(Regex.IsMatch(html, "<input(?=[^>]*id=\"RateMode\")(?![^>]*checked)[^>]*>")
-                && html.Contains("id=\"rateModeLabel\">Non-recurring", StringComparison.Ordinal), "Saved manual rates must default the form to non-recurring mode.");
+            Check(!html.Contains("id=\"RateMode\"", StringComparison.Ordinal), "Rate mode toggle must be removed from the Operations scheduling form.");
+            Check(!html.Contains("ManualTariffRate", StringComparison.Ordinal), "Manual tariff rate inputs must be removed from the Operations scheduling form.");
+            Check(!html.Contains("ManualBafRate", StringComparison.Ordinal), "Manual BAF rate inputs must be removed from the Operations scheduling form.");
             foreach (string? voyage in new string?[] { null, "", "   ", new string('V', 51) })
             {
                 var errors = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
@@ -87,7 +87,7 @@ namespace Checks.MSAP
             }
             Check(html.Contains("Save for reviewing", StringComparison.Ordinal) && html.Contains("__RequestVerificationToken", StringComparison.Ordinal), "Schedule save action or anti-forgery token is missing.");
             Check(Regex.Matches(html, "name=\"ServiceEntries.Index\"").Count == 2, "Saved service rows and the new-row template must retain collection binding indices.");
-            Check(Regex.IsMatch(html, "name=\"ServiceEntries\\[[^\\]]+\\].ManualTariffRate\" value=\"0.00\""), "A zero manual rate was lost when rendering.");
+            Check(!Regex.IsMatch(html, "ManualTariffRate"), "Manual rates must not be rendered in service rows.");
             Check(Regex.IsMatch(html, "name=\"ServiceEntries\\[[^\\]]+\\].VesselScheduleServiceEntryId\" value=\"7\""), "Saved row identity was lost.");
             Check(html.Contains("Save &lt;failed&gt;", StringComparison.Ordinal) && html.Contains("Tug &lt;A&gt;", StringComparison.Ordinal), "Validation or lookup text was not encoded.");
             Check(html.Contains("2026-10-17T01:00", StringComparison.Ordinal), "Overnight planned end was lost.");

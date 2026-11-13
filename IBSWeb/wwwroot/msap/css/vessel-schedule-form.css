@@ -320,7 +320,7 @@
 
 .schedule-services-table-header,
 .schedule-service-grid-row {
-    min-width: 660px;
+    min-width: 0;
 }
 
 .schedule-service-grid-row > div {
@@ -329,7 +329,7 @@
 
 .schedule-services-table-header {
     display: grid;
-    grid-template-columns: minmax(145px, 1.5fr) minmax(100px, 1fr) minmax(110px, 1fr) minmax(110px, 1fr) minmax(110px, 1fr) 32px;
+    grid-template-columns: 1fr 32px;
     gap: var(--ui-space-2);
     font-size: var(--ui-text-caption);
     font-weight: var(--ui-weight-medium);
@@ -347,9 +347,9 @@
 
 .schedule-service-grid-row {
     display: grid;
-    grid-template-columns: minmax(145px, 1.5fr) minmax(100px, 1fr) minmax(110px, 1fr) minmax(110px, 1fr) minmax(110px, 1fr) 32px;
+    grid-template-columns: 1fr 32px;
     gap: var(--ui-space-2);
-    align-items: start;
+    align-items: center;
     padding: var(--ui-space-1) var(--ui-space-1);
 }
 

@@ -67,8 +67,19 @@
                 <div class="billing-recipient">
                     <div><span class="ui-caption ui-muted">Statement address</span><p class="ui-body">@(Model.Principal?.Address ?? Model.Customer.CustomerAddress)</p></div>
                     <div><span class="ui-caption ui-muted">Statement TIN</span><p class="ui-body">@(Model.Principal?.TIN ?? Model.Customer.CustomerTin)</p></div>
-                    <div><span class="ui-caption ui-muted">Payment terms</span><p class="ui-body">@Model.Terms</p></div>
+                    <div><span class="ui-caption ui-muted">Payment terms</span><p class="ui-body">@(string.IsNullOrWhiteSpace(Model.Terms) ? "—" : Model.Terms)</p></div>
+                    <div><span class="ui-caption ui-muted">Due date</span><p class="ui-body">@Model.DueDate.ToString("dd MMM yyyy")</p></div>
                 </div>
+                @if (!string.IsNullOrWhiteSpace(Model.Remarks))
+                {
+                    <div class="billing-remarks-card" style="background: var(--bg-subtle, #f8f9fa); border-left: 4px solid var(--primary, #0d6efd); padding: 0.75rem 1rem; border-radius: 4px;">
+                        <span class="ui-caption ui-muted font-bold" style="display:flex; align-items:center; gap:0.25rem;">
+                            <span class="material-symbols-outlined" style="font-size: 16px;" aria-hidden="true">notes</span>
+                            Encoder Remarks for Approvers:
+                        </span>
+                        <p class="ui-body" style="margin: 0.25rem 0 0; white-space: pre-wrap;">@Model.Remarks</p>
+                    </div>
+                }
                 <p class="ui-caption ui-muted">@(Model.IsVatable ? "VAT" : "Non-VAT") · @(Model.IsVatInclusive ? "VAT inclusive" : "VAT exclusive") · @(Model.PrintWht ? "Print withholding" : "No printed withholding")</p>
             </section>
             <section class="ui-panel ui-stack" aria-labelledby="reviewChargesHeading">

@@ -254,12 +254,17 @@ namespace IBS.Services.MSAP
 
         public Task<ServiceResult> CancelCustomerOrderSlipAsync(int id, string username, CancellationToken ct = default)
         {
-            return ChangeBookingStatusAsync(id, MsapConstants.VesselScheduleStatus.Cancelled, username, ct);
+            return CancelCustomerOrderSlipAsync(id, username, null, ct);
+        }
+
+        public Task<ServiceResult> CancelCustomerOrderSlipAsync(int id, string username, string? reason, CancellationToken ct = default)
+        {
+            return ChangeBookingStatusAsync(id, MsapConstants.VesselScheduleStatus.Cancelled, username, reason, ct);
         }
 
         public Task<ServiceResult> CompleteBookingAsync(int id, string username, CancellationToken ct = default)
         {
-            return ChangeBookingStatusAsync(id, MsapConstants.VesselScheduleStatus.Completed, username, ct);
+            return ChangeBookingStatusAsync(id, MsapConstants.VesselScheduleStatus.Completed, username, null, ct);
         }
 
         public static bool CanCompleteService(IEnumerable<DispatchTicket> tickets)
@@ -270,7 +275,12 @@ namespace IBS.Services.MSAP
                 && t.DateArrived.Value.ToDateTime(t.TimeArrived.Value) <= DateTimeHelper.GetCurrentPhilippineTime());
         }
 
-        private async Task<ServiceResult> ChangeBookingStatusAsync(int id, string status, string username, CancellationToken ct)
+        private Task<ServiceResult> ChangeBookingStatusAsync(int id, string status, string username, CancellationToken ct)
+        {
+            return ChangeBookingStatusAsync(id, status, username, null, ct);
+        }
+
+        private async Task<ServiceResult> ChangeBookingStatusAsync(int id, string status, string username, string? reason, CancellationToken ct)
         {
             var result = ServiceResult.Failure("Failed to update the booking. Please try again.");
             try
@@ -313,7 +323,8 @@ namespace IBS.Services.MSAP
                         job.Status = MsapConstants.CustomerOrderSlipStatus.Cancelled;
                         job.EditedBy = username;
                         job.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                        await RecordAuditAsync($"Cancelled COS #{job.CustomerOrderSlipNumber}; linked booking cancelled and records retained.", username, ct, id, job.CustomerOrderSlipNumber);
+                        var reasonSuffix = string.IsNullOrWhiteSpace(reason) ? "" : $". Reason: {reason.Trim()}";
+                        await RecordAuditAsync($"User-initiated cancellation: Cancelled COS #{job.CustomerOrderSlipNumber} by {username}{reasonSuffix}; linked booking cancelled and records retained.", username, ct, id, job.CustomerOrderSlipNumber);
                     }
                     else
                     {
@@ -329,7 +340,11 @@ namespace IBS.Services.MSAP
                         schedule.Status = status;
                         schedule.EditedBy = username;
                         schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Vessel schedule #{schedule.VesselScheduleId} marked {status} through COS #{job.CustomerOrderSlipNumber}.", "Vessel Schedule", schedule.VesselScheduleId), ct);
+                        var reasonSuffix = string.IsNullOrWhiteSpace(reason) ? "" : $". Reason: {reason.Trim()}";
+                        var schedAudit = status == MsapConstants.VesselScheduleStatus.Cancelled
+                            ? $"User-initiated cancellation: Vessel schedule #{schedule.VesselScheduleId} cancelled through COS #{job.CustomerOrderSlipNumber} by {username}{reasonSuffix}."
+                            : $"Vessel schedule #{schedule.VesselScheduleId} marked {status} through COS #{job.CustomerOrderSlipNumber}.";
+                        await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, schedAudit, "Vessel Schedule", schedule.VesselScheduleId), ct);
                     }
                     await unitOfWork.SaveAsync(ct);
                     result = ServiceResult.Success(status == MsapConstants.VesselScheduleStatus.Cancelled

@@ -280,6 +280,32 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [HttpGet]
+        [RequireAnyAccess(ProcedureEnum.ApproveSchedule, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload)]
+        public async Task<IActionResult> GetSpotQuotation(int scheduleId, int entryId, CancellationToken ct)
+        {
+            var vm = await scheduleService.GetSpotQuotationViewModelAsync(scheduleId, entryId, ct);
+            if (vm == null)
+            {
+                return NotFound();
+            }
+            return PartialView("_SpotQuotationModal", vm);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAnyAccess(ProcedureEnum.ApproveSchedule, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload)]
+        public async Task<IActionResult> SaveSpotQuotation(SpotQuotationViewModel vm, CancellationToken ct)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = string.Join("; ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
+                return Json(new { success = false, message = errors });
+            }
+            var result = await scheduleService.SaveSpotQuotationAsync(vm, User.Identity?.Name ?? "system", ct);
+            return Json(new { success = result.IsSuccess, message = result.Message });
+        }
+
+        [HttpGet]
         [RequireAccess(ProcedureEnum.ApproveSchedule)]
         public async Task<IActionResult> Confirm(int id, CancellationToken ct)
         {
@@ -334,9 +360,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.EditCustomerOrderSlip)]
-        public async Task<IActionResult> Cancel(int id, CancellationToken ct)
+        public async Task<IActionResult> Cancel(int id, string? reason, CancellationToken ct)
         {
-            return await ChangeStatusAsync(id, MsapConstants.VesselScheduleStatus.Cancelled, ct);
+            return await ChangeStatusAsync(id, MsapConstants.VesselScheduleStatus.Cancelled, reason, ct);
         }
 
         [HttpPost]
@@ -344,12 +370,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [RequireAccess(ProcedureEnum.EditCustomerOrderSlip)]
         public async Task<IActionResult> Complete(int id, CancellationToken ct)
         {
-            return await ChangeStatusAsync(id, MsapConstants.VesselScheduleStatus.Completed, ct);
+            return await ChangeStatusAsync(id, MsapConstants.VesselScheduleStatus.Completed, null, ct);
         }
 
-        private async Task<IActionResult> ChangeStatusAsync(int id, string status, CancellationToken ct)
+        private async Task<IActionResult> ChangeStatusAsync(int id, string status, string? reason, CancellationToken ct)
         {
-            var result = await scheduleService.ChangeStatusAsync(id, status, User.Identity?.Name ?? "system", ct);
+            var result = await scheduleService.ChangeStatusAsync(id, status, User.Identity?.Name ?? "system", reason, ct);
             TempData[result.IsSuccess ? "success" : "error"] = result.Message;
             return RedirectToAction(nameof(Details), new { id });
         }
@@ -505,10 +531,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
                         VesselScheduleId = vm.VesselScheduleId,
                         TugboatId = e.TugboatId,
                         ServiceId = e.ServiceId,
-                        TariffBasis = e.TariffBasis,
-                        BafMethod = e.BafMethod,
-                        ManualTariffRate = e.ManualTariffRate,
-                        ManualBafRate = e.ManualBafRate
+                        TariffBasis = TariffChargeBasis.PerHour,
+                        BafMethod = BafCalculationMethod.PerHour,
+                        ManualTariffRate = null,
+                        ManualBafRate = null
                     }).ToList() ?? []
             };
             return entity;
