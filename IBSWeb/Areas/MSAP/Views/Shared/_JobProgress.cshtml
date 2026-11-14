@@ -11,6 +11,17 @@
         (JobProgressCalculator.ClearingStage, "Clearing"), (JobProgressCalculator.CompletedStage, "Fully cleared")
     };
     var currentStage = Model.Stage is JobProgressCalculator.TariffStage or JobProgressCalculator.ApprovalStage ? 2 : Model.Stage;
+    if (Model.Stage == JobProgressCalculator.PostingStage)
+    {
+        if (Model.LinkedBillings.Any(b => b.Status == MsapConstants.BillingStatus.ForPosting && (b.RejectedAt.HasValue || b.UnpostedDate.HasValue)))
+        {
+            stages[4] = (JobProgressCalculator.PostingStage, "Revision requested");
+        }
+        else if (Model.LinkedBillings.Any(b => b.Status == MsapConstants.BillingStatus.ForPosting))
+        {
+            stages[4] = (JobProgressCalculator.PostingStage, "Commercial review");
+        }
+    }
     if (Model.Stage == JobProgressCalculator.DepositStage && Model.BankingCollection?.ReturnedDate.HasValue == true)
     {
         stages[6] = (JobProgressCalculator.DepositStage, "Redeposit");
@@ -24,7 +35,7 @@
     bool canViewCollections = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.ViewCollections);
     var collectionIds = Model.LinkedBillings.Where(b => b.CollectionId.HasValue).Select(b => b.CollectionId!.Value).Distinct().OrderBy(id => id).ToList();
     bool canViewCos = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.ViewOperations);
-    var reviewBill = Model.LinkedBillings.FirstOrDefault(b => b.Status == MsapConstants.BillingStatus.ForPosting) ?? Model.LinkedBillings.FirstOrDefault();
+    var reviewBill = Model.LinkedBillings.FirstOrDefault(b => b.Status is MsapConstants.BillingStatus.ForPosting or MsapConstants.BillingStatus.Reviewed) ?? Model.LinkedBillings.FirstOrDefault();
     var actionUrl = !canAct ? null : Url.Action(Model.ActionName, Model.ActionController, new
     {
         area = "MSAP",

@@ -36,7 +36,7 @@ $(function () {
         commercialEnabled = false;
         defaultDiscount = 0;
         $('#sbmaCard').prop('hidden', true);
-        $('#CosDiscountPercent, #SkipCosDiscount, #SbmaEnabled, #sbmaFalse, #discountToggle').prop('disabled', true);
+        $('#CosDiscountPercent, #SkipCosDiscount, #DiscountOnTariff, #DiscountOnBaf, #DiscountScopeTotal, #SbmaEnabled, #sbmaFalse, #discountToggle').prop('disabled', true);
         $('#SeparateBaf').prop('disabled', form.dataset.editingDraft === 'true');
         $('#CosDiscountPercent').val('');
         $('#SkipCosDiscount, #SbmaEnabled').prop('checked', false);
@@ -112,7 +112,8 @@ $(function () {
         const baf = roundMoney(amounts.reduce((sum, amount) => sum + amount.baf, 0));
         const basicGross = roundMoney(amounts.reduce((sum, amount) => sum + amount.basicGross, 0));
         const bafGross = roundMoney(amounts.reduce((sum, amount) => sum + amount.bafGross, 0));
-        const showDiscount = tickets.some(ticket => appliedDiscount(ticket) > 0);
+        const showDiscount = tickets.some(ticket => appliedDiscount(ticket) > 0)
+            && ($('#DiscountOnTariff').is(':checked') || $('#DiscountOnBaf').is(':checked'));
         $('.billing-discount-row').prop('hidden', !showDiscount);
         $('#basicGross').text(money(basicGross));
         $('#bafGross').text(money(bafGross));
@@ -176,19 +177,22 @@ $(function () {
                 basic: Number(ticket.dispatchNetAmount), baf: Number(ticket.bafNetAmount)
             };
         }
-        const factor = 1 - appliedDiscount(ticket) / 100;
+        const pct = appliedDiscount(ticket);
+        const tariffFactor = $('#DiscountOnTariff').is(':checked') ? (1 - pct / 100) : 1;
+        const bafFactor = $('#DiscountOnBaf').is(':checked') ? (1 - pct / 100) : 1;
         const hours = Math.max(Number(ticket.actualHours ?? ticket.duration), 1);
         const basicGross = Number(ticket.dispatchRate) * (ticket.dispatchChargeType === 'Per hour' ? hours : 1);
         const bafGross = Number(ticket.bafRate) * (ticket.bafChargeType === 'Per hour' ? hours : 1);
         return {
             basicGross: roundMoney(basicGross), bafGross: roundMoney(bafGross),
-            basic: roundMoney(basicGross * factor), baf: roundMoney(bafGross * factor)
+            basic: roundMoney(basicGross * tariffFactor), baf: roundMoney(bafGross * bafFactor)
         };
     }
 
     function renderServices() {
         const $body = $('#completedServices').empty();
-        const showDiscount = tickets.some(ticket => appliedDiscount(ticket) > 0);
+        const showDiscount = tickets.some(ticket => appliedDiscount(ticket) > 0)
+            && ($('#DiscountOnTariff').is(':checked') || $('#DiscountOnBaf').is(':checked'));
         const columnCount = showDiscount ? 9 : 6;
         $('.billing-discount-column').prop('hidden', !showDiscount);
         $('#serviceAmountsNote').text(showDiscount ? 'Original amounts, discount and net charges' : 'Approved rates');
@@ -290,7 +294,8 @@ $(function () {
             $('#bookingIoc').text(header.isIoc ? 'IOC' : 'Non-IOC');
             $('#SeparateBaf').prop('disabled', form.dataset.editingDraft === 'true');
             commercialEnabled = header.hasSchedule;
-            $('#CosDiscountPercent, #SkipCosDiscount, #SbmaEnabled, #sbmaFalse').prop('disabled', !commercialEnabled);
+            $('#CosDiscountPercent, #SkipCosDiscount, #DiscountOnTariff, #DiscountOnBaf, #DiscountScopeTotal, #SbmaEnabled, #sbmaFalse').prop('disabled', !commercialEnabled);
+            $('#DiscountScopeTotal').prop('checked', $('#DiscountOnTariff').is(':checked') && $('#DiscountOnBaf').is(':checked'));
             $('#discountToggle').prop('disabled', true);
             defaultDiscount = Number(header.cosDiscountPercent) || 0;
             $('#CosDiscountPercent').val(header.skipCosDiscount ? 0 : defaultDiscount);
@@ -307,6 +312,15 @@ $(function () {
         }
     });
 
+    $('#DiscountScopeTotal').on('change', function () {
+        const checked = $(this).is(':checked');
+        $('#DiscountOnTariff, #DiscountOnBaf').prop('checked', checked);
+        renderServices();
+    });
+    $('#DiscountOnTariff, #DiscountOnBaf').on('change', function () {
+        $('#DiscountScopeTotal').prop('checked', $('#DiscountOnTariff').is(':checked') && $('#DiscountOnBaf').is(':checked'));
+        renderServices();
+    });
     $('#SbmaEnabled').on('change', updateSummary);
     $recipient.on('change', updateRecipient);
     $principal.on('change', updateRecipient);

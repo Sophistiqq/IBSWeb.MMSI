@@ -129,7 +129,7 @@ namespace IBS.Services.MSAP
             return null;
         }
 
-        public static void ApplyDiscount(DispatchTicket ticket, decimal discount)
+        public static void ApplyDiscount(DispatchTicket ticket, decimal discount, bool discountOnTariff = true, bool discountOnBaf = true)
         {
             if (discount is < 0 or > 100)
             {
@@ -138,14 +138,123 @@ namespace IBS.Services.MSAP
             var hours = Math.Max(ticket.RawDurationHours ?? ticket.TotalHours, 1m);
             var dispatchGross = ticket.DispatchRate * (ticket.DispatchChargeType == "Per hour" ? hours : 1m);
             var bafGross = ticket.BAFRate * (ticket.BAFChargeType == "Per hour" ? hours : 1m);
-            ticket.DispatchDiscount = discount;
-            ticket.BAFDiscount = discount;
+            var tariffDiscount = discountOnTariff ? discount : 0m;
+            var bafDiscount = discountOnBaf ? discount : 0m;
+            ticket.DispatchDiscount = tariffDiscount;
+            ticket.BAFDiscount = bafDiscount;
             ticket.DispatchBillingAmount = Math.Round(dispatchGross, 2);
             ticket.BAFBillingAmount = Math.Round(bafGross, 2);
-            ticket.DispatchNetRevenue = Math.Round(dispatchGross * (1m - discount / 100m), 2);
-            ticket.BAFNetRevenue = Math.Round(bafGross * (1m - discount / 100m), 2);
+            ticket.DispatchNetRevenue = Math.Round(dispatchGross * (1m - tariffDiscount / 100m), 2);
+            ticket.BAFNetRevenue = Math.Round(bafGross * (1m - bafDiscount / 100m), 2);
             ticket.TotalBilling = ticket.DispatchBillingAmount + ticket.BAFBillingAmount;
             ticket.TotalNetRevenue = ticket.DispatchNetRevenue + ticket.BAFNetRevenue;
+        }
+
+        public static void ApplyFlatDiscount(
+            IReadOnlyList<DispatchTicket> allTickets,
+            Func<DispatchTicket, bool> isEligibleForDiscount,
+            decimal flatTariffDiscount,
+            decimal flatBafDiscount,
+            bool discountOnTariff,
+            bool discountOnBaf)
+        {
+            foreach (var ticket in allTickets)
+            {
+                ApplyDiscount(ticket, 0m, false, false);
+            }
+
+            var eligible = allTickets.Where(isEligibleForDiscount).ToList();
+            if (eligible.Count == 0)
+            {
+                return;
+            }
+
+            var targetTariff = discountOnTariff ? Math.Round(Math.Max(0m, flatTariffDiscount), 2) : 0m;
+            var targetBaf = discountOnBaf ? Math.Round(Math.Max(0m, flatBafDiscount), 2) : 0m;
+
+            DistributeFlatComponent(
+                eligible,
+                targetTariff,
+                t => t.DispatchBillingAmount,
+                (t, gross, allocated) =>
+                {
+                    t.DispatchNetRevenue = gross - allocated;
+                    t.DispatchDiscount = gross > 0m ? Math.Round(allocated / gross * 100m, 4) : 0m;
+                });
+
+            DistributeFlatComponent(
+                eligible,
+                targetBaf,
+                t => t.BAFBillingAmount,
+                (t, gross, allocated) =>
+                {
+                    t.BAFNetRevenue = gross - allocated;
+                    t.BAFDiscount = gross > 0m ? Math.Round(allocated / gross * 100m, 4) : 0m;
+                });
+
+            foreach (var ticket in eligible)
+            {
+                ticket.TotalNetRevenue = ticket.DispatchNetRevenue + ticket.BAFNetRevenue;
+            }
+        }
+
+        private static void DistributeFlatComponent(
+            List<DispatchTicket> eligible,
+            decimal totalFlatDiscount,
+            Func<DispatchTicket, decimal> getGross,
+            Action<DispatchTicket, decimal, decimal> applyAllocation)
+        {
+            if (totalFlatDiscount <= 0m || eligible.Count == 0)
+            {
+                return;
+            }
+
+            var totalGross = eligible.Sum(getGross);
+            if (totalGross <= 0m)
+            {
+                return;
+            }
+
+            var effectiveTotal = Math.Min(totalFlatDiscount, totalGross);
+            var allocations = new decimal[eligible.Count];
+            var allocatedSum = 0m;
+
+            for (var i = 0; i < eligible.Count; i++)
+            {
+                var gross = getGross(eligible[i]);
+                var share = Math.Round(effectiveTotal * gross / totalGross, 2, MidpointRounding.AwayFromZero);
+                share = Math.Clamp(share, 0m, gross);
+                allocations[i] = share;
+                allocatedSum += share;
+            }
+
+            var remainder = effectiveTotal - allocatedSum;
+            if (remainder != 0m)
+            {
+                var targetIndex = -1;
+                var bestGross = -1m;
+                for (var i = 0; i < eligible.Count; i++)
+                {
+                    var gross = getGross(eligible[i]);
+                    var candidate = allocations[i] + remainder;
+                    if (candidate >= 0m && candidate <= gross && gross > bestGross)
+                    {
+                        bestGross = gross;
+                        targetIndex = i;
+                    }
+                }
+
+                if (targetIndex >= 0)
+                {
+                    allocations[targetIndex] += remainder;
+                }
+            }
+
+            for (var i = 0; i < eligible.Count; i++)
+            {
+                var gross = getGross(eligible[i]);
+                applyAllocation(eligible[i], gross, allocations[i]);
+            }
         }
 
         public static DateOnly BafCycleStart(DateOnly serviceDate)

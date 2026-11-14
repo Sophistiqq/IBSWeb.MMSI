@@ -84,6 +84,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     model.BilledTo = existingDraft.BilledTo;
                     model.PrincipalId = existingDraft.PrincipalId;
                     model.IsUndocumented = existingDraft.IsUndocumented;
+                    model.DiscountOnTariff = existingDraft.DiscountOnTariff;
+                    model.DiscountOnBaf = existingDraft.DiscountOnBaf;
                     model.SeparateBaf = existingDraft.BafBilling != null;
                     model.BafBillingNumber = existingDraft.BafBilling?.MsapBillingNumber;
                 }
@@ -108,7 +110,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to create Billings.")]
-        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,SbmaEnabled,Terms,Remarks")] Billing model, CancellationToken cancellationToken)
+        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,DiscountOnTariff,DiscountOnBaf,SbmaEnabled,Terms,Remarks")] Billing model, CancellationToken cancellationToken)
         {
             try
             {
@@ -308,10 +310,13 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     TugboatName = t.Tugboat?.TugboatName ?? "-",
                     ServiceName = t.Service?.ServiceName ?? "-",
                     TotalHours = t.TotalHours,
+                    EffectiveHours = Math.Max(t.RawDurationHours ?? t.TotalHours, 1m),
                     DispatchChargeType = t.DispatchChargeType ?? "Per hour",
                     DispatchRate = t.DispatchRate,
                     BAFChargeType = t.BAFChargeType ?? "Per hour",
-                    BAFRate = t.BAFRate
+                    BAFRate = t.BAFRate,
+                    IsSubcon = t.Tugboat is { IsCompanyOwned: false, TugboatOwnerId: not null },
+                    SubconCost = t.OtherTugChargeLine?.Amount
                 })
                 .ToList();
 
@@ -319,20 +324,28 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 ? await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == billing.CustomerOrderSlipId.Value, cancellationToken)
                 : null;
             var cosDefaultDiscount = schedule?.CosDiscountPercent ?? 0m;
-            var currentDiscountPercent = billing.Discount > 0m && (billing.Amount + billing.Discount) > 0m
-                ? Math.Round(billing.Discount / (billing.Amount + billing.Discount) * 100m, 2)
-                : cosDefaultDiscount;
+            var currentDiscountPercent = schedule?.CosDiscountPercent
+                ?? (billing.Discount > 0m && (billing.Amount + billing.Discount) > 0m
+                    ? Math.Round(billing.Discount / (billing.Amount + billing.Discount) * 100m, 2)
+                    : cosDefaultDiscount);
 
             var vm = new BillingAdjustViewModel
             {
                 MsapBillingId = billing.MsapBillingId,
                 MsapBillingNumber = billing.MsapBillingNumber,
+                COSNumber = billing.CustomerOrderSlip?.COSNumber,
                 CustomerName = billing.Customer?.CustomerName,
                 VesselName = billing.Vessel?.VesselName,
                 RejectionReason = billing.RejectionReason,
                 CosDefaultDiscountPercent = cosDefaultDiscount,
                 CosDiscountPercent = currentDiscountPercent,
                 SkipCosDiscount = billing.Discount <= 0m,
+                DiscountOnTariff = billing.DiscountOnTariff,
+                DiscountOnBaf = billing.DiscountOnBaf,
+                DiscountType = string.Equals(billing.DiscountType, "Flat", StringComparison.OrdinalIgnoreCase) ? "Flat" : "Percentage",
+                FlatDiscountTariff = billing.FlatDiscountTariff,
+                FlatDiscountBaf = billing.FlatDiscountBaf,
+                IncludeSubconInDiscount = billing.IncludeSubconInDiscount,
                 Tickets = tickets
             };
 

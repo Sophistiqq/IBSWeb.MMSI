@@ -127,6 +127,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Include(a => a.Service)
                 .Include(a => a.Terminal).ThenInclude(t => t.Port)
                 .Include(a => a.Tugboat)
+                .Include(a => a.OtherTugChargeLine)
                 .Include(a => a.TugMaster)
                 .Include(a => a.Vessel)
                 .OrderBy(dt => dt.DateLeft).ThenBy(dt => dt.TimeLeft)

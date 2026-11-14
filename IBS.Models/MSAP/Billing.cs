@@ -63,6 +63,22 @@ namespace IBS.Models.MSAP
         [MaxLength(500)]
         public string? AdjustmentAttachmentUrl { get; set; }
 
+        public bool DiscountOnTariff { get; set; } = true;
+
+        public bool DiscountOnBaf { get; set; } = true;
+
+        [Column(TypeName = "varchar(20)")]
+        [MaxLength(20)]
+        public string DiscountType { get; set; } = "Percentage";
+
+        [Column(TypeName = "numeric(18,4)")]
+        public decimal FlatDiscountTariff { get; set; }
+
+        [Column(TypeName = "numeric(18,4)")]
+        public decimal FlatDiscountBaf { get; set; }
+
+        public bool IncludeSubconInDiscount { get; set; }
+
         [BindNever, JsonIgnore]
         public int? ApprovedRevision { get; set; }
 

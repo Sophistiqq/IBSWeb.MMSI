@@ -285,7 +285,7 @@ namespace IBS.Services.MSAP
             {
                 result.Stage = 2;
                 result.Stopped = true;
-                result.Guidance = "Recorded service tickets still need charge calculation. Review the affected tickets and their calculation details before billing.";
+                result.Guidance = "Recorded service tickets are awaiting an approved rate. Approve the applicable rate or schedule terms before billing.";
                 return result;
             }
             if (active.Any(t => t.Status is MsapConstants.DispatchTicketStatus.ForTariff or MsapConstants.DispatchTicketStatus.Disapproved or MsapConstants.DispatchTicketStatus.ForApproval))
@@ -302,6 +302,18 @@ namespace IBS.Services.MSAP
                 result.Tickets = unbilled;
                 result.Guidance = $"{unbilled.Count} approved Dispatch Ticket(s) still need billing. Include every eligible ticket before posting.";
                 SetAction(result, "Create Billing", "Billing", "Create", null, ProcedureEnum.CreateBilling, "billing preparation");
+                return result;
+            }
+            List<Billing> returned = bills.Where(b => b.Status == MsapConstants.BillingStatus.ForPosting
+                && (b.RejectedAt.HasValue || b.UnpostedDate.HasValue)).ToList();
+            if (returned.Count > 0)
+            {
+                result.Stage = PostingStage;
+                result.Billings = returned;
+                result.Guidance = string.IsNullOrWhiteSpace(returned[0].RejectionReason)
+                    ? $"{returned.Count} billing(s) returned for revision. Adjust billing and resubmit for review."
+                    : $"{returned.Count} billing(s) returned for revision: {returned[0].RejectionReason}";
+                SetAction(result, "Adjust billing", "Billing", "Adjust", returned[0].MsapBillingId, ProcedureEnum.CreateBilling, "billing adjustment");
                 return result;
             }
             List<Billing> posting = bills.Where(b => b.Status == MsapConstants.BillingStatus.ForPosting).ToList();

@@ -76,22 +76,15 @@
             }
             @if (billingChanges.Count > 0)
             {
-                <div class="ui-panel ui-attention" style="border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.08);">
-                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                        <div>
-                            <p class="ui-body mb-1">
-                                <strong>Overridden values flagged for review &amp; approval:</strong>
-                            </p>
-                            <ul class="ui-caption mb-1" style="padding-left: 1.25rem;">
-                                @foreach (var change in billingChanges)
-                                {
-                                    <li><strong>@change.Label:</strong> @(string.IsNullOrWhiteSpace(change.Before) ? change.After : $"{change.Before} → {change.After}")</li>
-                                }
-                            </ul>
-                            @if (!string.IsNullOrWhiteSpace(adjustmentReason))
-                            {
-                                <p class="ui-caption ui-muted mb-0"><strong>Authorized reason:</strong> @adjustmentReason</p>
-                            }
+                var visibleChanges = billingChanges
+                    .Where(c => !c.Field.EndsWith("_NetAmount", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                <section class="modern-card ui-card ui-attention" aria-label="Overridden values flagged for review and approval" style="border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.06);">
+                    <div class="modern-card-header-action flex justify-between items-center w-full flex-wrap gap-2 ui-card-header">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined" style="color: #d97706;" aria-hidden="true">fact_check</span>
+                            <h2 class="modern-headline-md ui-section-title mb-0">Overridden values flagged for review &amp; approval</h2>
+                            <span class="modern-badge-sm status-tariff">@visibleChanges.Count change@(visibleChanges.Count == 1 ? "" : "s")</span>
                         </div>
                         @if (!string.IsNullOrWhiteSpace(adjustmentAttachmentUrl))
                         {
@@ -100,19 +93,97 @@
                             </a>
                         }
                     </div>
-                </div>
+                    <div class="modern-card-body ui-card-body ui-stack">
+                        @if (visibleChanges.Count > 0)
+                        {
+                            <div class="billing-table-scroll">
+                                <table class="modern-table ui-table" style="font-size: 0.9rem;">
+                                    <thead>
+                                        <tr>
+                                            <th>Changed field</th>
+                                            <th>Previous</th>
+                                            <th>Revised</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var change in visibleChanges)
+                                        {
+                                            <tr>
+                                                <td><strong>@change.Label</strong></td>
+                                                <td class="ui-muted">@(string.IsNullOrWhiteSpace(change.Before) ? "—" : change.Before)</td>
+                                                <td><strong>@change.After</strong></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(adjustmentReason))
+                        {
+                            <div class="pt-2" style="border-top: 1px solid var(--outline-variant);">
+                                <span class="ui-caption ui-muted"><strong>Authorized reason:</strong></span>
+                                <span class="ui-body">@adjustmentReason</span>
+                            </div>
+                        }
+                    </div>
+                </section>
             }
-            <p class="ui-caption ui-muted">
-                Encoder: @Model.CreatedBy
-                @if (Model.ReviewedAt.HasValue)
-                {
-                    <span> · Reviewer: @(Model.ReviewedByUser?.UserName ?? Model.ReviewedByUserId) (rev @Model.ReviewedRevision · @Model.ReviewedAt.Value.ToString("dd MMM yyyy HH:mm"))</span>
-                }
-                @if (Model.ApprovedAt.HasValue)
-                {
-                    <span> · Approver: @(Model.ApprovedByUser?.UserName ?? Model.ApprovedByUserId) (rev @Model.ApprovedRevision · @Model.ApprovedAt.Value.ToString("dd MMM yyyy HH:mm"))</span>
-                }
-            </p>
+            @{
+                var reviewerDone = Model.ReviewedAt.HasValue;
+                var reviewerRejected = !reviewerDone && Model.Status == MsapConstants.BillingStatus.ForPosting && Model.RejectedAt.HasValue;
+                var reviewerCurrent = !reviewerDone && !reviewerRejected && Model.Status == MsapConstants.BillingStatus.ForPosting;
+                var approverDone = Model.ApprovedAt.HasValue;
+                var approverCurrent = !approverDone && Model.Status == MsapConstants.BillingStatus.Reviewed;
+            }
+            <section class="billing-approval-trail" aria-label="Billing approval progress">
+                <div class="billing-approval-step is-done">
+                    <span class="material-symbols-outlined billing-approval-icon" aria-hidden="true">check_circle</span>
+                    <div>
+                        <div class="ui-caption"><strong>1. Preparation</strong> · @Model.CreatedBy</div>
+                        <div class="ui-caption ui-muted">Rev @Model.Revision · @Model.CreatedDate.ToString("dd MMM yyyy HH:mm")</div>
+                    </div>
+                </div>
+                <div class="billing-approval-step @(reviewerDone ? "is-done" : reviewerRejected ? "is-attention" : reviewerCurrent ? "is-current" : "")">
+                    <span class="material-symbols-outlined billing-approval-icon" aria-hidden="true">@(reviewerDone ? "check_circle" : reviewerRejected ? "error" : reviewerCurrent ? "pending" : "radio_button_unchecked")</span>
+                    <div>
+                        <div class="ui-caption">
+                            <strong>2. Review</strong>
+                            @if (reviewerDone)
+                            {
+                                <span> · @(Model.ReviewedByUser?.UserName ?? Model.ReviewedByUserId)</span>
+                            }
+                        </div>
+                        <div class="ui-caption ui-muted">
+                            @(reviewerDone
+                                ? $"Rev {Model.ReviewedRevision} · {Model.ReviewedAt!.Value.ToString("dd MMM yyyy HH:mm")}"
+                                : reviewerRejected
+                                    ? "Revision requested"
+                                    : reviewerCurrent
+                                        ? "Awaiting commercial review"
+                                        : "Pending")
+                        </div>
+                    </div>
+                </div>
+                <div class="billing-approval-step @(approverDone ? "is-done" : approverCurrent ? "is-current" : "")">
+                    <span class="material-symbols-outlined billing-approval-icon" aria-hidden="true">@(approverDone ? "check_circle" : approverCurrent ? "pending" : "radio_button_unchecked")</span>
+                    <div>
+                        <div class="ui-caption">
+                            <strong>3. Approval</strong>
+                            @if (approverDone)
+                            {
+                                <span> · @(Model.ApprovedByUser?.UserName ?? Model.ApprovedByUserId)</span>
+                            }
+                        </div>
+                        <div class="ui-caption ui-muted">
+                            @(approverDone
+                                ? $"Rev {Model.ApprovedRevision} · {Model.ApprovedAt!.Value.ToString("dd MMM yyyy HH:mm")}"
+                                : approverCurrent
+                                    ? "Awaiting final approval"
+                                    : "Pending")
+                        </div>
+                    </div>
+                </div>
+            </section>
             @if (related != null)
             {
                 <section class="ui-panel billing-section-heading" aria-label="Related billing">
@@ -148,7 +219,7 @@
             <section class="ui-panel ui-stack" aria-labelledby="reviewChargesHeading">
                 <h2 id="reviewChargesHeading" class="ui-section-title">@component charges for review</h2>
                 <div class="billing-table-scroll">
-                    <table class="billing-service-table">
+                    <table class="billing-service-table" style="font-size: 0.95rem;">
                         <thead><tr><th>Service / ticket</th><th>Actual / billed hours</th><th>Basic rate</th><th>BAF rate</th><th>Source · Basic / BAF</th><th>After discount</th></tr></thead>
                         <tbody>
                             @foreach (var group in (Model.PaidDispatchTickets ?? []).GroupBy(t => t.Tugboat.TugboatName))
@@ -156,28 +227,62 @@
                                 <tr class="billing-tugboat-row"><th colspan="6" scope="rowgroup">@group.Key<span class="billing-tugboat-owner ui-caption ui-muted">@(group.First().Tugboat.IsCompanyOwned ? "Company-owned" : "Subcontractor")</span></th></tr>
                                 @foreach (var ticket in group)
                                 {
-                                    var ticketHasOverride = billingChanges.Any(c =>
-                                        c.Field.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase)
-                                        || c.Label.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase));
-                                    var basicRateOverridden = ticketHasOverride && billingChanges.Any(c =>
-                                        (c.Field.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase) || c.Label.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase))
-                                        && c.Field.Contains("Dispatch", StringComparison.OrdinalIgnoreCase));
-                                    var bafRateOverridden = ticketHasOverride && billingChanges.Any(c =>
-                                        (c.Field.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase) || c.Label.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase))
-                                        && c.Field.Contains("BAF", StringComparison.OrdinalIgnoreCase));
+                                    var ticketChanges = billingChanges.Where(c =>
+                                        c.Field.Contains($"Ticket_{ticket.DispatchTicketId}_", StringComparison.OrdinalIgnoreCase)
+                                        || c.Field.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase)
+                                        || c.Label.Contains(ticket.DispatchNumber, StringComparison.OrdinalIgnoreCase)).ToList();
+                                    var ticketHasOverride = ticketChanges.Count > 0;
+                                    var basicRateChange = ticketChanges.FirstOrDefault(c => c.Field.EndsWith("_DispatchRate", StringComparison.OrdinalIgnoreCase) || c.Field.EndsWith("_DispatchBasis", StringComparison.OrdinalIgnoreCase));
+                                    var bafRateChange = ticketChanges.FirstOrDefault(c => c.Field.EndsWith("_BafRate", StringComparison.OrdinalIgnoreCase) || c.Field.EndsWith("_BafBasis", StringComparison.OrdinalIgnoreCase));
+                                    var netAmountChange = ticketChanges.FirstOrDefault(c => c.Field.EndsWith("_NetAmount", StringComparison.OrdinalIgnoreCase));
+                                    var basicRateOverridden = basicRateChange != null;
+                                    var bafRateOverridden = bafRateChange != null;
+                                    var netAmountOverridden = netAmountChange != null;
                                     <tr style="@(ticketHasOverride ? "background: rgba(245, 158, 11, 0.08);" : "")">
                                         <td>
-                                            @ticket.Service.ServiceName<span class="billing-ticket-number">@ticket.DispatchNumber</span>
+                                            <strong>@ticket.Service.ServiceName</strong><span class="billing-ticket-number"><strong>@ticket.DispatchNumber</strong></span>
                                             @if (ticketHasOverride)
                                             {
                                                 <span class="schedule-status-pill ui-status ui-attention" style="margin-left: 0.35rem;">Overridden</span>
                                             }
                                         </td>
-                                        <td>@(ticket.RawDurationHours?.ToString("N2") ?? "—") / @ticket.TotalHours.ToString("N2")</td>
-                                        <td style="@(basicRateOverridden ? "background: rgba(245, 158, 11, 0.18); font-weight: 700;" : "")">@(bafOnly ? "—" : $"{ticket.DispatchRate:N2} ({ticket.DispatchChargeType ?? "Per hour"})")</td>
-                                        <td style="@(bafRateOverridden ? "background: rgba(245, 158, 11, 0.18); font-weight: 700;" : "")">@(basicOnly ? "—" : $"{ticket.BAFRate:N2} ({ticket.BAFChargeType ?? "Per hour"})")</td>
+                                        <td>@(ticket.RawDurationHours?.ToString("N2") ?? "—") / <strong>@ticket.TotalHours.ToString("N2")</strong></td>
+                                        <td class="@(basicRateOverridden ? "schedule-review-attention" : "")" style="@(basicRateOverridden ? "background: rgba(245, 158, 11, 0.16);" : "")">
+                                            @if (bafOnly)
+                                            {
+                                                <span>—</span>
+                                            }
+                                            else
+                                            {
+                                                <strong>@ticket.DispatchRate.ToString("N2")</strong> <span>(@(ticket.DispatchChargeType ?? "Per hour"))</span>
+                                            }
+                                            @if (basicRateChange != null && !string.IsNullOrWhiteSpace(basicRateChange.Before))
+                                            {
+                                                <small class="ui-caption d-block">Revised from <strong>@basicRateChange.Before</strong></small>
+                                            }
+                                        </td>
+                                        <td class="@(bafRateOverridden ? "schedule-review-attention" : "")" style="@(bafRateOverridden ? "background: rgba(245, 158, 11, 0.16);" : "")">
+                                            @if (basicOnly)
+                                            {
+                                                <span>—</span>
+                                            }
+                                            else
+                                            {
+                                                <strong>@ticket.BAFRate.ToString("N2")</strong> <span>(@(ticket.BAFChargeType ?? "Per hour"))</span>
+                                            }
+                                            @if (bafRateChange != null && !string.IsNullOrWhiteSpace(bafRateChange.Before))
+                                            {
+                                                <small class="ui-caption d-block">Revised from <strong>@bafRateChange.Before</strong></small>
+                                            }
+                                        </td>
                                         <td>@(bafOnly ? "—" : ticket.IsManualTariffRate ? "Manual" : "Table") / @(basicOnly ? "—" : ticket.IsManualBafRate ? "Manual" : "Table")</td>
-                                        <td>@(bafOnly ? ticket.BAFNetRevenue.ToString("N2") : basicOnly ? ticket.DispatchNetRevenue.ToString("N2") : ticket.TotalNetRevenue.ToString("N2"))</td>
+                                        <td class="@(netAmountOverridden ? "schedule-review-attention" : "")" style="@(netAmountOverridden ? "background: rgba(245, 158, 11, 0.16);" : "")">
+                                            <strong>@(bafOnly ? ticket.BAFNetRevenue.ToString("N2") : basicOnly ? ticket.DispatchNetRevenue.ToString("N2") : ticket.TotalNetRevenue.ToString("N2"))</strong>
+                                            @if (netAmountChange != null && !string.IsNullOrWhiteSpace(netAmountChange.Before))
+                                            {
+                                                <small class="ui-caption d-block">Revised from <strong>@netAmountChange.Before</strong></small>
+                                            }
+                                        </td>
                                     </tr>
                                 }
                             }
@@ -188,26 +293,108 @@
             <section class="ui-panel ui-stack" aria-label="Saved billing totals">
                 <h2 class="ui-section-title">@Model.MsapBillingNumber · @component amounts</h2>
                 @{
-                    var discountOverridden = billingChanges.Any(c => c.Field.Contains("Discount", StringComparison.OrdinalIgnoreCase));
+                    var discountChange = billingChanges.FirstOrDefault(c => c.Field == "DiscountAmount");
+                    var discountMetaChanged = billingChanges.Any(c => c.Field.Contains("Discount", StringComparison.OrdinalIgnoreCase));
+                    var dispatchChange = billingChanges.FirstOrDefault(c => c.Field == "DispatchAmount");
+                    var bafChange = billingChanges.FirstOrDefault(c => c.Field == "BAFAmount");
+                    var amountChange = billingChanges.FirstOrDefault(c => c.Field == "Amount");
+                    var discountScopeLabel = (Model.DiscountOnTariff, Model.DiscountOnBaf) switch
+                    {
+                        (true, true) => "Total (Basic & BAF)",
+                        (true, false) => "Basic (Tariff) only",
+                        (false, true) => "BAF only",
+                        _ => "None"
+                    };
+                    var discountModeLabel = string.Equals(Model.DiscountType, "Flat", StringComparison.OrdinalIgnoreCase)
+                        ? "Flat"
+                        : "Percentage";
                 }
-                <div class="billing-amount" style="@(discountOverridden ? "background: rgba(245, 158, 11, 0.14); padding: 0.25rem 0.5rem; border-radius: 4px;" : "")">
-                    <span>Discount applied @(discountOverridden ? "(Overridden)" : "")</span>
-                    <strong>@Model.Discount.ToString("N2")</strong>
+                <div class="billing-totals-row">
+                    <div class="billing-total-item @(discountMetaChanged ? "schedule-review-attention" : "")">
+                        <span class="ui-caption ui-muted"><strong>Discount · @discountModeLabel · @discountScopeLabel @(discountMetaChanged ? "(Overridden)" : "")</strong></span>
+                        <strong class="ui-body">@Model.Discount.ToString("N2")</strong>
+                        @if (discountChange != null)
+                        {
+                            <small class="ui-caption">Revised from <strong>@discountChange.Before</strong></small>
+                        }
+                    </div>
+                    <div class="billing-total-item @(dispatchChange != null ? "schedule-review-attention" : "")">
+                        <span class="ui-caption ui-muted"><strong>Basic after discount</strong></span>
+                        <strong class="ui-body">@Model.DispatchAmount.ToString("N2")</strong>
+                        @if (dispatchChange != null)
+                        {
+                            <small class="ui-caption">Revised from <strong>@dispatchChange.Before</strong></small>
+                        }
+                    </div>
+                    <div class="billing-total-item @(bafChange != null ? "schedule-review-attention" : "")">
+                        <span class="ui-caption ui-muted"><strong>BAF after discount</strong></span>
+                        <strong class="ui-body">@Model.BAFAmount.ToString("N2")</strong>
+                        @if (bafChange != null)
+                        {
+                            <small class="ui-caption">Revised from <strong>@bafChange.Before</strong></small>
+                        }
+                    </div>
+                    <div class="billing-total-item is-primary @(amountChange != null ? "schedule-review-attention" : "")">
+                        <span class="ui-caption ui-muted"><strong>Statement total</strong></span>
+                        <strong class="ui-body text-primary">@Model.Amount.ToString("N2")</strong>
+                        @if (amountChange != null)
+                        {
+                            <small class="ui-caption">Revised from <strong>@amountChange.Before</strong></small>
+                        }
+                    </div>
+                    <div class="billing-total-item">
+                        <span class="ui-caption ui-muted"><strong>Remaining balance</strong></span>
+                        <strong class="ui-body">@Model.Balance.ToString("N2")</strong>
+                    </div>
                 </div>
-                <div class="billing-amount"><span>Basic charges after discount</span><strong>@Model.DispatchAmount.ToString("N2")</strong></div>
-                <div class="billing-amount"><span>BAF charges after discount</span><strong>@Model.BAFAmount.ToString("N2")</strong></div>
-                <div class="billing-amount billing-summary-total"><strong>Statement total</strong><strong>@Model.Amount.ToString("N2")</strong></div>
-                <div class="billing-amount"><span>Remaining billing balance</span><strong>@Model.Balance.ToString("N2")</strong></div>
                 @if (basicOnly)
                 {
                     <p class="ui-notice ui-attention" role="note"><span class="material-symbols-outlined" aria-hidden="true">info</span> Reminder: confirm SBMA placement and financial treatment.</p>
                 }
             </section>
+            @{
+                var ticketImages = (Model.PaidDispatchTickets ?? [])
+                    .Where(t => !string.IsNullOrEmpty(t.ImageSignedUrl))
+                    .ToList();
+            }
             <section class="ui-stack" aria-labelledby="ticketImagesHeading">
-                <h2 id="ticketImagesHeading" class="ui-section-title">Ticket images</h2>
-                @if (Model.PaidDispatchTickets?.Any(t => !string.IsNullOrEmpty(t.ImageSignedUrl)) == true)
+                <div class="flex justify-between items-center w-full flex-wrap gap-2">
+                    <div class="flex items-center gap-2">
+                        <h2 id="ticketImagesHeading" class="ui-section-title mb-0">Ticket images</h2>
+                        @if (ticketImages.Count > 0)
+                        {
+                            <span class="modern-badge-sm status-billing">@ticketImages.Count</span>
+                        }
+                    </div>
+                    @if (ticketImages.Count > 1)
+                    {
+                        <div class="flex gap-2">
+                            <button type="button" class="modern-btn-secondary" id="toggleAllTicketImages" data-expanded="false">
+                                <span class="material-symbols-outlined" aria-hidden="true">unfold_more</span> Expand all
+                            </button>
+                        </div>
+                    }
+                </div>
+                @if (ticketImages.Count > 0)
                 {
-                    <partial name="_TicketImages" model="Model" />
+                    <div class="ui-stack" id="ticketImagesAccordion">
+                        @foreach (var dt in ticketImages)
+                        {
+                            <details class="modern-card ui-card js-ticket-image-fold">
+                                <summary class="modern-card-header-action flex justify-between items-center w-full ui-card-header" style="cursor: pointer; list-style: none;">
+                                    <div class="flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-primary" aria-hidden="true">image</span>
+                                        <span class="ui-body"><strong>Dispatch Ticket #@dt.DispatchNumber</strong></span>
+                                        <span class="ui-caption ui-muted">@(dt.Tugboat?.TugboatName ?? "—") · @(dt.Service?.ServiceName ?? "—")</span>
+                                    </div>
+                                    <span class="material-symbols-outlined ui-muted js-fold-icon" aria-hidden="true">expand_more</span>
+                                </summary>
+                                <div class="modern-card-body ui-card-body text-center">
+                                    <img src="@dt.ImageSignedUrl" alt="Dispatch Ticket @dt.DispatchNumber" loading="lazy" style="max-width: 100%; max-height: 85vh; object-fit: contain;" />
+                                </div>
+                            </details>
+                        }
+                    </div>
                 }
                 else
                 {
@@ -452,5 +639,26 @@
                 button.disabled = false;
             }
         });
+
+        (function () {
+            const folds = document.querySelectorAll('.js-ticket-image-fold');
+            const toggleAllBtn = document.getElementById('toggleAllTicketImages');
+            folds.forEach(function (details) {
+                details.addEventListener('toggle', function () {
+                    const icon = details.querySelector('.js-fold-icon');
+                    if (icon) icon.textContent = details.open ? 'expand_less' : 'expand_more';
+                });
+            });
+            if (toggleAllBtn) {
+                toggleAllBtn.addEventListener('click', function () {
+                    const expand = toggleAllBtn.dataset.expanded !== 'true';
+                    folds.forEach(function (details) { details.open = expand; });
+                    toggleAllBtn.dataset.expanded = String(expand);
+                    toggleAllBtn.innerHTML = expand
+                        ? '<span class="material-symbols-outlined" aria-hidden="true">unfold_less</span> Collapse all'
+                        : '<span class="material-symbols-outlined" aria-hidden="true">unfold_more</span> Expand all';
+                });
+            }
+        })();
     </script>
 }

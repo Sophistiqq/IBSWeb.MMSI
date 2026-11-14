@@ -24,6 +24,21 @@ namespace IBS.Models.MSAP.ViewModels
 
         public bool SkipCosDiscount { get; set; }
 
+        public bool DiscountOnTariff { get; set; } = true;
+
+        public bool DiscountOnBaf { get; set; } = true;
+
+        [Required]
+        public string DiscountType { get; set; } = "Percentage";
+
+        [Range(0, 999999999999.99)]
+        public decimal FlatDiscountTariff { get; set; }
+
+        [Range(0, 999999999999.99)]
+        public decimal FlatDiscountBaf { get; set; }
+
+        public bool IncludeSubconInDiscount { get; set; }
+
         [Required]
         [StringLength(500, MinimumLength = 5)]
         public string Reason { get; set; } = string.Empty;
@@ -45,6 +60,8 @@ namespace IBS.Models.MSAP.ViewModels
 
         public decimal TotalHours { get; set; }
 
+        public decimal EffectiveHours { get; set; }
+
         [Required]
         public string DispatchChargeType { get; set; } = "Per hour";
 
@@ -56,5 +73,9 @@ namespace IBS.Models.MSAP.ViewModels
 
         [Range(0, 999999999999.99)]
         public decimal BAFRate { get; set; }
+
+        public bool IsSubcon { get; set; }
+
+        public decimal? SubconCost { get; set; }
     }
 }

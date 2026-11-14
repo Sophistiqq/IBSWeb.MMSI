@@ -57,6 +57,15 @@ namespace Checks.MSAP
             var splitFinalReview = JobProgressCalculator.Calculate(job, null, [first, second], [bill, split]);
             Check(splitFinalReview.Stage == 6 && splitFinalReview.Permission == IBS.Models.MSAP.Enums.ProcedureEnum.ApproveFinalBilling,
                 "Reviewed split bills must require final-approval access.");
+            split.Status = MsapConstants.BillingStatus.ForPosting;
+            split.RejectedAt = DateTime.UtcNow;
+            split.RejectionReason = "Check discount";
+            var splitRejected = JobProgressCalculator.Calculate(job, null, [first, second], [bill, split]);
+            Check(splitRejected.Stage == 6 && splitRejected.ActionName == "Adjust"
+                && splitRejected.Permission == IBS.Models.MSAP.Enums.ProcedureEnum.CreateBilling,
+                "Rejected bills must direct the encoder to Adjust billing.");
+            split.RejectedAt = null;
+            split.RejectionReason = null;
             split.Status = "For Collection";
             job.Status = MsapConstants.CustomerOrderSlipStatus.Closed;
             schedule.Status = MsapConstants.VesselScheduleStatus.Completed;

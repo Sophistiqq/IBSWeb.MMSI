@@ -2,124 +2,291 @@
 @{
     ViewData["Title"] = $"Adjust billing {Model.MsapBillingNumber}";
     ViewData["IsFullWidth"] = true;
+    var activeScope = (Model.DiscountOnTariff, Model.DiscountOnBaf) switch
+    {
+        (true, false) => "tariff",
+        (false, true) => "baf",
+        _ => "total"
+    };
+    var isFlat = string.Equals(Model.DiscountType, "Flat", StringComparison.OrdinalIgnoreCase);
+    var hasSubconTickets = Model.Tickets.Any(t => t.IsSubcon);
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/billing-preparation.css" asp-append-version="true" />
 
 <div class="modern-layout app-ui billing-preparation">
-    <main class="billing-content ui-stack" style="max-width: 1120px; margin: 0 auto;">
-        <header class="ui-page-header">
-            <nav aria-label="Breadcrumb">
-                <ol class="ui-breadcrumb">
-                    <li><a asp-action="Index">Billing</a></li>
-                    <li><a asp-action="Review" asp-route-id="@Model.MsapBillingId">@Model.MsapBillingNumber</a></li>
-                    <li aria-current="page">Adjust</li>
-                </ol>
-            </nav>
-            <h1 class="ui-page-title" data-page-header>Adjust billing @Model.MsapBillingNumber</h1>
-            <div class="billing-review-header-actions">
-                <a asp-action="Review" asp-route-id="@Model.MsapBillingId" class="modern-btn-secondary ui-page-action" data-ui-back>Back to review</a>
+    <main class="modern-container ui-page">
+        <div class="flex-stack ui-page-toolbar">
+            <div>
+                <nav aria-label="Breadcrumb">
+                    <ol class="ui-breadcrumb">
+                        <li>MSAP</li>
+                        <li><a asp-action="Index">Billing</a></li>
+                        <li><a asp-action="Review" asp-route-id="@Model.MsapBillingId">@Model.MsapBillingNumber</a></li>
+                        <li aria-current="page">Adjust</li>
+                    </ol>
+                </nav>
+                <h1 class="modern-headline-lg ui-page-title" data-page-header>@ViewData["Title"]</h1>
+                <p class="ui-page-description ui-caption ui-muted">
+                    @(Model.CustomerName ?? "Customer") · @(Model.VesselName ?? "Vessel")@(string.IsNullOrWhiteSpace(Model.COSNumber) ? "" : $" · COS {Model.COSNumber}") · Authorized rate, basis, and discount adjustment
+                </p>
             </div>
-            <p class="ui-page-description ui-caption ui-muted">
-                @(Model.CustomerName ?? "Customer") · @(Model.VesselName ?? "Vessel") · Authorized rate, basis, and discount adjustment
-            </p>
-        </header>
+            <div class="flex gap-2 ui-actions">
+                <a asp-action="Review" asp-route-id="@Model.MsapBillingId" class="modern-btn-secondary ui-page-action" data-ui-back>
+                    <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span> Back to review
+                </a>
+            </div>
+        </div>
 
         @if (!string.IsNullOrWhiteSpace(Model.RejectionReason))
         {
-            <div class="ui-panel ui-critical" role="alert">
-                <p class="ui-body mb-1"><strong>Requested revision reason:</strong></p>
-                <p class="ui-caption mb-0">@Model.RejectionReason</p>
+            <div class="modern-card ui-card ui-critical mb-4" role="alert">
+                <div class="modern-card-header-info ui-card-header">
+                    <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+                    <h2 class="modern-headline-md ui-section-title">Requested revision reason</h2>
+                </div>
+                <div class="modern-card-body ui-card-body">
+                    <p class="ui-body mb-0">@Model.RejectionReason</p>
+                </div>
             </div>
         }
 
-        <form asp-action="Adjust" method="post" enctype="multipart/form-data" class="ui-stack" id="adjustBillingForm">
+        <form asp-action="Adjust" method="post" enctype="multipart/form-data" class="ui-stack" id="adjustBillingForm" novalidate>
             @Html.AntiForgeryToken()
             <input type="hidden" asp-for="MsapBillingId" />
             <input type="hidden" asp-for="MsapBillingNumber" />
 
-            <section class="ui-panel ui-stack" aria-labelledby="adjustDiscountHeading">
-                <h2 id="adjustDiscountHeading" class="ui-section-title">Discount adjustment</h2>
-                <div class="billing-fields">
-                    <div>
-                        <label asp-for="CosDiscountPercent" class="ui-label">Discount percentage (%)</label>
-                        <input asp-for="CosDiscountPercent" type="number" step="0.0001" min="0" max="100" class="modern-input" id="adjustDiscountPercent" />
-                        <span class="ui-caption ui-muted">COS default: @Model.CosDefaultDiscountPercent.ToString("0.####")%</span>
+            <section class="modern-card ui-card" aria-labelledby="adjustDiscountHeading">
+                <div class="modern-card-header-action flex justify-between items-center w-full flex-wrap gap-2 ui-card-header">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary" aria-hidden="true">percent</span>
+                        <h2 id="adjustDiscountHeading" class="modern-headline-md ui-section-title">Discount adjustment</h2>
                     </div>
-                    <div class="d-flex align-items-center gap-2 pt-3">
-                        <input asp-for="SkipCosDiscount" type="checkbox" id="adjustSkipDiscount" />
-                        <label for="adjustSkipDiscount" class="ui-label mb-0">Skip discount (0%)</label>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <input asp-for="DiscountType" type="hidden" id="adjustDiscountType" />
+                        <div class="billing-mode-switch @(Model.SkipCosDiscount ? "is-disabled" : "")" id="discountModeGroup" role="radiogroup" aria-label="Discount type">
+                            <button type="button" class="billing-segmented-btn @(!isFlat ? "is-active" : "")" data-mode="Percentage" role="radio" aria-checked="@((!isFlat).ToString().ToLowerInvariant())">
+                                Percentage (%)
+                            </button>
+                            <button type="button" class="billing-segmented-btn @(isFlat ? "is-active" : "")" data-mode="Flat" role="radio" aria-checked="@(isFlat.ToString().ToLowerInvariant())">
+                                Flat Amount (₱)
+                            </button>
+                        </div>
+                        <label class="billing-option mb-0" for="adjustApplyDiscount">
+                            <input type="checkbox" id="adjustApplyDiscount" @(!Model.SkipCosDiscount ? "checked" : "") />
+                            <span>Apply customer discount</span>
+                        </label>
+                        <input asp-for="SkipCosDiscount" type="hidden" id="adjustSkipDiscount" />
                     </div>
+                </div>
+                <div class="modern-card-body ui-card-body ui-stack">
+                    <div class="billing-discount-grid" id="discountLayoutGrid">
+                        <div class="ui-field" id="percentRateField" @(isFlat ? "hidden" : "")>
+                            <label asp-for="CosDiscountPercent" class="modern-label ui-label">Discount rate</label>
+                            <div class="billing-discount-control">
+                                <input asp-for="CosDiscountPercent" type="number" step="0.0001" min="0" max="100" class="modern-input ui-input" id="adjustDiscountPercent" />
+                                <span aria-hidden="true">%</span>
+                            </div>
+                            <span class="ui-caption ui-muted">COS default: @Model.CosDefaultDiscountPercent.ToString("0.####")%</span>
+                        </div>
+                        <div class="ui-field" style="@(isFlat ? "grid-column: 1 / -1;" : "")" id="discountScopeContainer">
+                            <span class="modern-label ui-label">Apply discount to</span>
+                            <input asp-for="DiscountOnTariff" type="hidden" id="adjustDiscountTariff" />
+                            <input asp-for="DiscountOnBaf" type="hidden" id="adjustDiscountBaf" />
+                            <div class="billing-segmented @(Model.SkipCosDiscount ? "is-disabled" : "")" id="discountScopeGroup" role="radiogroup" aria-label="Discount scope">
+                                <button type="button" class="billing-segmented-btn @(activeScope == "tariff" ? "is-active" : "")" data-scope="tariff" role="radio" aria-checked="@((activeScope == "tariff").ToString().ToLowerInvariant())">
+                                    Basic (Tariff)
+                                </button>
+                                <button type="button" class="billing-segmented-btn @(activeScope == "baf" ? "is-active" : "")" data-scope="baf" role="radio" aria-checked="@((activeScope == "baf").ToString().ToLowerInvariant())">
+                                    BAF
+                                </button>
+                                <button type="button" class="billing-segmented-btn @(activeScope == "total" ? "is-active" : "")" data-scope="total" role="radio" aria-checked="@((activeScope == "total").ToString().ToLowerInvariant())">
+                                    Total (Gross)
+                                </button>
+                            </div>
+                            <div class="billing-flat-grid" id="flatInputsGrid" @(isFlat ? "" : "hidden")>
+                                <div class="ui-field">
+                                    <label asp-for="FlatDiscountTariff" class="ui-caption ui-muted">Basic flat discount (₱)</label>
+                                    <input asp-for="FlatDiscountTariff" type="number" step="0.01" min="0" class="modern-input ui-input" id="adjustFlatTariff" />
+                                </div>
+                                <div class="ui-field">
+                                    <label asp-for="FlatDiscountBaf" class="ui-caption ui-muted">BAF flat discount (₱)</label>
+                                    <input asp-for="FlatDiscountBaf" type="number" step="0.01" min="0" class="modern-input ui-input" id="adjustFlatBaf" />
+                                </div>
+                                <div class="ui-field">
+                                    <span class="ui-caption ui-muted">Combined invoice discount</span>
+                                    <div class="billing-flat-total">
+                                        <strong id="flatCombinedTotal">₱0.00</strong>
+                                    </div>
+                                </div>
+                            </div>
+                            <span id="scopeHelp" class="ui-caption ui-muted">Applies to both Basic (Tariff) and BAF charges.</span>
+                        </div>
+                    </div>
+                    @if (hasSubconTickets)
+                    {
+                        <div class="flex items-center justify-between flex-wrap gap-2 pt-2" style="border-top: 1px solid var(--outline-variant);">
+                            <label class="billing-option mb-0" for="adjustIncludeSubcon">
+                                <input asp-for="IncludeSubconInDiscount" type="checkbox" id="adjustIncludeSubcon" />
+                                <span>Include Subcon tickets in discount</span>
+                            </label>
+                            <span class="ui-caption ui-muted">Subcon tickets are excluded from customer discounts by default to protect third-party tugboat margin.</span>
+                        </div>
+                        <div id="subconMarginWarning" class="ui-notice ui-attention" role="alert" hidden>
+                            <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+                            <span id="subconMarginWarningText"></span>
+                        </div>
+                    }
+                    else
+                    {
+                        <input asp-for="IncludeSubconInDiscount" type="hidden" id="adjustIncludeSubcon" />
+                    }
                 </div>
             </section>
 
-            <section class="ui-panel ui-stack" aria-labelledby="adjustTicketsHeading">
-                <h2 id="adjustTicketsHeading" class="ui-section-title">Ticket rates &amp; billing basis</h2>
-                <div class="billing-table-scroll">
-                    <table class="billing-service-table">
-                        <thead>
-                            <tr>
-                                <th>Ticket</th>
-                                <th>Tugboat / Service</th>
-                                <th>Hours</th>
-                                <th>Basic basis</th>
-                                <th>Basic rate</th>
-                                <th>BAF basis</th>
-                                <th>BAF rate</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @for (int i = 0; i < Model.Tickets.Count; i++)
-                            {
+            <section class="modern-card ui-card" aria-labelledby="adjustTicketsHeading">
+                <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary" aria-hidden="true">receipt_long</span>
+                        <h2 id="adjustTicketsHeading" class="modern-headline-md ui-section-title">Ticket rates &amp; billing basis</h2>
+                    </div>
+                    <span class="modern-badge-sm status-billing">@Model.Tickets.Count ticket@(Model.Tickets.Count == 1 ? "" : "s")</span>
+                </div>
+                <div class="modern-card-body ui-card-body">
+                    <div class="billing-table-scroll">
+                        <table class="modern-table ui-table" id="adjustTicketsTable">
+                            <thead>
                                 <tr>
-                                    <td>
-                                        <input type="hidden" asp-for="Tickets[i].DispatchTicketId" />
-                                        <input type="hidden" asp-for="Tickets[i].DispatchNumber" />
-                                        <strong>@Model.Tickets[i].DispatchNumber</strong>
-                                    </td>
-                                    <td>@Model.Tickets[i].TugboatName<br /><span class="ui-caption ui-muted">@Model.Tickets[i].ServiceName</span></td>
-                                    <td>@Model.Tickets[i].TotalHours.ToString("N2")</td>
-                                    <td>
-                                        <select asp-for="Tickets[i].DispatchChargeType" class="modern-input">
-                                            <option value="Per hour">Per hour</option>
-                                            <option value="Per move">Per move</option>
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <input asp-for="Tickets[i].DispatchRate" type="number" step="0.01" min="0" class="modern-input" style="min-width: 110px;" required />
-                                    </td>
-                                    <td>
-                                        <select asp-for="Tickets[i].BAFChargeType" class="modern-input">
-                                            <option value="Per hour">Per hour</option>
-                                            <option value="Per move">Per move</option>
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <input asp-for="Tickets[i].BAFRate" type="number" step="0.01" min="0" class="modern-input" style="min-width: 110px;" required />
-                                    </td>
+                                    <th>Ticket</th>
+                                    <th>Tugboat / Service</th>
+                                    <th class="text-end">Hours</th>
+                                    <th>Basic basis</th>
+                                    <th>Basic rate</th>
+                                    <th>BAF basis</th>
+                                    <th>BAF rate</th>
+                                    <th class="text-end">Basic gross</th>
+                                    <th class="text-end">BAF gross</th>
+                                    <th class="text-end">Discount</th>
+                                    <th class="text-end">Net total</th>
                                 </tr>
-                            }
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                @for (int i = 0; i < Model.Tickets.Count; i++)
+                                {
+                                    var ticket = Model.Tickets[i];
+                                    <tr class="js-adjust-ticket-row"
+                                        data-effective-hours="@ticket.EffectiveHours.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                        data-is-subcon="@ticket.IsSubcon.ToString().ToLowerInvariant()"
+                                        data-subcon-cost="@(ticket.SubconCost?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "")">
+                                        <td>
+                                            <input type="hidden" asp-for="Tickets[i].DispatchTicketId" />
+                                            <input type="hidden" asp-for="Tickets[i].DispatchNumber" />
+                                            <input type="hidden" asp-for="Tickets[i].EffectiveHours" />
+                                            <input type="hidden" asp-for="Tickets[i].IsSubcon" />
+                                            <input type="hidden" asp-for="Tickets[i].SubconCost" />
+                                            <strong>@ticket.DispatchNumber</strong>
+                                            @if (ticket.IsSubcon)
+                                            {
+                                                <div class="mt-1">
+                                                    <span class="modern-badge-sm status-tariff">Subcon</span>
+                                                </div>
+                                            }
+                                        </td>
+                                        <td>
+                                            <div>@ticket.TugboatName</div>
+                                            <div class="ui-caption ui-muted">@ticket.ServiceName</div>
+                                            @if (ticket.IsSubcon && ticket.SubconCost.HasValue)
+                                            {
+                                                <div class="ui-caption ui-muted">AP cost: ₱@ticket.SubconCost.Value.ToString("N2")</div>
+                                            }
+                                        </td>
+                                        <td class="text-end">@ticket.TotalHours.ToString("N2")</td>
+                                        <td style="min-width: 140px;">
+                                            <select asp-for="Tickets[i].DispatchChargeType" class="js-modern-select js-adjust-basic-basis" data-searchable="false">
+                                                <option value="Per hour">Per hour</option>
+                                                <option value="Per move">Per move</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input asp-for="Tickets[i].DispatchRate" type="number" step="0.01" min="0" class="modern-input ui-input js-adjust-basic-rate" style="min-width: 115px;" required />
+                                        </td>
+                                        <td style="min-width: 140px;">
+                                            <select asp-for="Tickets[i].BAFChargeType" class="js-modern-select js-adjust-baf-basis" data-searchable="false">
+                                                <option value="Per hour">Per hour</option>
+                                                <option value="Per move">Per move</option>
+                                                <option value="Lumpsum">Lumpsum</option>
+                                                <option value="Industry">Industry</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input asp-for="Tickets[i].BAFRate" type="number" step="0.01" min="0" class="modern-input ui-input js-adjust-baf-rate" style="min-width: 115px;" required />
+                                        </td>
+                                        <td class="text-end js-row-basic-gross">0.00</td>
+                                        <td class="text-end js-row-baf-gross">0.00</td>
+                                        <td class="text-end js-row-discount">0.00</td>
+                                        <td class="text-end"><strong class="js-row-net">0.00</strong></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
 
-            <section class="ui-panel ui-stack" aria-labelledby="adjustAuthHeading">
-                <h2 id="adjustAuthHeading" class="ui-section-title">Authorization &amp; justification (required)</h2>
-                <div>
-                    <label asp-for="Reason" class="ui-label">Authorized reason for adjustment</label>
-                    <textarea asp-for="Reason" class="modern-input" rows="3" minlength="5" maxlength="500" placeholder="Explain what changed and who authorized it (5–500 characters)" required></textarea>
+            <section class="modern-card ui-card" aria-labelledby="adjustSummaryHeading">
+                <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary" aria-hidden="true">calculate</span>
+                        <h2 id="adjustSummaryHeading" class="modern-headline-md ui-section-title">Adjusted billing summary</h2>
+                    </div>
+                    <span class="modern-badge-sm status-tariff" id="adjustScopeBadge">Total (Basic &amp; BAF)</span>
                 </div>
-                <div>
-                    <label asp-for="AuthorizationFile" class="ui-label">Signed authorization document (.pdf, .png, .jpg, .jpeg, max 10 MB)</label>
-                    <input asp-for="AuthorizationFile" type="file" accept=".pdf,.png,.jpg,.jpeg" class="modern-input" required />
+                <div class="modern-card-body ui-card-body">
+                    <div class="modern-grid">
+                        <div class="modern-col-3">
+                            <span class="ui-caption ui-muted">Basic gross</span>
+                            <div class="modern-value-md" id="summaryBasicGross">₱0.00</div>
+                        </div>
+                        <div class="modern-col-3">
+                            <span class="ui-caption ui-muted">BAF gross</span>
+                            <div class="modern-value-md" id="summaryBafGross">₱0.00</div>
+                        </div>
+                        <div class="modern-col-3">
+                            <span class="ui-caption ui-muted">Less: customer discount</span>
+                            <div class="modern-value-md" id="summaryTotalDiscount">₱0.00</div>
+                        </div>
+                        <div class="modern-col-3">
+                            <span class="ui-caption ui-muted">Adjusted net billing</span>
+                            <div class="modern-value-lg text-primary" id="summaryTotalNet">₱0.00</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="modern-card ui-card" aria-labelledby="adjustAuthHeading">
+                <div class="modern-card-header-info ui-card-header">
+                    <span class="material-symbols-outlined text-primary" aria-hidden="true">verified_user</span>
+                    <h2 id="adjustAuthHeading" class="modern-headline-md ui-section-title">Authorization &amp; justification (required)</h2>
+                </div>
+                <div class="modern-card-body ui-card-body ui-stack">
+                    <div class="ui-field">
+                        <label asp-for="Reason" class="modern-label ui-label">Authorized reason for adjustment *</label>
+                        <textarea asp-for="Reason" class="modern-input ui-input" id="adjustReason" rows="3" minlength="5" maxlength="500" placeholder="Explain what changed and who authorized it (5–500 characters)" required></textarea>
+                    </div>
+                    <div class="ui-field">
+                        <label asp-for="AuthorizationFile" class="modern-label ui-label">Signed authorization document (.pdf, .png, .jpg, .jpeg, max 10 MB) *</label>
+                        <input asp-for="AuthorizationFile" type="file" accept=".pdf,.png,.jpg,.jpeg" class="modern-input ui-input" id="adjustAuthFile" required />
+                        <span class="ui-caption ui-muted" id="adjustFileHelp">No file selected.</span>
+                    </div>
                 </div>
             </section>
 
             <footer class="billing-footer">
                 <p class="ui-caption ui-muted">Submitting recalculates billing totals and highlights all overridden values for the Reviewer and Approver.</p>
                 <div class="billing-footer-actions">
-                    <a asp-action="Review" asp-route-id="@Model.MsapBillingId" class="modern-btn-secondary">Cancel</a>
+                    <a asp-action="Review" asp-route-id="@Model.MsapBillingId" class="modern-btn-secondary ui-page-action">
+                        <span class="material-symbols-outlined" aria-hidden="true">cancel</span> Cancel
+                    </a>
                     <button type="submit" class="modern-btn-primary ui-page-action">
                         <span class="material-symbols-outlined" aria-hidden="true">save</span> Save adjustment &amp; resubmit
                     </button>
@@ -132,18 +299,389 @@
 @section Scripts {
     <script>
         (function () {
+            const form = document.getElementById('adjustBillingForm');
+            const applyDiscount = document.getElementById('adjustApplyDiscount');
             const skip = document.getElementById('adjustSkipDiscount');
+            const discountTypeInput = document.getElementById('adjustDiscountType');
+            const modeGroup = document.getElementById('discountModeGroup');
+            const modeButtons = Array.from(document.querySelectorAll('#discountModeGroup .billing-segmented-btn'));
+            const percentRateField = document.getElementById('percentRateField');
+            const discountScopeContainer = document.getElementById('discountScopeContainer');
+            const flatInputsGrid = document.getElementById('flatInputsGrid');
+            const flatTariffInput = document.getElementById('adjustFlatTariff');
+            const flatBafInput = document.getElementById('adjustFlatBaf');
+            const flatCombinedTotal = document.getElementById('flatCombinedTotal');
+            const includeSubconInput = document.getElementById('adjustIncludeSubcon');
+            const subconMarginWarning = document.getElementById('subconMarginWarning');
+            const subconMarginWarningText = document.getElementById('subconMarginWarningText');
             const pct = document.getElementById('adjustDiscountPercent');
-            function syncDiscount() {
-                pct.readOnly = skip.checked;
-                if (skip.checked) pct.value = '0';
-            }
-            skip.addEventListener('change', syncDiscount);
-            syncDiscount();
+            const scopeGroup = document.getElementById('discountScopeGroup');
+            const scopeButtons = Array.from(document.querySelectorAll('#discountScopeGroup .billing-segmented-btn'));
+            const scopeTariff = document.getElementById('adjustDiscountTariff');
+            const scopeBaf = document.getElementById('adjustDiscountBaf');
+            const scopeBadge = document.getElementById('adjustScopeBadge');
+            const scopeHelp = document.getElementById('scopeHelp');
+            const reasonInput = document.getElementById('adjustReason');
+            const fileInput = document.getElementById('adjustAuthFile');
+            const fileHelp = document.getElementById('adjustFileHelp');
+            let isSubmitting = false;
+            let lastEligibleBasicGross = 0;
+            let lastEligibleBafGross = 0;
 
-            document.getElementById('adjustBillingForm').addEventListener('submit', function () {
-                ModernAlert.showLoading('Saving adjustment and recalculating billing...');
+            const currencyFormatter = new Intl.NumberFormat('en-PH', {
+                style: 'currency',
+                currency: 'PHP',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
             });
+            const numberFormatter = new Intl.NumberFormat('en-PH', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+
+            function round2(value) {
+                return Math.round((value + Number.EPSILON) * 100) / 100;
+            }
+
+            function isFlatMode() {
+                return (discountTypeInput.value || '').toLowerCase() === 'flat';
+            }
+
+            function isIncludeSubcon() {
+                if (!includeSubconInput) return false;
+                return includeSubconInput.type === 'checkbox'
+                    ? includeSubconInput.checked
+                    : includeSubconInput.value.toLowerCase() === 'true';
+            }
+
+            function setDiscountMode(mode) {
+                discountTypeInput.value = mode;
+                const flat = mode === 'Flat';
+                modeButtons.forEach(function (btn) {
+                    const isActive = btn.dataset.mode === mode;
+                    btn.classList.toggle('is-active', isActive);
+                    btn.setAttribute('aria-checked', String(isActive));
+                });
+                percentRateField.hidden = flat;
+                flatInputsGrid.hidden = !flat;
+                discountScopeContainer.style.gridColumn = flat ? '1 / -1' : '';
+                syncDiscountInputs();
+            }
+
+            function setScope(scope) {
+                const onTariff = scope === 'total' || scope === 'tariff';
+                const onBaf = scope === 'total' || scope === 'baf';
+                scopeTariff.value = String(onTariff);
+                scopeBaf.value = String(onBaf);
+                scopeButtons.forEach(function (btn) {
+                    const isActive = btn.dataset.scope === scope;
+                    btn.classList.toggle('is-active', isActive);
+                    btn.setAttribute('aria-checked', String(isActive));
+                });
+                syncFlatInputsState();
+                recalculateTotals();
+            }
+
+            function syncFlatInputsState() {
+                const enabled = applyDiscount.checked && isFlatMode();
+                const onTariff = scopeTariff.value.toLowerCase() === 'true';
+                const onBaf = scopeBaf.value.toLowerCase() === 'true';
+
+                flatTariffInput.readOnly = !enabled || !onTariff;
+                flatBafInput.readOnly = !enabled || !onBaf;
+                if (!enabled || !onTariff) flatTariffInput.value = '0';
+                if (!enabled || !onBaf) flatBafInput.value = '0';
+            }
+
+            function syncDiscountInputs() {
+                const enabled = applyDiscount.checked;
+                skip.value = String(!enabled);
+                pct.readOnly = !enabled;
+                if (!enabled) {
+                    pct.value = '0';
+                }
+                modeGroup.classList.toggle('is-disabled', !enabled);
+                modeButtons.forEach(function (btn) { btn.disabled = !enabled; });
+                scopeGroup.classList.toggle('is-disabled', !enabled);
+                scopeButtons.forEach(function (btn) { btn.disabled = !enabled; });
+                syncFlatInputsState();
+                recalculateTotals();
+            }
+
+            function syncScopeLabel() {
+                const onTariff = scopeTariff.value.toLowerCase() === 'true';
+                const onBaf = scopeBaf.value.toLowerCase() === 'true';
+                const flat = isFlatMode();
+                if (!applyDiscount.checked) {
+                    scopeBadge.textContent = 'No discount (0%)';
+                    scopeHelp.textContent = 'Enable "Apply customer discount" above to select a scope.';
+                } else if (onTariff && onBaf) {
+                    scopeBadge.textContent = flat ? 'Flat · Total (Basic & BAF)' : 'Total (Basic & BAF)';
+                    scopeHelp.textContent = flat
+                        ? 'Distributed pro-rata across eligible tickets for Basic and BAF.'
+                        : 'Applies to both Basic (Tariff) and BAF charges.';
+                } else if (onTariff) {
+                    scopeBadge.textContent = flat ? 'Flat · Basic (Tariff)' : 'Basic (Tariff) only';
+                    scopeHelp.textContent = flat
+                        ? 'Distributed pro-rata across eligible tickets for Basic (Tariff) only.'
+                        : 'Applies to Basic (Tariff) charges only.';
+                } else {
+                    scopeBadge.textContent = flat ? 'Flat · BAF' : 'BAF only';
+                    scopeHelp.textContent = flat
+                        ? 'Distributed pro-rata across eligible tickets for BAF only.'
+                        : 'Applies to BAF charges only.';
+                }
+            }
+
+            function distributeFlatComponent(eligibleRows, targetFlat, grossKey) {
+                const allocations = new Map();
+                if (targetFlat <= 0 || eligibleRows.length === 0) return allocations;
+
+                let totalGross = 0;
+                eligibleRows.forEach(r => { totalGross = round2(totalGross + r[grossKey]); });
+                if (totalGross <= 0) return allocations;
+
+                const effectiveTotal = Math.min(targetFlat, totalGross);
+                let allocatedSum = 0;
+                eligibleRows.forEach(function (r) {
+                    let share = round2(effectiveTotal * r[grossKey] / totalGross);
+                    share = Math.min(r[grossKey], Math.max(0, share));
+                    allocations.set(r, share);
+                    allocatedSum = round2(allocatedSum + share);
+                });
+
+                const remainder = round2(effectiveTotal - allocatedSum);
+                if (remainder !== 0) {
+                    let bestRow = null;
+                    let bestGross = -1;
+                    eligibleRows.forEach(function (r) {
+                        const candidate = round2((allocations.get(r) || 0) + remainder);
+                        if (candidate >= 0 && candidate <= r[grossKey] && r[grossKey] > bestGross) {
+                            bestGross = r[grossKey];
+                            bestRow = r;
+                        }
+                    });
+                    if (bestRow) {
+                        allocations.set(bestRow, round2((allocations.get(bestRow) || 0) + remainder));
+                    }
+                }
+                return allocations;
+            }
+
+            function recalculateTotals() {
+                syncScopeLabel();
+                const enabled = applyDiscount.checked;
+                const flat = isFlatMode();
+                const includeSubcon = isIncludeSubcon();
+                const onTariff = scopeTariff.value.toLowerCase() === 'true';
+                const onBaf = scopeBaf.value.toLowerCase() === 'true';
+
+                const rows = Array.from(document.querySelectorAll('.js-adjust-ticket-row')).map(function (tr) {
+                    const hours = Math.max(parseFloat(tr.dataset.effectiveHours) || 1, 1);
+                    const basicBasis = tr.querySelector('.js-adjust-basic-basis').value;
+                    const basicRate = Math.max(0, parseFloat(tr.querySelector('.js-adjust-basic-rate').value) || 0);
+                    const bafBasis = tr.querySelector('.js-adjust-baf-basis').value;
+                    const bafRate = Math.max(0, parseFloat(tr.querySelector('.js-adjust-baf-rate').value) || 0);
+                    const isSubcon = tr.dataset.isSubcon === 'true';
+                    const subconCost = parseFloat(tr.dataset.subconCost);
+                    return {
+                        tr,
+                        basicGross: round2(basicRate * (basicBasis === 'Per hour' ? hours : 1)),
+                        bafGross: round2(bafRate * (bafBasis === 'Per hour' ? hours : 1)),
+                        eligible: !isSubcon || includeSubcon,
+                        isSubcon,
+                        subconCost: Number.isNaN(subconCost) ? null : subconCost
+                    };
+                });
+
+                const eligibleRows = rows.filter(r => r.eligible);
+                lastEligibleBasicGross = round2(eligibleRows.reduce((acc, r) => acc + r.basicGross, 0));
+                lastEligibleBafGross = round2(eligibleRows.reduce((acc, r) => acc + r.bafGross, 0));
+
+                let flatTariffMap = new Map();
+                let flatBafMap = new Map();
+                if (enabled && flat) {
+                    const targetTariff = onTariff ? Math.max(0, parseFloat(flatTariffInput.value) || 0) : 0;
+                    const targetBaf = onBaf ? Math.max(0, parseFloat(flatBafInput.value) || 0) : 0;
+                    flatCombinedTotal.textContent = currencyFormatter.format(round2(targetTariff + targetBaf));
+                    flatTariffMap = distributeFlatComponent(eligibleRows, targetTariff, 'basicGross');
+                    flatBafMap = distributeFlatComponent(eligibleRows, targetBaf, 'bafGross');
+                } else {
+                    flatCombinedTotal.textContent = currencyFormatter.format(0);
+                }
+
+                const rawDiscount = !enabled || flat ? 0 : Math.min(100, Math.max(0, parseFloat(pct.value) || 0));
+                let totalBasicGross = 0;
+                let totalBafGross = 0;
+                let totalDiscount = 0;
+                let totalNet = 0;
+                const belowCostTickets = [];
+
+                rows.forEach(function (r) {
+                    let basicNet = r.basicGross;
+                    let bafNet = r.bafGross;
+
+                    if (enabled && r.eligible) {
+                        if (flat) {
+                            basicNet = round2(r.basicGross - (flatTariffMap.get(r) || 0));
+                            bafNet = round2(r.bafGross - (flatBafMap.get(r) || 0));
+                        } else {
+                            if (onTariff) basicNet = round2(r.basicGross * (1 - rawDiscount / 100));
+                            if (onBaf) bafNet = round2(r.bafGross * (1 - rawDiscount / 100));
+                        }
+                    }
+
+                    const rowDiscount = round2((r.basicGross - basicNet) + (r.bafGross - bafNet));
+                    const rowNet = round2(basicNet + bafNet);
+
+                    r.tr.querySelector('.js-row-basic-gross').textContent = numberFormatter.format(r.basicGross);
+                    r.tr.querySelector('.js-row-baf-gross').textContent = numberFormatter.format(r.bafGross);
+                    r.tr.querySelector('.js-row-discount').textContent = numberFormatter.format(rowDiscount);
+                    r.tr.querySelector('.js-row-net').textContent = numberFormatter.format(rowNet);
+
+                    if (r.isSubcon && r.subconCost !== null && rowNet < r.subconCost) {
+                        belowCostTickets.push(r.tr.querySelector('strong').textContent);
+                    }
+
+                    totalBasicGross = round2(totalBasicGross + r.basicGross);
+                    totalBafGross = round2(totalBafGross + r.bafGross);
+                    totalDiscount = round2(totalDiscount + rowDiscount);
+                    totalNet = round2(totalNet + rowNet);
+                });
+
+                if (subconMarginWarning && subconMarginWarningText) {
+                    subconMarginWarning.hidden = belowCostTickets.length === 0;
+                    if (belowCostTickets.length > 0) {
+                        subconMarginWarningText.textContent = `Margin alert: Net revenue is below recorded Subcon AP cost on ${belowCostTickets.join(', ')}.`;
+                    }
+                }
+
+                document.getElementById('summaryBasicGross').textContent = currencyFormatter.format(totalBasicGross);
+                document.getElementById('summaryBafGross').textContent = currencyFormatter.format(totalBafGross);
+                document.getElementById('summaryTotalDiscount').textContent = currencyFormatter.format(totalDiscount);
+                document.getElementById('summaryTotalNet').textContent = currencyFormatter.format(totalNet);
+            }
+
+            applyDiscount.addEventListener('change', function () {
+                syncDiscountInputs();
+                if (applyDiscount.checked) {
+                    if (isFlatMode()) {
+                        (scopeTariff.value.toLowerCase() === 'true' ? flatTariffInput : flatBafInput).focus();
+                    } else {
+                        pct.focus();
+                    }
+                }
+            });
+            modeButtons.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    setDiscountMode(btn.dataset.mode);
+                });
+            });
+            pct.addEventListener('input', recalculateTotals);
+            flatTariffInput.addEventListener('input', recalculateTotals);
+            flatBafInput.addEventListener('input', recalculateTotals);
+            if (includeSubconInput && includeSubconInput.type === 'checkbox') {
+                includeSubconInput.addEventListener('change', recalculateTotals);
+            }
+            scopeButtons.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    setScope(btn.dataset.scope);
+                });
+            });
+
+            document.querySelectorAll('.js-adjust-basic-basis, .js-adjust-baf-basis').forEach(function (selectEl) {
+                selectEl.addEventListener('change', recalculateTotals);
+                if (window.jQuery) {
+                    window.jQuery(selectEl).on('change', recalculateTotals);
+                }
+            });
+            document.querySelectorAll('.js-adjust-basic-rate, .js-adjust-baf-rate').forEach(function (inputEl) {
+                inputEl.addEventListener('input', recalculateTotals);
+            });
+
+            fileInput.addEventListener('change', function () {
+                const file = fileInput.files && fileInput.files[0];
+                if (!file) {
+                    fileHelp.textContent = 'No file selected.';
+                    return;
+                }
+                const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+                fileHelp.textContent = `${file.name} (${sizeMb} MB)`;
+            });
+
+            form.addEventListener('submit', async function (event) {
+                if (isSubmitting) {
+                    return;
+                }
+                event.preventDefault();
+
+                if (applyDiscount.checked && !isFlatMode()) {
+                    const discountVal = parseFloat(pct.value);
+                    if (Number.isNaN(discountVal) || discountVal < 0 || discountVal > 100) {
+                        ModernAlert.warning('Discount percentage must be between 0% and 100%.', 'Invalid discount');
+                        pct.focus();
+                        return;
+                    }
+                }
+
+                if (applyDiscount.checked && isFlatMode()) {
+                    const flatTariffVal = parseFloat(flatTariffInput.value) || 0;
+                    const flatBafVal = parseFloat(flatBafInput.value) || 0;
+                    if (flatTariffVal < 0 || flatBafVal < 0) {
+                        ModernAlert.warning('Flat discount amounts cannot be negative.', 'Invalid discount');
+                        return;
+                    }
+                    if (flatTariffVal > lastEligibleBasicGross) {
+                        ModernAlert.warning(`Basic flat discount cannot exceed eligible Basic gross (${currencyFormatter.format(lastEligibleBasicGross)}).`, 'Discount exceeds gross');
+                        flatTariffInput.focus();
+                        return;
+                    }
+                    if (flatBafVal > lastEligibleBafGross) {
+                        ModernAlert.warning(`BAF flat discount cannot exceed eligible BAF gross (${currencyFormatter.format(lastEligibleBafGross)}).`, 'Discount exceeds gross');
+                        flatBafInput.focus();
+                        return;
+                    }
+                }
+
+                const reason = (reasonInput.value || '').trim();
+                if (reason.length < 5 || reason.length > 500) {
+                    ModernAlert.warning('Please provide a justification reason between 5 and 500 characters.', 'Justification required');
+                    reasonInput.focus();
+                    return;
+                }
+
+                const file = fileInput.files && fileInput.files[0];
+                if (!file) {
+                    ModernAlert.warning('Please attach the signed authorization document (.pdf, .png, .jpg, or .jpeg).', 'Authorization document required');
+                    fileInput.focus();
+                    return;
+                }
+
+                const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+                if (!['.pdf', '.png', '.jpg', '.jpeg'].includes(ext) || file.size > 10 * 1024 * 1024) {
+                    ModernAlert.warning('Authorization document must be a PDF, PNG, or JPEG file of up to 10 MB.', 'Invalid file');
+                    fileInput.focus();
+                    return;
+                }
+
+                const result = await ModernAlert.confirm({
+                    title: 'Save adjustment & resubmit?',
+                    text: 'This will recalculate billing totals, log the override with your authorization document, and resubmit for review.',
+                    confirmText: 'Save & resubmit',
+                    cancelText: 'Keep editing',
+                    icon: 'question'
+                });
+
+                if (!result.isConfirmed) {
+                    return;
+                }
+
+                isSubmitting = true;
+                ModernAlert.showLoading('Saving adjustment and recalculating billing...');
+                form.submit();
+            });
+
+            syncDiscountInputs();
         })();
     </script>
 }

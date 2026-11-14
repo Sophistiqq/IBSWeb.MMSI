@@ -103,6 +103,9 @@ namespace IBS.Services.MSAP
                         existingDraft.PrintWht = model.PrintWht;
                         existingDraft.PrintDiscount = model.PrintDiscount;
                         existingDraft.IsUndocumented = model.IsUndocumented;
+                        existingDraft.DiscountOnTariff = model.DiscountOnTariff;
+                        existingDraft.DiscountOnBaf = model.DiscountOnBaf;
+                        existingDraft.Discount = model.Discount;
                         existingDraft.DispatchAmount = model.DispatchAmount;
                         existingDraft.BAFAmount = model.BAFAmount;
                         existingDraft.Amount = model.Amount;
@@ -127,6 +130,9 @@ namespace IBS.Services.MSAP
                             existingDraft.BafBilling.PrintWht = model.BafBilling.PrintWht;
                             existingDraft.BafBilling.PrintDiscount = model.BafBilling.PrintDiscount;
                             existingDraft.BafBilling.IsUndocumented = model.BafBilling.IsUndocumented;
+                            existingDraft.BafBilling.DiscountOnTariff = model.BafBilling.DiscountOnTariff;
+                            existingDraft.BafBilling.DiscountOnBaf = model.BafBilling.DiscountOnBaf;
+                            existingDraft.BafBilling.Discount = model.BafBilling.Discount;
                             existingDraft.BafBilling.BAFAmount = model.BafBilling.BAFAmount;
                             existingDraft.BafBilling.Amount = model.BafBilling.Amount;
                             existingDraft.BafBilling.Balance = model.BafBilling.Balance;
@@ -342,13 +348,12 @@ namespace IBS.Services.MSAP
             }
             var canOverrideCommercial = existingDraft != null
                 && (existingDraft.RejectedAt.HasValue || existingDraft.UnpostedDate.HasValue);
-            if (schedule != null && ((model.CosDiscountPercent.HasValue
-                && (model.CosDiscountPercent != schedule.CosDiscountPercent || model.SkipCosDiscount != schedule.SkipCosDiscount))
-                || (model.SbmaEnabled.HasValue && model.SbmaEnabled != schedule.SbmaEnabled)))
+            decimal scheduleEffectiveDiscount = schedule == null || schedule.SkipCosDiscount ? 0m : (schedule.CosDiscountPercent ?? 0m);
+            decimal modelEffectiveDiscount = model.SkipCosDiscount ? 0m : (model.CosDiscountPercent ?? 0m);
+            bool discountChanged = schedule != null && model.CosDiscountPercent.HasValue && modelEffectiveDiscount != scheduleEffectiveDiscount;
+            if (schedule != null && (discountChanged || (model.SbmaEnabled.HasValue && model.SbmaEnabled != schedule.SbmaEnabled)))
             {
-                if (model.CosDiscountPercent.HasValue
-                    && (model.CosDiscountPercent != schedule.CosDiscountPercent || model.SkipCosDiscount != schedule.SkipCosDiscount)
-                    && !canOverrideCommercial)
+                if (discountChanged && !canOverrideCommercial)
                 {
                     return ServiceResult<List<Billing>>.Failure("Discount overrides require a Reviewer or Approver revision request. Use Adjust Billing after rejection.");
                 }
@@ -362,14 +367,14 @@ namespace IBS.Services.MSAP
                         }
                     }
                 }
-                if (model.CosDiscountPercent.HasValue)
+                if (discountChanged)
                 {
                     schedule.CosDiscountPercent = model.CosDiscountPercent;
                     schedule.SkipCosDiscount = model.SkipCosDiscount;
-                    foreach (var ticket in tickets)
-                    {
-                        ScheduledTicketCharges.ApplyDiscount(ticket, model.SkipCosDiscount ? 0m : model.CosDiscountPercent.Value);
-                    }
+                }
+                foreach (var ticket in tickets)
+                {
+                    ScheduledTicketCharges.ApplyDiscount(ticket, scheduleEffectiveDiscount == modelEffectiveDiscount ? scheduleEffectiveDiscount : modelEffectiveDiscount, model.DiscountOnTariff, model.DiscountOnBaf);
                 }
                 if (model.SbmaEnabled.HasValue)
                 {
@@ -405,7 +410,10 @@ namespace IBS.Services.MSAP
             model.UniqueTugboats = tickets.Select(t => t.Tugboat.TugboatName).Distinct().ToList();
             model.DispatchAmount = tickets.Sum(t => t.DispatchNetRevenue);
             decimal baf = tickets.Sum(t => t.BAFNetRevenue);
+            decimal tariffDiscountAmt = tickets.Sum(t => t.DispatchBillingAmount - t.DispatchNetRevenue);
+            decimal bafDiscountAmt = tickets.Sum(t => t.BAFBillingAmount - t.BAFNetRevenue);
             model.BAFAmount = model.SeparateBaf ? 0 : baf;
+            model.Discount = model.SeparateBaf ? tariffDiscountAmt : tariffDiscountAmt + bafDiscountAmt;
             model.Amount = model.Balance = model.DispatchAmount + model.BAFAmount;
             model.IsPrincipal = model.PrincipalId.HasValue;
             var statements = new List<Billing> { model };
@@ -440,6 +448,9 @@ namespace IBS.Services.MSAP
                     PrintWht = model.PrintWht,
                     PrintDiscount = model.PrintDiscount,
                     IsUndocumented = model.IsUndocumented,
+                    DiscountOnTariff = model.DiscountOnTariff,
+                    DiscountOnBaf = model.DiscountOnBaf,
+                    Discount = bafDiscountAmt,
                     Company = company,
                     Status = model.Status,
                     CreatedBy = username,
@@ -644,6 +655,12 @@ namespace IBS.Services.MSAP
                 {
                     return ServiceResult.Failure("Discount must be between 0% and 100%.", ServiceResultStatus.ValidationError);
                 }
+                var isFlatDiscount = string.Equals(model.DiscountType, "Flat", StringComparison.OrdinalIgnoreCase);
+                var normalizedDiscountType = isFlatDiscount ? "Flat" : "Percentage";
+                if (isFlatDiscount && (model.FlatDiscountTariff < 0m || model.FlatDiscountBaf < 0m))
+                {
+                    return ServiceResult.Failure("Flat discount amounts cannot be negative.", ServiceResultStatus.ValidationError);
+                }
 
                 string extension = Path.GetExtension(model.AuthorizationFile.FileName).ToLowerInvariant();
                 string uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
@@ -665,9 +682,11 @@ namespace IBS.Services.MSAP
                         : null;
 
                     var fieldDiffs = new List<MsapFieldChange>();
-                    decimal effectiveDiscount = model.SkipCosDiscount ? 0m : model.CosDiscountPercent;
+                    decimal effectiveDiscount = model.SkipCosDiscount || isFlatDiscount ? 0m : model.CosDiscountPercent;
+                    var effectiveFlatTariff = !model.SkipCosDiscount && isFlatDiscount && model.DiscountOnTariff ? Math.Round(model.FlatDiscountTariff, 2) : 0m;
+                    var effectiveFlatBaf = !model.SkipCosDiscount && isFlatDiscount && model.DiscountOnBaf ? Math.Round(model.FlatDiscountBaf, 2) : 0m;
 
-                    if (schedule != null)
+                    if (schedule != null && !isFlatDiscount)
                     {
                         decimal prevDiscount = schedule.SkipCosDiscount ? 0m : (schedule.CosDiscountPercent ?? 0m);
                         if (prevDiscount != effectiveDiscount)
@@ -684,6 +703,74 @@ namespace IBS.Services.MSAP
                         schedule.SkipCosDiscount = model.SkipCosDiscount;
                     }
 
+                    if (!string.Equals(primaryBill.DiscountType, normalizedDiscountType, StringComparison.OrdinalIgnoreCase))
+                    {
+                        fieldDiffs.Add(new MsapFieldChange
+                        {
+                            Field = "DiscountType",
+                            Label = "Discount Mode",
+                            Before = primaryBill.DiscountType,
+                            After = normalizedDiscountType
+                        });
+                    }
+                    if (isFlatDiscount && (primaryBill.FlatDiscountTariff != effectiveFlatTariff || primaryBill.FlatDiscountBaf != effectiveFlatBaf))
+                    {
+                        fieldDiffs.Add(new MsapFieldChange
+                        {
+                            Field = "FlatDiscount",
+                            Label = "Flat Discount (Basic / BAF)",
+                            Before = $"₱{primaryBill.FlatDiscountTariff:N2} / ₱{primaryBill.FlatDiscountBaf:N2}",
+                            After = $"₱{effectiveFlatTariff:N2} / ₱{effectiveFlatBaf:N2}"
+                        });
+                    }
+                    if (primaryBill.IncludeSubconInDiscount != model.IncludeSubconInDiscount)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange
+                        {
+                            Field = "IncludeSubconInDiscount",
+                            Label = "Subcon Discount Eligibility",
+                            Before = primaryBill.IncludeSubconInDiscount ? "Included" : "Excluded",
+                            After = model.IncludeSubconInDiscount ? "Included" : "Excluded"
+                        });
+                    }
+
+                    if (primaryBill.DiscountOnTariff != model.DiscountOnTariff || primaryBill.DiscountOnBaf != model.DiscountOnBaf)
+                    {
+                        static string FormatScope(bool onTariff, bool onBaf) => (onTariff, onBaf) switch
+                        {
+                            (true, true) => "Total (Basic & BAF)",
+                            (true, false) => "Basic (Tariff) only",
+                            (false, true) => "BAF only",
+                            _ => "None"
+                        };
+                        fieldDiffs.Add(new MsapFieldChange
+                        {
+                            Field = "DiscountScope",
+                            Label = "Discount Scope",
+                            Before = FormatScope(primaryBill.DiscountOnTariff, primaryBill.DiscountOnBaf),
+                            After = FormatScope(model.DiscountOnTariff, model.DiscountOnBaf)
+                        });
+                    }
+                    primaryBill.DiscountType = normalizedDiscountType;
+                    primaryBill.FlatDiscountTariff = effectiveFlatTariff;
+                    primaryBill.FlatDiscountBaf = effectiveFlatBaf;
+                    primaryBill.IncludeSubconInDiscount = model.IncludeSubconInDiscount;
+                    primaryBill.DiscountOnTariff = model.DiscountOnTariff;
+                    primaryBill.DiscountOnBaf = model.DiscountOnBaf;
+                    if (bafBill != null)
+                    {
+                        bafBill.DiscountType = normalizedDiscountType;
+                        bafBill.FlatDiscountTariff = effectiveFlatTariff;
+                        bafBill.FlatDiscountBaf = effectiveFlatBaf;
+                        bafBill.IncludeSubconInDiscount = model.IncludeSubconInDiscount;
+                        bafBill.DiscountOnTariff = model.DiscountOnTariff;
+                        bafBill.DiscountOnBaf = model.DiscountOnBaf;
+                    }
+
+                    static bool IsSubconTicket(DispatchTicket t) => t.Tugboat is { IsCompanyOwned: false, TugboatOwnerId: not null };
+
+                    var oldTicketNets = tickets.ToDictionary(t => t.DispatchTicketId, t => t.TotalNetRevenue);
+
                     foreach (var ticketInput in model.Tickets)
                     {
                         var ticket = tickets.FirstOrDefault(t => t.DispatchTicketId == ticketInput.DispatchTicketId);
@@ -693,7 +780,9 @@ namespace IBS.Services.MSAP
                         }
 
                         string newDispatchType = ticketInput.DispatchChargeType == "Per move" ? "Per move" : "Per hour";
-                        string newBafType = ticketInput.BAFChargeType == "Per move" ? "Per move" : "Per hour";
+                        string newBafType = ticketInput.BAFChargeType is "Per move" or "Lumpsum" or "Industry"
+                            ? ticketInput.BAFChargeType
+                            : "Per hour";
 
                         if (!string.Equals(ticket.DispatchChargeType, newDispatchType, StringComparison.Ordinal))
                         {
@@ -720,22 +809,77 @@ namespace IBS.Services.MSAP
                         ticket.EditedBy = username;
                         ticket.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
-                        ScheduledTicketCharges.ApplyDiscount(ticket, effectiveDiscount);
+                        if (!isFlatDiscount)
+                        {
+                            var applyForTicket = model.IncludeSubconInDiscount || !IsSubconTicket(ticket);
+                            ScheduledTicketCharges.ApplyDiscount(
+                                ticket,
+                                applyForTicket ? effectiveDiscount : 0m,
+                                applyForTicket && model.DiscountOnTariff,
+                                applyForTicket && model.DiscountOnBaf);
+                        }
+                    }
+
+                    if (isFlatDiscount)
+                    {
+                        bool IsEligible(DispatchTicket t) => model.IncludeSubconInDiscount || !IsSubconTicket(t);
+                        ScheduledTicketCharges.ApplyFlatDiscount(
+                            tickets,
+                            IsEligible,
+                            effectiveFlatTariff,
+                            effectiveFlatBaf,
+                            model.DiscountOnTariff,
+                            model.DiscountOnBaf);
+                    }
+
+                    foreach (var ticket in tickets)
+                    {
+                        if (oldTicketNets.TryGetValue(ticket.DispatchTicketId, out var oldNet) && oldNet != ticket.TotalNetRevenue)
+                        {
+                            fieldDiffs.Add(new MsapFieldChange
+                            {
+                                Field = $"Ticket_{ticket.DispatchTicketId}_NetAmount",
+                                Label = $"{ticket.DispatchNumber} After Discount",
+                                Before = oldNet.ToString("N2"),
+                                After = ticket.TotalNetRevenue.ToString("N2")
+                            });
+                        }
                     }
 
                     decimal oldTotal = primaryBill.Amount + (bafBill?.Amount ?? 0m);
+                    decimal oldDispatchAmount = primaryBill.DispatchAmount;
+                    decimal oldBafAmount = primaryBill.BAFAmount + (bafBill?.BAFAmount ?? 0m);
+                    decimal oldDiscountAmount = primaryBill.Discount + (bafBill?.Discount ?? 0m);
                     primaryBill.DispatchAmount = tickets.Sum(t => t.DispatchNetRevenue);
                     decimal totalBaf = tickets.Sum(t => t.BAFNetRevenue);
+                    decimal tariffDiscountAmt = tickets.Sum(t => t.DispatchBillingAmount - t.DispatchNetRevenue);
+                    decimal bafDiscountAmt = tickets.Sum(t => t.BAFBillingAmount - t.BAFNetRevenue);
+                    decimal newDiscountAmount = tariffDiscountAmt + bafDiscountAmt;
+                    if (oldDiscountAmount != newDiscountAmount)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange { Field = "DiscountAmount", Label = "Total Discount Applied", Before = oldDiscountAmount.ToString("N2"), After = newDiscountAmount.ToString("N2") });
+                    }
+                    if (oldDispatchAmount != primaryBill.DispatchAmount)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange { Field = "DispatchAmount", Label = "Basic Charges After Discount", Before = oldDispatchAmount.ToString("N2"), After = primaryBill.DispatchAmount.ToString("N2") });
+                    }
+                    if (oldBafAmount != totalBaf)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange { Field = "BAFAmount", Label = "BAF Charges After Discount", Before = oldBafAmount.ToString("N2"), After = totalBaf.ToString("N2") });
+                    }
                     if (bafBill != null)
                     {
                         primaryBill.BAFAmount = 0m;
+                        primaryBill.Discount = tariffDiscountAmt;
                         primaryBill.Amount = primaryBill.Balance = primaryBill.DispatchAmount;
                         bafBill.BAFAmount = totalBaf;
+                        bafBill.Discount = bafDiscountAmt;
                         bafBill.Amount = bafBill.Balance = totalBaf;
                     }
                     else
                     {
                         primaryBill.BAFAmount = totalBaf;
+                        primaryBill.Discount = tariffDiscountAmt + bafDiscountAmt;
                         primaryBill.Amount = primaryBill.Balance = primaryBill.DispatchAmount + totalBaf;
                     }
                     decimal newTotal = primaryBill.Amount + (bafBill?.Amount ?? 0m);

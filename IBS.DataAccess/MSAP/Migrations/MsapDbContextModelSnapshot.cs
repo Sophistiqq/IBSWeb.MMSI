@@ -404,6 +404,20 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("discount");
 
+                    b.Property<bool>("DiscountOnBaf")
+                        .HasColumnType("boolean")
+                        .HasColumnName("discount_on_baf");
+
+                    b.Property<bool>("DiscountOnTariff")
+                        .HasColumnType("boolean")
+                        .HasColumnName("discount_on_tariff");
+
+                    b.Property<string>("DiscountType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("discount_type");
+
                     b.Property<decimal>("DispatchAmount")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
@@ -420,6 +434,20 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Property<DateTime?>("EditedDate")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("edited_date");
+
+                    b.Property<decimal>("FlatDiscountBaf")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("flat_discount_baf");
+
+                    b.Property<decimal>("FlatDiscountTariff")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("flat_discount_tariff");
+
+                    b.Property<bool>("IncludeSubconInDiscount")
+                        .HasColumnType("boolean")
+                        .HasColumnName("include_subcon_in_discount");
 
                     b.Property<bool>("IsPaid")
                         .HasColumnType("boolean")
