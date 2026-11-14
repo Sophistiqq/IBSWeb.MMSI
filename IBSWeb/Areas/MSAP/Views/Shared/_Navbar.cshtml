@@ -311,6 +311,15 @@
                                                 <div><div class="mnav-link-title">Principals</div></div>
                                             </a>
                                         }
+                                        @if (canManageCustomer || canManagePrincipal || canAccessRates)
+                                        {
+                                            <a class="mnav-mega-link"
+                                               asp-area="MSAP" asp-controller="Representative" asp-action="Index"
+                                               role="menuitem">
+                                                <span class="material-symbols-outlined">badge</span>
+                                                <div><div class="mnav-link-title">Representatives</div></div>
+                                            </a>
+                                        }
                                         @if (canAccessRates)
                                         {
                                             <a class="mnav-mega-link"

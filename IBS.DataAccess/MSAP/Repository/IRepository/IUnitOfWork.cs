@@ -49,6 +49,7 @@ namespace IBS.DataAccess.MSAP.Repository.IRepository
         IBafTableRepository BafTable { get; }
         IPortRepository Port { get; }
         IPrincipalRepository Principal { get; }
+        IRepository<IBS.Models.MSAP.MasterFile.MsapRepresentative> Representative { get; }
         ITerminalRepository Terminal { get; }
         ITugboatRepository Tugboat { get; }
         ITugMasterRepository TugMaster { get; }

@@ -62,6 +62,7 @@ namespace IBS.DataAccess.MSAP.Data
         public DbSet<TugboatOwner> MsapTugboatOwners { get; set; }
         public DbSet<Port> MsapPorts { get; set; }
         public DbSet<Principal> MsapPrincipals { get; set; }
+        public DbSet<MsapRepresentative> MsapRepresentatives { get; set; }
         public DbSet<Terminal> MsapTerminals { get; set; }
         public DbSet<Tugboat> MsapTugboats { get; set; }
         public DbSet<TugMaster> MsapTugMasters { get; set; }
@@ -98,6 +99,10 @@ namespace IBS.DataAccess.MSAP.Data
             builder.Entity<Billing>().ToTable("mmsi_billings");
             builder.Entity<Billing>().HasOne(b => b.BasicBilling).WithOne(b => b.BafBilling)
                 .HasForeignKey<Billing>(b => b.BasicBillingId).OnDelete(DeleteBehavior.Restrict);
+            builder.Entity<Billing>().HasOne(b => b.AgencyIncentiveRepresentative).WithMany()
+                .HasForeignKey(b => b.AgencyIncentiveRepresentativeId).OnDelete(DeleteBehavior.Restrict);
+            builder.Entity<Billing>().HasOne(b => b.AgentCommissionRepresentative).WithMany()
+                .HasForeignKey(b => b.AgentCommissionRepresentativeId).OnDelete(DeleteBehavior.Restrict);
             builder.Entity<Collection>().ToTable("mmsi_collections");
             builder.Entity<OtherTugCharge>(charge =>
             {
@@ -121,6 +126,12 @@ namespace IBS.DataAccess.MSAP.Data
             builder.Entity<Vessel>().ToTable("mmsi_vessels");
             builder.Entity<Service>().ToTable("mmsi_services");
             builder.Entity<Principal>().ToTable("mmsi_principals");
+            builder.Entity<MsapRepresentative>(rep =>
+            {
+                rep.ToTable("mmsi_representatives");
+                rep.HasOne(r => r.Customer).WithMany().HasForeignKey(r => r.CustomerId).OnDelete(DeleteBehavior.Restrict);
+                rep.HasOne(r => r.Principal).WithMany().HasForeignKey(r => r.PrincipalId).OnDelete(DeleteBehavior.Restrict);
+            });
             builder.Entity<TariffRate>().ToTable("mmsi_tariff_rates");
             builder.Entity<BafRate>().ToTable("mmsi_baf_rates");
             builder.Entity<BafRate>().HasIndex(rate => new { rate.CustomerId, rate.TerminalId, rate.ServiceId, rate.AsOfDate });

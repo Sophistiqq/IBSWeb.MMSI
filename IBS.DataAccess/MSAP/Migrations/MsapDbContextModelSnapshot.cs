@@ -303,6 +303,64 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("varchar(500)")
                         .HasColumnName("adjustment_attachment_url");
 
+                    b.Property<decimal>("AgencyIncentiveAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("agency_incentive_amount");
+
+                    b.Property<string>("AgencyIncentiveBase")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("agency_incentive_base");
+
+                    b.Property<string>("AgencyIncentiveMode")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("agency_incentive_mode");
+
+                    b.Property<string>("AgencyIncentiveName")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)")
+                        .HasColumnName("agency_incentive_name");
+
+                    b.Property<decimal>("AgencyIncentiveRate")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("agency_incentive_rate");
+
+                    b.Property<int?>("AgencyIncentiveRepresentativeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("agency_incentive_representative_id");
+
+                    b.Property<decimal>("AgentCommissionAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("agent_commission_amount");
+
+                    b.Property<string>("AgentCommissionBase")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("agent_commission_base");
+
+                    b.Property<string>("AgentCommissionMode")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("agent_commission_mode");
+
+                    b.Property<string>("AgentCommissionName")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)")
+                        .HasColumnName("agent_commission_name");
+
+                    b.Property<decimal>("AgentCommissionRate")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("agent_commission_rate");
+
+                    b.Property<int?>("AgentCommissionRepresentativeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("agent_commission_representative_id");
+
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
@@ -591,6 +649,12 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     b.HasKey("MsapBillingId")
                         .HasName("pk_mmsi_billings");
+
+                    b.HasIndex("AgencyIncentiveRepresentativeId")
+                        .HasDatabaseName("ix_mmsi_billings_agency_incentive_representative_id");
+
+                    b.HasIndex("AgentCommissionRepresentativeId")
+                        .HasDatabaseName("ix_mmsi_billings_agent_commission_representative_id");
 
                     b.HasIndex("ApprovedByUserId")
                         .HasDatabaseName("ix_mmsi_billings_approved_by_user_id");
@@ -1180,6 +1244,16 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("accounting_source_id")
                         .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<decimal>("AgencyIncentiveAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("agency_incentive_amount");
+
+                    b.Property<decimal>("AgentCommissionAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("agent_commission_amount");
 
                     b.Property<decimal>("ApOtherTugs")
                         .HasPrecision(18, 4)
@@ -1798,6 +1872,86 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasDatabaseName("ix_mmsi_posted_periods_year_month");
 
                     b.ToTable("mmsi_posted_periods", "msap");
+                });
+
+            modelBuilder.Entity("IBS.Models.MSAP.MasterFile.MsapRepresentative", b =>
+                {
+                    b.Property<int>("RepresentativeId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("representative_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("RepresentativeId"));
+
+                    b.Property<string>("CalculationBase")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("calculation_base");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("category");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_date");
+
+                    b.Property<int?>("CustomerId")
+                        .HasColumnType("integer")
+                        .HasColumnName("customer_id");
+
+                    b.Property<string>("EditedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("edited_by");
+
+                    b.Property<DateTime?>("EditedDate")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("edited_date");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<int?>("PrincipalId")
+                        .HasColumnType("integer")
+                        .HasColumnName("principal_id");
+
+                    b.Property<string>("RateMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("rate_mode");
+
+                    b.Property<decimal>("RateValue")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("rate_value");
+
+                    b.Property<string>("RepresentativeName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)")
+                        .HasColumnName("representative_name");
+
+                    b.HasKey("RepresentativeId")
+                        .HasName("pk_mmsi_representatives");
+
+                    b.HasIndex("CustomerId")
+                        .HasDatabaseName("ix_mmsi_representatives_customer_id");
+
+                    b.HasIndex("PrincipalId")
+                        .HasDatabaseName("ix_mmsi_representatives_principal_id");
+
+                    b.ToTable("mmsi_representatives", "msap");
                 });
 
             modelBuilder.Entity("IBS.Models.MSAP.MasterFile.Port", b =>
@@ -3097,6 +3251,18 @@ namespace IBS.DataAccess.MSAP.Migrations
 
             modelBuilder.Entity("IBS.Models.MSAP.Billing", b =>
                 {
+                    b.HasOne("IBS.Models.MSAP.MasterFile.MsapRepresentative", "AgencyIncentiveRepresentative")
+                        .WithMany()
+                        .HasForeignKey("AgencyIncentiveRepresentativeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_mmsi_billings_msap_representatives_agency_incentive_represe");
+
+                    b.HasOne("IBS.Models.MSAP.MasterFile.MsapRepresentative", "AgentCommissionRepresentative")
+                        .WithMany()
+                        .HasForeignKey("AgentCommissionRepresentativeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_mmsi_billings_msap_representatives_agent_commission_represe");
+
                     b.HasOne("IBS.Models.ApplicationUser", "ApprovedByUser")
                         .WithMany()
                         .HasForeignKey("ApprovedByUserId")
@@ -3166,6 +3332,10 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_mmsi_billings_msap_vessels_vesselnum");
+
+                    b.Navigation("AgencyIncentiveRepresentative");
+
+                    b.Navigation("AgentCommissionRepresentative");
 
                     b.Navigation("ApprovedByUser");
 
@@ -3383,6 +3553,25 @@ namespace IBS.DataAccess.MSAP.Migrations
                     b.Navigation("Tugboat");
 
                     b.Navigation("Vessel");
+                });
+
+            modelBuilder.Entity("IBS.Models.MSAP.MasterFile.MsapRepresentative", b =>
+                {
+                    b.HasOne("IBS.Models.MSAP.MasterFile.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_mmsi_representatives_customers_customer_id");
+
+                    b.HasOne("IBS.Models.MSAP.MasterFile.Principal", "Principal")
+                        .WithMany()
+                        .HasForeignKey("PrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_mmsi_representatives_mmsi_principals_principal_id");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Principal");
                 });
 
             modelBuilder.Entity("IBS.Models.MSAP.MasterFile.Principal", b =>

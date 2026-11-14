@@ -144,6 +144,88 @@
                 </div>
             </section>
 
+            @{
+                var agencyIncentiveReps = ViewBag.AgencyIncentiveReps as List<IBS.Models.MSAP.MasterFile.MsapRepresentative> ?? [];
+                var agentCommissionReps = ViewBag.AgentCommissionReps as List<IBS.Models.MSAP.MasterFile.MsapRepresentative> ?? [];
+            }
+            <section class="modern-card ui-card" aria-labelledby="adjustCommissionsHeading">
+                <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary" aria-hidden="true">badge</span>
+                        <h2 id="adjustCommissionsHeading" class="modern-headline-md ui-section-title">Internal Rebates &amp; Commissions</h2>
+                    </div>
+                    <span class="ui-caption ui-muted">Internal only — hidden from client invoices</span>
+                </div>
+                <div class="modern-card-body ui-card-body ui-stack">
+                    <div class="billing-recipient-fields">
+                        <div class="ui-field">
+                            <label asp-for="AgencyIncentiveRepresentativeId" class="ui-label">Agency incentive representative</label>
+                            <select asp-for="AgencyIncentiveRepresentativeId" class="js-modern-select js-adjust-rep" data-prefix="AgencyIncentive" id="adjustAgencyIncentiveRep">
+                                <option value="">None</option>
+                                @foreach (var rep in agencyIncentiveReps)
+                                {
+                                    <option value="@rep.RepresentativeId" data-mode="@rep.RateMode" data-base="@rep.CalculationBase" data-rate="@rep.RateValue">@rep.RepresentativeName</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="ui-field">
+                            <label asp-for="AgencyIncentiveMode" class="ui-label">Mode</label>
+                            <select asp-for="AgencyIncentiveMode" class="js-modern-select" id="adjustAgencyIncentiveMode">
+                                <option value="Percentage">Percentage (%)</option>
+                                <option value="Flat">Flat (₱)</option>
+                            </select>
+                        </div>
+                        <div class="ui-field">
+                            <label asp-for="AgencyIncentiveBase" class="ui-label">Calculation base</label>
+                            <select asp-for="AgencyIncentiveBase" class="js-modern-select" id="adjustAgencyIncentiveBase">
+                                <option value="NetOfDiscount">Net of Discount</option>
+                                <option value="NetOfVat">Net of VAT</option>
+                                <option value="Gross">Gross (Basic + BAF)</option>
+                                <option value="BasicOnly">Basic (Tariff) Only</option>
+                                <option value="BafOnly">BAF Only</option>
+                            </select>
+                        </div>
+                        <div class="ui-field">
+                            <label asp-for="AgencyIncentiveRate" class="ui-label">Rate / Amount</label>
+                            <input asp-for="AgencyIncentiveRate" type="number" step="0.0001" min="0" class="modern-input ui-input" id="adjustAgencyIncentiveRate" />
+                        </div>
+                    </div>
+                    <div class="billing-recipient-fields">
+                        <div class="ui-field">
+                            <label asp-for="AgentCommissionRepresentativeId" class="ui-label">Agent commission representative</label>
+                            <select asp-for="AgentCommissionRepresentativeId" class="js-modern-select js-adjust-rep" data-prefix="AgentCommission" id="adjustAgentCommissionRep">
+                                <option value="">None</option>
+                                @foreach (var rep in agentCommissionReps)
+                                {
+                                    <option value="@rep.RepresentativeId" data-mode="@rep.RateMode" data-base="@rep.CalculationBase" data-rate="@rep.RateValue">@rep.RepresentativeName</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="ui-field">
+                            <label asp-for="AgentCommissionMode" class="ui-label">Mode</label>
+                            <select asp-for="AgentCommissionMode" class="js-modern-select" id="adjustAgentCommissionMode">
+                                <option value="Percentage">Percentage (%)</option>
+                                <option value="Flat">Flat (₱)</option>
+                            </select>
+                        </div>
+                        <div class="ui-field">
+                            <label asp-for="AgentCommissionBase" class="ui-label">Calculation base</label>
+                            <select asp-for="AgentCommissionBase" class="js-modern-select" id="adjustAgentCommissionBase">
+                                <option value="NetOfDiscount">Net of Discount</option>
+                                <option value="NetOfVat">Net of VAT</option>
+                                <option value="Gross">Gross (Basic + BAF)</option>
+                                <option value="BasicOnly">Basic (Tariff) Only</option>
+                                <option value="BafOnly">BAF Only</option>
+                            </select>
+                        </div>
+                        <div class="ui-field">
+                            <label asp-for="AgentCommissionRate" class="ui-label">Rate / Amount</label>
+                            <input asp-for="AgentCommissionRate" type="number" step="0.0001" min="0" class="modern-input ui-input" id="adjustAgentCommissionRate" />
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <section class="modern-card ui-card" aria-labelledby="adjustTicketsHeading">
                 <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
                     <div class="flex items-center gap-2">
@@ -679,6 +761,24 @@
                 isSubmitting = true;
                 ModernAlert.showLoading('Saving adjustment and recalculating billing...');
                 form.submit();
+            });
+
+            document.querySelectorAll('.js-adjust-rep').forEach((sel) => {
+                sel.addEventListener('change', () => {
+                    const opt = sel.options[sel.selectedIndex];
+                    const prefix = sel.dataset.prefix;
+                    if (!opt || !opt.value) {
+                        const rateEl = document.getElementById(`adjust${prefix}Rate`);
+                        if (rateEl) rateEl.value = '0';
+                        return;
+                    }
+                    const modeEl = document.getElementById(`adjust${prefix}Mode`);
+                    const baseEl = document.getElementById(`adjust${prefix}Base`);
+                    const rateEl = document.getElementById(`adjust${prefix}Rate`);
+                    if (modeEl && opt.dataset.mode) { modeEl.value = opt.dataset.mode; modeEl.dispatchEvent(new Event('change')); }
+                    if (baseEl && opt.dataset.base) { baseEl.value = opt.dataset.base; baseEl.dispatchEvent(new Event('change')); }
+                    if (rateEl && opt.dataset.rate) { rateEl.value = opt.dataset.rate; }
+                });
             });
 
             syncDiscountInputs();

@@ -359,6 +359,36 @@
                         <strong class="ui-body">@Model.Balance.ToString("N2")</strong>
                     </div>
                 </div>
+                @if (Model.AgencyIncentiveAmount > 0 || Model.AgentCommissionAmount > 0
+                    || !string.IsNullOrWhiteSpace(Model.AgencyIncentiveName) || !string.IsNullOrWhiteSpace(Model.AgentCommissionName))
+                {
+                    var incChanged = billingChanges.Any(c => c.Field.StartsWith("AgencyIncentive", StringComparison.OrdinalIgnoreCase));
+                    var comChanged = billingChanges.Any(c => c.Field.StartsWith("AgentCommission", StringComparison.OrdinalIgnoreCase));
+                    <div class="billing-recipient" aria-label="Internal rebates and commissions">
+                        <div class="@(incChanged ? "schedule-review-attention" : "")">
+                            <span class="ui-caption ui-muted">Agency incentive (internal only)</span>
+                            <p class="ui-body mb-0">
+                                <strong>@(Model.AgencyIncentiveName ?? "—")</strong>
+                                @if (Model.AgencyIncentiveAmount > 0)
+                                {
+                                    <span>· ₱@Model.AgencyIncentiveAmount.ToString("N2")</span>
+                                    <span class="ui-caption ui-muted">(@(Model.AgencyIncentiveMode == "Flat" ? $"Flat ₱{Model.AgencyIncentiveRate:N2}" : $"{Model.AgencyIncentiveRate:0.##}% of {Model.AgencyIncentiveBase}"))</span>
+                                }
+                            </p>
+                        </div>
+                        <div class="@(comChanged ? "schedule-review-attention" : "")">
+                            <span class="ui-caption ui-muted">Agent commission (internal only)</span>
+                            <p class="ui-body mb-0">
+                                <strong>@(Model.AgentCommissionName ?? "—")</strong>
+                                @if (Model.AgentCommissionAmount > 0)
+                                {
+                                    <span>· ₱@Model.AgentCommissionAmount.ToString("N2")</span>
+                                    <span class="ui-caption ui-muted">(@(Model.AgentCommissionMode == "Flat" ? $"Flat ₱{Model.AgentCommissionRate:N2}" : $"{Model.AgentCommissionRate:0.##}% of {Model.AgentCommissionBase}"))</span>
+                                }
+                            </p>
+                        </div>
+                    </div>
+                }
                 @if (basicOnly)
                 {
                     <p class="ui-notice ui-attention" role="note"><span class="material-symbols-outlined" aria-hidden="true">info</span> Reminder: confirm SBMA placement and financial treatment.</p>

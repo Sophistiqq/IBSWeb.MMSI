@@ -8,11 +8,14 @@ $(function () {
     const $recipient = $('#BilledTo');
     let customer = null;
     let principals = [];
+    let representatives = [];
     let tickets = [];
     let customerRequest = 0;
     let cosRequest = 0;
     let saving = false;
     let initialCos = form.dataset.initialCos;
+    const initialAgencyInc = form.dataset.initialAgencyInc || '';
+    const initialAgentCom = form.dataset.initialAgentCom || '';
     let commercialEnabled = false;
     let defaultDiscount = 0;
     const money = value => Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -144,6 +147,58 @@ $(function () {
         $('#combinedDue').text(money(statementTotals(basic + baf).due));
         $('#balanceNote').text(split ? 'Payments and remaining balances are tracked separately for each billing number.' : 'The charges are included in one billing balance.');
         $('#preparationNote').text(split ? 'One preparation · Two billing numbers · Separate balances' : 'One preparation · One billing number');
+        updateCommissionPreviews(basicGross, bafGross, basic + baf);
+    }
+
+    function computeCommission(rep, basicGross, bafGross, netOfDiscount) {
+        if (!rep || Number(rep.rateValue) <= 0) return 0;
+        const rate = Number(rep.rateValue);
+        if (rep.rateMode === 'Flat') return roundMoney(rate);
+        let baseAmount = netOfDiscount;
+        if (rep.calculationBase === 'Gross') baseAmount = basicGross + bafGross;
+        else if (rep.calculationBase === 'NetOfVat') baseAmount = customer?.vatType === 'Vatable' ? roundMoney(netOfDiscount / 1.12) : netOfDiscount;
+        else if (rep.calculationBase === 'BasicOnly') baseAmount = basicGross;
+        else if (rep.calculationBase === 'BafOnly') baseAmount = bafGross;
+        return baseAmount > 0 ? roundMoney(baseAmount * (rate / 100)) : 0;
+    }
+
+    function updateCommissionPreviews(basicGross, bafGross, netOfDiscount) {
+        const baseLabels = { NetOfDiscount: 'Net of Discount', NetOfVat: 'Net of VAT', Gross: 'Gross', BasicOnly: 'Basic Only', BafOnly: 'BAF Only' };
+        [['AgencyIncentiveSelect', 'agencyIncentivePreview'], ['AgentCommissionSelect', 'agentCommissionPreview']].forEach(([selectId, previewId]) => {
+            const repId = $('#' + selectId).val();
+            const rep = representatives.find(r => String(r.representativeId) === String(repId));
+            if (!rep) {
+                $('#' + previewId).text('Hidden from client invoices.');
+                return;
+            }
+            const amount = computeCommission(rep, basicGross, bafGross, netOfDiscount);
+            const rateText = rep.rateMode === 'Flat'
+                ? 'Flat ₱' + money(rep.rateValue)
+                : Number(rep.rateValue) + '% of ' + (baseLabels[rep.calculationBase] || rep.calculationBase);
+            $('#' + previewId).text(`${rateText} · Computed: ₱${money(amount)} (internal only)`);
+        });
+    }
+
+    function populateRepresentatives(isInitialEdit) {
+        const incList = representatives.filter(r => r.category === 'AgencyIncentive');
+        const comList = representatives.filter(r => r.category === 'AgentCommission');
+        const customerId = Number($customer.val() || 0);
+        const $inc = $('#AgencyIncentiveSelect').empty().append('<option value="">None</option>');
+        const $com = $('#AgentCommissionSelect').empty().append('<option value="">None</option>');
+        incList.forEach(r => $inc.append($('<option>').val(r.representativeId).text(`${r.representativeName} (${r.rateMode === 'Flat' ? '₱' + money(r.rateValue) : r.rateValue + '%'})`)));
+        comList.forEach(r => $com.append($('<option>').val(r.representativeId).text(`${r.representativeName} (${r.rateMode === 'Flat' ? '₱' + money(r.rateValue) : r.rateValue + '%'})`)));
+        if (isInitialEdit) {
+            if (initialAgencyInc) $inc.val(initialAgencyInc);
+            if (initialAgentCom) $com.val(initialAgentCom);
+        } else {
+            const defaultInc = incList.find(r => r.customerId === customerId);
+            const defaultCom = comList.find(r => r.customerId === customerId);
+            if (defaultInc) $inc.val(defaultInc.representativeId);
+            if (defaultCom) $com.val(defaultCom.representativeId);
+        }
+        $('#commissionOptionsSection').prop('hidden', representatives.length === 0);
+        $inc.trigger('change');
+        $com.trigger('change');
     }
 
     function updateDiscount() {
@@ -273,6 +328,9 @@ $(function () {
         const request = ++customerRequest;
         customer = null;
         principals = [];
+        representatives = [];
+        $('#commissionOptionsSection').prop('hidden', true);
+        $('#AgencyIncentiveSelect, #AgentCommissionSelect').empty().append('<option value="">None</option>');
         resetServices();
         $cos.empty().append('<option value="">Select COS</option>').prop('disabled', true);
         $principal.empty().append('<option value="">Select principal</option>');
@@ -282,14 +340,16 @@ $(function () {
         const id = $customer.val();
         if (!id) return;
         try {
-            const [details, jobs, recipients] = await Promise.all([
+            const [details, jobs, recipients, reps] = await Promise.all([
                 getJson(form.dataset.customerUrl, { customerId: id }),
                 getJson(form.dataset.cosListUrl, initialCos ? { customerId: id, currentCustomerOrderSlipId: initialCos } : { customerId: id }),
-                getJson(form.dataset.principalsUrl, { customerId: id })
+                getJson(form.dataset.principalsUrl, { customerId: id }),
+                form.dataset.repsUrl ? getJson(form.dataset.repsUrl, { customerId: id }) : Promise.resolve([])
             ]);
             if (request !== customerRequest) return;
             customer = details;
             principals = recipients;
+            representatives = reps || [];
             jobs.forEach(job => $cos.append($('<option>').val(job.value).text(job.name)));
             $cos.prop('disabled', false);
             principals.forEach(principal => $principal.append($('<option>').val(principal.value).text(principal.name)));
@@ -298,6 +358,7 @@ $(function () {
             $('#customerWithholding').prop('checked', !!customer.withholdingTax);
             $('#customerPrintDiscount, #billingPrintDiscount').prop('checked', !!customer.printDiscount);
             const isInitialEdit = Boolean(initialCos) && form.dataset.editingDraft === 'true';
+            populateRepresentatives(isInitialEdit);
             if (!isInitialEdit) {
                 $('#IsUndocumented').prop('checked', customer.isUndoc === 'Undocumented');
             } else {
@@ -413,6 +474,7 @@ $(function () {
         }
     });
     $('#billingTerms').on('change', updateTermsOverrideHint);
+    $('#AgencyIncentiveSelect, #AgentCommissionSelect').on('change', updateSummary);
     updateSummary();
     if ($customer.val()) $customer.trigger('change');
 });

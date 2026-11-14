@@ -87,6 +87,10 @@ namespace IBS.Services.MSAP
                         TrackDiff("DispatchAmount", "Dispatch Amount", existingDraft.DispatchAmount.ToString("N2"), model.DispatchAmount.ToString("N2"));
                         TrackDiff("BAFAmount", "BAF Amount", existingDraft.BAFAmount.ToString("N2"), model.BAFAmount.ToString("N2"));
                         TrackDiff("Amount", "Total Amount", existingDraft.Amount.ToString("N2"), model.Amount.ToString("N2"));
+                        TrackDiff("AgencyIncentiveName", "Agency Incentive Representative", existingDraft.AgencyIncentiveName, model.AgencyIncentiveName);
+                        TrackDiff("AgencyIncentiveAmount", "Agency Incentive Amount", existingDraft.AgencyIncentiveAmount.ToString("N2"), model.AgencyIncentiveAmount.ToString("N2"));
+                        TrackDiff("AgentCommissionName", "Agent Commission Representative", existingDraft.AgentCommissionName, model.AgentCommissionName);
+                        TrackDiff("AgentCommissionAmount", "Agent Commission Amount", existingDraft.AgentCommissionAmount.ToString("N2"), model.AgentCommissionAmount.ToString("N2"));
 
                         existingDraft.MsapBillingNumber = model.MsapBillingNumber;
                         existingDraft.Date = model.Date;
@@ -106,6 +110,18 @@ namespace IBS.Services.MSAP
                         existingDraft.DiscountOnTariff = model.DiscountOnTariff;
                         existingDraft.DiscountOnBaf = model.DiscountOnBaf;
                         existingDraft.Discount = model.Discount;
+                        existingDraft.AgencyIncentiveRepresentativeId = model.AgencyIncentiveRepresentativeId;
+                        existingDraft.AgencyIncentiveName = model.AgencyIncentiveName;
+                        existingDraft.AgencyIncentiveMode = model.AgencyIncentiveMode;
+                        existingDraft.AgencyIncentiveBase = model.AgencyIncentiveBase;
+                        existingDraft.AgencyIncentiveRate = model.AgencyIncentiveRate;
+                        existingDraft.AgencyIncentiveAmount = model.AgencyIncentiveAmount;
+                        existingDraft.AgentCommissionRepresentativeId = model.AgentCommissionRepresentativeId;
+                        existingDraft.AgentCommissionName = model.AgentCommissionName;
+                        existingDraft.AgentCommissionMode = model.AgentCommissionMode;
+                        existingDraft.AgentCommissionBase = model.AgentCommissionBase;
+                        existingDraft.AgentCommissionRate = model.AgentCommissionRate;
+                        existingDraft.AgentCommissionAmount = model.AgentCommissionAmount;
                         existingDraft.DispatchAmount = model.DispatchAmount;
                         existingDraft.BAFAmount = model.BAFAmount;
                         existingDraft.Amount = model.Amount;
@@ -562,11 +578,89 @@ namespace IBS.Services.MSAP
                 };
                 statements.Add(model.BafBilling);
             }
+            await ApplyBillingCommissionsAsync(model, tickets, cancellationToken);
             foreach (var statement in statements)
             {
                 unitOfWork.Billing.ProcessAddress(statement, cancellationToken);
             }
             return ServiceResult<List<Billing>>.Success(statements);
+        }
+
+        private async Task ApplyBillingCommissionsAsync(Billing model, IReadOnlyList<DispatchTicket> tickets, CancellationToken cancellationToken)
+        {
+            var basicGross = tickets.Sum(t => t.DispatchBillingAmount);
+            var bafGross = tickets.Sum(t => t.BAFBillingAmount);
+            var netOfDiscount = tickets.Sum(t => t.DispatchNetRevenue + t.BAFNetRevenue);
+
+            if (model.AgencyIncentiveRepresentativeId.HasValue)
+            {
+                var rep = await unitOfWork.Representative.GetAsync(
+                    r => r.RepresentativeId == model.AgencyIncentiveRepresentativeId.Value && r.IsActive,
+                    cancellationToken);
+                if (rep != null && rep.Category == CommissionCalculator.CategoryAgencyIncentive)
+                {
+                    model.AgencyIncentiveName = rep.RepresentativeName;
+                    model.AgencyIncentiveMode = rep.RateMode;
+                    model.AgencyIncentiveBase = rep.CalculationBase;
+                    model.AgencyIncentiveRate = rep.RateValue;
+                    model.AgencyIncentiveAmount = CommissionCalculator.ComputeAmount(
+                        rep.RateMode, rep.CalculationBase, rep.RateValue, basicGross, bafGross, netOfDiscount, model.IsVatable);
+                }
+                else
+                {
+                    ClearAgencyIncentive(model);
+                }
+            }
+            else
+            {
+                ClearAgencyIncentive(model);
+            }
+
+            if (model.AgentCommissionRepresentativeId.HasValue)
+            {
+                var rep = await unitOfWork.Representative.GetAsync(
+                    r => r.RepresentativeId == model.AgentCommissionRepresentativeId.Value && r.IsActive,
+                    cancellationToken);
+                if (rep != null && rep.Category == CommissionCalculator.CategoryAgentCommission)
+                {
+                    model.AgentCommissionName = rep.RepresentativeName;
+                    model.AgentCommissionMode = rep.RateMode;
+                    model.AgentCommissionBase = rep.CalculationBase;
+                    model.AgentCommissionRate = rep.RateValue;
+                    model.AgentCommissionAmount = CommissionCalculator.ComputeAmount(
+                        rep.RateMode, rep.CalculationBase, rep.RateValue, basicGross, bafGross, netOfDiscount, model.IsVatable);
+                }
+                else
+                {
+                    ClearAgentCommission(model);
+                }
+            }
+            else
+            {
+                ClearAgentCommission(model);
+            }
+
+            CommissionCalculator.AllocateAcrossTickets(tickets, model.AgencyIncentiveAmount, model.AgentCommissionAmount);
+        }
+
+        private static void ClearAgencyIncentive(Billing model)
+        {
+            model.AgencyIncentiveRepresentativeId = null;
+            model.AgencyIncentiveName = null;
+            model.AgencyIncentiveMode = null;
+            model.AgencyIncentiveBase = null;
+            model.AgencyIncentiveRate = 0m;
+            model.AgencyIncentiveAmount = 0m;
+        }
+
+        private static void ClearAgentCommission(Billing model)
+        {
+            model.AgentCommissionRepresentativeId = null;
+            model.AgentCommissionName = null;
+            model.AgentCommissionMode = null;
+            model.AgentCommissionBase = null;
+            model.AgentCommissionRate = 0m;
+            model.AgentCommissionAmount = 0m;
         }
 
         public static void ApplyCustomerTaxSettings(Billing model)
@@ -986,6 +1080,82 @@ namespace IBS.Services.MSAP
                     {
                         fieldDiffs.Add(new MsapFieldChange { Field = "Amount", Label = "Total Billing Amount", Before = oldTotal.ToString("N2"), After = newTotal.ToString("N2") });
                     }
+
+                    var basicGrossSum = tickets.Sum(t => t.DispatchBillingAmount);
+                    var bafGrossSum = tickets.Sum(t => t.BAFBillingAmount);
+                    var netSum = tickets.Sum(t => t.DispatchNetRevenue + t.BAFNetRevenue);
+
+                    var prevIncName = primaryBill.AgencyIncentiveName ?? "None";
+                    var prevIncAmount = primaryBill.AgencyIncentiveAmount;
+                    if (model.AgencyIncentiveRepresentativeId.HasValue)
+                    {
+                        var rep = await unitOfWork.Representative.GetAsync(r => r.RepresentativeId == model.AgencyIncentiveRepresentativeId.Value, cancellationToken);
+                        if (rep != null && rep.Category == CommissionCalculator.CategoryAgencyIncentive)
+                        {
+                            primaryBill.AgencyIncentiveRepresentativeId = rep.RepresentativeId;
+                            primaryBill.AgencyIncentiveName = rep.RepresentativeName;
+                            primaryBill.AgencyIncentiveMode = !string.IsNullOrWhiteSpace(model.AgencyIncentiveMode) ? model.AgencyIncentiveMode : rep.RateMode;
+                            primaryBill.AgencyIncentiveBase = !string.IsNullOrWhiteSpace(model.AgencyIncentiveBase) ? model.AgencyIncentiveBase : rep.CalculationBase;
+                            primaryBill.AgencyIncentiveRate = model.AgencyIncentiveRate;
+                            primaryBill.AgencyIncentiveAmount = CommissionCalculator.ComputeAmount(
+                                primaryBill.AgencyIncentiveMode, primaryBill.AgencyIncentiveBase, primaryBill.AgencyIncentiveRate,
+                                basicGrossSum, bafGrossSum, netSum, primaryBill.IsVatable);
+                        }
+                        else
+                        {
+                            ClearAgencyIncentive(primaryBill);
+                        }
+                    }
+                    else
+                    {
+                        ClearAgencyIncentive(primaryBill);
+                    }
+                    var newIncName = primaryBill.AgencyIncentiveName ?? "None";
+                    if (prevIncName != newIncName)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange { Field = "AgencyIncentiveName", Label = "Agency Incentive Representative", Before = prevIncName, After = newIncName });
+                    }
+                    if (prevIncAmount != primaryBill.AgencyIncentiveAmount)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange { Field = "AgencyIncentiveAmount", Label = "Agency Incentive Amount", Before = prevIncAmount.ToString("N2"), After = primaryBill.AgencyIncentiveAmount.ToString("N2") });
+                    }
+
+                    var prevComName = primaryBill.AgentCommissionName ?? "None";
+                    var prevComAmount = primaryBill.AgentCommissionAmount;
+                    if (model.AgentCommissionRepresentativeId.HasValue)
+                    {
+                        var rep = await unitOfWork.Representative.GetAsync(r => r.RepresentativeId == model.AgentCommissionRepresentativeId.Value, cancellationToken);
+                        if (rep != null && rep.Category == CommissionCalculator.CategoryAgentCommission)
+                        {
+                            primaryBill.AgentCommissionRepresentativeId = rep.RepresentativeId;
+                            primaryBill.AgentCommissionName = rep.RepresentativeName;
+                            primaryBill.AgentCommissionMode = !string.IsNullOrWhiteSpace(model.AgentCommissionMode) ? model.AgentCommissionMode : rep.RateMode;
+                            primaryBill.AgentCommissionBase = !string.IsNullOrWhiteSpace(model.AgentCommissionBase) ? model.AgentCommissionBase : rep.CalculationBase;
+                            primaryBill.AgentCommissionRate = model.AgentCommissionRate;
+                            primaryBill.AgentCommissionAmount = CommissionCalculator.ComputeAmount(
+                                primaryBill.AgentCommissionMode, primaryBill.AgentCommissionBase, primaryBill.AgentCommissionRate,
+                                basicGrossSum, bafGrossSum, netSum, primaryBill.IsVatable);
+                        }
+                        else
+                        {
+                            ClearAgentCommission(primaryBill);
+                        }
+                    }
+                    else
+                    {
+                        ClearAgentCommission(primaryBill);
+                    }
+                    var newComName = primaryBill.AgentCommissionName ?? "None";
+                    if (prevComName != newComName)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange { Field = "AgentCommissionName", Label = "Agent Commission Representative", Before = prevComName, After = newComName });
+                    }
+                    if (prevComAmount != primaryBill.AgentCommissionAmount)
+                    {
+                        fieldDiffs.Add(new MsapFieldChange { Field = "AgentCommissionAmount", Label = "Agent Commission Amount", Before = prevComAmount.ToString("N2"), After = primaryBill.AgentCommissionAmount.ToString("N2") });
+                    }
+
+                    CommissionCalculator.AllocateAcrossTickets(tickets, primaryBill.AgencyIncentiveAmount, primaryBill.AgentCommissionAmount);
 
                     var editedAt = DateTimeHelper.GetCurrentPhilippineTime();
                     foreach (var bill in new[] { primaryBill, bafBill }.Where(b => b != null))

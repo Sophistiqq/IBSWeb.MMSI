@@ -73,6 +73,7 @@ namespace IBS.DataAccess.MSAP.Repository
         public IBafTableRepository BafTable { get; }
         public IPortRepository Port { get; }
         public IPrincipalRepository Principal { get; }
+        public IRepository<MsapRepresentative> Representative { get; }
         public IServiceRepository Service { get; }
         public ITerminalRepository Terminal { get; }
         public ITugboatRepository Tugboat { get; }
@@ -122,6 +123,7 @@ namespace IBS.DataAccess.MSAP.Repository
             Msap = new MsapRepository(_db);
             Port = new PortRepository(_db);
             Principal = new PrincipalRepository(_db);
+            Representative = new Repository<MsapRepresentative>(_db);
             Service = new ServiceRepository(_db);
             TariffTable = new TariffTableRepository(_db);
             BafTable = new BafTableRepository(_db);

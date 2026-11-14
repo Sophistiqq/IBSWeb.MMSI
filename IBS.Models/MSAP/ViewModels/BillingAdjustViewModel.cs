@@ -39,6 +39,24 @@ namespace IBS.Models.MSAP.ViewModels
 
         public bool IncludeSubconInDiscount { get; set; }
 
+        public int? AgencyIncentiveRepresentativeId { get; set; }
+
+        public string? AgencyIncentiveMode { get; set; }
+
+        public string? AgencyIncentiveBase { get; set; }
+
+        [Range(0, 999999999999.99)]
+        public decimal AgencyIncentiveRate { get; set; }
+
+        public int? AgentCommissionRepresentativeId { get; set; }
+
+        public string? AgentCommissionMode { get; set; }
+
+        public string? AgentCommissionBase { get; set; }
+
+        [Range(0, 999999999999.99)]
+        public decimal AgentCommissionRate { get; set; }
+
         [Required]
         [StringLength(500, MinimumLength = 5)]
         public string Reason { get; set; } = string.Empty;

@@ -284,7 +284,7 @@ var expectedMsapControllers = new HashSet<string>(StringComparer.Ordinal)
 {
     "AppRole", "AuditTrail", "BankAccount", "Billing", "Collection", "Customer", "CustomerOrderSlip",
     "DispatchTicket", "Home", "MaritimeReport", "MaritimeService", "MasterFile", "MsapImport",
-    "OtherTugCharge", "PaymentTerms", "Port", "PostedPeriod", "Principal", "RateUpload", "TariffRate",
+    "OtherTugCharge", "PaymentTerms", "Port", "PostedPeriod", "Principal", "RateUpload", "Representative", "TariffRate",
     "Terminal", "Tugboat", "TugboatOwner", "TugMaster", "UserAccess", "Vessel", "VesselSchedule"
 };
 var discoveredMsapControllers = moduleActions.Select(a => a.ControllerName).ToHashSet(StringComparer.Ordinal);

@@ -1,0 +1,147 @@
+@model IBS.Models.MSAP.MasterFile.MsapRepresentative
+@using IBS.Services.MSAP
+
+@{
+    var isEdit = Model.RepresentativeId > 0;
+    ViewData["Title"] = isEdit ? "Edit Representative" : "Create Representative";
+    ViewData["IsFullWidth"] = true;
+    var customers = ViewBag.Customers as List<SelectListItem> ?? [];
+    var principals = ViewBag.Principals as List<SelectListItem> ?? [];
+}
+
+<div class="modern-layout app-ui">
+    <form asp-action="@(isEdit ? "Edit" : "Create")" asp-route-id="@(isEdit ? Model.RepresentativeId : null)" method="post">
+        @if (isEdit)
+        {
+            <input type="hidden" asp-for="RepresentativeId" />
+        }
+        <main class="modern-container ui-page">
+            <div class="flex-stack ui-page-toolbar">
+                <div>
+                    <nav aria-label="Breadcrumb">
+                        <ol class="ui-breadcrumb">
+                            <li>MSAP</li>
+                            <li><a asp-action="Index">Representatives</a></li>
+                            <li aria-current="page">@(isEdit ? "Edit" : "New")</li>
+                        </ol>
+                    </nav>
+                    <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
+                </div>
+                <div class="flex gap-2 ui-actions">
+                    <button type="submit" class="modern-btn-primary ui-page-action">
+                        <span class="material-symbols-outlined">save</span> Save Changes
+                    </button>
+                    <a asp-action="Index" class="modern-btn-secondary ui-page-action">
+                        <span class="material-symbols-outlined">cancel</span> Cancel
+                    </a>
+                </div>
+            </div>
+
+            <div class="modern-grid">
+                <section class="modern-col-8">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
+                            <span class="material-symbols-outlined">badge</span>
+                            <h2 class="modern-headline-md ui-section-title">Representative &amp; Rebate Rule</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
+
+                            <div class="modern-grid ui-field-grid">
+                                <div class="modern-col-7">
+                                    <label asp-for="RepresentativeName" class="modern-label ui-label">Representative Name <span class="text-error">*</span></label>
+                                    <input asp-for="RepresentativeName" class="form-control ui-input" placeholder="e.g., Tabliso, Trio, SMC" required />
+                                    <span asp-validation-for="RepresentativeName" class="text-error ui-caption"></span>
+                                </div>
+                                <div class="modern-col-5">
+                                    <label asp-for="Category" class="modern-label ui-label">Category <span class="text-error">*</span></label>
+                                    <select asp-for="Category" class="js-modern-select">
+                                        <option value="@CommissionCalculator.CategoryAgentCommission">Agent Commission</option>
+                                        <option value="@CommissionCalculator.CategoryAgencyIncentive">Agency Incentive</option>
+                                    </select>
+                                    <span asp-validation-for="Category" class="text-error ui-caption"></span>
+                                </div>
+                            </div>
+
+                            <div class="modern-grid ui-field-grid mt-4">
+                                <div class="modern-col-6">
+                                    <label asp-for="CustomerId" class="modern-label ui-label">Customer (Optional)</label>
+                                    <select asp-for="CustomerId" asp-items="customers" class="js-modern-select" id="repCustomerSelect">
+                                        <option value="">All customers</option>
+                                    </select>
+                                    <span class="ui-caption ui-muted">Leave blank to make this representative selectable for any customer.</span>
+                                </div>
+                                <div class="modern-col-6">
+                                    <label asp-for="PrincipalId" class="modern-label ui-label">Principal (Optional)</label>
+                                    <select asp-for="PrincipalId" asp-items="principals" class="js-modern-select" id="repPrincipalSelect">
+                                        <option value="">All principals</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="modern-grid ui-field-grid mt-4">
+                                <div class="modern-col-4">
+                                    <label asp-for="RateMode" class="modern-label ui-label">Rate Mode <span class="text-error">*</span></label>
+                                    <select asp-for="RateMode" class="js-modern-select" id="repRateMode">
+                                        <option value="@CommissionCalculator.ModePercentage">Percentage (%)</option>
+                                        <option value="@CommissionCalculator.ModeFlat">Flat (₱)</option>
+                                    </select>
+                                </div>
+                                <div class="modern-col-4">
+                                    <label asp-for="RateValue" class="modern-label ui-label">Rate / Amount <span class="text-error">*</span></label>
+                                    <input asp-for="RateValue" type="number" step="0.0001" min="0" class="form-control ui-input" required />
+                                    <span asp-validation-for="RateValue" class="text-error ui-caption"></span>
+                                </div>
+                                <div class="modern-col-4" id="repBaseGroup">
+                                    <label asp-for="CalculationBase" class="modern-label ui-label">Calculation Base <span class="text-error">*</span></label>
+                                    <select asp-for="CalculationBase" class="js-modern-select">
+                                        <option value="@CommissionCalculator.BaseNetOfDiscount">Net of Company Discount</option>
+                                        <option value="@CommissionCalculator.BaseNetOfVat">Net of VAT (after Discount)</option>
+                                        <option value="@CommissionCalculator.BaseGross">Gross (Basic + BAF)</option>
+                                        <option value="@CommissionCalculator.BaseBasicOnly">Basic (Tariff) Only</option>
+                                        <option value="@CommissionCalculator.BaseBafOnly">BAF Only</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mt-4">
+                                <label class="inline-flex items-center gap-2 ui-body">
+                                    <input asp-for="IsActive" class="form-check-input" />
+                                    <span>Active</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </form>
+</div>
+
+@section Scripts {
+    @{ await Html.RenderPartialAsync("_ValidationScriptsPartial"); }
+    <script>
+        $(function () {
+            const principalsUrl = '@Url.Action("GetPrincipalsByCustomer", "Representative", new { area = "MSAP" })';
+            function toggleBase() {
+                const isFlat = $('#repRateMode').val() === '@CommissionCalculator.ModeFlat';
+                $('#repBaseGroup').prop('hidden', isFlat);
+            }
+            $('#repRateMode').on('change', toggleBase);
+            toggleBase();
+
+            $('#repCustomerSelect').on('change', function () {
+                const customerId = $(this).val();
+                const $principal = $('#repPrincipalSelect').empty().append('<option value="">All principals</option>');
+                if (!customerId) {
+                    $principal.trigger('change');
+                    return;
+                }
+                $.getJSON(principalsUrl, { customerId }, function (items) {
+                    (items || []).forEach(p => $principal.append($('<option>').val(p.value).text(p.text)));
+                    $principal.trigger('change');
+                });
+            });
+        });
+    </script>
+}

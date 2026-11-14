@@ -1,0 +1,128 @@
+@{
+    ViewData["Title"] = "Representatives & Rebates";
+    ViewData["IsFullWidth"] = true;
+}
+
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page">
+        <div class="flex-stack ui-page-toolbar">
+            <div>
+                <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Representatives</li></ol></nav>
+                <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
+            </div>
+            <div class="flex gap-2 ui-actions">
+                <a asp-action="Create" class="modern-btn-primary ui-page-action">
+                    <span class="material-symbols-outlined">add_circle</span>
+                    CREATE NEW
+                </a>
+            </div>
+        </div>
+
+        <div class="modern-card ui-card">
+            <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">badge</span>
+                    <h2 class="modern-headline-md ui-section-title">Representative List</h2>
+                </div>
+            </div>
+            <div class="modern-card-body ui-card-body">
+                <table class="modern-table ui-table" id="representativesTable">
+                    <thead>
+                        <tr>
+                            <th>Representative</th>
+                            <th>Category</th>
+                            <th>Customer</th>
+                            <th>Principal</th>
+                            <th>Rate</th>
+                            <th>Base</th>
+                            <th class="text-center">Active?</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<form id="deleteForm" method="post" asp-antiforgery="false" hidden>@Html.AntiForgeryToken()</form>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            const editUrl = '@Url.Action("Edit", "Representative", new { area = "MSAP" })';
+            const deleteUrl = '@Url.Action("Delete", "Representative", new { area = "MSAP" })';
+            const categoryLabels = {
+                AgencyIncentive: 'Agency Incentive',
+                AgentCommission: 'Agent Commission'
+            };
+            const baseLabels = {
+                NetOfDiscount: 'Net of Discount',
+                NetOfVat: 'Net of VAT',
+                Gross: 'Gross (Basic + BAF)',
+                BasicOnly: 'Basic (Tariff) Only',
+                BafOnly: 'BAF Only'
+            };
+
+            const table = $('#representativesTable').DataTable(ModernTable.config({
+                serverSide: false,
+                ajax: ModernTable.ajax("@Url.Action("GetRepresentativeList", "Representative", new { area = "MSAP" })"),
+                columns: [
+                    { data: "representativeName", render: (d) => `<strong>${$('<div>').text(d || '').html()}</strong>` },
+                    { data: "category", render: (d) => categoryLabels[d] || d },
+                    { data: "customerName" },
+                    { data: "principalName", render: (d) => d || '<span class="ui-muted">—</span>' },
+                    {
+                        data: null,
+                        render: (data, type, row) => row.rateMode === 'Flat'
+                            ? '₱' + Number(row.rateValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            : Number(row.rateValue).toFixed(2).replace(/\.00$/, '') + '%'
+                    },
+                    { data: "calculationBase", render: (d, t, row) => row.rateMode === 'Flat' ? '<span class="ui-muted">Flat</span>' : (baseLabels[d] || d) },
+                    {
+                        data: "isActive",
+                        className: "text-center",
+                        render: (d) => d
+                            ? '<span class="modern-badge-sm status-posted">Active</span>'
+                            : '<span class="modern-badge-sm status-voided">Inactive</span>'
+                    },
+                    {
+                        data: "representativeId",
+                        className: "text-center",
+                        orderable: false,
+                        render: (id) => `
+                            <div class="flex justify-center gap-1">
+                                <a href="${editUrl}/${id}" class="modern-btn-icon" title="Edit"><span class="material-symbols-outlined">edit</span></a>
+                                <button type="button" class="modern-btn-icon text-error js-delete-rep" data-id="${id}" title="Delete / Deactivate">
+                                    <span class="material-symbols-outlined">delete</span>
+                                </button>
+                            </div>`
+                    }
+                ]
+            }));
+
+            $('#representativesTable').on('click', '.js-delete-rep', async function () {
+                const id = $(this).data('id');
+                const confirm = await ModernAlert.confirm({
+                    title: 'Remove representative?',
+                    text: 'If already used in billings, it will be marked inactive instead of deleted.',
+                    confirmText: 'Continue',
+                    cancelText: 'Cancel',
+                    icon: 'warning'
+                });
+                if (!confirm.isConfirmed) return;
+                const token = $('#deleteForm input[name="__RequestVerificationToken"]').val();
+                $.post(`${deleteUrl}/${id}`, { __RequestVerificationToken: token })
+                    .done((res) => {
+                        if (res.success) {
+                            ModernAlert.success(res.message);
+                            table.ajax.reload(null, false);
+                        } else {
+                            ModernAlert.error(res.message || 'Unable to remove representative.');
+                        }
+                    })
+                    .fail(() => ModernAlert.error('Unable to remove representative.'));
+            });
+        });
+    </script>
+}

@@ -147,6 +147,16 @@ namespace IBS.Models.MSAP
         [System.Text.Json.Serialization.JsonIgnore]
         [Column(TypeName = "numeric(18,2)")]
         public decimal SbmaShareAmount { get; set; }
+
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Column(TypeName = "numeric(18,2)")]
+        public decimal AgencyIncentiveAmount { get; set; }
+
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Column(TypeName = "numeric(18,2)")]
+        public decimal AgentCommissionAmount { get; set; }
         public bool ApOtherTugsIncludesVat { get; set; } = true;
 
         public bool IsManualTariffRate { get; set; }

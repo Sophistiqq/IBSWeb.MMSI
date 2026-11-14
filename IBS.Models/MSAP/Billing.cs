@@ -79,6 +79,52 @@ namespace IBS.Models.MSAP
 
         public bool IncludeSubconInDiscount { get; set; }
 
+        public int? AgencyIncentiveRepresentativeId { get; set; }
+
+        [JsonIgnore]
+        public MsapRepresentative? AgencyIncentiveRepresentative { get; set; }
+
+        [Column(TypeName = "varchar(120)")]
+        [MaxLength(120)]
+        public string? AgencyIncentiveName { get; set; }
+
+        [Column(TypeName = "varchar(20)")]
+        [MaxLength(20)]
+        public string? AgencyIncentiveMode { get; set; }
+
+        [Column(TypeName = "varchar(30)")]
+        [MaxLength(30)]
+        public string? AgencyIncentiveBase { get; set; }
+
+        [Column(TypeName = "numeric(18,4)")]
+        public decimal AgencyIncentiveRate { get; set; }
+
+        [Column(TypeName = "numeric(18,2)")]
+        public decimal AgencyIncentiveAmount { get; set; }
+
+        public int? AgentCommissionRepresentativeId { get; set; }
+
+        [JsonIgnore]
+        public MsapRepresentative? AgentCommissionRepresentative { get; set; }
+
+        [Column(TypeName = "varchar(120)")]
+        [MaxLength(120)]
+        public string? AgentCommissionName { get; set; }
+
+        [Column(TypeName = "varchar(20)")]
+        [MaxLength(20)]
+        public string? AgentCommissionMode { get; set; }
+
+        [Column(TypeName = "varchar(30)")]
+        [MaxLength(30)]
+        public string? AgentCommissionBase { get; set; }
+
+        [Column(TypeName = "numeric(18,4)")]
+        public decimal AgentCommissionRate { get; set; }
+
+        [Column(TypeName = "numeric(18,2)")]
+        public decimal AgentCommissionAmount { get; set; }
+
         [BindNever, JsonIgnore]
         public int? ApprovedRevision { get; set; }
 

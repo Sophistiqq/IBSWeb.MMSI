@@ -110,7 +110,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to create Billings.")]
-        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,DiscountOnTariff,DiscountOnBaf,SbmaEnabled,Terms,Remarks,TicketBasisOverrides")] Billing model, CancellationToken cancellationToken)
+        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,DiscountOnTariff,DiscountOnBaf,SbmaEnabled,Terms,Remarks,AgencyIncentiveRepresentativeId,AgentCommissionRepresentativeId,TicketBasisOverrides")] Billing model, CancellationToken cancellationToken)
         {
             try
             {
@@ -142,7 +142,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling)]
         public async Task<IActionResult> PreviewPreparation(
-            [Bind("CustomerId,CustomerOrderSlipId,PrincipalId,BilledTo,MsapBillingNumber,Date,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,SbmaEnabled,Terms,Remarks,TicketBasisOverrides")] Billing model,
+            [Bind("CustomerId,CustomerOrderSlipId,PrincipalId,BilledTo,MsapBillingNumber,Date,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,SbmaEnabled,Terms,Remarks,AgencyIncentiveRepresentativeId,AgentCommissionRepresentativeId,TicketBasisOverrides")] Billing model,
             CancellationToken cancellationToken)
         {
             if (ModelState.Any(entry => (entry.Key is nameof(Billing.CosDiscountPercent) or nameof(Billing.SkipCosDiscount) or nameof(Billing.SbmaEnabled))
@@ -346,8 +346,22 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 FlatDiscountTariff = billing.FlatDiscountTariff,
                 FlatDiscountBaf = billing.FlatDiscountBaf,
                 IncludeSubconInDiscount = billing.IncludeSubconInDiscount,
+                AgencyIncentiveRepresentativeId = billing.AgencyIncentiveRepresentativeId,
+                AgencyIncentiveMode = billing.AgencyIncentiveMode ?? CommissionCalculator.ModePercentage,
+                AgencyIncentiveBase = billing.AgencyIncentiveBase ?? CommissionCalculator.BaseNetOfDiscount,
+                AgencyIncentiveRate = billing.AgencyIncentiveRate,
+                AgentCommissionRepresentativeId = billing.AgentCommissionRepresentativeId,
+                AgentCommissionMode = billing.AgentCommissionMode ?? CommissionCalculator.ModePercentage,
+                AgentCommissionBase = billing.AgentCommissionBase ?? CommissionCalculator.BaseNetOfDiscount,
+                AgentCommissionRate = billing.AgentCommissionRate,
                 Tickets = tickets
             };
+
+            var reps = (await unitOfWork.Representative.GetAllAsync(
+                r => r.IsActive && (r.CustomerId == null || r.CustomerId == billing.CustomerId),
+                cancellationToken)).OrderBy(r => r.RepresentativeName).ToList();
+            ViewBag.AgencyIncentiveReps = reps.Where(r => r.Category == CommissionCalculator.CategoryAgencyIncentive).ToList();
+            ViewBag.AgentCommissionReps = reps.Where(r => r.Category == CommissionCalculator.CategoryAgentCommission).ToList();
 
             return View(vm);
         }
@@ -770,6 +784,31 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// <summary>
         /// Gets all billable COS records for a customer (used to populate JO modern-select).
         /// </summary>
+        [HttpGet]
+        [RequireAccess(ProcedureEnum.CreateBilling)]
+        public async Task<JsonResult> GetRepresentativesByCustomer(int customerId, int? principalId, CancellationToken cancellationToken)
+        {
+            var reps = (await unitOfWork.Representative.GetAllAsync(
+                r => r.IsActive && (r.CustomerId == null || r.CustomerId == customerId),
+                cancellationToken))
+                .OrderByDescending(r => r.PrincipalId == principalId && principalId.HasValue)
+                .ThenByDescending(r => r.CustomerId == customerId)
+                .ThenBy(r => r.RepresentativeName)
+                .Select(r => new
+                {
+                    representativeId = r.RepresentativeId,
+                    representativeName = r.RepresentativeName,
+                    category = r.Category,
+                    customerId = r.CustomerId,
+                    principalId = r.PrincipalId,
+                    rateMode = r.RateMode,
+                    rateValue = r.RateValue,
+                    calculationBase = r.CalculationBase
+                })
+                .ToList();
+            return Json(reps);
+        }
+
         [HttpGet]
         [RequireAccess(ProcedureEnum.CreateBilling)]
         public async Task<JsonResult> GetBillableCustomerOrderSlips(int customerId, int? currentCustomerOrderSlipId, CancellationToken cancellationToken)

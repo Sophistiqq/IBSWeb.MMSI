@@ -943,8 +943,8 @@ public class MaritimeReportController(IUnitOfWork unitOfWork, ICloudStorageServi
                     ws.Cells[row, 27].Value = amountDeposited;
                     ws.Cells[row, 28].Value = sbmaShares[t.DispatchTicketId];
                     ws.Cells[row, 29].Value = 0m;
-                    ws.Cells[row, 30].Value = 0m;
-                    ws.Cells[row, 31].Value = 0m;
+                    ws.Cells[row, 30].Value = t.AgencyIncentiveAmount;
+                    ws.Cells[row, 31].Value = t.AgentCommissionAmount;
                     var balance = netOfVat - (decimal)ws.Cells[row, 28].Value - (decimal)ws.Cells[row, 29].Value - (decimal)ws.Cells[row, 30].Value - (decimal)ws.Cells[row, 31].Value;
                     ws.Cells[row, 32].Value = balance;
                     ws.Cells[row, 33].Value = t.ApOtherTugs;

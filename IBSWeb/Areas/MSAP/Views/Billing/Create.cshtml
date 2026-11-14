@@ -14,6 +14,7 @@
           data-cos-list-url="@Url.Action("GetBillableCustomerOrderSlips")"
           data-tickets-url="@Url.Action("GetDispatchTicketsByCustomerOrderSlip")"
           data-principals-url="@Url.Action("GetPrincipalsByCustomer")"
+          data-reps-url="@Url.Action("GetRepresentativesByCustomer")"
           data-progress-url="@Url.Action("Progress", "CustomerOrderSlip")"
           data-index-url="@Url.Action("Index")"
           data-details-url="@Url.Action("Details", "CustomerOrderSlip")"
@@ -21,6 +22,8 @@
           data-editing-draft="@isEditingDraft.ToString().ToLowerInvariant()"
           data-initial-billed-to="@Model.BilledTo"
           data-initial-principal="@Model.PrincipalId"
+          data-initial-agency-inc="@Model.AgencyIncentiveRepresentativeId"
+          data-initial-agent-com="@Model.AgentCommissionRepresentativeId"
           data-suggested-bir-number="@ViewData["SuggestedBirNumber"]"
           data-suggested-bir-baf-number="@ViewData["SuggestedBirBafNumber"]">
         @Html.AntiForgeryToken()
@@ -163,6 +166,22 @@
                                 </label>
                             </div>
                             <span id="discountHelp" class="ui-caption ui-muted">Locked to COS default. Overrides require reviewer revision.</span>
+                        </div>
+                    </div>
+                    <div class="billing-recipient-fields" id="commissionOptionsSection" hidden aria-label="Internal rebates and agent commissions">
+                        <div class="ui-field">
+                            <label for="AgencyIncentiveSelect" class="ui-label">Agency incentive (internal only)</label>
+                            <select asp-for="AgencyIncentiveRepresentativeId" class="js-modern-select" id="AgencyIncentiveSelect">
+                                <option value="">None</option>
+                            </select>
+                            <small id="agencyIncentivePreview" class="ui-caption ui-muted">Hidden from client invoices.</small>
+                        </div>
+                        <div class="ui-field">
+                            <label for="AgentCommissionSelect" class="ui-label">Agent commission (internal only)</label>
+                            <select asp-for="AgentCommissionRepresentativeId" class="js-modern-select" id="AgentCommissionSelect">
+                                <option value="">None</option>
+                            </select>
+                            <small id="agentCommissionPreview" class="ui-caption ui-muted">Hidden from client invoices.</small>
                         </div>
                     </div>
                     <div class="billing-recipient">
