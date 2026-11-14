@@ -50,10 +50,22 @@
                     @{
                         var billingChanges = ViewBag.BillingChanges as List<MsapFieldChange> ?? new List<MsapFieldChange>();
                         var hasSeriesOverride = billingChanges.Any(c => c.Field == nameof(Billing.MsapBillingNumber));
+                        var masterDefaultTerms = (Model.Principal?.Terms ?? Model.Customer.CustomerTerms)?.Trim();
+                        if (string.IsNullOrWhiteSpace(masterDefaultTerms))
+                        {
+                            masterDefaultTerms = "COD";
+                        }
+                        var hasTermsOverride = billingChanges.Any(c => c.Field == nameof(Billing.Terms))
+                            || (!string.IsNullOrWhiteSpace(Model.Terms) && !string.Equals(Model.Terms.Trim(), masterDefaultTerms, StringComparison.OrdinalIgnoreCase));
+                        var hasDueDateChange = billingChanges.Any(c => c.Field == nameof(Billing.DueDate));
                     }
                     @if (hasSeriesOverride)
                     {
                         <span class="schedule-status-pill ui-status ui-attention" title="Invoice number differs from the expected sequential BIR series">Series overridden</span>
+                    }
+                    @if (hasTermsOverride)
+                    {
+                        <span class="schedule-status-pill ui-status ui-attention" title="Payment terms differ from the customer/principal master file default">Terms overridden</span>
                     }
                     @if (Model.PeriodStatus == MsapPeriodStatus.Adjusted)
                     {
@@ -97,7 +109,7 @@
                         @if (visibleChanges.Count > 0)
                         {
                             <div class="billing-table-scroll">
-                                <table class="modern-table ui-table" style="font-size: 0.9rem;">
+                                <table class="modern-table ui-table billing-override-table" style="font-size: 0.9rem;">
                                     <thead>
                                         <tr>
                                             <th>Changed field</th>
@@ -201,8 +213,8 @@
                 <div class="billing-recipient">
                     <div><span class="ui-caption ui-muted">Statement address</span><p class="ui-body">@(Model.Principal?.Address ?? Model.Customer.CustomerAddress)</p></div>
                     <div><span class="ui-caption ui-muted">Statement TIN</span><p class="ui-body">@(Model.Principal?.TIN ?? Model.Customer.CustomerTin)</p></div>
-                    <div><span class="ui-caption ui-muted">Payment terms</span><p class="ui-body">@(string.IsNullOrWhiteSpace(Model.Terms) ? "—" : Model.Terms)</p></div>
-                    <div><span class="ui-caption ui-muted">Due date</span><p class="ui-body">@Model.DueDate.ToString("dd MMM yyyy")</p></div>
+                    <div class="@(hasTermsOverride ? "schedule-review-attention" : "")"><span class="ui-caption ui-muted">Payment terms @(hasTermsOverride ? "(Overridden)" : "")</span><p class="ui-body">@(string.IsNullOrWhiteSpace(Model.Terms) ? "—" : Model.Terms)</p></div>
+                    <div class="@(hasDueDateChange ? "schedule-review-attention" : "")"><span class="ui-caption ui-muted">Due date @(hasDueDateChange ? "(Adjusted)" : "")</span><p class="ui-body">@Model.DueDate.ToString("dd MMM yyyy")</p></div>
                 </div>
                 @if (!string.IsNullOrWhiteSpace(Model.Remarks))
                 {

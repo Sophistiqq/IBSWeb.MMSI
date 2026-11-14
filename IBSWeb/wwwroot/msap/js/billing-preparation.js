@@ -54,6 +54,13 @@ $(function () {
         enableActions();
     }
 
+    function updateTermsOverrideHint() {
+        const defaultTerms = ($('#recipientTerms').text() || '').trim();
+        const currentTerms = ($('#billingTerms').val() || '').trim();
+        const isTermsOverride = defaultTerms !== '' && defaultTerms !== '—' && currentTerms !== '' && currentTerms !== defaultTerms;
+        $('#termsOverrideHint').prop('hidden', !isTermsOverride).text(isTermsOverride ? `Terms override (default ${defaultTerms}) — flagged for reviewer.` : '');
+    }
+
     function updateRecipient() {
         const isPrincipal = $recipient.val() === 'PRINCIPAL';
         $('#principalField').prop('hidden', !isPrincipal);
@@ -65,6 +72,7 @@ $(function () {
         if (selected?.terms && !$('#billingTerms').data('user-overridden')) {
             $('#billingTerms').val(selected.terms).trigger('change');
         }
+        updateTermsOverrideHint();
         $('#recipientNote').text(isPrincipal ? 'Both Basic and BAF statements are addressed to the selected principal.' : 'The statement is addressed to the service customer.');
     }
 
@@ -189,11 +197,33 @@ $(function () {
         };
     }
 
+    function buildBasisControl(ticket, field, currentValue) {
+        const isToggleable = currentValue === 'Per hour' || currentValue === 'Per move';
+        if (!isToggleable) {
+            return currentValue ? $('<span class="billing-basis-badge">').text(currentValue) : null;
+        }
+        const $toggle = $('<div class="billing-basis-toggle" role="group">');
+        [['Per hour', 'Per hr'], ['Per move', 'Per move']].forEach(([value, label]) => {
+            $('<button type="button" class="billing-basis-btn">')
+                .toggleClass('is-active', currentValue === value)
+                .attr('aria-pressed', currentValue === value ? 'true' : 'false')
+                .text(label)
+                .on('click', () => {
+                    if (ticket[field] === value) return;
+                    ticket[field] = value;
+                    renderServices();
+                })
+                .appendTo($toggle);
+        });
+        return $toggle;
+    }
+
     function renderServices() {
         const $body = $('#completedServices').empty();
         const showDiscount = tickets.some(ticket => appliedDiscount(ticket) > 0)
             && ($('#DiscountOnTariff').is(':checked') || $('#DiscountOnBaf').is(':checked'));
-        const columnCount = showDiscount ? 9 : 6;
+        const columnCount = 6 + (commercialEnabled ? 2 : 0) + (showDiscount ? 3 : 0);
+        $('.billing-basis-column').prop('hidden', !commercialEnabled);
         $('.billing-discount-column').prop('hidden', !showDiscount);
         $('#serviceAmountsNote').text(showDiscount ? 'Original amounts, discount and net charges' : 'Approved rates');
         const groups = new Map();
@@ -201,16 +231,30 @@ $(function () {
             if (!groups.has(ticket.tugboat)) groups.set(ticket.tugboat, []);
             groups.get(ticket.tugboat).push(ticket);
         });
+        let ticketIndex = 0;
         groups.forEach((services, tugboat) => {
             $body.append($('<tr class="billing-tugboat-row">').append($('<th scope="rowgroup">').attr('colspan', columnCount).append(
                 $('<span>').text(tugboat), $('<span class="billing-tugboat-owner ui-caption ui-muted">').text(services[0].isCompanyOwned ? 'Company-owned' : 'Subcontractor'))));
             services.forEach(ticket => {
+                const idx = ticketIndex++;
                 const $row = $('<tr>');
                 const amount = charges(ticket);
                 $row.append($('<td>').append($('<strong>').text(ticket.service), $('<span class="billing-ticket-number">').text(ticket.dispatchNo)));
-                [ticket.actualHours == null ? '—' : Number(ticket.actualHours).toFixed(2), Number(ticket.duration).toFixed(2),
-                    money(amount.basicGross), money(amount.bafGross)]
+                [ticket.actualHours == null ? '—' : Number(ticket.actualHours).toFixed(2), Number(ticket.duration).toFixed(2)]
                     .forEach(value => $row.append($('<td>').text(value)));
+                $row.append($('<td>').text(money(amount.basicGross)));
+                if (commercialEnabled) {
+                    $row.append($('<td class="billing-basis-cell">').append(
+                        buildBasisControl(ticket, 'dispatchChargeType', ticket.dispatchChargeType),
+                        $('<input type="hidden">').attr('name', `TicketBasisOverrides[${idx}].DispatchTicketId`).val(ticket.dispatchTicketId),
+                        $('<input type="hidden">').attr('name', `TicketBasisOverrides[${idx}].DispatchChargeType`).val(ticket.dispatchChargeType)));
+                }
+                $row.append($('<td>').text(money(amount.bafGross)));
+                if (commercialEnabled) {
+                    $row.append($('<td class="billing-basis-cell">').append(
+                        buildBasisControl(ticket, 'bafChargeType', ticket.bafChargeType),
+                        $('<input type="hidden">').attr('name', `TicketBasisOverrides[${idx}].BAFChargeType`).val(ticket.bafChargeType)));
+                }
                 if (showDiscount) {
                     const discountLabel = !commercialEnabled && Number(ticket.dispatchDiscount || 0) !== Number(ticket.bafDiscount || 0)
                         ? 'Basic ' + Number(ticket.dispatchDiscount || 0) + '% / BAF ' + Number(ticket.bafDiscount || 0) + '%'
@@ -240,7 +284,7 @@ $(function () {
         try {
             const [details, jobs, recipients] = await Promise.all([
                 getJson(form.dataset.customerUrl, { customerId: id }),
-                getJson(form.dataset.cosListUrl, { customerId: id }),
+                getJson(form.dataset.cosListUrl, initialCos ? { customerId: id, currentCustomerOrderSlipId: initialCos } : { customerId: id }),
                 getJson(form.dataset.principalsUrl, { customerId: id })
             ]);
             if (request !== customerRequest) return;
@@ -368,6 +412,7 @@ $(function () {
             enableActions();
         }
     });
+    $('#billingTerms').on('change', updateTermsOverrideHint);
     updateSummary();
     if ($customer.val()) $customer.trigger('change');
 });

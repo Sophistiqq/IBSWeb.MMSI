@@ -617,6 +617,13 @@
     background: rgba(245, 158, 11, 0.12);
 }
 
+.billing-recipient .schedule-review-attention {
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.12);
+}
+
 @media (max-width: 960px) {
     .billing-totals-row {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -694,6 +701,70 @@
         border-left: 0;
         border-top: 1px solid var(--outline-variant);
     }
+}
+
+.billing-preparation .billing-service-table :is(th.billing-basis-column, td.billing-basis-cell) {
+    text-align: center;
+}
+
+.billing-basis-cell > .billing-basis-toggle,
+.billing-basis-cell > .billing-basis-badge {
+    margin-inline: auto;
+}
+
+.billing-preparation .billing-override-table thead,
+.billing-preparation .billing-override-table thead tr,
+.billing-preparation .billing-override-table thead th {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+.billing-basis-toggle {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    border-radius: 999px;
+    border: 1px solid var(--outline-variant);
+    background: var(--surface-variant, var(--surface));
+    gap: 2px;
+}
+
+.billing-basis-btn {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--on-surface-variant);
+    font-size: 0.7rem;
+    font-weight: 500;
+    line-height: 1.2;
+    padding: 2px 7px;
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.billing-basis-btn:hover {
+    color: var(--on-surface);
+}
+
+.billing-basis-btn.is-active {
+    background: var(--primary);
+    color: var(--on-primary, #fff);
+    font-weight: 600;
+}
+
+.billing-basis-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 500;
+    line-height: 1.2;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--outline-variant);
+    color: var(--on-surface-variant);
+    background: var(--surface-variant, var(--surface));
+    white-space: nowrap;
 }
 
 @media print {

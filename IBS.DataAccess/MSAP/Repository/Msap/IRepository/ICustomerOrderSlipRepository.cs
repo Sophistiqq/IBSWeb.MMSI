@@ -10,7 +10,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
         Task<CustomerOrderSlip?> GetCustomerOrderSlipWithDetailsAsync(int id, CancellationToken cancellationToken);
         Task<CustomerOrderSlip?> GetForUpdateAsync(int id, CancellationToken ct = default);
         Task<string> GenerateCustomerOrderSlipNumber(CancellationToken cancellationToken);
-        Task<List<CustomerOrderSlip>> SearchBillableCustomerOrderSlipsAsync(string term, int customerId, int limit, CancellationToken cancellationToken);
+        Task<List<CustomerOrderSlip>> SearchBillableCustomerOrderSlipsAsync(string term, int customerId, int limit, CancellationToken cancellationToken, int? currentCustomerOrderSlipId = null);
         Task<(IEnumerable<CustomerOrderSlip> Data, int RecordsFiltered, int TotalRecords)> GetPagedCustomerOrderSlipsAsync(DataTablesParameters parameters, CancellationToken cancellationToken);
     }
 }

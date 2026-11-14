@@ -155,7 +155,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
         {
             return await _db.Customers.AsNoTracking()
                 .Where(c => _db.MsapDispatchTickets.Any(t =>
-                                (t.Status == IBS.Utility.MSAP.Constants.MsapConstants.DispatchTicketStatus.ForBilling || (currentCustomerId.GetValueOrDefault() != 0 && t.CustomerId == currentCustomerId))
+                                ((t.Status == IBS.Utility.MSAP.Constants.MsapConstants.DispatchTicketStatus.ForBilling && t.BillingId == null)
+                                 || (currentCustomerId.GetValueOrDefault() != 0 && t.CustomerId == currentCustomerId))
                                 && t.CustomerId == c.CustomerId) &&
                             (string.IsNullOrEmpty(type) || c.Type == type) &&
                             c.IsActive)
@@ -170,7 +171,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
         public async Task<List<SelectListItem>> GetMsapUnbilledTicketsById(string type, CancellationToken cancellationToken = default)
         {
             var dispatchTicketList = await _db.MsapDispatchTickets
-                .Where(dt => dt.Status == IBS.Utility.MSAP.Constants.MsapConstants.DispatchTicketStatus.ForBilling)
+                .Where(dt => dt.Status == IBS.Utility.MSAP.Constants.MsapConstants.DispatchTicketStatus.ForBilling && dt.BillingId == null)
                 .OrderBy(dt => dt.DispatchNumber)
                 .Select(s => new SelectListItem
                 {
@@ -185,7 +186,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
         {
             var tickets = await _db
                 .MsapDispatchTickets
-                .Where(b => b.CustomerId == customerId && b.Status == IBS.Utility.MSAP.Constants.MsapConstants.DispatchTicketStatus.ForBilling)
+                .Where(b => b.CustomerId == customerId && b.Status == IBS.Utility.MSAP.Constants.MsapConstants.DispatchTicketStatus.ForBilling && b.BillingId == null)
                 .Include(b => b.Customer)
                 .OrderBy(b => b.DispatchNumber)
                 .ToListAsync(cancellationToken);

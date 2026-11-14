@@ -89,12 +89,12 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
             return $"COS-{year}-0001";
         }
-        public async Task<List<CustomerOrderSlip>> SearchBillableCustomerOrderSlipsAsync(string term, int customerId, int limit, CancellationToken cancellationToken)
+        public async Task<List<CustomerOrderSlip>> SearchBillableCustomerOrderSlipsAsync(string term, int customerId, int limit, CancellationToken cancellationToken, int? currentCustomerOrderSlipId = null)
         {
             var query = dbSet.AsNoTracking()
                 .Where(j => j.CustomerId == customerId &&
                             j.DispatchTickets.Any(dt => dt.Status == IBS.Utility.MSAP.Constants.MsapConstants.DispatchTicketStatus.ForBilling
-                                && (dt.BillingId == null || dt.Billing!.Status == IBS.Utility.MSAP.Constants.MsapConstants.BillingStatus.ForPosting)) &&
+                                && (dt.BillingId == null || (currentCustomerOrderSlipId.HasValue && j.CustomerOrderSlipId == currentCustomerOrderSlipId.Value && dt.Billing!.Status == IBS.Utility.MSAP.Constants.MsapConstants.BillingStatus.ForPosting))) &&
                             j.DispatchTickets.All(dt => dt.Status == IBS.Utility.MSAP.Constants.MsapConstants.DispatchTicketStatus.ForBilling ||
                                                         dt.Status == IBS.Utility.MSAP.Constants.MsapConstants.DispatchTicketStatus.Billed ||
                                                         dt.Status == IBS.Utility.MSAP.Constants.MsapConstants.DispatchTicketStatus.Deleted));

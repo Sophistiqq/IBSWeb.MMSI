@@ -110,7 +110,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to create Billings.")]
-        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,DiscountOnTariff,DiscountOnBaf,SbmaEnabled,Terms,Remarks")] Billing model, CancellationToken cancellationToken)
+        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,DiscountOnTariff,DiscountOnBaf,SbmaEnabled,Terms,Remarks,TicketBasisOverrides")] Billing model, CancellationToken cancellationToken)
         {
             try
             {
@@ -142,7 +142,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling)]
         public async Task<IActionResult> PreviewPreparation(
-            [Bind("CustomerId,CustomerOrderSlipId,PrincipalId,BilledTo,MsapBillingNumber,Date,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,SbmaEnabled,Terms,Remarks")] Billing model,
+            [Bind("CustomerId,CustomerOrderSlipId,PrincipalId,BilledTo,MsapBillingNumber,Date,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,SbmaEnabled,Terms,Remarks,TicketBasisOverrides")] Billing model,
             CancellationToken cancellationToken)
         {
             if (ModelState.Any(entry => (entry.Key is nameof(Billing.CosDiscountPercent) or nameof(Billing.SkipCosDiscount) or nameof(Billing.SbmaEnabled))
@@ -772,9 +772,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// </summary>
         [HttpGet]
         [RequireAccess(ProcedureEnum.CreateBilling)]
-        public async Task<JsonResult> GetBillableCustomerOrderSlips(int customerId, CancellationToken cancellationToken)
+        public async Task<JsonResult> GetBillableCustomerOrderSlips(int customerId, int? currentCustomerOrderSlipId, CancellationToken cancellationToken)
         {
-            var result = await billingService.GetBillableCustomerOrderSlipsAsync(customerId, cancellationToken);
+            var result = await billingService.GetBillableCustomerOrderSlipsAsync(customerId, cancellationToken, currentCustomerOrderSlipId);
             return Json(result);
         }
 

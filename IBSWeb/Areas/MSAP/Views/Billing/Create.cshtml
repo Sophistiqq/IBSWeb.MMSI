@@ -99,6 +99,8 @@
                             <label class="billing-option"><input asp-for="PrintDiscount" id="billingPrintDiscount" /> Print discount</label>
                             <label class="billing-option"><input asp-for="IsUndocumented" /> Undocumented</label>
                             <label class="billing-option" title="@(isEditingDraft ? "Discard draft first to change Basic and BAF split." : null)"><input asp-for="SeparateBaf" disabled="@isEditingDraft" /> Separate Basic and BAF</label>
+                            <label class="billing-option" id="sbmaCard" hidden title="Subic Bay Metropolitan Authority share."><input type="checkbox" name="SbmaEnabled" id="SbmaEnabled" value="true" disabled /> Apply SBMA share</label>
+                            <input type="hidden" name="SbmaEnabled" id="sbmaFalse" value="false" disabled />
                             @if (isEditingDraft)
                             {
                                 <input type="hidden" name="SeparateBaf" value="@Model.SeparateBaf.ToString().ToLowerInvariant()" />
@@ -162,13 +164,6 @@
                             </div>
                             <span id="discountHelp" class="ui-caption ui-muted">Locked to COS default. Overrides require reviewer revision.</span>
                         </div>
-                        <label class="billing-setting-card" id="sbmaCard" hidden>
-                            <input type="checkbox" name="SbmaEnabled" id="SbmaEnabled" value="true" disabled />
-                            <span class="material-symbols-outlined billing-setting-check" aria-hidden="true">check</span>
-                            <span class="ui-label">Apply SBMA share</span>
-                            <span class="ui-caption ui-muted">Subic Bay Metropolitan Authority share.</span>
-                        </label>
-                        <input type="hidden" name="SbmaEnabled" id="sbmaFalse" value="false" disabled />
                     </div>
                     <div class="billing-recipient">
                         <div><span class="ui-caption ui-muted">Statement address</span><p id="recipientAddress" class="ui-body">—</p></div>
@@ -179,6 +174,7 @@
                                 <option value="">-- Customer Default --</option>
                             </select>
                             <span class="ui-caption ui-muted" style="display:block;margin-top:2px;">Master file default: <strong id="recipientTerms">—</strong></span>
+                            <small id="termsOverrideHint" class="ui-caption schedule-review-attention" hidden></small>
                         </div>
                     </div>
                     <p id="recipientNote" class="ui-caption ui-muted">The statement is addressed to the service customer.</p>
@@ -191,7 +187,7 @@
                     </div>
                     <div class="billing-table-scroll">
                         <table class="billing-service-table">
-                            <thead><tr><th>Service</th><th>Actual hours</th><th>Billable hours</th><th id="basicAmountHeading">Basic amount</th><th id="bafAmountHeading">BAF amount</th><th class="billing-discount-column" hidden>Discount</th><th class="billing-discount-column" hidden>Basic net</th><th class="billing-discount-column" hidden>BAF net</th><th>Tariff / BAF source</th></tr></thead>
+                            <thead><tr><th>Service</th><th>Actual hours</th><th>Billable hours</th><th id="basicAmountHeading">Basic amount</th><th class="billing-basis-column" hidden>Basic basis</th><th id="bafAmountHeading">BAF amount</th><th class="billing-basis-column" hidden>BAF basis</th><th class="billing-discount-column" hidden>Discount</th><th class="billing-discount-column" hidden>Basic net</th><th class="billing-discount-column" hidden>BAF net</th><th>Tariff / BAF source</th></tr></thead>
                             <tbody id="completedServices"><tr><td colspan="6">Select a customer and COS to view completed services.</td></tr></tbody>
                         </table>
                     </div>

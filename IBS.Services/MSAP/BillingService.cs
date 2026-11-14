@@ -146,6 +146,7 @@ namespace IBS.Services.MSAP
                             ticket.Billing = existingDraft;
                         }
 
+                        fieldDiffs.AddRange(model.PendingBasisDiffs);
                         if (existingDraft.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted && fieldDiffs.Count > 0)
                         {
                             if (existingDraft.PeriodStatus == MsapPeriodStatus.Final)
@@ -191,33 +192,63 @@ namespace IBS.Services.MSAP
                         ticket.Billing = model;
                     }
                     await unitOfWork.SaveAsync(cancellationToken);
+                    var defaultTerms = (model.Principal?.Terms ?? model.Customer?.CustomerTerms)?.Trim();
+                    if (string.IsNullOrWhiteSpace(defaultTerms))
+                    {
+                        defaultTerms = "COD";
+                    }
                     foreach (var bill in prepared.Data)
                     {
                         var expectedNumber = bill.BasicBillingId.HasValue ? expectedBirBaf : expectedBirBasic;
                         var isSeriesOverride = !model.IsUndocumented
                             && !string.IsNullOrWhiteSpace(expectedNumber)
                             && !string.Equals(bill.MsapBillingNumber, expectedNumber, StringComparison.OrdinalIgnoreCase);
+                        var isTermsOverride = !string.Equals(bill.Terms, defaultTerms, StringComparison.OrdinalIgnoreCase);
                         var overrideNote = isSeriesOverride
                             ? $" [Series override: expected {expectedNumber}, prepared {bill.MsapBillingNumber}]"
                             : "";
-                        if (isSeriesOverride)
+                        if (isTermsOverride)
                         {
+                            overrideNote += $" [Terms override: default {defaultTerms}, prepared {bill.Terms}]";
+                        }
+                        if (isSeriesOverride || isTermsOverride || model.PendingBasisDiffs.Count > 0)
+                        {
+                            var changes = new List<MsapFieldChange>();
+                            var reasonParts = new List<string>();
+                            if (isSeriesOverride)
+                            {
+                                changes.Add(new MsapFieldChange
+                                {
+                                    Field = nameof(Billing.MsapBillingNumber),
+                                    Label = "Billing Number (Series Override)",
+                                    Before = $"Expected {expectedNumber}",
+                                    After = bill.MsapBillingNumber
+                                });
+                                reasonParts.Add($"BIR invoice series override (expected {expectedNumber}, prepared {bill.MsapBillingNumber})");
+                            }
+                            if (isTermsOverride)
+                            {
+                                changes.Add(new MsapFieldChange
+                                {
+                                    Field = nameof(Billing.Terms),
+                                    Label = "Payment Terms",
+                                    Before = defaultTerms,
+                                    After = bill.Terms
+                                });
+                                reasonParts.Add($"Payment terms override (default {defaultTerms}, prepared {bill.Terms})");
+                            }
+                            if (model.PendingBasisDiffs.Count > 0)
+                            {
+                                changes.AddRange(model.PendingBasisDiffs);
+                                reasonParts.Add("Charge basis (Per hour / Per move) selected on billing preparation");
+                            }
                             await unitOfWork.MsapAdjustmentLog.AddAsync(new MsapAdjustmentLog
                             {
                                 DocumentType = "Billing",
                                 RecordId = bill.MsapBillingId,
                                 ReferenceNumber = bill.MsapBillingNumber,
-                                Reason = $"BIR invoice series override (expected {expectedNumber}, prepared {bill.MsapBillingNumber})",
-                                ChangesJson = System.Text.Json.JsonSerializer.Serialize(new[]
-                                {
-                                    new MsapFieldChange
-                                    {
-                                        Field = nameof(Billing.MsapBillingNumber),
-                                        Label = "Billing Number (Series Override)",
-                                        Before = $"Expected {expectedNumber}",
-                                        After = bill.MsapBillingNumber
-                                    }
-                                }),
+                                Reason = string.Join("; ", reasonParts),
+                                ChangesJson = System.Text.Json.JsonSerializer.Serialize(changes),
                                 EditedBy = username,
                                 EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
                             }, cancellationToken);
@@ -380,6 +411,74 @@ namespace IBS.Services.MSAP
                 {
                     schedule.SbmaEnabled = model.SbmaEnabled.Value;
                     SbmaShareCalculator.Apply(tickets, schedule.SbmaEnabled);
+                }
+            }
+            if (schedule != null && model.TicketBasisOverrides.Count > 0)
+            {
+                var basisLookup = model.TicketBasisOverrides
+                    .GroupBy(b => b.DispatchTicketId)
+                    .ToDictionary(g => g.Key, g => g.Last());
+                var anyBasisChanged = false;
+                var effectivePct = model.CosDiscountPercent.HasValue ? modelEffectiveDiscount : scheduleEffectiveDiscount;
+
+                foreach (var ticket in tickets)
+                {
+                    if (!basisLookup.TryGetValue(ticket.DispatchTicketId, out var basisInput))
+                    {
+                        continue;
+                    }
+
+                    var newDispatchType = basisInput.DispatchChargeType == "Per move" ? "Per move" : "Per hour";
+                    var newBafType = basisInput.BAFChargeType is "Per move" or "Lumpsum" or "Industry"
+                        ? basisInput.BAFChargeType
+                        : "Per hour";
+
+                    if (!string.Equals(ticket.DispatchChargeType, newDispatchType, StringComparison.Ordinal))
+                    {
+                        model.PendingBasisDiffs.Add(new MsapFieldChange
+                        {
+                            Field = $"Ticket_{ticket.DispatchTicketId}_DispatchBasis",
+                            Label = $"{ticket.DispatchNumber} Basic Basis",
+                            Before = ticket.DispatchChargeType ?? "Per hour",
+                            After = newDispatchType
+                        });
+                        ticket.DispatchChargeType = newDispatchType;
+                        anyBasisChanged = true;
+                    }
+
+                    if (!string.Equals(ticket.BAFChargeType, newBafType, StringComparison.Ordinal))
+                    {
+                        model.PendingBasisDiffs.Add(new MsapFieldChange
+                        {
+                            Field = $"Ticket_{ticket.DispatchTicketId}_BafBasis",
+                            Label = $"{ticket.DispatchNumber} BAF Basis",
+                            Before = ticket.BAFChargeType ?? "Per hour",
+                            After = newBafType
+                        });
+                        ticket.BAFChargeType = newBafType;
+                        anyBasisChanged = true;
+                    }
+
+                    if (anyBasisChanged)
+                    {
+                        ScheduledTicketCharges.ApplyDiscount(ticket, effectivePct, model.DiscountOnTariff, model.DiscountOnBaf);
+                    }
+                }
+
+                if (anyBasisChanged)
+                {
+                    if (!isAuthorizedRevision)
+                    {
+                        foreach (var period in tickets.Select(t => t.Date).Distinct())
+                        {
+                            if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(period.Year, period.Month, cancellationToken))
+                            {
+                                return ServiceResult<List<Billing>>.Failure("Cannot change billing basis for tickets in a closed period.");
+                            }
+                        }
+                    }
+
+                    SbmaShareCalculator.Apply(tickets, model.SbmaEnabled ?? schedule.SbmaEnabled);
                 }
             }
             model.MsapBillingNumber = basicNumber;
@@ -1276,9 +1375,9 @@ namespace IBS.Services.MSAP
             return (billings, filtered, total);
         }
 
-        public async Task<List<object>> GetBillableCustomerOrderSlipsAsync(int customerId, CancellationToken cancellationToken)
+        public async Task<List<object>> GetBillableCustomerOrderSlipsAsync(int customerId, CancellationToken cancellationToken, int? currentCustomerOrderSlipId = null)
         {
-            var result = await unitOfWork.CustomerOrderSlip.SearchBillableCustomerOrderSlipsAsync("", customerId, 999, cancellationToken);
+            var result = await unitOfWork.CustomerOrderSlip.SearchBillableCustomerOrderSlipsAsync("", customerId, 999, cancellationToken, currentCustomerOrderSlipId);
 
             return result.Select(j => (object)new
             {

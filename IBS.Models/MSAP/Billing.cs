@@ -303,5 +303,20 @@ namespace IBS.Models.MSAP
 
         [NotMapped]
         public string? DispatchTicketNumbers { get; set; }
+
+        [NotMapped]
+        public List<BillingTicketBasisInput> TicketBasisOverrides { get; set; } = [];
+
+        [NotMapped]
+        public List<MsapFieldChange> PendingBasisDiffs { get; set; } = [];
+    }
+
+    public class BillingTicketBasisInput
+    {
+        public int DispatchTicketId { get; set; }
+
+        public string? DispatchChargeType { get; set; }
+
+        public string? BAFChargeType { get; set; }
     }
 }
