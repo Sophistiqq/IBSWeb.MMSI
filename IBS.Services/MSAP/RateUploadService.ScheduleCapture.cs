@@ -232,6 +232,434 @@ namespace IBS.Services.MSAP
             return (result, null);
         }
 
+        public async Task<ScheduleRateSetupViewModel> GetScheduleRateSetupAsync(
+            VesselSchedule schedule,
+            List<ScheduleRateCaptureViewModel> captures,
+            CancellationToken ct)
+        {
+            var plannedDate = DateOnly.FromDateTime(schedule.PlannedStart);
+            var today = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime());
+            var defaultTariffDate = plannedDate > today ? today : plannedDate;
+            var defaultBafDate = ScheduledTicketCharges.BafCycleStart(plannedDate);
+            var model = new ScheduleRateSetupViewModel
+            {
+                ScheduleId = schedule.VesselScheduleId,
+                CustomerId = schedule.CustomerId,
+                PortId = schedule.PortId,
+                TerminalId = schedule.TerminalId,
+                PlannedDate = plannedDate
+            };
+
+            if (!schedule.CustomerId.HasValue)
+            {
+                return model;
+            }
+
+            var awaitingTariff = new Dictionary<int, (Guid Id, decimal? Amount)>();
+            var awaitingBaf = new Dictionary<int, (Guid Id, decimal? Amount)>();
+            if (_db != null)
+            {
+                var awaitingUploads = await _db.MsapRateUploads.AsNoTracking()
+                    .Where(u => u.Company == MsapConstants.Company_MMSI && u.SubmittedAt != null && u.ApprovedAt == null)
+                    .OrderByDescending(u => u.SubmittedAt)
+                    .Take(50)
+                    .ToListAsync(ct);
+
+                foreach (var upload in awaitingUploads)
+                {
+                    var uploadRows = JsonSerializer.Deserialize<List<RateUploadRowViewModel>>(upload.RowsJson) ?? [];
+                    foreach (var row in uploadRows.Where(r => r.Selected && r.CustomerId == schedule.CustomerId.Value && r.TerminalId == schedule.TerminalId))
+                    {
+                        var target = upload.RateKind == RateTableKind.Tariff ? awaitingTariff : awaitingBaf;
+                        target.TryAdd(row.ServiceId, (upload.RateUploadId, row.Amount));
+                    }
+                }
+            }
+
+            var captureMap = captures
+                .GroupBy(c => (c.EntryId, c.Kind))
+                .ToDictionary(g => g.Key, g => g.First());
+
+            foreach (var group in schedule.ServiceEntries.Where(e => !e.CancelledAt.HasValue).GroupBy(e => e.ServiceId))
+            {
+                var first = group.First();
+                var entryIds = group.Select(e => e.VesselScheduleServiceEntryId).ToList();
+                var tariffCaptures = entryIds
+                    .Select(id => captureMap.TryGetValue((id, RateTableKind.Tariff), out var c) ? c : null)
+                    .Where(c => c != null)
+                    .Cast<ScheduleRateCaptureViewModel>()
+                    .ToList();
+                var bafCaptures = entryIds
+                    .Select(id => captureMap.TryGetValue((id, RateTableKind.BAF), out var c) ? c : null)
+                    .Where(c => c != null)
+                    .Cast<ScheduleRateCaptureViewModel>()
+                    .ToList();
+
+                decimal? tariffTableRate = tariffCaptures.FirstOrDefault(c => c.ApplicableTableRate.HasValue)?.ApplicableTableRate;
+                if (tariffCaptures.Count == 0)
+                {
+                    tariffTableRate = (await _work.TariffTable.GetApplicableRateAsync(schedule.CustomerId.Value, schedule.TerminalId, group.Key, plannedDate, ct))?.Dispatch;
+                }
+
+                decimal? bafTableRate = bafCaptures.FirstOrDefault(c => c.ApplicableTableRate.HasValue)?.ApplicableTableRate;
+                if (bafCaptures.Count == 0)
+                {
+                    var bafRate = await _work.BafTable.GetApplicableRateAsync(schedule.CustomerId.Value, schedule.TerminalId, group.Key, plannedDate, ct);
+                    if (bafRate != null && bafRate.AsOfDate >= defaultBafDate)
+                    {
+                        bafTableRate = bafRate.Amount;
+                    }
+                }
+
+                var primaryTariff = tariffCaptures.FirstOrDefault(c => c.IsPendingRate || c.CanCapture) ?? tariffCaptures.FirstOrDefault();
+                var primaryBaf = bafCaptures.FirstOrDefault(c => c.IsPendingRate || c.CanCapture) ?? bafCaptures.FirstOrDefault();
+
+                var tariffBasisLabel = first.TariffBasis switch
+                {
+                    TariffChargeBasis.PerMove => "Per move",
+                    TariffChargeBasis.PerHour => "Per hour",
+                    _ => "Not specified"
+                };
+                var bafMethodLabel = first.BafMethod switch
+                {
+                    BafCalculationMethod.PerMove => "Per move",
+                    BafCalculationMethod.PerHour => "Per hour",
+                    BafCalculationMethod.Lumpsum => "Lumpsum",
+                    BafCalculationMethod.Industry => "Industry",
+                    _ => "Not specified"
+                };
+
+                awaitingTariff.TryGetValue(group.Key, out var pendingTariff);
+                awaitingBaf.TryGetValue(group.Key, out var pendingBaf);
+
+                model.Items.Add(new ScheduleRateSetupItemViewModel
+                {
+                    ServiceId = group.Key,
+                    ServiceName = first.Service?.ServiceName ?? $"Service #{group.Key}",
+                    SourceEntryId = first.VesselScheduleServiceEntryId,
+                    TugboatNames = string.Join(", ", group.Select(e => e.Tugboat?.TugboatName ?? $"Tug #{e.TugboatId}").Distinct()),
+                    ChargingContext = $"Basic: {tariffBasisLabel} · BAF: {bafMethodLabel}",
+
+                    TariffTableRate = tariffTableRate,
+                    TariffManualAmount = first.ManualTariffRate,
+                    TariffIsPending = primaryTariff?.IsPendingRate == true,
+                    TariffCanSetup = primaryTariff != null && (primaryTariff.IsPendingRate || (primaryTariff.CanCapture && !primaryTariff.PublishedUpdateId.HasValue)),
+                    TariffEffectiveDate = primaryTariff?.EffectiveDate ?? defaultTariffDate,
+                    TariffPublishedUpdateId = primaryTariff?.PublishedUpdateId,
+                    PendingTariffUploadId = pendingTariff.Id == Guid.Empty ? null : pendingTariff.Id,
+                    PendingTariffAmount = pendingTariff.Amount,
+
+                    BafTableRate = bafTableRate,
+                    BafManualAmount = first.ManualBafRate,
+                    BafIsPending = primaryBaf?.IsPendingRate == true,
+                    BafCanSetup = primaryBaf != null && (primaryBaf.IsPendingRate || (primaryBaf.CanCapture && !primaryBaf.PublishedUpdateId.HasValue)),
+                    BafEffectiveDate = primaryBaf?.EffectiveDate ?? defaultBafDate,
+                    BafPublishedUpdateId = primaryBaf?.PublishedUpdateId,
+                    PendingBafUploadId = pendingBaf.Id == Guid.Empty ? null : pendingBaf.Id,
+                    PendingBafAmount = pendingBaf.Amount
+                });
+            }
+
+            return model;
+        }
+
+        public async Task<ServiceResult<BatchRatePreviewViewModel>> PreviewBatchAsync(BatchRateUpdateRequest request, CancellationToken ct)
+        {
+            var preparation = await ValidateAndPrepareBatchAsync(request, applyBaseline: true, ct);
+            if (!preparation.IsSuccess)
+            {
+                return ServiceResult<BatchRatePreviewViewModel>.Failure(preparation.Message!);
+            }
+
+            return ServiceResult<BatchRatePreviewViewModel>.Success(BuildBatchPreview(request.TariffRows, request.BafRows));
+        }
+
+        public async Task<ServiceResult<BatchRateSaveResult>> SaveBatchAsync(
+            BatchRateUpdateRequest request,
+            string userId,
+            bool canApprove,
+            CancellationToken ct)
+        {
+            var action = (request.Action ?? "submit").Trim().ToLowerInvariant();
+            if (action is not ("draft" or "submit" or "approve"))
+            {
+                return ServiceResult<BatchRateSaveResult>.Failure("Choose a valid rate update action.");
+            }
+            if (action == "approve" && !canApprove)
+            {
+                return ServiceResult<BatchRateSaveResult>.Failure("Rate approval permission is required to activate rates.");
+            }
+
+            var actor = await _db.Users.AsNoTracking().SingleOrDefaultAsync(user => user.Id == userId && user.IsActive, ct);
+            if (actor == null || string.IsNullOrWhiteSpace(actor.Name) || actor.Name.Trim().Length > 255)
+            {
+                return ServiceResult<BatchRateSaveResult>.Failure("The account needs a full name of up to 255 characters before recording rate changes.");
+            }
+
+            var validation = await ValidateAndPrepareBatchAsync(request, applyBaseline: false, ct);
+            if (!validation.IsSuccess)
+            {
+                return ServiceResult<BatchRateSaveResult>.Failure(validation.Message!);
+            }
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+
+            VesselSchedule? schedule = null;
+            if (request.ScheduleId.HasValue)
+            {
+                schedule = await _work.VesselSchedule.GetScheduleWithDetailsAsync(request.ScheduleId.Value, ct);
+                if (schedule == null)
+                {
+                    return ServiceResult<BatchRateSaveResult>.Failure("Schedule not found.");
+                }
+                if (schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+                {
+                    return ServiceResult<BatchRateSaveResult>.Failure("Completed or cancelled schedules cannot receive rate updates.");
+                }
+            }
+
+            if (action == "approve")
+            {
+                await _db.Database.ExecuteSqlRawAsync("LOCK TABLE msap.mmsi_tariff_rates, msap.mmsi_baf_rates IN SHARE ROW EXCLUSIVE MODE", ct);
+            }
+
+            if (request.TariffRows.Count > 0)
+            {
+                await UpdateBaselineAsync(request.TariffRows, RateTableKind.Tariff, true, ct);
+            }
+            if (request.BafRows.Count > 0)
+            {
+                await UpdateBaselineAsync(request.BafRows, RateTableKind.BAF, true, ct);
+            }
+
+            if (action == "approve" && !string.IsNullOrWhiteSpace(request.Fingerprint))
+            {
+                var freshPreview = BuildBatchPreview(request.TariffRows, request.BafRows);
+                if (!string.Equals(freshPreview.Fingerprint, request.Fingerprint, StringComparison.Ordinal))
+                {
+                    return ServiceResult<BatchRateSaveResult>.Failure("Stored rates changed while reviewing. Review the updated comparison and try again.");
+                }
+            }
+
+            if (schedule != null)
+            {
+                var entryByService = schedule.ServiceEntries
+                    .Where(e => !e.CancelledAt.HasValue)
+                    .GroupBy(e => e.ServiceId)
+                    .ToDictionary(g => g.Key, g => g.First().VesselScheduleServiceEntryId);
+                foreach (var row in request.TariffRows.Concat(request.BafRows))
+                {
+                    row.SourceScheduleId ??= schedule.VesselScheduleId;
+                    row.SourceRevision ??= schedule.Revision;
+                    if (!row.SourceServiceEntryId.HasValue && entryByService.TryGetValue(row.ServiceId, out var entryId))
+                    {
+                        row.SourceServiceEntryId = entryId;
+                    }
+                }
+            }
+
+            var result = new BatchRateSaveResult { Approved = action == "approve" };
+            var now = DateTimeHelper.GetCurrentPhilippineTime();
+
+            if (request.TariffRows.Count > 0)
+            {
+                var tariffResult = await SaveSingleKindBatchAsync(RateTableKind.Tariff, request.TariffId, request.TariffRows, action, schedule?.VesselScheduleId, actor, now, ct);
+                if (!tariffResult.IsSuccess)
+                {
+                    return ServiceResult<BatchRateSaveResult>.Failure(tariffResult.Message!);
+                }
+                result.TariffUploadId = tariffResult.Data;
+            }
+
+            if (request.BafRows.Count > 0)
+            {
+                var bafResult = await SaveSingleKindBatchAsync(RateTableKind.BAF, request.BafId, request.BafRows, action, schedule?.VesselScheduleId, actor, now, ct);
+                if (!bafResult.IsSuccess)
+                {
+                    return ServiceResult<BatchRateSaveResult>.Failure(bafResult.Message!);
+                }
+                result.BafUploadId = bafResult.Data;
+            }
+
+            await _db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            var message = action switch
+            {
+                "approve" => "Rates approved and activated. Eligible unbilled tickets without a prepared billing were automatically recalculated.",
+                "submit" => "Rates submitted for review. Live rates remain unchanged until approved.",
+                _ => "Rate draft saved. Review and submit when ready."
+            };
+            return ServiceResult<BatchRateSaveResult>.Success(result, message);
+        }
+
+        private async Task<ServiceResult> ValidateAndPrepareBatchAsync(BatchRateUpdateRequest request, bool applyBaseline, CancellationToken ct)
+        {
+            if (request.TariffRows.Count == 0 && request.BafRows.Count == 0)
+            {
+                return ServiceResult.Failure("Enter at least one Basic or BAF rate before continuing.");
+            }
+
+            if (request.TariffRows.Count > 0)
+            {
+                var tariffErrors = ValidateRows(request.TariffRows);
+                if (tariffErrors.Count > 0)
+                {
+                    return ServiceResult.Failure(string.Join("\n", tariffErrors.Take(20)));
+                }
+                if (request.ScheduleId.HasValue && request.TariffRows.Any(r => r.Amount is not > 0))
+                {
+                    return ServiceResult.Failure("Basic tariff rates must be greater than zero.");
+                }
+                var refs = await PopulateReferencesAsync(request.TariffRows, ct);
+                if (!refs.IsSuccess)
+                {
+                    return refs;
+                }
+                if (applyBaseline)
+                {
+                    await UpdateBaselineAsync(request.TariffRows, RateTableKind.Tariff, true, ct);
+                }
+            }
+
+            if (request.BafRows.Count > 0)
+            {
+                var bafErrors = ValidateRows(request.BafRows);
+                if (bafErrors.Count > 0)
+                {
+                    return ServiceResult.Failure(string.Join("\n", bafErrors.Take(20)));
+                }
+                if (request.RequireTuesdayForBaf && request.BafRows.Any(r => r.EffectiveDate.DayOfWeek != DayOfWeek.Tuesday))
+                {
+                    return ServiceResult.Failure("BAF effective dates must fall on a Tuesday.");
+                }
+                var refs = await PopulateReferencesAsync(request.BafRows, ct);
+                if (!refs.IsSuccess)
+                {
+                    return refs;
+                }
+                if (applyBaseline)
+                {
+                    await UpdateBaselineAsync(request.BafRows, RateTableKind.BAF, true, ct);
+                }
+            }
+
+            return ServiceResult.Success("Valid");
+        }
+
+        private static BatchRatePreviewViewModel BuildBatchPreview(List<RateUploadRowViewModel> tariffRows, List<RateUploadRowViewModel> bafRows)
+        {
+            var items = new List<BatchRatePreviewItemViewModel>();
+            foreach (var (kind, rows) in new[] { (RateTableKind.Tariff, tariffRows), (RateTableKind.BAF, bafRows) })
+            {
+                foreach (var row in rows)
+                {
+                    items.Add(new BatchRatePreviewItemViewModel
+                    {
+                        Kind = kind,
+                        KindLabel = kind == RateTableKind.Tariff ? "Basic" : "BAF",
+                        CustomerName = row.CustomerName,
+                        PortName = row.PortName,
+                        TerminalName = row.TerminalName,
+                        ServiceName = row.ServiceName,
+                        EffectiveDate = row.EffectiveDate,
+                        BaselineDate = row.BaselineDate,
+                        StoredAmount = row.StoredAmount,
+                        Amount = row.Amount!.Value,
+                        Change = row.Change
+                    });
+                }
+            }
+
+            var fingerprint = Fingerprint(items.Select(i => new
+            {
+                i.Kind,
+                i.CustomerName,
+                i.TerminalName,
+                i.ServiceName,
+                i.EffectiveDate,
+                i.StoredAmount,
+                i.Amount,
+                i.Change
+            }));
+
+            return new BatchRatePreviewViewModel
+            {
+                Fingerprint = fingerprint,
+                HasChanges = items.Any(i => i.Change != "Unchanged"),
+                Items = items
+            };
+        }
+
+        private async Task<ServiceResult<Guid>> SaveSingleKindBatchAsync(
+            RateTableKind kind,
+            Guid? existingId,
+            List<RateUploadRowViewModel> rows,
+            string action,
+            int? scheduleId,
+            ApplicationUser actor,
+            DateTime now,
+            CancellationToken ct)
+        {
+            RateUpload? update;
+            if (existingId.HasValue)
+            {
+                update = await LockAsync(existingId.Value, ct);
+                if (update == null || update.UploadedByUserId != actor.Id || update.SubmittedAt.HasValue || update.RateKind != kind)
+                {
+                    return ServiceResult<Guid>.Failure($"Only your unsubmitted {kind} draft can be updated.");
+                }
+            }
+            else
+            {
+                update = new RateUpload
+                {
+                    UploadedByUserId = actor.Id,
+                    UploadedBy = actor.Name.Trim(),
+                    UploadedAt = now,
+                    RateKind = kind,
+                    FileName = scheduleId.HasValue ? $"Booking #{scheduleId} {kind} rates" : $"{kind} rate update"
+                };
+            }
+
+            foreach (var row in rows)
+            {
+                row.Selected = action == "draft" ? row.Selected : row.Change != "Unchanged" || !row.ExistingRateId.HasValue;
+            }
+            if (action != "draft" && !rows.Any(r => r.Selected))
+            {
+                foreach (var row in rows)
+                {
+                    row.Selected = true;
+                }
+            }
+
+            var before = update.RowsJson;
+            update.UploadedBy = actor.Name.Trim();
+            update.RowsJson = JsonSerializer.Serialize(rows);
+            update.TotalRows = rows.Count;
+            update.ChangedRows = rows.Count(r => r.Change != "Unchanged");
+            if (action is "submit" or "approve")
+            {
+                update.SubmittedAt ??= now;
+            }
+            if (!existingId.HasValue)
+            {
+                _db.MsapRateUploads.Add(update);
+            }
+
+            _db.AuditTrails.Add(CreateAudit(actor, update, action == "draft" ? "Saved draft" : "Submitted for review", before));
+
+            if (action == "approve")
+            {
+                var selectedRows = rows.Where(r => r.Selected).ToList();
+                await PopulateNamesAsync([update], ct);
+                await ActivateRowsAsync(update, selectedRows, actor, ct);
+            }
+
+            return ServiceResult<Guid>.Success(update.RateUploadId);
+        }
+
         private static string Fingerprint(object value)
         {
             return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value))));

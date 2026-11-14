@@ -62,13 +62,55 @@ namespace IBS.Services.MSAP
             return model;
         }
 
-        public async Task<RateEditorViewModel?> GetEditorAsync(RateTableKind kind, DateOnly asOf, Guid? id, string userId, CancellationToken ct)
+        public async Task<RateEditorViewModel?> GetEditorAsync(
+            RateTableKind kind,
+            DateOnly asOf,
+            Guid? id,
+            string userId,
+            CancellationToken ct,
+            int? scheduleId = null,
+            string? mode = null,
+            int? customerId = null,
+            int? portId = null,
+            int? terminalId = null,
+            int? serviceId = null)
         {
             if (!Enum.IsDefined(kind) || asOf.Year is < 1900 or > 9998)
             {
                 return null;
             }
-            var model = new RateEditorViewModel { Kind = kind, AsOfDate = asOf, Id = id };
+
+            VesselSchedule? schedule = null;
+            if (!id.HasValue && scheduleId.HasValue)
+            {
+                schedule = await _work.VesselSchedule.GetScheduleWithDetailsAsync(scheduleId.Value, ct);
+                if (schedule == null)
+                {
+                    return null;
+                }
+            }
+
+            var effectiveAsOf = schedule != null && asOf == DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime())
+                ? DateOnly.FromDateTime(schedule.PlannedStart)
+                : asOf;
+            var effectiveMode = !id.HasValue && (string.Equals(mode, "combined", StringComparison.OrdinalIgnoreCase) || (schedule != null && string.IsNullOrEmpty(mode)))
+                ? "combined"
+                : "single";
+
+            var model = new RateEditorViewModel
+            {
+                Kind = kind,
+                AsOfDate = effectiveAsOf,
+                Id = id,
+                Mode = effectiveMode,
+                ScheduleId = schedule?.VesselScheduleId,
+                ScheduleLabel = schedule == null ? null : $"Booking #{schedule.VesselScheduleId} · {schedule.Customer?.CustomerName ?? "Customer"} · {schedule.Vessel?.VesselName ?? "Vessel"}",
+                SelectedCustomerId = customerId ?? schedule?.CustomerId,
+                SelectedPortId = portId ?? schedule?.PortId,
+                SelectedTerminalId = terminalId ?? schedule?.TerminalId,
+                SelectedServiceId = serviceId
+            };
+
             if (id.HasValue)
             {
                 RateUploadViewModel? saved = await GetAsync(id.Value, userId, ct);
@@ -78,10 +120,15 @@ namespace IBS.Services.MSAP
                 }
                 model.Rows = saved.Rows;
             }
+            else if (effectiveMode == "combined")
+            {
+                model.CombinedRows = await GetCombinedRowsAsync(effectiveAsOf, schedule, model.SelectedCustomerId, model.SelectedPortId, model.SelectedTerminalId, model.SelectedServiceId, ct);
+            }
             else
             {
-                model.Rows = await GetRowsAsync(kind, null, asOf, ct);
+                model.Rows = await GetRowsAsync(kind, null, effectiveAsOf, ct);
             }
+
             model.Customers = await _db.Customers.AsNoTracking().Where(customer => customer.Company == MsapConstants.Company_MMSI)
                 .OrderBy(customer => customer.CustomerName).Select(customer => new RateReferenceViewModel { Id = customer.CustomerId, Name = customer.CustomerName, Code = customer.CustomerCode }).ToListAsync(ct);
             model.Ports = await _db.MsapPorts.AsNoTracking().OrderBy(port => port.PortName)
@@ -91,6 +138,178 @@ namespace IBS.Services.MSAP
             model.Services = await _db.MsapServices.AsNoTracking().OrderBy(service => service.ServiceName)
                 .Select(service => new RateReferenceViewModel { Id = service.ServiceId, Name = service.ServiceName, Code = service.ServiceNumber }).ToListAsync(ct);
             return model;
+        }
+
+        private async Task<List<RateEditorCombinedRowViewModel>> GetCombinedRowsAsync(
+            DateOnly asOf,
+            VesselSchedule? schedule,
+            int? customerId,
+            int? portId,
+            int? terminalId,
+            int? serviceId,
+            CancellationToken ct)
+        {
+            var tariffRows = await GetRowsAsync(RateTableKind.Tariff, null, asOf, ct);
+            var bafRows = await GetRowsAsync(RateTableKind.BAF, null, asOf, ct);
+
+            if (schedule != null && schedule.CustomerId.HasValue)
+            {
+                tariffRows = tariffRows.Where(r => r.CustomerId == schedule.CustomerId.Value && r.TerminalId == schedule.TerminalId).ToList();
+                bafRows = bafRows.Where(r => r.CustomerId == schedule.CustomerId.Value && r.TerminalId == schedule.TerminalId).ToList();
+            }
+
+            var bafCycleStart = ScheduledTicketCharges.BafCycleStart(asOf);
+            var combinedMap = new Dictionary<(int CustomerId, int TerminalId, int ServiceId), RateEditorCombinedRowViewModel>();
+
+            foreach (var t in tariffRows)
+            {
+                var key = (t.CustomerId, t.TerminalId, t.ServiceId);
+                combinedMap[key] = new RateEditorCombinedRowViewModel
+                {
+                    CustomerId = t.CustomerId, CustomerCode = t.CustomerCode, CustomerName = t.CustomerName,
+                    PortId = t.PortId, PortCode = t.PortCode, PortName = t.PortName,
+                    TerminalId = t.TerminalId, TerminalCode = t.TerminalCode, TerminalName = t.TerminalName,
+                    ServiceId = t.ServiceId, ServiceCode = t.ServiceCode, ServiceName = t.ServiceName,
+                    TariffEffectiveDate = t.EffectiveDate,
+                    TariffAmount = t.Amount,
+                    TariffExistingRateId = t.ExistingRateId,
+                    TariffBaselineRateId = t.BaselineRateId,
+                    TariffBaselineDate = t.BaselineDate,
+                    TariffStoredAmount = t.StoredAmount,
+                    BafEffectiveDate = bafCycleStart,
+                    IsPendingTariff = t.Amount is not > 0,
+                    IsPendingBaf = true
+                };
+            }
+
+            foreach (var b in bafRows)
+            {
+                var key = (b.CustomerId, b.TerminalId, b.ServiceId);
+                if (!combinedMap.TryGetValue(key, out var item))
+                {
+                    item = new RateEditorCombinedRowViewModel
+                    {
+                        CustomerId = b.CustomerId, CustomerCode = b.CustomerCode, CustomerName = b.CustomerName,
+                        PortId = b.PortId, PortCode = b.PortCode, PortName = b.PortName,
+                        TerminalId = b.TerminalId, TerminalCode = b.TerminalCode, TerminalName = b.TerminalName,
+                        ServiceId = b.ServiceId, ServiceCode = b.ServiceCode, ServiceName = b.ServiceName,
+                        TariffEffectiveDate = asOf,
+                        IsPendingTariff = true
+                    };
+                    combinedMap[key] = item;
+                }
+
+                var isCurrentCycle = b.EffectiveDate >= bafCycleStart;
+                item.BafBaselineDate = b.BaselineDate;
+                item.BafStoredAmount = b.StoredAmount;
+                item.BafBaselineRateId = b.BaselineRateId;
+                if (isCurrentCycle)
+                {
+                    item.BafEffectiveDate = b.EffectiveDate;
+                    item.BafAmount = b.Amount;
+                    item.BafExistingRateId = b.ExistingRateId;
+                    item.IsPendingBaf = false;
+                }
+                else
+                {
+                    item.BafEffectiveDate = bafCycleStart;
+                    item.BafAmount = null;
+                    item.BafExistingRateId = null;
+                    item.IsPendingBaf = true;
+                }
+            }
+
+            if (schedule != null && schedule.CustomerId.HasValue)
+            {
+                var today = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime());
+                var defaultTariffDate = asOf > today ? today : asOf;
+                var activeEntries = schedule.ServiceEntries.Where(e => !e.CancelledAt.HasValue).ToList();
+                var scheduleServiceIds = activeEntries.Select(e => e.ServiceId).Distinct().ToHashSet();
+
+                foreach (var group in activeEntries.GroupBy(e => e.ServiceId))
+                {
+                    var first = group.First();
+                    var key = (schedule.CustomerId.Value, schedule.TerminalId, group.Key);
+                    if (!combinedMap.TryGetValue(key, out var item))
+                    {
+                        item = new RateEditorCombinedRowViewModel
+                        {
+                            CustomerId = schedule.CustomerId.Value,
+                            CustomerCode = schedule.Customer?.CustomerCode ?? "",
+                            CustomerName = schedule.Customer?.CustomerName ?? $"Customer #{schedule.CustomerId}",
+                            PortId = schedule.PortId,
+                            PortCode = schedule.Port?.PortNumber ?? "",
+                            PortName = schedule.Port?.PortName ?? $"Port #{schedule.PortId}",
+                            TerminalId = schedule.TerminalId,
+                            TerminalCode = schedule.Terminal?.TerminalNumber ?? "",
+                            TerminalName = schedule.Terminal?.TerminalName ?? $"Terminal #{schedule.TerminalId}",
+                            ServiceId = group.Key,
+                            ServiceCode = first.Service?.ServiceNumber ?? "",
+                            ServiceName = first.Service?.ServiceName ?? $"Service #{group.Key}",
+                            TariffEffectiveDate = defaultTariffDate,
+                            BafEffectiveDate = bafCycleStart,
+                            IsPendingTariff = true,
+                            IsPendingBaf = true
+                        };
+                        combinedMap[key] = item;
+                    }
+
+                    item.SourceScheduleId = schedule.VesselScheduleId;
+                    item.SourceServiceEntryId = first.VesselScheduleServiceEntryId;
+                    item.SourceRevision = schedule.Revision;
+                    var tugs = string.Join(", ", group.Select(e => e.Tugboat?.TugboatName ?? $"Tug #{e.TugboatId}").Distinct());
+                    item.ContextNote = $"Booking #{schedule.VesselScheduleId} · {tugs}";
+
+                    if (item.IsPendingTariff && first.ManualTariffRate.HasValue)
+                    {
+                        item.TariffEffectiveDate = defaultTariffDate;
+                        item.TariffAmount = first.ManualTariffRate;
+                    }
+                    if (item.IsPendingBaf && first.ManualBafRate.HasValue)
+                    {
+                        item.BafEffectiveDate = bafCycleStart;
+                        item.BafAmount = first.ManualBafRate;
+                    }
+                }
+
+                return combinedMap.Values
+                    .OrderByDescending(r => scheduleServiceIds.Contains(r.ServiceId))
+                    .ThenByDescending(r => r.IsPendingTariff || r.IsPendingBaf)
+                    .ThenBy(r => r.ServiceName)
+                    .ToList();
+            }
+
+            if (customerId.HasValue && portId.HasValue && terminalId.HasValue && serviceId.HasValue)
+            {
+                var key = (customerId.Value, terminalId.Value, serviceId.Value);
+                if (!combinedMap.ContainsKey(key))
+                {
+                    var customer = await _db.Customers.AsNoTracking().SingleOrDefaultAsync(c => c.CustomerId == customerId.Value && c.Company == MsapConstants.Company_MMSI, ct);
+                    var port = await _db.MsapPorts.AsNoTracking().SingleOrDefaultAsync(p => p.PortId == portId.Value, ct);
+                    var terminal = await _db.MsapTerminals.AsNoTracking().SingleOrDefaultAsync(t => t.TerminalId == terminalId.Value && t.PortId == portId.Value, ct);
+                    var service = await _db.MsapServices.AsNoTracking().SingleOrDefaultAsync(s => s.ServiceId == serviceId.Value, ct);
+                    if (customer != null && port != null && terminal != null && service != null)
+                    {
+                        combinedMap[key] = new RateEditorCombinedRowViewModel
+                        {
+                            CustomerId = customer.CustomerId, CustomerCode = customer.CustomerCode, CustomerName = customer.CustomerName,
+                            PortId = port.PortId, PortCode = port.PortNumber, PortName = port.PortName,
+                            TerminalId = terminal.TerminalId, TerminalCode = terminal.TerminalNumber, TerminalName = terminal.TerminalName,
+                            ServiceId = service.ServiceId, ServiceCode = service.ServiceNumber, ServiceName = service.ServiceName,
+                            TariffEffectiveDate = asOf,
+                            BafEffectiveDate = bafCycleStart,
+                            IsPendingTariff = true,
+                            IsPendingBaf = true
+                        };
+                    }
+                }
+            }
+
+            return combinedMap.Values
+                .OrderBy(r => r.CustomerCode)
+                .ThenBy(r => r.TerminalCode)
+                .ThenBy(r => r.ServiceName)
+                .ToList();
         }
 
         public async Task<List<RateUploadRowViewModel>> GetRowsAsync(RateTableKind kind, DateOnly? from, DateOnly through, CancellationToken ct)
@@ -306,6 +525,80 @@ namespace IBS.Services.MSAP
             }
             await PopulateNamesAsync([update], ct);
             await ActivateRowsAsync(update, rows, actor, ct);
+            await _db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+            return ServiceResult.Success(
+                "Selected rates approved and activated. Eligible unbilled tickets without a prepared billing were automatically recalculated.");
+        }
+
+        public async Task<ServiceResult> SubmitAndApproveAsync(Guid id, int[] selectedRows, string userId, CancellationToken ct)
+        {
+            var actor = await _db.Users.AsNoTracking().SingleOrDefaultAsync(user => user.Id == userId && user.IsActive, ct);
+            if (actor == null || string.IsNullOrWhiteSpace(actor.Name) || actor.Name.Trim().Length > 255)
+            {
+                return ServiceResult.Failure("The account needs a full name of up to 255 characters before recording rate changes.");
+            }
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+            var update = await LockAsync(id, ct);
+            if (update == null)
+            {
+                return ServiceResult.Failure("Rate update not found.");
+            }
+            if (update.ApprovedAt.HasValue)
+            {
+                return ServiceResult.Success("This update is already approved.");
+            }
+
+            await _db.Database.ExecuteSqlRawAsync("LOCK TABLE msap.mmsi_tariff_rates, msap.mmsi_baf_rates IN SHARE ROW EXCLUSIVE MODE", ct);
+
+            var allRows = JsonSerializer.Deserialize<List<RateUploadRowViewModel>>(update.RowsJson)!;
+            if (!update.SubmittedAt.HasValue)
+            {
+                if (update.UploadedByUserId != userId)
+                {
+                    return ServiceResult.Failure("Only the preparer can submit an unsubmitted draft.");
+                }
+                if (ValidateRows(allRows).Count > 0)
+                {
+                    return ServiceResult.Failure("This draft has invalid rows. Create a new draft in the rate editor.");
+                }
+                if (await UpdateBaselineAsync(allRows, update.RateKind, false, ct))
+                {
+                    return ServiceResult.Failure("Stored rates changed. Refresh the comparison and review it before approving.");
+                }
+                var before = update.RowsJson;
+                foreach (var row in allRows)
+                {
+                    row.Selected = selectedRows.Contains(row.RowNumber) && row.Change != "Unchanged";
+                }
+                if (!allRows.Any(row => row.Selected))
+                {
+                    return ServiceResult.Failure("Select at least one new or changed rate.");
+                }
+                update.SubmittedAt = DateTimeHelper.GetCurrentPhilippineTime();
+                update.UploadedBy = actor.Name.Trim();
+                update.RowsJson = JsonSerializer.Serialize(allRows);
+                update.ChangedRows = allRows.Count(row => row.Change != "Unchanged");
+                _db.AuditTrails.Add(CreateAudit(actor, update, "Submitted for review", before));
+            }
+
+            var selected = allRows.Where(row => row.Selected).ToList();
+            if (ValidateRows(selected).Count > 0 || !Enum.IsDefined(update.RateKind))
+            {
+                return ServiceResult.Failure("The selected rows are invalid. Refresh and review the draft.");
+            }
+            var references = await PopulateReferencesAsync(selected, ct);
+            if (!references.IsSuccess)
+            {
+                return references;
+            }
+            if (await UpdateBaselineAsync(selected, update.RateKind, false, ct))
+            {
+                return ServiceResult.Failure("Stored rates changed after review. The preparer must refresh the comparison and resubmit.");
+            }
+            await PopulateNamesAsync([update], ct);
+            await ActivateRowsAsync(update, selected, actor, ct);
             await _db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
             return ServiceResult.Success(

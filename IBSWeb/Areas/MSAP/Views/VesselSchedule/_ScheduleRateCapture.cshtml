@@ -1,8 +1,8 @@
 @model ScheduleRateCaptureViewModel
-<div class="schedule-rate-capture-wrapper">
-@if (Model != null)
+@if (Model != null && (Model.PublishedUpdateId.HasValue || Model.IsPendingRate))
 {
-    if (Model.PublishedUpdateId.HasValue)
+    <div class="schedule-rate-capture-wrapper">
+    @if (Model.PublishedUpdateId.HasValue)
     {
         <small class="ui-caption">Saved for reuse · <a asp-controller="RateUpload" asp-action="Details"
                                                           asp-route-id="@Model.PublishedUpdateId">View rate evidence</a></small>
@@ -10,53 +10,10 @@
     else if (Model.IsPendingRate)
     {
         <small class="ui-caption schedule-review-attention">Rate pending</small>
-        @if (Model.CanCapture && (ViewBag.CanManageRates == true || ViewBag.CanCaptureRates == true))
-        {
-            <a asp-controller="RateUpload" asp-action="Editor"
-               asp-route-kind="@Model.Kind"
-               asp-route-asOfDate="@Model.EffectiveDate.ToString("yyyy-MM-dd")"
-               asp-route-customerId="@Model.CustomerId"
-               asp-route-portId="@Model.PortId"
-               asp-route-terminalId="@Model.TerminalId"
-               asp-route-serviceId="@Model.ServiceId"
-               class="schedule-rate-save"
-               aria-label="Open @(Model.Kind == RateTableKind.Tariff ? "Basic" : "BAF") in rate editor"
-               title="Open in rate editor to establish reusable rate">
-                <span class="material-symbols-outlined" aria-hidden="true">edit</span>
-            </a>
-        }
     }
-    else if (Model.Kind == RateTableKind.BAF && Model.Amount.HasValue && Model.Amount.Value == 0)
-    {
-        <small class="ui-caption text-muted">Zero BAF</small>
-    }
-    else if (Model.Amount.HasValue && Model.ApplicableTableRate.HasValue && Model.Amount == Model.ApplicableTableRate)
-    {
-        <small class="ui-caption text-muted">Standard table rate</small>
-    }
-    else
-    {
-        <small class="ui-caption">@(Model.ApplicableTableRate.HasValue ? "Manual override" : "Not saved to rate table")</small>
-        @if (Model.CanCapture && (ViewBag.CanManageRates == true || ViewBag.CanCaptureRates == true))
-        {
-            <a asp-controller="RateUpload" asp-action="Editor"
-               asp-route-kind="@Model.Kind"
-               asp-route-asOfDate="@Model.EffectiveDate.ToString("yyyy-MM-dd")"
-               asp-route-customerId="@Model.CustomerId"
-               asp-route-portId="@Model.PortId"
-               asp-route-terminalId="@Model.TerminalId"
-               asp-route-serviceId="@Model.ServiceId"
-               asp-route-amount="@(Model.Amount?.ToString(System.Globalization.CultureInfo.InvariantCulture))"
-               class="schedule-rate-save"
-               aria-label="Open @(Model.Kind == RateTableKind.Tariff ? "Basic" : "BAF") in rate editor"
-               title="Open in rate editor to review and save reusable rate">
-                <span class="material-symbols-outlined" aria-hidden="true">edit</span>
-            </a>
-        }
-    }
+    </div>
 }
 else
 {
-    <small class="ui-caption text-muted">Standard table rate</small>
+    <div class="schedule-rate-capture-wrapper"></div>
 }
-</div>

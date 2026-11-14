@@ -134,7 +134,35 @@ namespace Checks.MSAP
                 var reviewData = new ViewDataDictionary<VesselSchedule>(services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = schedule };
                 reviewData["AssignedTugboatModels"] = new List<Tugboat> { tug };
                 reviewData["CanConfirm"] = true;
+                reviewData["CanManageRates"] = true;
+                reviewData["CanPrepareRates"] = true;
+                reviewData["CanApproveRates"] = true;
                 reviewData["CanCaptureRates"] = true;
+                reviewData["RateSetup"] = new ScheduleRateSetupViewModel
+                {
+                    ScheduleId = 5,
+                    CustomerId = 1,
+                    PortId = 1,
+                    TerminalId = 1,
+                    PlannedDate = new DateOnly(2026, 10, 12),
+                    Items =
+                    [
+                        new ScheduleRateSetupItemViewModel
+                        {
+                            ServiceId = 1,
+                            ServiceName = "Ship Docking",
+                            SourceEntryId = 0,
+                            TugboatNames = "Tug <A>",
+                            ChargingContext = "Base charging",
+                            TariffIsPending = true,
+                            TariffCanSetup = true,
+                            TariffEffectiveDate = new DateOnly(2026, 10, 12),
+                            BafIsPending = true,
+                            BafCanSetup = true,
+                            BafEffectiveDate = new DateOnly(2026, 10, 13)
+                        }
+                    ]
+                };
                 reviewData["RateCaptures"] = new List<ScheduleRateCaptureViewModel>
                 {
                     new() { ScheduleId = 5, EntryId = 0, Kind = RateTableKind.Tariff, CanCapture = true, EffectiveDate = new DateOnly(2026, 10, 13) },
@@ -162,9 +190,13 @@ namespace Checks.MSAP
                     Check(reviewHtml.Contains("Revised from 12 Oct 2026, 08:00", StringComparison.Ordinal)
                         && reviewHtml.Contains("Revised for reapproval:", StringComparison.Ordinal), "Reapproval must highlight revised schedule fields.");
                 }
-                Check(Regex.Matches(reviewHtml, "RateUpload/Editor").Count == 2
-                    && reviewHtml.Contains("Open Basic in rate editor", StringComparison.Ordinal)
-                    && reviewHtml.Contains("Open BAF in rate editor", StringComparison.Ordinal), "Authorized rate editor actions were missing.");
+                Check(reviewHtml.Contains("schedule-rate-editor-cta--attention", StringComparison.Ordinal)
+                    && reviewHtml.Contains("Open rate editor", StringComparison.Ordinal)
+                    && reviewHtml.Contains("2 missing", StringComparison.Ordinal)
+                    && Regex.Matches(reviewHtml, "RateUpload/Editor").Count == 1
+                    && !reviewHtml.Contains("id=\"scheduleRateSetup\"", StringComparison.Ordinal)
+                    && !reviewHtml.Contains("Open Basic in rate editor", StringComparison.Ordinal)
+                    && !reviewHtml.Contains("Open BAF in rate editor", StringComparison.Ordinal), "Highlighted single rate editor button was missing or inline rate setup leaked back onto the schedule.");
                 int reviewSummaryIndex = reviewHtml.IndexOf("aria-label=\"Review summary\"", StringComparison.Ordinal);
                 int reviewSummaryEnd = reviewSummaryIndex < 0 ? -1 : reviewHtml.IndexOf("</aside>", reviewSummaryIndex, StringComparison.Ordinal);
                 int approvalIndex = reviewHtml.IndexOf("id=\"confirmSchedule\"", StringComparison.Ordinal);
@@ -196,7 +228,9 @@ namespace Checks.MSAP
             Check(!viewerHtml.Contains("Tariff rate (₱)", StringComparison.Ordinal)
                 && !viewerHtml.Contains("BAF rate (₱)", StringComparison.Ordinal)
                 && !viewerHtml.Contains("29,000.00", StringComparison.Ordinal)
-                && !viewerHtml.Contains("Manual rates", StringComparison.Ordinal), "Non-approver Operations view leaked rate information.");
+                && !viewerHtml.Contains("Manual rates", StringComparison.Ordinal)
+                && !viewerHtml.Contains("schedule-rate-editor-cta", StringComparison.Ordinal)
+                && !viewerHtml.Contains("RateUpload/Editor", StringComparison.Ordinal), "Non-approver Operations view leaked rate information.");
             foreach (string status in new[] { MsapConstants.VesselScheduleStatus.Confirmed, MsapConstants.VesselScheduleStatus.Cancelled })
             {
                 schedule.Status = status;

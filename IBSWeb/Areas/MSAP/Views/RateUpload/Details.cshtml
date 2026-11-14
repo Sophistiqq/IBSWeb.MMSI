@@ -7,7 +7,14 @@
     bool submitted = update.SubmittedAt.HasValue;
     bool canEdit = Model.IsOwner && ViewData["CanUpload"] is true && !approved;
     bool canApprove = ViewData["CanApprove"] is true && submitted && !approved && !Model.BaselineChanged;
+    bool canDirectApprove = canEdit && !submitted && !Model.BaselineChanged && ViewData["CanApprove"] is true;
     var changes = Model.Rows.Where(row => row.Change != "Unchanged").ToList();
+    var sourceScheduleIds = Model.Rows
+        .Where(row => row.SourceScheduleId.HasValue)
+        .Select(row => row.SourceScheduleId!.Value)
+        .Distinct()
+        .ToList();
+    int? singleScheduleId = sourceScheduleIds.Count == 1 ? sourceScheduleIds[0] : null;
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/rate-maintenance.css" asp-append-version="true" />
@@ -17,7 +24,14 @@
         <header class="ui-page-header">
             <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-controller="Home" asp-action="Index">MSAP</a></li><li><a asp-action="Index">Rate updates</a></li><li aria-current="page">Review</li></ol></nav>
             <h1 class="ui-page-title" data-page-header>@update.RateKind rate update</h1>
-            <a asp-action="Index" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
+            @if (singleScheduleId.HasValue)
+            {
+                <a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@singleScheduleId.Value" class="modern-btn-secondary ui-page-action">Back to Booking #@singleScheduleId.Value</a>
+            }
+            else
+            {
+                <a asp-action="Index" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
+            }
             <p class="ui-page-description ui-caption ui-muted">@update.Status · @(approved ? "Selected rates are active." : "Live rates remain unchanged.")</p>
         </header>
         <section class="ui-panel rate-upload-meta">
@@ -86,14 +100,28 @@
             @if (update.RateKind == RateTableKind.BAF) { <p class="ui-caption ui-muted">Per hour uses billable hours. Per Move, Lumpsum and Industry apply the final BAF amount once per service entry. Existing COS discounts and tax rules still apply.</p> }
         </section>
         <div class="rate-upload-actions">
+            @if (singleScheduleId.HasValue)
+            {
+                <a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@singleScheduleId.Value" class="modern-btn-secondary">Back to Booking #@singleScheduleId.Value</a>
+            }
             @if (canEdit && Model.BaselineChanged)
             {
                 <form asp-action="Refresh" method="post"><input type="hidden" name="id" value="@update.RateUploadId" /><button type="submit" class="modern-btn-secondary">Refresh comparison and return to draft</button></form>
             }
             else if (canEdit && !submitted)
             {
-                <a asp-action="Editor" asp-route-id="@update.RateUploadId" asp-route-kind="@update.RateKind" class="modern-btn-secondary">Edit draft</a>
-                @if (changes.Count > 0) { <button type="submit" form="rateSubmit" class="modern-btn-primary">Save for reviewing</button> }
+                <a asp-action="Editor" asp-route-id="@update.RateUploadId" asp-route-kind="@update.RateKind" asp-route-scheduleId="@singleScheduleId" class="modern-btn-secondary">Edit draft</a>
+                @if (changes.Count > 0)
+                {
+                    @if (canDirectApprove)
+                    {
+                        <button type="submit" form="rateSubmit" formaction="@Url.Action("SubmitAndApprove")" class="modern-btn-primary" data-confirm="Approve selected @update.RateKind rates?" data-description="Selected rates will become active immediately." data-confirm-button="Approve rates">Approve selected rates</button>
+                    }
+                    else
+                    {
+                        <button type="submit" form="rateSubmit" class="modern-btn-primary">Submit for approval</button>
+                    }
+                }
             }
             @if (canApprove)
             {
@@ -106,9 +134,17 @@
     <script>
         document.querySelectorAll('#rateSubmit, .rate-confirm-form').forEach(form => form.addEventListener('submit', async function (event) {
             event.preventDefault();
-            const result = await ModernAlert.confirm({ title: this.dataset.confirm || 'Save rates for reviewing?', text: this.dataset.description || 'Included changes will be submitted for approval. Live rates remain unchanged.', confirmText: this.dataset.confirm ? 'Approve rates' : 'Save for reviewing', cancelText: 'Keep reviewing' });
+            const submitter = event.submitter;
+            const confirmTitle = submitter?.dataset.confirm || this.dataset.confirm || 'Save rates for reviewing?';
+            const confirmText = submitter?.dataset.description || this.dataset.description || 'Included changes will be submitted for approval. Live rates remain unchanged.';
+            const confirmButton = submitter?.dataset.confirmButton || (this.dataset.confirm ? 'Approve rates' : 'Save for reviewing');
+            const result = await ModernAlert.confirm({ title: confirmTitle, text: confirmText, confirmText: confirmButton, cancelText: 'Keep reviewing' });
             if (result.isConfirmed) {
-                const button = document.querySelector('[form="rateSubmit"]:is(button)') || this.querySelector('button');
+                const actionOverride = submitter?.getAttribute('formaction');
+                if (actionOverride) {
+                    this.action = actionOverride;
+                }
+                const button = submitter || document.querySelector('[form="rateSubmit"]:is(button)') || this.querySelector('button');
                 if (button) button.disabled = true;
                 HTMLFormElement.prototype.submit.call(this);
             }

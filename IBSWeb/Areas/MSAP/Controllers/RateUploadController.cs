@@ -49,24 +49,105 @@ namespace IBSWeb.Areas.MSAP.Controllers
             int? portId = null,
             int? terminalId = null,
             int? serviceId = null,
-            decimal? amount = null)
+            decimal? amount = null,
+            int? scheduleId = null,
+            string? mode = null,
+            string? returnUrl = null)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest("Choose a valid table and effective date.");
             }
             ViewData["CanEditRates"] = await _access.HasAccessAsync(UserId, ProcedureEnum.ManageRates);
-            RateEditorViewModel? model = await _rates.GetEditorAsync(kind, asOfDate ?? DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()), id, UserId, ct);
+            ViewData["CanApproveRates"] = await _access.HasAccessAsync(UserId, ProcedureEnum.ApproveRateUpload);
+            RateEditorViewModel? model = await _rates.GetEditorAsync(
+                kind,
+                asOfDate ?? DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()),
+                id,
+                UserId,
+                ct,
+                scheduleId,
+                mode,
+                customerId,
+                portId,
+                terminalId,
+                serviceId);
             if (model == null)
             {
                 return NotFound();
             }
-            model.SelectedCustomerId = customerId;
-            model.SelectedPortId = portId;
-            model.SelectedTerminalId = terminalId;
-            model.SelectedServiceId = serviceId;
             model.InitialAmount = amount;
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                model.ReturnUrl = returnUrl;
+            }
+            else if (model.ScheduleId.HasValue)
+            {
+                model.ReturnUrl = Url.Action("Details", "VesselSchedule", new { id = model.ScheduleId.Value });
+            }
             return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.ManageRates)]
+        [RequestSizeLimit(8 * 1024 * 1024)]
+        public async Task<IActionResult> PreviewBatch([FromBody] BatchRateUpdateRequest request, CancellationToken ct)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { message = "Some dates or amounts are invalid. Check the highlighted inputs." });
+            }
+
+            var result = await _rates.PreviewBatchAsync(request, ct);
+            return result.IsSuccess ? Json(result.Data) : BadRequest(new { message = result.Message });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.ManageRates)]
+        [RequestSizeLimit(8 * 1024 * 1024)]
+        public async Task<IActionResult> SaveBatch([FromBody] BatchRateUpdateRequest request, CancellationToken ct)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { message = "Some dates or amounts are invalid. Check the highlighted inputs." });
+            }
+
+            var canApprove = await _access.HasAccessAsync(UserId, ProcedureEnum.ApproveRateUpload);
+            if (string.Equals(request.Action, "approve", StringComparison.OrdinalIgnoreCase) && !canApprove)
+            {
+                return Forbid();
+            }
+
+            try
+            {
+                var result = await _rates.SaveBatchAsync(request, UserId, canApprove, ct);
+                if (!result.IsSuccess)
+                {
+                    return BadRequest(new { message = result.Message });
+                }
+
+                var data = result.Data!;
+                TempData["success"] = result.Message;
+                var primaryId = data.TariffUploadId ?? data.BafUploadId;
+                return Json(new
+                {
+                    success = true,
+                    message = result.Message,
+                    approved = data.Approved,
+                    tariffUploadId = data.TariffUploadId,
+                    bafUploadId = data.BafUploadId,
+                    tariffUrl = data.TariffUploadId.HasValue ? Url.Action(nameof(Details), new { id = data.TariffUploadId.Value }) : null,
+                    bafUrl = data.BafUploadId.HasValue ? Url.Action(nameof(Details), new { id = data.BafUploadId.Value }) : null,
+                    url = primaryId.HasValue ? Url.Action(nameof(Details), new { id = primaryId.Value }) : null
+                });
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Could not save batch rate update");
+                return StatusCode(500, new { message = "The rate update could not be saved. Your edits remain on this page; try again." });
+            }
         }
 
         [HttpPost]
@@ -188,6 +269,30 @@ namespace IBSWeb.Areas.MSAP.Controllers
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex, "Could not approve rate update {Id}", id);
+                TempData["error"] = "The update could not be approved. Refresh and try again.";
+            }
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.ApproveRateUpload)]
+        [RequestFormLimits(ValueCountLimit = 10010)]
+        public async Task<IActionResult> SubmitAndApprove(Guid id, int[] selectedRows, CancellationToken ct)
+        {
+            if (!await _access.HasAccessAsync(UserId, ProcedureEnum.ManageRates))
+            {
+                return Forbid();
+            }
+
+            try
+            {
+                var result = await _rates.SubmitAndApproveAsync(id, selectedRows, UserId, ct);
+                TempData[result.IsSuccess ? "success" : "error"] = result.Message;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Could not submit and approve rate update {Id}", id);
                 TempData["error"] = "The update could not be approved. Refresh and try again.";
             }
             return RedirectToAction(nameof(Details), new { id });

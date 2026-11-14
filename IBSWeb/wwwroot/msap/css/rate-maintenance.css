@@ -211,3 +211,73 @@
 .rate-editor-table .rate-row-changed > td:first-child { border-left: 3px solid var(--rate-change-color); }
 .rate-editor-table .rate-row-new > td:first-child { border-left: 3px solid var(--rate-new-color); }
 .rate-discard[hidden] { display: none; }
+
+.rate-schedule-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-3);
+    padding: var(--ui-space-3) var(--ui-space-4);
+    border: 1px solid var(--outline-variant, #cbd5e1);
+    border-radius: var(--ui-radius-lg, 12px);
+    background: var(--surface-container-low, #f8fafc);
+}
+
+.rate-editor-combined-table {
+    min-width: 72rem;
+}
+
+.rate-combined-inputs {
+    display: grid;
+    grid-template-columns: minmax(9.5rem, 1fr) minmax(8rem, 1fr);
+    gap: var(--ui-space-2);
+    align-items: center;
+}
+
+.rate-combined-inputs input {
+    min-width: 0;
+    width: 100%;
+}
+
+.rate-editor-pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-3);
+    padding-top: var(--ui-space-2);
+}
+
+.rate-editor-pager-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+}
+
+.modern-swal-popup:has(.schedule-batch-preview) {
+    width: min(720px, calc(100vw - 2rem)) !important;
+}
+
+.modern-swal-popup:has(.schedule-batch-preview) .modern-value-md {
+    max-width: none;
+    text-align: left;
+}
+
+.schedule-batch-preview {
+    display: grid;
+    gap: var(--ui-space-3);
+    text-align: left;
+}
+
+.schedule-batch-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--ui-text-sm, 0.875rem);
+}
+
+.schedule-batch-preview-table :is(th, td) {
+    padding: var(--ui-space-2);
+    border-bottom: 1px solid var(--outline-variant, #e2e8f0);
+    text-align: left;
+}

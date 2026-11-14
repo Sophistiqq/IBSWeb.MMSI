@@ -3,7 +3,8 @@
     var closed = Model.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
     var pending = !closed && (!Model.CustomerOrderSlipId.HasValue || Model.ApprovedRevision != Model.Revision || Model.Status == MsapConstants.VesselScheduleStatus.Tentative);
     var canApprove = pending && ViewBag.CanConfirm == true;
-    var canViewRates = ViewBag.CanConfirm == true || ViewBag.CanManageRates == true;
+    bool canViewRates = ViewBag.CanConfirm == true || ViewBag.CanManageRates == true;
+    var rateSetup = (object?)ViewBag.RateSetup as ScheduleRateSetupViewModel;
     var reapproval = Model.ApprovedRevision.HasValue;
     ViewData["Title"] = pending ? "Review schedule" : "Schedule details";
     ViewData["IsFullWidth"] = true;
@@ -116,9 +117,30 @@
                 </dl>
             </section>
             <section class="ui-stack" aria-labelledby="reviewServicesTitle">
-                <div class="ui-field">
-                    <h2 class="ui-section-title" id="reviewServicesTitle">Tugboats &amp; services</h2>
-                    <p class="ui-caption ui-muted">@(canViewRates ? "Table rates use the planned date. Final rates use actual service start; actual ticket details are recorded after service." : "Assigned tugboats and expected services for this booking. Actual ticket details are recorded after service.")</p>
+                <div class="schedule-section-header">
+                    <div class="ui-field">
+                        <h2 class="ui-section-title" id="reviewServicesTitle">Tugboats &amp; services</h2>
+                        <p class="ui-caption ui-muted">@(canViewRates ? "Table rates use the planned date. Final rates use actual service start; actual ticket details are recorded after service." : "Assigned tugboats and expected services for this booking. Actual ticket details are recorded after service.")</p>
+                    </div>
+                    @if (canViewRates && ViewBag.CanManageRates == true && !closed)
+                    {
+                        int pendingRateCount = rateSetup?.PendingCount ?? 0;
+                        int awaitingRateCount = rateSetup?.AwaitingApprovalCount ?? 0;
+                        bool hasRateAttention = pendingRateCount > 0 || awaitingRateCount > 0;
+                        <a asp-controller="RateUpload" asp-action="Editor" asp-route-scheduleId="@Model.VesselScheduleId" asp-route-mode="combined"
+                           class="@(hasRateAttention ? "modern-btn-primary schedule-rate-editor-cta schedule-rate-editor-cta--attention" : "modern-btn-secondary")">
+                            <span class="material-symbols-outlined" aria-hidden="true">edit_note</span>
+                            <span>Open rate editor</span>
+                            @if (pendingRateCount > 0)
+                            {
+                                <span class="schedule-rate-cta-badge">@pendingRateCount missing</span>
+                            }
+                            else if (awaitingRateCount > 0)
+                            {
+                                <span class="schedule-rate-cta-badge">@awaitingRateCount awaiting approval</span>
+                            }
+                        </a>
+                    }
                 </div>
                 @if (tugs.Count == 0)
                 {
@@ -156,7 +178,7 @@
                                                 <td>@(entry.TariffBasis == TariffChargeBasis.PerMove ? "Per move" : entry.TariffBasis == TariffChargeBasis.PerHour ? "Per hour" : "Not specified")</td>
                                                 <td class="schedule-review-rate-cell">
                                                     <span class="@(entry.ManualTariffRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="tariff" data-manual="@entry.ManualTariffRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualTariffRate.HasValue ? entry.ManualTariffRate.Value.ToString("N2") : "Checking table…")</span>
-                                                    <small class="ui-caption ui-muted" data-rate-source>@(entry.ManualTariffRate.HasValue ? (entry.ManualTariffRate.Value == 0 ? "Zero tariff" : "Saved manual rate") : "Table rate pending")</small>
+                                                    <small class="ui-caption ui-muted" data-rate-source>@(entry.ManualTariffRate.HasValue ? (entry.ManualTariffRate.Value == 0 ? "Zero tariff" : "Saved manual rate") : "")</small>
                                                     <partial name="_ScheduleRateCapture" model="captures.SingleOrDefault(item => item.EntryId == entry.VesselScheduleServiceEntryId && item.Kind == RateTableKind.Tariff)" />
                                                 </td>
                                                 <td>
@@ -168,7 +190,7 @@
                                                 </td>
                                                 <td class="schedule-review-rate-cell">
                                                     <span class="@(entry.ManualBafRate.HasValue ? "schedule-review-manual" : "")" data-review-rate="baf" data-manual="@entry.ManualBafRate.HasValue.ToString().ToLowerInvariant()">@(entry.ManualBafRate.HasValue ? entry.ManualBafRate.Value.ToString("N2") : "Checking table…")</span>
-                                                    <small class="ui-caption ui-muted" data-rate-source>@(entry.ManualBafRate.HasValue ? (entry.ManualBafRate.Value == 0 ? "Zero BAF" : "Saved manual rate") : "Table rate pending")</small>
+                                                    <small class="ui-caption ui-muted" data-rate-source>@(entry.ManualBafRate.HasValue ? (entry.ManualBafRate.Value == 0 ? "Zero BAF" : "Saved manual rate") : "")</small>
                                                     <partial name="_ScheduleRateCapture" model="captures.SingleOrDefault(item => item.EntryId == entry.VesselScheduleServiceEntryId && item.Kind == RateTableKind.BAF)" />
                                                 </td>
                                             </tr>

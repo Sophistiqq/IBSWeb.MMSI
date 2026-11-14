@@ -64,14 +64,27 @@
 
     const review = document.getElementById('scheduleReview');
     if (!review || !review.dataset.rateUrl) return;
+    const rateLookupCache = new Map();
+    const fetchServiceRate = serviceId => {
+        if (!rateLookupCache.has(serviceId)) {
+            const params = new URLSearchParams({
+                customerId: review.dataset.customerId,
+                terminalId: review.dataset.terminalId,
+                serviceId,
+                date: review.dataset.plannedStart
+            });
+            rateLookupCache.set(serviceId, fetch(review.dataset.rateUrl + '?' + params).then(response => {
+                if (!response.ok || response.redirected) throw new Error('Rate lookup unavailable');
+                return response.json();
+            }));
+        }
+        return rateLookupCache.get(serviceId);
+    };
     review.querySelectorAll('[data-review-service]').forEach(async row => {
         const cells = [...row.querySelectorAll('[data-review-rate]')];
         if (!cells.length) return;
-        const params = new URLSearchParams({ customerId: review.dataset.customerId, terminalId: review.dataset.terminalId, serviceId: row.dataset.reviewService, date: review.dataset.plannedStart });
         try {
-            const response = await fetch(review.dataset.rateUrl + '?' + params);
-            if (!response.ok || response.redirected) throw new Error('Rate lookup unavailable');
-            const data = await response.json();
+            const data = await fetchServiceRate(row.dataset.reviewService);
             cells.forEach(cell => {
                 const kind = cell.dataset.reviewRate;
                 const rate = kind === 'tariff' ? data.tariffRate : data.bafRate;
@@ -87,13 +100,15 @@
                 cell.parentElement.classList.toggle('schedule-review-override', manual && found);
                 if (!manual) cell.textContent = found ? formattedRate : 'No table match';
                 const sourceEl = cell.parentElement.querySelector('[data-rate-source]');
+                const captureWrapper = cell.parentElement.querySelector('.schedule-rate-capture-wrapper');
+                const hasCaptureBadge = Boolean(captureWrapper && captureWrapper.textContent && captureWrapper.textContent.trim().length > 0);
                 sourceEl.textContent = manual
                     ? isZeroBaf
                         ? (found ? 'Zero BAF · table estimate: ' + formattedRate : 'Zero BAF')
                         : isZeroTariff
                             ? (found ? 'Zero tariff · table estimate: ' + formattedRate : 'Zero tariff')
-                            : (found ? 'Manual override · table estimate: ' + formattedRate : 'Manual rate · no table match')
-                    : found ? 'Table rate · planned date' : 'Rate pending · no table match';
+                            : (found ? 'Manual override · table estimate: ' + formattedRate : 'Manual rate · not saved to rate table')
+                    : found ? 'Table rate · planned date' : (hasCaptureBadge ? '' : 'Rate pending');
 
                 if (manual && found && review.dataset.adoptUrl && row.dataset.entryId) {
                     let adoptBtn = cell.parentElement.querySelector('.schedule-adopt-rate');
@@ -126,9 +141,9 @@
                                 cell.parentElement.classList.remove('schedule-review-attention', 'schedule-review-override');
                                 sourceEl.textContent = 'Table rate · planned date';
                                 cell.parentElement.querySelectorAll('.schedule-adopt-rate, .schedule-adopt-sep').forEach(el => el.remove());
-                                const captureWrapper = cell.parentElement.querySelector('.schedule-rate-capture-wrapper');
-                                if (captureWrapper) {
-                                    captureWrapper.innerHTML = '<small class="ui-caption text-muted">Standard table rate</small>';
+                                const adoptCaptureWrapper = cell.parentElement.querySelector('.schedule-rate-capture-wrapper');
+                                if (adoptCaptureWrapper) {
+                                    adoptCaptureWrapper.innerHTML = '';
                                 }
                             } catch (err) {
                                 ModernAlert.error(err.message || 'Could not adopt table rate.');

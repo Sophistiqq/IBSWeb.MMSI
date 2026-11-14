@@ -186,13 +186,18 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
             await SetActionPermissionsAsync();
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            ViewBag.CanManageRates = userId != null
-                && await accessControl.HasAnyAccessAsync(userId, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload);
+            ViewBag.CanPrepareRates = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ManageRates);
+            ViewBag.CanApproveRates = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ApproveRateUpload);
+            ViewBag.CanManageRates = ViewBag.CanPrepareRates == true || ViewBag.CanApproveRates == true;
             ViewBag.CanCaptureRates = ViewBag.CanManageRates;
             var canViewRates = ViewBag.CanConfirm == true || ViewBag.CanManageRates == true;
-            ViewBag.RateCaptures = canViewRates
+            var rateCaptures = canViewRates
                 ? await rates.GetScheduleCapturesAsync(schedule, ct)
                 : new List<ScheduleRateCaptureViewModel>();
+            ViewBag.RateCaptures = rateCaptures;
+            ViewBag.RateSetup = canViewRates
+                ? await rates.GetScheduleRateSetupAsync(schedule, rateCaptures, ct)
+                : null;
             ViewData["JobProgressActionStage"] = 1;
             ViewData["JobProgressActionTargetId"] = id;
             var job = schedule.CustomerOrderSlipId.HasValue

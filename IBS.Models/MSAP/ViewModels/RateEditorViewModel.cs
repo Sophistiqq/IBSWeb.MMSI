@@ -17,5 +17,10 @@ namespace IBS.Models.MSAP.ViewModels
         public int? SelectedTerminalId { get; set; }
         public int? SelectedServiceId { get; set; }
         public decimal? InitialAmount { get; set; }
+        public string Mode { get; set; } = "single";
+        public int? ScheduleId { get; set; }
+        public string? ScheduleLabel { get; set; }
+        public string? ReturnUrl { get; set; }
+        public List<RateEditorCombinedRowViewModel> CombinedRows { get; set; } = [];
     }
 }
