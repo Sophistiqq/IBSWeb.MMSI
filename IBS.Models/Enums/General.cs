@@ -152,6 +152,7 @@ namespace IBS.Models.Enums
         Supplier = 2,
         BankAccount = 3,
         Company = 4,
-        TugboatOwner = 5
+        TugboatOwner = 5,
+        Representative = 6
     }
 }

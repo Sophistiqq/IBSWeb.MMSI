@@ -36,6 +36,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         private readonly ISubAccountResolver _subAccountResolver;
         private readonly CheckVoucherDocumentationService _documentationService;
         private readonly TugboatPaymentService _tugboatPayments;
+        private readonly MsapCommissionPaymentService _msapCommissionPayments;
         private const string _apTradePayableAccountNo = "201010100";
         private const string _apNonTradePayableAccountNo = "201020200";
         private const string _commissionPayableAccountNo = "201010200";
@@ -59,7 +60,8 @@ namespace IBSWeb.Areas.Filpride.Controllers
             ILogger<CheckVoucherTradeController> logger,
             ISubAccountResolver subAccountResolver,
             CheckVoucherDocumentationService documentationService,
-            TugboatPaymentService tugboatPayments)
+            TugboatPaymentService tugboatPayments,
+            MsapCommissionPaymentService? msapCommissionPayments = null)
         {
             _unitOfWork = unitOfWork;
             _userManager = userManager;
@@ -69,6 +71,12 @@ namespace IBSWeb.Areas.Filpride.Controllers
             _subAccountResolver = subAccountResolver;
             _documentationService = documentationService;
             _tugboatPayments = tugboatPayments;
+            _msapCommissionPayments = msapCommissionPayments ?? new MsapCommissionPaymentService(
+                dbContext,
+                unitOfWork,
+                documentationService,
+                cloudStorageService,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<MsapCommissionPaymentService>.Instance);
         }
 
         private string GetUserFullName()
@@ -466,6 +474,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
                             s.CheckVoucherHeaderNo!.ToLower().Contains(searchValue) ||
                             (hasDate && s.Date == date) ||
                             s.Supplier!.SupplierName.ToLower().Contains(searchValue) == true ||
+                            (s.SupplierName != null && s.SupplierName.ToLower().Contains(searchValue)) ||
                             s.Total.ToString().Contains(searchValue) ||
                             s.CheckAmount.ToString().Contains(searchValue) ||
                             s.Amount!.Any(a => a.ToString().Contains(searchValue)) ||
@@ -1860,6 +1869,20 @@ namespace IBSWeb.Areas.Filpride.Controllers
                                         .Distinct()
                                         .ToArray()
                                     ?? Array.Empty<string>();
+                if (header.CvType == nameof(CVType.Commission))
+                {
+                    var msapPayments = await _dbContext.FilprideMsapCommissionPayments
+                        .AsNoTracking()
+                        .Where(p => p.CheckVoucherHeaderId == header.CheckVoucherHeaderId)
+                        .ToListAsync(cancellationToken);
+                    if (msapPayments.Count > 0)
+                    {
+                        ViewData["IsMsapCommission"] = true;
+                        ViewData["MsapCosNumbers"] = await _msapCommissionPayments.GetCosNumbersAsync(
+                            msapPayments.Select(p => p.MsapBillingId),
+                            cancellationToken);
+                    }
+                }
             }
 
             var viewModel = new CheckVoucherVM
@@ -2030,6 +2053,8 @@ namespace IBSWeb.Areas.Filpride.Controllers
 
                 #endregion Add amount paid for the advances if applicable
 
+                await _msapCommissionPayments.ValidateBeforePostAsync(modelHeader, modelDetails, cancellationToken);
+
                 await _unitOfWork.FilprideCheckVoucher.PostAsync(modelHeader, modelDetails, cancellationToken);
 
                 #region --Audit Trail Recording
@@ -2076,10 +2101,17 @@ namespace IBSWeb.Areas.Filpride.Controllers
 
             try
             {
+                if (model.PostedBy != null && await _msapCommissionPayments.IsMsapCommissionVoucherAsync(id, cancellationToken))
+                {
+                    throw new InvalidOperationException("Void a posted MSAP commission voucher instead of cancelling it.");
+                }
+
                 model.CanceledBy = GetUserFullName();
                 model.CanceledDate = DateTimeHelper.GetCurrentPhilippineTime();
                 model.Status = nameof(Status.Canceled);
                 model.CancellationRemarks = cancellationRemarks;
+
+                await _msapCommissionPayments.ReleaseAllocationsAsync(id, model.CanceledDate.Value, cancellationToken);
 
                 #region -- Recalculate payment of RR's or DR's
 
@@ -2163,6 +2195,8 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 model.VoidedBy = GetUserFullName();
                 model.VoidedDate = DateTimeHelper.GetCurrentPhilippineTime();
                 model.Status = nameof(Status.Voided);
+
+                await _msapCommissionPayments.ReleaseAllocationsAsync(id, model.VoidedDate.Value, cancellationToken);
 
                 await _unitOfWork.GeneralLedger.ReverseEntries(model.CheckVoucherHeaderNo, cancellationToken);
 
@@ -2864,7 +2898,9 @@ namespace IBSWeb.Areas.Filpride.Controllers
 
             CommissionPaymentViewModel model = new()
             {
+                Source = CommissionPaymentViewModel.SourceFilprideDr,
                 Suppliers = await _unitOfWork.GetFilprideCommissioneeListAsyncById(cancellationToken),
+                Representatives = await _msapCommissionPayments.GetRepresentativesSelectListAsync(cancellationToken),
                 BankAccounts = await _unitOfWork.GetFilprideBankAccountListById(cancellationToken),
                 COA = await GetTradeAccountingEntryOptionsAsync(cancellationToken),
                 MinDate = await _unitOfWork.GetMinimumPeriodBasedOnThePostedPeriods(Module.CheckVoucher, cancellationToken)
@@ -2875,6 +2911,20 @@ namespace IBSWeb.Areas.Filpride.Controllers
             return View(model);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> GetMsapRepresentativeCommissions(int representativeId, int? cvId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var result = await _msapCommissionPayments.GetRepresentativeCommissionsAsync(representativeId, cvId, cancellationToken);
+                return Json(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
         [Authorize(Policy = nameof(CheckVoucherTrade.CheckVoucherTradeCreateCommissionPayment))]
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -2882,6 +2932,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
         {
 
             viewModel.Suppliers = await _unitOfWork.GetFilprideCommissioneeListAsyncById(cancellationToken);
+            viewModel.Representatives = await _msapCommissionPayments.GetRepresentativesSelectListAsync(cancellationToken);
             viewModel.BankAccounts = await _unitOfWork.GetFilprideBankAccountListById(cancellationToken);
             viewModel.COA = await GetTradeAccountingEntryOptionsAsync(cancellationToken);
             viewModel.MinDate = await _unitOfWork.GetMinimumPeriodBasedOnThePostedPeriods(Module.CheckVoucher, cancellationToken);
@@ -2895,6 +2946,43 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 ModelState.AddModelError(string.Empty, documentationError);
             }
             await _documentationService.PrepareAsync(viewModel.Documentation, viewModel.Type, null, cancellationToken);
+
+            if (viewModel.Source == CommissionPaymentViewModel.SourceMsapBilling)
+            {
+                if (!viewModel.RepresentativeId.HasValue || viewModel.RepresentativeId.Value <= 0)
+                {
+                    ModelState.AddModelError(nameof(viewModel.RepresentativeId), "Select an MSAP representative.");
+                }
+                if (viewModel.MsapItems == null || viewModel.MsapItems.Count == 0)
+                {
+                    ModelState.AddModelError(string.Empty, "Select at least one approved MSAP billing commission/incentive item.");
+                }
+
+                if (!ModelState.IsValid)
+                {
+                    TempData["warning"] = "The information provided was invalid.";
+                    return View(viewModel);
+                }
+
+                try
+                {
+                    await _msapCommissionPayments.CreateAsync(viewModel, file, GetUserFullName(), cancellationToken);
+                    TempData["success"] = "MSAP commission check voucher created successfully.";
+                    return RedirectToAction(nameof(Index));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to create MSAP commission payment. Error: {ErrorMessage}. Created by: {UserName}",
+                        ex.Message, _userManager.GetUserName(User));
+                    TempData["error"] = ex.Message;
+                    return View(viewModel);
+                }
+            }
+
+            if (!viewModel.SupplierId.HasValue || viewModel.SupplierId.Value <= 0)
+            {
+                ModelState.AddModelError(nameof(viewModel.SupplierId), "The Supplier No field is required.");
+            }
 
             if (!ModelState.IsValid)
             {
@@ -3793,21 +3881,35 @@ namespace IBSWeb.Areas.Filpride.Controllers
                         $"Cannot edit this record because the period {existingHeaderModel.Date:MMM yyyy} is already closed.");
                 }
 
+                var msapPayments = await _dbContext.FilprideMsapCommissionPayments
+                    .AsNoTracking()
+                    .Where(p => p.CheckVoucherHeaderId == existingHeaderModel.CheckVoucherHeaderId && p.ReleasedAt == null)
+                    .ToListAsync(cancellationToken);
+                var isMsapCommission = msapPayments.Count > 0;
+
                 CommissionPaymentViewModel model = new()
                 {
                     CvId = existingHeaderModel.CheckVoucherHeaderId,
-                    SupplierId = existingHeaderModel.SupplierId ?? 0,
+                    Source = isMsapCommission
+                        ? CommissionPaymentViewModel.SourceMsapBilling
+                        : CommissionPaymentViewModel.SourceFilprideDr,
+                    SupplierId = existingHeaderModel.SupplierId,
+                    RepresentativeId = isMsapCommission ? msapPayments[0].RepresentativeId : null,
                     Payee = existingHeaderModel.Payee!,
-                    SupplierAddress = existingHeaderModel.Supplier!.SupplierAddress,
-                    SupplierTinNo = existingHeaderModel.Supplier.SupplierTin,
+                    SupplierAddress = existingHeaderModel.Supplier?.SupplierAddress ?? existingHeaderModel.Address ?? string.Empty,
+                    SupplierTinNo = existingHeaderModel.Supplier?.SupplierTin ?? existingHeaderModel.Tin ?? string.Empty,
                     TransactionDate = existingHeaderModel.Date,
                     BankId = existingHeaderModel.BankId,
                     CheckNo = existingHeaderModel.CheckNo!,
                     CheckDate = existingHeaderModel.CheckDate ?? DateOnly.MinValue,
                     Particulars = existingHeaderModel.Particulars!,
                     DRs = [],
+                    MsapItems = msapPayments
+                        .Select(p => new MsapCommissionItemInput { BillingId = p.MsapBillingId, Category = p.Category })
+                        .ToList(),
                     Suppliers =
                         await _unitOfWork.GetFilprideCommissioneeListAsyncById(cancellationToken),
+                    Representatives = await _msapCommissionPayments.GetRepresentativesSelectListAsync(cancellationToken),
                     BankAccounts = await _unitOfWork.GetFilprideBankAccountListById(cancellationToken),
                     COA = await GetTradeAccountingEntryOptionsAsync(cancellationToken),
                     OldCVNo = existingHeaderModel.OldCvNo,
@@ -3830,24 +3932,28 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 model.DefaultPayableAmount = GetDetailAccountAmount(existingDetails, _commissionPayableAccountNo, isDebit: true);
                 model.CashInBankAmount = GetDetailAccountAmount(existingDetails, _cashInBankAccountNo, isDebit: false);
 
-                var getCheckVoucherTradePayment = await _dbContext.FilprideCVTradePayments
-                    .Where(cv => cv.CheckVoucherId == id && cv.DocumentType == "DR")
-                    .ToListAsync(cancellationToken);
-
-                foreach (var item in getCheckVoucherTradePayment)
+                if (!isMsapCommission)
                 {
-                    model.DRs.Add(new DRDetailsViewModel
+                    var getCheckVoucherTradePayment = await _dbContext.FilprideCVTradePayments
+                        .Where(cv => cv.CheckVoucherId == id && cv.DocumentType == "DR")
+                        .ToListAsync(cancellationToken);
+
+                    foreach (var item in getCheckVoucherTradePayment)
                     {
-                        Id = item.DocumentId,
-                        Amount = item.AmountPaid
-                    });
+                        model.DRs.Add(new DRDetailsViewModel
+                        {
+                            Id = item.DocumentId,
+                            Amount = item.AmountPaid
+                        });
+                    }
                 }
 
                 model.AdditionalAccountingEntries = existingDetails
                     .Where(d => d.CheckVoucherHeaderId == existingHeaderModel.CheckVoucherHeaderId &&
                                 !d.IsDisplayEntry &&
                                 d.AccountNo != _commissionPayableAccountNo &&
-                                d.AccountNo != _cashInBankAccountNo)
+                                d.AccountNo != _cashInBankAccountNo &&
+                                (!isMsapCommission || !d.AccountNo.StartsWith("201030", StringComparison.Ordinal)))
                     .Select(d => new CheckVoucherTradeAccountingEntryViewModel
                     {
                         AccountNumber = d.AccountNo,
@@ -3880,6 +3986,7 @@ namespace IBSWeb.Areas.Filpride.Controllers
 
 
             viewModel.Suppliers = await _unitOfWork.GetFilprideCommissioneeListAsyncById(cancellationToken);
+            viewModel.Representatives = await _msapCommissionPayments.GetRepresentativesSelectListAsync(cancellationToken);
             viewModel.BankAccounts = await _unitOfWork.GetFilprideBankAccountListById(cancellationToken);
             viewModel.COA = await GetTradeAccountingEntryOptionsAsync(cancellationToken);
             viewModel.MinDate = await _unitOfWork.GetMinimumPeriodBasedOnThePostedPeriods(Module.CheckVoucher, cancellationToken);
@@ -3892,6 +3999,10 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 return NotFound();
             }
 
+            var isMsapCommission = await _msapCommissionPayments.IsMsapCommissionVoucherAsync(existingHeaderModel.CheckVoucherHeaderId, cancellationToken);
+            viewModel.Source = isMsapCommission
+                ? CommissionPaymentViewModel.SourceMsapBilling
+                : CommissionPaymentViewModel.SourceFilprideDr;
             viewModel.Type = existingHeaderModel.Type;
             string? documentationError = await _documentationService.ValidateAndNormalizeAsync(
                 existingHeaderModel.Type,
@@ -3907,6 +4018,43 @@ namespace IBSWeb.Areas.Filpride.Controllers
                 existingHeaderModel.Type,
                 existingHeaderModel.DocumentedByCompanyName,
                 cancellationToken);
+
+            if (isMsapCommission)
+            {
+                if (!viewModel.RepresentativeId.HasValue || viewModel.RepresentativeId.Value <= 0)
+                {
+                    ModelState.AddModelError(nameof(viewModel.RepresentativeId), "Select an MSAP representative.");
+                }
+                if (viewModel.MsapItems == null || viewModel.MsapItems.Count == 0)
+                {
+                    ModelState.AddModelError(string.Empty, "Select at least one approved MSAP billing commission/incentive item.");
+                }
+
+                if (!ModelState.IsValid)
+                {
+                    TempData["warning"] = "The information provided was invalid.";
+                    return View(viewModel);
+                }
+
+                try
+                {
+                    await _msapCommissionPayments.EditAsync(viewModel, file, GetUserFullName(), cancellationToken);
+                    TempData["success"] = $"Check voucher trade #{existingHeaderModel.CheckVoucherHeaderNo} updated successfully";
+                    return RedirectToAction(nameof(Index));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to edit MSAP commission payment. Error: {ErrorMessage}. Edited by: {UserName}",
+                        ex.Message, _userManager.GetUserName(User));
+                    TempData["error"] = ex.Message;
+                    return View(viewModel);
+                }
+            }
+
+            if (!viewModel.SupplierId.HasValue || viewModel.SupplierId.Value <= 0)
+            {
+                ModelState.AddModelError(nameof(viewModel.SupplierId), "The Supplier No field is required.");
+            }
 
             if (!ModelState.IsValid)
             {

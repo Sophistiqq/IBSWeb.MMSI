@@ -1883,6 +1883,11 @@ namespace IBS.DataAccess.MSAP.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("RepresentativeId"));
 
+                    b.Property<string>("Address")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("address");
+
                     b.Property<string>("CalculationBase")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -1941,6 +1946,26 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("varchar(120)")
                         .HasColumnName("representative_name");
+
+                    b.Property<string>("TaxType")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("tax_type");
+
+                    b.Property<string>("Tin")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("tin");
+
+                    b.Property<string>("VatType")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("vat_type");
+
+                    b.Property<decimal?>("WithholdingTaxPercent")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("withholding_tax_percent");
 
                     b.HasKey("RepresentativeId")
                         .HasName("pk_mmsi_representatives");

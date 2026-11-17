@@ -85,42 +85,24 @@ namespace IBS.Services.MSAP
 
         public static string? ValidatePaymentProfile(TugboatOwner owner, bool required = false)
         {
-            var results = new List<ValidationResult>();
-            if (!Validator.TryValidateObject(owner, new ValidationContext(owner), results, true))
-            {
-                return results[0].ErrorMessage;
-            }
-            if (!required && string.IsNullOrWhiteSpace(owner.Address) && string.IsNullOrWhiteSpace(owner.Tin)
-                && string.IsNullOrWhiteSpace(owner.VatType) && string.IsNullOrWhiteSpace(owner.TaxType)
-                && !owner.WithholdingTaxPercent.HasValue)
-            {
-                return null;
-            }
-            if (string.IsNullOrWhiteSpace(owner.Address) || string.IsNullOrWhiteSpace(owner.Tin))
-            {
-                return "Complete the owner's payee address and TIN before payment.";
-            }
-            if (owner.VatType is not (MsapConstants.VatType_Vatable or MsapConstants.VatType_ZeroRated or MsapConstants.VatType_Exempt)
-                || owner.TaxType is not (MsapConstants.TaxType_WithTax or MsapConstants.TaxType_Exempt))
-            {
-                return "Select valid VAT and withholding classifications for the owner.";
-            }
-            if (owner.TaxType == MsapConstants.TaxType_WithTax
-                && (!owner.WithholdingTaxPercent.HasValue || WithholdingTaxHelper.GetAccountNumberByPercent(owner.WithholdingTaxPercent.Value) == null))
-            {
-                return "Select a supported withholding rate for the owner.";
-            }
-            return null;
+            return PaymentProfileHelper.Validate(
+                owner,
+                owner.Address,
+                owner.Tin,
+                owner.VatType,
+                owner.TaxType,
+                owner.WithholdingTaxPercent,
+                required,
+                "owner");
         }
 
         private static void Normalize(TugboatOwner owner)
         {
-            owner.Address = owner.Address?.Trim();
-            owner.Tin = owner.Tin?.Trim();
-            if (owner.TaxType == MsapConstants.TaxType_Exempt)
-            {
-                owner.WithholdingTaxPercent = 0m;
-            }
+            (owner.Address, owner.Tin, owner.WithholdingTaxPercent) = PaymentProfileHelper.Normalize(
+                owner.Address,
+                owner.Tin,
+                owner.TaxType,
+                owner.WithholdingTaxPercent);
         }
 
         public async Task<ServiceResult> DeleteAsync(int id, string username, CancellationToken cancellationToken)

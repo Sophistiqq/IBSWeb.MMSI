@@ -83,6 +83,17 @@ namespace IBS.Utility.MSAP.Constants
 
         #region MSAP Accounting Accounts
 
+        public const string CommissionPayableAccount = "201010200";
+        // TODO(IBS-122): Confirm final GL expense/contra-revenue account number for MSAP Agency Incentive & Agent Commission with Ma'am Kim.
+        public const string CommissionExpenseAccount = "503010500";
+        public const string InputVatAccount = "101060200";
+
+        public static class RepresentativeCategory
+        {
+            public const string AgencyIncentive = "AgencyIncentive";
+            public const string AgentCommission = "AgentCommission";
+        }
+
         #endregion
 
     }

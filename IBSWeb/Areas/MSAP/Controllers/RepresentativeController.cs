@@ -65,7 +65,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(
-            [Bind("RepresentativeName,Category,CustomerId,PrincipalId,RateMode,RateValue,CalculationBase,IsActive")]
+            [Bind("RepresentativeName,Category,CustomerId,PrincipalId,RateMode,RateValue,CalculationBase,Address,Tin,VatType,TaxType,WithholdingTaxPercent,IsActive")]
             MsapRepresentative model,
             CancellationToken cancellationToken)
         {
@@ -78,6 +78,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             var username = userManager.GetUserName(User) ?? "System";
             model.RepresentativeName = model.RepresentativeName.Trim();
+            (model.Address, model.Tin, model.WithholdingTaxPercent) = PaymentProfileHelper.Normalize(
+                model.Address,
+                model.Tin,
+                model.TaxType,
+                model.WithholdingTaxPercent);
             model.CreatedBy = username;
             model.CreatedDate = DateTimeHelper.GetCurrentPhilippineTime();
             await db.MsapRepresentatives.AddAsync(model, cancellationToken);
@@ -110,7 +115,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(
             int id,
-            [Bind("RepresentativeId,RepresentativeName,Category,CustomerId,PrincipalId,RateMode,RateValue,CalculationBase,IsActive")]
+            [Bind("RepresentativeId,RepresentativeName,Category,CustomerId,PrincipalId,RateMode,RateValue,CalculationBase,Address,Tin,VatType,TaxType,WithholdingTaxPercent,IsActive")]
             MsapRepresentative model,
             CancellationToken cancellationToken)
         {
@@ -140,6 +145,13 @@ namespace IBSWeb.Areas.MSAP.Controllers
             existing.RateMode = model.RateMode;
             existing.RateValue = model.RateValue;
             existing.CalculationBase = model.CalculationBase;
+            (existing.Address, existing.Tin, existing.WithholdingTaxPercent) = PaymentProfileHelper.Normalize(
+                model.Address,
+                model.Tin,
+                model.TaxType,
+                model.WithholdingTaxPercent);
+            existing.VatType = model.VatType;
+            existing.TaxType = model.TaxType;
             existing.IsActive = model.IsActive;
             existing.EditedBy = username;
             existing.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
@@ -217,6 +229,19 @@ namespace IBSWeb.Areas.MSAP.Controllers
             if (!model.CustomerId.HasValue)
             {
                 model.PrincipalId = null;
+            }
+            var profileError = PaymentProfileHelper.Validate(
+                model,
+                model.Address,
+                model.Tin,
+                model.VatType,
+                model.TaxType,
+                model.WithholdingTaxPercent,
+                required: false,
+                "representative");
+            if (profileError != null)
+            {
+                ModelState.AddModelError(string.Empty, profileError);
             }
         }
 

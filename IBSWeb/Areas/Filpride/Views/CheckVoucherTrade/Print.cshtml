@@ -15,11 +15,12 @@
 
     int supplierId = Model.Supplier?.SupplierId ?? 0;
     bool isTugboatPayment = Model.Header?.CvType == nameof(CVType.OtherTugs);
+    bool isMsapCommission = ViewData["IsMsapCommission"] is true;
     bool wasPrinted = ViewData["WasPrinted"] is bool printed ? printed : Model.Header!.IsPrinted;
     bool activePayment = !isTugboatPayment || (Model.Header!.TugboatPayments.All(payment => payment.ReleasedAt == null) && Model.Header.CanceledBy == null && Model.Header.VoidedBy == null);
     bool canPost = !isTugboatPayment || (await Authorization.AuthorizeAsync(User, nameof(CheckVoucherTrade.CheckVoucherTradePost))).Succeeded;
     bool canUnpost = !isTugboatPayment || (await Authorization.AuthorizeAsync(User, nameof(CheckVoucherTrade.CheckVoucherTradeUnpost))).Succeeded;
-    var displayEntries = Model.Details?.Where(entry => isTugboatPayment ? !entry.IsDisplayEntry : entry.IsDisplayEntry)
+    var displayEntries = Model.Details?.Where(entry => (isTugboatPayment || isMsapCommission) ? !entry.IsDisplayEntry : entry.IsDisplayEntry)
         .OrderBy(entry => entry.CheckVoucherDetailId).ToList() ?? [];
 
 
@@ -154,7 +155,7 @@
         <tbody>
             <tr>
                 <td style="width:10%; padding-left:20px;">Name :</td>
-                @if (Model.Header.SupplierId != null || isTugboatPayment)
+                @if (Model.Header.SupplierId != null || isTugboatPayment || isMsapCommission)
                 {
                     <td class="text-clamp-2 break-word">@Model.Header!.SupplierName!.ToUpper()</td>
                 }
@@ -167,11 +168,15 @@
             <tr>
                 <td style="padding-left:20px;">Address :</td>
                 <td class="text-clamp-2 break-word">@Model.Header!.Address.ToUpper()</td>
-                <td style="width:5%;">@(isTugboatPayment ? "COS # :" : "PO # :")</td>
+                <td style="width:5%;">@((isTugboatPayment || isMsapCommission) ? "COS # :" : "PO # :")</td>
                 <td class="text-clamp-2 break-word">
                     @if (isTugboatPayment && ViewData["TugboatCosNumbers"] is string[] cosNumbers)
                     {
                         @string.Join(", ", cosNumbers)
+                    }
+                    else if (isMsapCommission && ViewData["MsapCosNumbers"] is string[] msapCosNumbers)
+                    {
+                        @string.Join(", ", msapCosNumbers)
                     }
                     else if (Model.Header.PONo != null && Model.Header.PONo.Any())
                     {
@@ -182,7 +187,7 @@
             <tr>
                 <td style="padding-left:20px;">TIN # :</td>
                 <td>@Html.DisplayFor(model => model.Header!.Tin)</td>
-                <td>@(isTugboatPayment ? "Bill # :" : "SI # :")</td>
+                <td>@((isTugboatPayment || isMsapCommission) ? "Bill # :" : "SI # :")</td>
                 <td class="text-clamp-2 break-word">
                     @if (ViewBag.SINoArray is string[] siArray && siArray.Any())
                     {
@@ -210,7 +215,7 @@
         <tbody>
             <tr>
                 <td style="width:20%; padding-left:20px;">Payee :</td>
-                @if (Model.Header.SupplierId != null || isTugboatPayment)
+                @if (Model.Header.SupplierId != null || isTugboatPayment || isMsapCommission)
                 {
                     <td class="text-clamp-2 break-word">@Model.Header!.Payee!.ToUpper()</td>
                 }

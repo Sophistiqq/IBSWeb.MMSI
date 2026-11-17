@@ -85,6 +85,7 @@ builder.Services.AddMsapModule(builder.Configuration);
 builder.Services.AddScoped<ProvisionalReceiptTaggingService>();
 builder.Services.AddScoped<CheckVoucherDocumentationService>();
 builder.Services.AddScoped<TugboatPaymentService>();
+builder.Services.AddScoped<MsapCommissionPaymentService>();
 builder.Services.AddOptions<BrandingOptions>()
     .Bind(builder.Configuration.GetSection(BrandingOptions.SectionName))
     .Validate(BrandingOptions.IsValid, "Branding configuration is incomplete.")

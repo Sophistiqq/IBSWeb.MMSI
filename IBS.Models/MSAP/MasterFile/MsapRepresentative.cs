@@ -41,6 +41,31 @@ namespace IBS.Models.MSAP.MasterFile
         [Column(TypeName = "varchar(30)")]
         public string CalculationBase { get; set; } = "NetOfDiscount";
 
+        [StringLength(200)]
+        [Display(Name = "Payee Address")]
+        [Column(TypeName = "varchar(200)")]
+        public string? Address { get; set; }
+
+        [StringLength(20)]
+        [Display(Name = "TIN")]
+        [Column(TypeName = "varchar(20)")]
+        public string? Tin { get; set; }
+
+        [StringLength(20)]
+        [Display(Name = "VAT Classification")]
+        [Column(TypeName = "varchar(20)")]
+        public string? VatType { get; set; }
+
+        [StringLength(20)]
+        [Display(Name = "Withholding Classification")]
+        [Column(TypeName = "varchar(20)")]
+        public string? TaxType { get; set; }
+
+        [Range(typeof(decimal), "0", "1")]
+        [Column(TypeName = "numeric(18,4)")]
+        [Display(Name = "Withholding Rate")]
+        public decimal? WithholdingTaxPercent { get; set; }
+
         public bool IsActive { get; set; } = true;
 
         [MaxLength(100)]

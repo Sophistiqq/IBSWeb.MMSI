@@ -318,6 +318,7 @@ namespace Checks.MSAP
                 }
                 catch (PostgresException ex) when (ex.SqlState == "P0001" && ex.MessageText.Contains("selected-ticket vouchers", StringComparison.Ordinal))
                 { }
+                await db.Database.MigrateAsync();
                 await service.ChangeStatusAsync(combined, "Post", "Payment check", null, default);
                 await new UnitOfWork(db).FilprideCheckVoucher.RebuildGeneralLedgerAsync(form.Date, form.Date.AddDays(1));
                 var ledger = await db.FilprideGeneralLedgerBooks.Where(g => g.Reference == combinedVoucher.CheckVoucherHeaderNo).ToListAsync();

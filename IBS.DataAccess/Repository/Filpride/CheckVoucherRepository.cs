@@ -307,6 +307,7 @@ namespace IBS.DataAccess.Repository.Filpride
                 .Include(checkVoucher => checkVoucher.Details)
                 .Include(checkVoucher => checkVoucher.Supplier)
                 .Include(checkVoucher => checkVoucher.TugboatPayments)
+                .Include(checkVoucher => checkVoucher.MsapCommissionPayments)
                 .Where(checkVoucher =>
                     checkVoucher.PostedBy != null &&
                     checkVoucher.Date >= startDate &&
@@ -389,6 +390,10 @@ namespace IBS.DataAccess.Repository.Filpride
             {
                 ledgers.SetCounterparty(CounterpartyType.TugboatOwner, header.TugboatPayments[0].TugboatOwnerId, header.Payee);
             }
+            else if (header.MsapCommissionPayments.Count > 0)
+            {
+                ledgers.SetCounterparty(CounterpartyType.Representative, header.MsapCommissionPayments[0].RepresentativeId, header.Payee);
+            }
             else if (header.SupplierId.HasValue)
             {
                 ledgers.SetCounterparty(
@@ -409,7 +414,9 @@ namespace IBS.DataAccess.Repository.Filpride
             FilprideCheckVoucherHeader header,
             CancellationToken cancellationToken)
         {
-            if (header.CvType == nameof(CVType.OtherTugs))
+            if (header.CvType == nameof(CVType.OtherTugs)
+                || header.MsapCommissionPayments.Count > 0
+                || await _db.FilprideMsapCommissionPayments.AnyAsync(p => p.CheckVoucherHeaderId == header.CheckVoucherHeaderId, cancellationToken))
             {
                 return false;
             }
@@ -431,7 +438,7 @@ namespace IBS.DataAccess.Repository.Filpride
 
         private static bool ShouldSkipGeneralLedgerEntries(FilprideCheckVoucherHeader header)
         {
-            if (header.CvType == nameof(CVType.OtherTugs))
+            if (header.CvType == nameof(CVType.OtherTugs) || header.MsapCommissionPayments.Count > 0)
             {
                 return false;
             }

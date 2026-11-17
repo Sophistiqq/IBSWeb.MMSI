@@ -25,13 +25,30 @@
                 <div class="col-12 col-md-4">
                     <div asp-validation-summary="ModelOnly" class="text-danger"></div>
                     <input type="hidden" asp-for="CvId"/>
+                    <input type="hidden" asp-for="Source" />
                     <partial name="_CheckVoucherDocumentation" for="Documentation" />
                     <div class="form-group mb-3">
+                        <label class="control-label">Commission Source</label>
+                        <div>
+                            <span class="badge @(Model.Source == CommissionPaymentViewModel.SourceMsapBilling ? "bg-info text-dark" : "bg-secondary")">
+                                @(Model.Source == CommissionPaymentViewModel.SourceMsapBilling ? "MSAP Billing" : "Filpride DR")
+                            </span>
+                        </div>
+                    </div>
+                    <div id="filprideSupplierGroup" class="form-group mb-3" style="@(Model.Source == CommissionPaymentViewModel.SourceMsapBilling ? "display:none;" : "")">
                         <label asp-for="SupplierId" class="control-label"></label><span class="required">*</span>
-                        <select asp-for="SupplierId" asp-items="@Model.Suppliers" class="form-select js-select2 GetDRList supplier" style="width:100%">
+                        <select asp-for="SupplierId" asp-items="@Model.Suppliers" class="form-select js-select2 GetDRList supplier" style="width:100%" disabled="@(Model.Source == CommissionPaymentViewModel.SourceMsapBilling)">
                             <option></option>
                         </select>
                         <span asp-validation-for="SupplierId" class="text-danger"></span>
+                    </div>
+                    <div id="msapRepresentativeGroup" class="form-group mb-3" style="@(Model.Source == CommissionPaymentViewModel.SourceMsapBilling ? "" : "display:none;")">
+                        <label asp-for="RepresentativeId" class="control-label"></label><span class="required">*</span>
+                        <select asp-for="RepresentativeId" asp-items="@Model.Representatives" class="form-select js-select2 msap-representative" style="width:100%" disabled="@(Model.Source != CommissionPaymentViewModel.SourceMsapBilling)">
+                            <option></option>
+                        </select>
+                        <span asp-validation-for="RepresentativeId" class="text-danger"></span>
+                        <div id="rep-profile-error" class="text-danger small mt-1" role="alert"></div>
                     </div>
                     <div class="form-floating mb-3">
                         <input asp-for="Payee" type="text" class="form-control supplierName" placeholder=""/>
@@ -47,7 +64,7 @@
                     </div>
                 </div>
                 <div class="col-12 col-md-8">
-                    <div class="row mb-3 overflow-auto" style="max-height: 300px;">
+                    <div id="filprideDrPanel" class="row mb-3 overflow-auto" style="max-height: 300px; @(Model.Source == CommissionPaymentViewModel.SourceMsapBilling ? "display:none;" : "")">
                         <table>
                             <thead class="sticky-top bg-white">
                             <tr>
@@ -68,6 +85,32 @@
                             </tr>
                             </thead>
                             <tbody class="drList">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="msapBillingPanel" class="row mb-3 overflow-auto" style="max-height: 300px; @(Model.Source == CommissionPaymentViewModel.SourceMsapBilling ? "" : "display:none;")">
+                        <div id="selectedMsapItems"></div>
+                        <table>
+                            <thead class="sticky-top bg-white">
+                            <tr>
+                                <th colspan="7" class="text-center py-3">
+                                    <span>MSAP BILLING COMMISSION / INCENTIVE LIST</span>
+                                    <span class="selected-msap-count ms-2 px-2 py-1 rounded-pill" style="display: none; background: linear-gradient(135deg, #5a9a9a, #4a8a8a); color: white; font-size: 0.75rem; vertical-align: middle;">
+                                        <span id="msapSelectedCount">0</span> selected
+                                    </span>
+                                </th>
+                            </tr>
+                            <tr>
+                                <th><input type="checkbox" id="msapSelectAll"></th>
+                                <th>Billing No.</th>
+                                <th>COS No.</th>
+                                <th>Category</th>
+                                <th class="text-end">Gross</th>
+                                <th class="text-end">EWT</th>
+                                <th class="text-end">Net Payable</th>
+                            </tr>
+                            </thead>
+                            <tbody class="msapBillingList">
                             </tbody>
                         </table>
                     </div>
@@ -148,6 +191,13 @@
                             <td><input type='text' name="AccountTitle" value="Cash in Bank" class="w-100 accountTitle" style='border:none' readonly/></td>
                             <td><input type='text' name="Debit" value='0.0000' class="w-100" style='border:none' readonly/></td>
                             <td><input type='text' name="Credit" value="@Model.CashInBankAmount.ToString("N4")" class="w-100 cib-credit money" style='border:none' readonly /></td>
+                            <td></td>
+                        </tr>
+                        <tr id="msapWithholdingRow" style="display:none;">
+                            <td><input id="msapWithholdingAccount" type="text" name="AccountNumber" class="w-100" style='border:none' readonly disabled/></td>
+                            <td><input id="msapWithholdingTitle" type="text" name="AccountTitle" value="Expanded Withholding Tax" class="w-100" style='border:none' readonly disabled/></td>
+                            <td><input type="text" name="Debit" value="0.0000" class="w-100" style='border:none' readonly disabled/></td>
+                            <td><input id="msapWithholdingAmount" type="text" name="Credit" value="0.0000" class="w-100" style='border:none' readonly disabled/></td>
                             <td></td>
                         </tr>
                         @foreach (var entry in Model.AdditionalAccountingEntries)
@@ -236,6 +286,9 @@
     </script>
     <script>
         $(document).ready(function () {
+            if ($("#Source").val() === "@CommissionPaymentViewModel.SourceMsapBilling") {
+                return;
+            }
             $(".supplier").each(function () {
                 var suppId = $(this).val();
                 var cvId = $("#CvId").val();
@@ -488,6 +541,9 @@
             $("#accountingEntriesBody tr, .defaultEntry tr").each(function () {
                 var debitField = $(this).find("td:eq(2) input");
                 var creditField = $(this).find("td:eq(3) input");
+                if (debitField.prop("disabled") && creditField.prop("disabled")) {
+                    return;
+                }
                 var debitInput = debitField.val();
                 var creditInput = creditField.val();
                 debitInput = debitInput ? String(debitInput) : "";
@@ -672,6 +728,26 @@
                     }
                 });
             }
+        });
+    </script>
+    <script src="~/js/msap-commission-payment.js" asp-append-version="true"></script>
+    <script>
+        $(function () {
+            if ($("#Source").val() !== "@CommissionPaymentViewModel.SourceMsapBilling") {
+                return;
+            }
+            const msapCtrl = window.MsapCommissionPayment({
+                endpointUrl: '@Url.Action("GetMsapRepresentativeCommissions", "CheckVoucherTrade", new { area = "Filpride" })',
+                getSource: () => $("#Source").val(),
+                initialSelected: @Html.Raw(Json.Serialize(Model.MsapItems.Select(i => new { billingId = i.BillingId, category = i.Category })))
+            });
+
+            const cvId = $("#CvId").val();
+            msapCtrl.loadRepresentative($(".msap-representative").val(), cvId, true);
+
+            $(".msap-representative").on("change", function () {
+                msapCtrl.loadRepresentative($(this).val(), cvId, false);
+            });
         });
     </script>
 }

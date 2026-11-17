@@ -26,6 +26,7 @@ namespace Checks.MSAP
                 await TicketIntegrityDatabaseCheck.RunAsync(includeBilling: true);
                 await OtherTugProgressDatabaseCheck.RunAsync();
                 await TugboatPaymentDatabaseCheck.RunAsync();
+                await MsapCommissionPaymentDatabaseCheck.RunAsync();
                 await using var connection = new NpgsqlConnection(TugboatOwnerCheck.TestConnection());
                 await connection.OpenAsync();
                 await CheckConstraintsAsync(connection);

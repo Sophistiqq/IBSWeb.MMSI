@@ -116,6 +116,7 @@ namespace IBS.DataAccess.Data
 
         public DbSet<FilprideTugboatPayment> FilprideTugboatPayments { get; set; }
         public DbSet<FilprideTugboatPaymentAllocation> FilprideTugboatPaymentAllocations { get; set; }
+        public DbSet<FilprideMsapCommissionPayment> FilprideMsapCommissionPayments { get; set; }
 
         public DbSet<FilprideCheckVoucherHeader> FilprideCheckVoucherHeaders { get; set; }
         public DbSet<FilprideCheckVoucherDetail> FilprideCheckVoucherDetails { get; set; }
@@ -618,6 +619,21 @@ namespace IBS.DataAccess.Data
                 allocation.HasOne(a => a.Payment).WithMany(p => p.Allocations)
                     .HasForeignKey(a => a.TugboatPaymentId).OnDelete(DeleteBehavior.Restrict);
                 allocation.HasIndex(a => a.OtherTugChargeLineId).IsUnique().HasFilter("released_at IS NULL");
+            });
+
+            builder.Entity<FilprideMsapCommissionPayment>(payment =>
+            {
+                payment.HasOne(p => p.Voucher).WithMany(v => v.MsapCommissionPayments)
+                    .HasForeignKey(p => p.CheckVoucherHeaderId).OnDelete(DeleteBehavior.Restrict);
+                payment.HasIndex(p => p.CheckVoucherHeaderId);
+                payment.HasIndex(p => new { p.MsapBillingId, p.Category }).IsUnique().HasFilter("released_at IS NULL");
+                payment.ToTable("filpride_msap_commission_payments", table =>
+                {
+                    table.HasCheckConstraint("ck_msap_commission_payment_amounts",
+                        "gross_amount > 0 AND withholding_amount >= 0 AND withholding_amount < gross_amount");
+                    table.HasCheckConstraint("ck_msap_commission_payment_category",
+                        "category IN ('AgencyIncentive', 'AgentCommission')");
+                });
             });
 
             #region -- Check Voucher Header --

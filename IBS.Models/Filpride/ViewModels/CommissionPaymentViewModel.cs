@@ -1,12 +1,29 @@
-using Microsoft.AspNetCore.Mvc.Rendering;
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
+using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace IBS.Models.Filpride.ViewModels
 {
     public class CommissionPaymentViewModel
     {
+        public const string SourceFilprideDr = "FilprideDr";
+        public const string SourceMsapBilling = "MsapBilling";
+
         public int CvId { get; set; }
+
+        public string Source { get; set; } = SourceFilprideDr;
+
         public List<SelectListItem>? Suppliers { get; set; }
+
+        [BindNever, ValidateNever]
+        public List<SelectListItem>? Representatives { get; set; }
+
+        [Display(Name = "Representative")]
+        public int? RepresentativeId { get; set; }
+
+        [BindNever, ValidateNever]
+        public string? RepresentativeProfileError { get; set; }
 
         [Required]
         [StringLength(150)]
@@ -20,9 +37,8 @@ namespace IBS.Models.Filpride.ViewModels
         [Display(Name = "Supplier Tin Number")]
         public string SupplierTinNo { get; set; } = null!;
 
-        [Required]
         [Display(Name = "Supplier No")]
-        public int SupplierId { get; set; }
+        public int? SupplierId { get; set; }
 
         [Required]
         [Display(Name = "Transaction Date")]
@@ -69,7 +85,9 @@ namespace IBS.Models.Filpride.ViewModels
         //others
         public string? CreatedBy { get; set; }
 
-        public List<DRDetailsViewModel> DRs { get; set; } = null!;
+        public List<DRDetailsViewModel> DRs { get; set; } = [];
+
+        public List<MsapCommissionItemInput> MsapItems { get; set; } = [];
 
         public string? OldCVNo { get; set; }
 
@@ -81,5 +99,12 @@ namespace IBS.Models.Filpride.ViewModels
 
         [Display(Name = "SI No")]
         public string? SiNo { get; set; }
+    }
+
+    public class MsapCommissionItemInput
+    {
+        public int BillingId { get; set; }
+
+        public string Category { get; set; } = string.Empty;
     }
 }

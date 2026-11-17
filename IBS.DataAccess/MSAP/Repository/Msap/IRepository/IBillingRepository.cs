@@ -39,5 +39,11 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
         Task<(IEnumerable<Billing> Data, int RecordsFiltered, int TotalRecords)> GetPagedBillingsAsync(DataTablesParameters parameters, CancellationToken cancellationToken, int? customerOrderSlipId = null);
 
         Task<List<Billing>> GetBillingsByCollectionIdAsync(int collectionId, CancellationToken cancellationToken);
+
+        Task RecognizeCommissionLiabilityAsync(Billing billing, string actor, CancellationToken ct = default);
+
+        Task<string?> GetActiveCommissionVoucherNumberAsync(int billingId, CancellationToken ct = default);
+
+        Task ReverseCommissionLiabilityAsync(Billing billing, CancellationToken ct = default);
     }
 }

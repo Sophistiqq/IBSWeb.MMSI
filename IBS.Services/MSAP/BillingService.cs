@@ -1288,6 +1288,7 @@ namespace IBS.Services.MSAP
                     DateTime approvedAt = DateTimeHelper.GetCurrentPhilippineTime();
                     var salesBook = BillingBookEntries.Create(model, approvedAt, username, approverUserId);
                     await unitOfWork.Billing.AddSalesBookAsync(salesBook, cancellationToken);
+                    await unitOfWork.Billing.RecognizeCommissionLiabilityAsync(model, username, cancellationToken);
 
                     model.ApprovedRevision = model.Revision;
                     model.ApprovedByUserId = approverUserId;
@@ -1341,6 +1342,14 @@ namespace IBS.Services.MSAP
 
                 var related = billing.BasicBilling ?? billing.BafBilling;
                 var targetBillsPreview = new[] { billing, related }.Where(b => b != null).Distinct().ToList();
+                foreach (var previewBill in targetBillsPreview)
+                {
+                    var activeCv = await unitOfWork.Billing.GetActiveCommissionVoucherNumberAsync(previewBill!.MsapBillingId, cancellationToken);
+                    if (!string.IsNullOrEmpty(activeCv))
+                    {
+                        return ServiceResult.Failure($"Cannot reopen billing #{previewBill.MsapBillingNumber}: active Check Voucher {activeCv} exists in IBS AP. Void or cancel the check voucher first.", ServiceResultStatus.ValidationError);
+                    }
+                }
                 bool requiresAuthorizationDoc = targetBillsPreview.Any(b => b!.PeriodStatus == MsapPeriodStatus.Final);
 
                 if (requiresAuthorizationDoc && authorizationFile is not { Length: > 0 })
@@ -1375,6 +1384,12 @@ namespace IBS.Services.MSAP
                             throw new InvalidOperationException($"Cannot reopen billing #{bill.MsapBillingNumber}: collections exist.");
                         }
 
+                        var activeCv = await unitOfWork.Billing.GetActiveCommissionVoucherNumberAsync(bill.MsapBillingId, cancellationToken);
+                        if (!string.IsNullOrEmpty(activeCv))
+                        {
+                            throw new InvalidOperationException($"Cannot reopen billing #{bill.MsapBillingNumber}: active Check Voucher {activeCv} exists in IBS AP. Void or cancel the check voucher first.");
+                        }
+
                         int priorRevision = bill.Revision;
                         string priorStatus = bill.Status;
 
@@ -1391,6 +1406,7 @@ namespace IBS.Services.MSAP
                         bill.ApprovedAt = null;
 
                         await unitOfWork.Billing.VoidSalesBookAsync(bill.MsapBillingId, priorRevision, username, reason.Trim(), cancellationToken);
+                        await unitOfWork.Billing.ReverseCommissionLiabilityAsync(bill, cancellationToken);
 
                         if (bill.PeriodStatus == MsapPeriodStatus.Final)
                         {

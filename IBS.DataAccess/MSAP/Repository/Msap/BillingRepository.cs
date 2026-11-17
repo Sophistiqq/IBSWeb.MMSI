@@ -1,10 +1,17 @@
 using System.Linq.Dynamic.Core;
 using System.Linq.Expressions;
+using IBS.DataAccess.Data;
 using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository.Msap.IRepository;
+using IBS.Models.Enums;
+using IBS.Models.Filpride.AccountsPayable;
+using IBS.Models.Filpride.Books;
 using IBS.Models.MSAP;
+using IBS.Utility.Helpers;
+using IBS.Utility.MSAP.Constants;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace IBS.DataAccess.MSAP.Repository.Msap
 {
@@ -413,6 +420,233 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             return await _db.MsapBillings
                 .Where(b => b.CollectionId == collectionId)
                 .ToListAsync(cancellationToken);
+        }
+
+        public async Task RecognizeCommissionLiabilityAsync(Billing billing, string actor, CancellationToken ct = default)
+        {
+            var items = new List<(int RepresentativeId, string Category, string CategoryLabel, decimal Amount)>();
+            if (billing.AgencyIncentiveRepresentativeId.HasValue && billing.AgencyIncentiveAmount > 0m)
+            {
+                items.Add((
+                    billing.AgencyIncentiveRepresentativeId.Value,
+                    MsapConstants.RepresentativeCategory.AgencyIncentive,
+                    "Agency Incentive",
+                    billing.AgencyIncentiveAmount));
+            }
+            if (billing.AgentCommissionRepresentativeId.HasValue && billing.AgentCommissionAmount > 0m)
+            {
+                items.Add((
+                    billing.AgentCommissionRepresentativeId.Value,
+                    MsapConstants.RepresentativeCategory.AgentCommission,
+                    "Agent Commission",
+                    billing.AgentCommissionAmount));
+            }
+
+            if (items.Count == 0)
+            {
+                return;
+            }
+
+            await using var accounting = await OpenAccountingContextAsync(ct);
+            var work = new IBS.DataAccess.Repository.UnitOfWork(accounting);
+            var glRef = billing.MsapBillingNumber.Length <= 20
+                ? billing.MsapBillingNumber
+                : billing.MsapBillingNumber[..20];
+
+            var recognitionDate = billing.Date;
+            var closedPeriodAdjustment = false;
+            if (await work.IsPeriodPostedAsync(Module.ReceivingReport, recognitionDate, ct))
+            {
+                closedPeriodAdjustment = true;
+                var today = DateOnly.FromDateTime(IBS.Utility.MSAP.Helpers.DateTimeHelper.GetCurrentPhilippineTime());
+                var minOpenDate = DateOnly.FromDateTime(await work.GetMinimumPeriodBasedOnThePostedPeriods(Module.ReceivingReport, ct));
+                recognitionDate = today >= minOpenDate ? today : minOpenDate;
+            }
+
+            var expenseAccount = await accounting.FilprideChartOfAccounts
+                .SingleOrDefaultAsync(a => a.AccountNumber == MsapConstants.CommissionExpenseAccount && !a.IsMain && !a.IsHidden, ct)
+                ?? throw new InvalidOperationException("Required posting account is unavailable: " + MsapConstants.CommissionExpenseAccount);
+            var apAccount = await accounting.FilprideChartOfAccounts
+                .SingleOrDefaultAsync(a => a.AccountNumber == MsapConstants.CommissionPayableAccount && !a.IsMain && !a.IsHidden, ct)
+                ?? throw new InvalidOperationException("Required posting account is unavailable: " + MsapConstants.CommissionPayableAccount);
+            IBS.Models.Filpride.MasterFile.FilprideChartOfAccount? vatAccount = null;
+
+            var repIds = items.Select(i => i.RepresentativeId).Distinct().ToArray();
+            var reps = await _db.MsapRepresentatives.AsNoTracking()
+                .Where(r => repIds.Contains(r.RepresentativeId))
+                .ToDictionaryAsync(r => r.RepresentativeId, ct);
+
+            var now = IBS.Utility.MSAP.Helpers.DateTimeHelper.GetCurrentPhilippineTime();
+            var ledgers = new List<FilprideGeneralLedgerBook>();
+
+            foreach (var item in items)
+            {
+                if (!reps.TryGetValue(item.RepresentativeId, out var rep))
+                {
+                    throw new InvalidOperationException("Assigned MSAP representative was not found.");
+                }
+
+                var profileError = PaymentProfileHelper.Validate(
+                    rep,
+                    rep.Address,
+                    rep.Tin,
+                    rep.VatType,
+                    rep.TaxType,
+                    rep.WithholdingTaxPercent,
+                    required: true,
+                    "representative");
+                if (profileError != null)
+                {
+                    throw new InvalidOperationException(profileError);
+                }
+
+                var marker = $"({billing.MsapBillingNumber} - {item.CategoryLabel})";
+                var alreadyRecognized = await accounting.FilprideGeneralLedgerBooks
+                    .IgnoreQueryFilters(["TugboatWorkspace"])
+                    .AnyAsync(g => g.WorkspaceTugboatId == null
+                        && g.Reference == glRef
+                        && g.CounterpartyType == CounterpartyType.Representative
+                        && g.CounterpartyId == rep.RepresentativeId
+                        && g.Description.Contains(marker), ct);
+                if (alreadyRecognized)
+                {
+                    continue;
+                }
+
+                var (gross, net, inputVat, _, _) = PaymentProfileHelper.ComputePayableBreakdown(
+                    rep.VatType!,
+                    rep.TaxType!,
+                    rep.WithholdingTaxPercent ?? 0m,
+                    item.Amount);
+
+                var particulars = closedPeriodAdjustment
+                    ? $"ADJUSTMENT ON SET UP A/P {item.CategoryLabel.ToUpperInvariant()} - {rep.RepresentativeName} {marker} (BILLING DATE {billing.Date:MMM dd, yyyy})"
+                    : $"SET UP A/P {item.CategoryLabel.ToUpperInvariant()} - {rep.RepresentativeName} {marker}";
+
+                ledgers.Add(new FilprideGeneralLedgerBook
+                {
+                    WorkspaceTugboatId = null,
+                    Date = recognitionDate,
+                    Reference = glRef,
+                    Description = particulars,
+                    AccountId = expenseAccount.AccountId,
+                    AccountNo = expenseAccount.AccountNumber!,
+                    AccountTitle = expenseAccount.AccountName,
+                    Debit = net,
+                    Credit = 0m,
+                    CreatedBy = actor,
+                    CreatedDate = now,
+                    IsPosted = true,
+                    ModuleType = nameof(ModuleType.Purchase),
+                    CounterpartyType = CounterpartyType.Representative,
+                    CounterpartyId = rep.RepresentativeId,
+                    CounterpartyName = rep.RepresentativeName
+                });
+
+                if (inputVat > 0m)
+                {
+                    vatAccount ??= await accounting.FilprideChartOfAccounts
+                        .SingleOrDefaultAsync(a => a.AccountNumber == MsapConstants.InputVatAccount && !a.IsMain && !a.IsHidden, ct)
+                        ?? throw new InvalidOperationException("Required posting account is unavailable: " + MsapConstants.InputVatAccount);
+                    ledgers.Add(new FilprideGeneralLedgerBook
+                    {
+                        WorkspaceTugboatId = null,
+                        Date = recognitionDate,
+                        Reference = glRef,
+                        Description = particulars,
+                        AccountId = vatAccount.AccountId,
+                        AccountNo = vatAccount.AccountNumber!,
+                        AccountTitle = vatAccount.AccountName,
+                        Debit = inputVat,
+                        Credit = 0m,
+                        CreatedBy = actor,
+                        CreatedDate = now,
+                        IsPosted = true,
+                        ModuleType = nameof(ModuleType.Purchase),
+                        CounterpartyType = CounterpartyType.Representative,
+                        CounterpartyId = rep.RepresentativeId,
+                        CounterpartyName = rep.RepresentativeName
+                    });
+                }
+
+                ledgers.Add(new FilprideGeneralLedgerBook
+                {
+                    WorkspaceTugboatId = null,
+                    Date = recognitionDate,
+                    Reference = glRef,
+                    Description = particulars,
+                    AccountId = apAccount.AccountId,
+                    AccountNo = apAccount.AccountNumber!,
+                    AccountTitle = apAccount.AccountName,
+                    Debit = 0m,
+                    Credit = gross,
+                    CreatedBy = actor,
+                    CreatedDate = now,
+                    IsPosted = true,
+                    ModuleType = nameof(ModuleType.Purchase),
+                    CounterpartyType = CounterpartyType.Representative,
+                    CounterpartyId = rep.RepresentativeId,
+                    CounterpartyName = rep.RepresentativeName
+                });
+            }
+
+            if (ledgers.Count > 0)
+            {
+                await accounting.FilprideGeneralLedgerBooks.AddRangeAsync(ledgers, ct);
+                await accounting.FilprideAuditTrails.AddAsync(
+                    new IBS.Models.Filpride.Books.FilprideAuditTrail(
+                        actor,
+                        $"Posted MSAP representative commission/incentive GL entries for {billing.MsapBillingNumber}",
+                        "Billing"),
+                    ct);
+                await accounting.SaveChangesAsync(ct);
+            }
+        }
+
+        public async Task<string?> GetActiveCommissionVoucherNumberAsync(int billingId, CancellationToken ct = default)
+        {
+            await using var accounting = await OpenAccountingContextAsync(ct);
+            return await accounting.FilprideMsapCommissionPayments
+                .IgnoreQueryFilters(["TugboatWorkspace"])
+                .Include(p => p.Voucher)
+                .Where(p => p.MsapBillingId == billingId
+                    && p.ReleasedAt == null
+                    && p.Voucher.Status != nameof(CheckVoucherPaymentStatus.Voided)
+                    && p.Voucher.Status != nameof(CheckVoucherPaymentStatus.Canceled))
+                .Select(p => p.Voucher.CheckVoucherHeaderNo)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        public async Task ReverseCommissionLiabilityAsync(Billing billing, CancellationToken ct = default)
+        {
+            var glRef = billing.MsapBillingNumber.Length <= 20
+                ? billing.MsapBillingNumber
+                : billing.MsapBillingNumber[..20];
+
+            await using var accounting = await OpenAccountingContextAsync(ct);
+            var glEntries = await accounting.FilprideGeneralLedgerBooks
+                .IgnoreQueryFilters(["TugboatWorkspace"])
+                .Where(g => g.WorkspaceTugboatId == null
+                    && g.Reference == glRef
+                    && g.CounterpartyType == CounterpartyType.Representative)
+                .ToListAsync(ct);
+
+            if (glEntries.Count > 0)
+            {
+                accounting.FilprideGeneralLedgerBooks.RemoveRange(glEntries);
+                await accounting.SaveChangesAsync(ct);
+            }
+        }
+
+        private async Task<ApplicationDbContext> OpenAccountingContextAsync(CancellationToken ct)
+        {
+            var accounting = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseNpgsql(_db.Database.GetDbConnection()).Options);
+            if (_db.Database.CurrentTransaction != null)
+            {
+                await accounting.Database.UseTransactionAsync(_db.Database.CurrentTransaction.GetDbTransaction(), ct);
+            }
+            return accounting;
         }
     }
 }

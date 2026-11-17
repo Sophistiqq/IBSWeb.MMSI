@@ -1,5 +1,6 @@
 @model IBS.Models.MSAP.MasterFile.MsapRepresentative
 @using IBS.Services.MSAP
+@using IBS.Utility.MSAP.Constants
 
 @{
     var isEdit = Model.RepresentativeId > 0;
@@ -109,6 +110,62 @@
                                     <input asp-for="IsActive" class="form-check-input" />
                                     <span>Active</span>
                                 </label>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="modern-col-4">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
+                            <span class="material-symbols-outlined">payments</span>
+                            <h2 class="modern-headline-md ui-section-title">Payment Profile</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <p class="ui-caption ui-muted mb-3">Complete this profile before paying this representative through IBS Trade Commission Check Voucher.</p>
+                            <div class="flex flex-column gap-3">
+                                <div>
+                                    <label asp-for="Address" class="modern-label ui-label"></label>
+                                    <input asp-for="Address" class="form-control ui-input" placeholder="Payee registered address" />
+                                    <span asp-validation-for="Address" class="text-error ui-caption"></span>
+                                </div>
+                                <div>
+                                    <label asp-for="Tin" class="modern-label ui-label"></label>
+                                    <input asp-for="Tin" class="form-control ui-input" placeholder="e.g., 000-000-000-00000" />
+                                    <span asp-validation-for="Tin" class="text-error ui-caption"></span>
+                                </div>
+                                <div>
+                                    <label asp-for="VatType" class="modern-label ui-label"></label>
+                                    <select asp-for="VatType" class="js-modern-select">
+                                        <option value="">Select classification</option>
+                                        <option value="@MsapConstants.VatType_Vatable">@MsapConstants.VatType_Vatable</option>
+                                        <option value="@MsapConstants.VatType_ZeroRated">@MsapConstants.VatType_ZeroRated</option>
+                                        <option value="@MsapConstants.VatType_Exempt">@MsapConstants.VatType_Exempt</option>
+                                    </select>
+                                    <span asp-validation-for="VatType" class="text-error ui-caption"></span>
+                                </div>
+                                <div>
+                                    <label asp-for="TaxType" class="modern-label ui-label"></label>
+                                    <select asp-for="TaxType" class="js-modern-select" id="repTaxType">
+                                        <option value="">Select classification</option>
+                                        <option value="@MsapConstants.TaxType_WithTax">@MsapConstants.TaxType_WithTax</option>
+                                        <option value="@MsapConstants.TaxType_Exempt">@MsapConstants.TaxType_Exempt</option>
+                                    </select>
+                                    <span asp-validation-for="TaxType" class="text-error ui-caption"></span>
+                                </div>
+                                <div>
+                                    <label asp-for="WithholdingTaxPercent" class="modern-label ui-label"></label>
+                                    <select asp-for="WithholdingTaxPercent" class="js-modern-select" id="repWithholdingPercent">
+                                        <option value="">Select when withholding applies</option>
+                                        <option value="0.005" selected="@(Model.WithholdingTaxPercent == 0.005m)">0.5%</option>
+                                        <option value="0.01" selected="@(Model.WithholdingTaxPercent == 0.01m)">1%</option>
+                                        <option value="0.02" selected="@(Model.WithholdingTaxPercent == 0.02m)">2%</option>
+                                        <option value="0.05" selected="@(Model.WithholdingTaxPercent == 0.05m)">5%</option>
+                                        <option value="0.10" selected="@(Model.WithholdingTaxPercent == 0.10m)">10%</option>
+                                        <option value="0" selected="@(Model.WithholdingTaxPercent == 0m)">Exempt</option>
+                                    </select>
+                                    <span asp-validation-for="WithholdingTaxPercent" class="text-error ui-caption"></span>
+                                </div>
                             </div>
                         </div>
                     </div>

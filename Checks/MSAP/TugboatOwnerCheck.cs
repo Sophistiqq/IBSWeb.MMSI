@@ -5,10 +5,12 @@ using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository;
 using IBS.Models.MSAP.MasterFile;
 using IBS.Services.MSAP;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 
@@ -45,13 +47,28 @@ namespace Checks.MSAP
             Check(profile > 0, "Owner-profile migration was not found.");
             string sql = db.GetService<IMigrator>().GenerateScript(migrations[profile - 1], migrations[profile]);
             Check(!sql.Contains("UPDATE ") && !sql.Contains("DROP TABLE"), "Owner migration contains a data repair or table replacement.");
+            await using var sharedServices = new ServiceCollection()
+                .AddLogging()
+                .AddSingleton<IBS.Utility.TugboatWorkspace>()
+                .AddDbContext<ApplicationDbContext>(o => o.UseNpgsql(TestConnection()))
+                .AddDefaultIdentity<IBS.Models.ApplicationUser>()
+                .AddRoles<IdentityRole>()
+                .AddEntityFrameworkStores<ApplicationDbContext>()
+                .Services.BuildServiceProvider();
+            await using var shared = sharedServices.GetRequiredService<ApplicationDbContext>();
+            string[] pubMigrations = shared.Database.GetMigrations().ToArray();
+            int commPay = Array.FindIndex(pubMigrations, x => x.EndsWith("_AddMsapCommissionPayments", StringComparison.Ordinal));
+            if (commPay > 0)
+            {
+                await shared.GetService<IMigrator>().MigrateAsync(pubMigrations[commPay - 1]);
+            }
             await db.GetService<IMigrator>().MigrateAsync(migrations[profile - 1]);
             await db.Database.MigrateAsync();
+            await shared.Database.MigrateAsync();
             Check(identity.OrderBy(x => x.Key).SequenceEqual((await db.MsapTugboatOwners
                 .ToDictionaryAsync(x => x.TugboatOwnerId, x => x.TugboatOwnerNumber)).OrderBy(x => x.Key)), "Owner migration changed master identities.");
 
             await using var transaction = await db.Database.BeginTransactionAsync();
-            await using var shared = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseNpgsql(TestConnection()).Options);
             var work = new UnitOfWork(db, shared);
             var service = new TugboatOwnerService(work, NullLogger<TugboatOwnerService>.Instance);
             var owner = new TugboatOwner { TugboatOwnerNumber = "ZQ1", TugboatOwnerName = "Owner profile check" };

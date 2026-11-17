@@ -1,12 +1,13 @@
 using IBS.Models.MSAP;
+using IBS.Utility.MSAP.Constants;
 using static IBS.Utility.MSAP.Constants.TaxConstants;
 
 namespace IBS.Services.MSAP
 {
     public static class CommissionCalculator
     {
-        public const string CategoryAgencyIncentive = "AgencyIncentive";
-        public const string CategoryAgentCommission = "AgentCommission";
+        public const string CategoryAgencyIncentive = MsapConstants.RepresentativeCategory.AgencyIncentive;
+        public const string CategoryAgentCommission = MsapConstants.RepresentativeCategory.AgentCommission;
 
         public const string ModePercentage = "Percentage";
         public const string ModeFlat = "Flat";
