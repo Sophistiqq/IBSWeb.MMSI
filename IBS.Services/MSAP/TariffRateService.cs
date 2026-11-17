@@ -26,7 +26,8 @@ namespace IBS.Services.MSAP
             try
             {
                 List<RateUploadRowViewModel> rows = await _rates.GetRowsAsync(kind, dateFrom, dateTo, ct);
-                return ServiceResult<byte[]>.Success(await RateUploadWorkbook.WriteAsync(rows, kind, dateFrom.HasValue, ct));
+                var masterLists = dateFrom.HasValue ? null : await _rates.GetMasterListsAsync(ct);
+                return ServiceResult<byte[]>.Success(await RateUploadWorkbook.WriteAsync(rows, kind, dateFrom.HasValue, ct, masterLists));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

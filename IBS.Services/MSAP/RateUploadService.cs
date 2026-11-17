@@ -25,9 +25,21 @@ namespace IBS.Services.MSAP
 
         public async Task<List<RateUpload>> GetRecentAsync(bool awaitingReview, CancellationToken ct)
         {
-            List<RateUpload> updates = await _db.MsapRateUploads.AsNoTracking()
-                .Where(update => update.Company == MsapConstants.Company_MMSI && (!awaitingReview || update.SubmittedAt != null && update.ApprovedAt == null))
-                .OrderByDescending(update => update.UploadedAt).ThenBy(update => update.RateUploadId).Take(50)
+            var (items, _) = await GetPagedAsync(awaitingReview, 1, 10, ct);
+            return items;
+        }
+
+        public async Task<(List<RateUpload> Items, int TotalCount)> GetPagedAsync(bool awaitingReview, int page, int pageSize, CancellationToken ct)
+        {
+            var normalizedPage = Math.Max(1, page);
+            var normalizedSize = Math.Clamp(pageSize, 1, 50);
+            var query = _db.MsapRateUploads.AsNoTracking()
+                .Where(update => update.Company == MsapConstants.Company_MMSI && (!awaitingReview || update.SubmittedAt != null && update.ApprovedAt == null));
+            var totalCount = await query.CountAsync(ct);
+            List<RateUpload> updates = await query
+                .OrderByDescending(update => update.UploadedAt).ThenBy(update => update.RateUploadId)
+                .Skip((normalizedPage - 1) * normalizedSize)
+                .Take(normalizedSize)
                 .Select(update => new RateUpload
                 {
                     RateUploadId = update.RateUploadId, Company = update.Company, FileName = update.FileName,
@@ -37,7 +49,7 @@ namespace IBS.Services.MSAP
                     TotalRows = update.TotalRows, ChangedRows = update.ChangedRows
                 }).ToListAsync(ct);
             await PopulateNamesAsync(updates, ct);
-            return updates;
+            return (updates, totalCount);
         }
 
         public async Task<RateUploadViewModel?> GetAsync(Guid id, string userId, CancellationToken ct)
@@ -352,6 +364,34 @@ namespace IBS.Services.MSAP
             return rows;
         }
 
+        public async Task<RateWorkbookMasterLists> GetMasterListsAsync(CancellationToken ct)
+        {
+            return new RateWorkbookMasterLists
+            {
+                Customers = await _db.Customers.AsNoTracking()
+                    .Where(c => c.Company == MsapConstants.Company_MMSI && c.IsActive)
+                    .OrderBy(c => c.CustomerName)
+                    .Select(c => c.CustomerName)
+                    .Distinct()
+                    .ToListAsync(ct),
+                Ports = await _db.MsapPorts.AsNoTracking()
+                    .OrderBy(p => p.PortName)
+                    .Select(p => p.PortName)
+                    .Distinct()
+                    .ToListAsync(ct),
+                Terminals = await _db.MsapTerminals.AsNoTracking()
+                    .OrderBy(t => t.TerminalName)
+                    .Select(t => t.TerminalName)
+                    .Distinct()
+                    .ToListAsync(ct),
+                Services = await _db.MsapServices.AsNoTracking()
+                    .OrderBy(s => s.ServiceName)
+                    .Select(s => s.ServiceName)
+                    .Distinct()
+                    .ToListAsync(ct)
+            };
+        }
+
         public static List<string> ValidateRows(IReadOnlyList<RateUploadRowViewModel> rows)
         {
             var errors = new List<string>();
@@ -372,9 +412,9 @@ namespace IBS.Services.MSAP
                 {
                     errors.Add($"Row {index + 1}: enter a valid effective date between 1900 and 9998.");
                 }
-                if (!row.Amount.HasValue || row.Amount < 0 || row.Amount > 99999999999999.9999m || decimal.Round(row.Amount.Value, 4) != row.Amount)
+                if (!row.Amount.HasValue || row.Amount < 0 || row.Amount > 99999999999999.99m || decimal.Round(row.Amount.Value, 2) != row.Amount)
                 {
-                    errors.Add($"Row {index + 1}: enter a nonnegative amount with at most four decimal places. Blank is not zero.");
+                    errors.Add($"Row {index + 1}: enter a nonnegative amount with at most two decimal places. Blank is not zero.");
                 }
                 if (!keys.Add((row.CustomerId, row.TerminalId, row.ServiceId, row.EffectiveDate)))
                 {
@@ -433,6 +473,75 @@ namespace IBS.Services.MSAP
                 await transaction.CommitAsync(ct);
             }
             return ServiceResult<Guid>.Success(update.RateUploadId, "Draft saved. Review the comparison before submitting.");
+        }
+
+        public async Task<ServiceResult<Guid>> StageExcelUploadAsync(
+            Stream fileStream, string fileName, RateTableKind kind, string userId, CancellationToken ct)
+        {
+            var (rows, parseErrors) = await RateUploadWorkbook.ReadAsync(fileStream, kind, ct);
+            if (parseErrors.Count > 0)
+            {
+                return ServiceResult<Guid>.Failure(string.Join("\n", parseErrors.Take(25)));
+            }
+            if (rows.Count == 0)
+            {
+                return ServiceResult<Guid>.Failure("No rate rows were found in the uploaded workbook.");
+            }
+
+            var customers = await _db.Customers.AsNoTracking()
+                .Where(c => c.Company == MsapConstants.Company_MMSI && c.IsActive)
+                .ToListAsync(ct);
+            var ports = await _db.MsapPorts.AsNoTracking().ToListAsync(ct);
+            var terminals = await _db.MsapTerminals.AsNoTracking().ToListAsync(ct);
+            var services = await _db.MsapServices.AsNoTracking().ToListAsync(ct);
+
+            var resolutionErrors = new List<string>();
+            foreach (var row in rows)
+            {
+                var customer = customers.FirstOrDefault(c => !string.IsNullOrEmpty(row.CustomerName)
+                    ? string.Equals(c.CustomerName, row.CustomerName, StringComparison.OrdinalIgnoreCase)
+                    : !string.IsNullOrEmpty(row.CustomerCode) && string.Equals(c.CustomerCode, row.CustomerCode, StringComparison.OrdinalIgnoreCase));
+                var port = ports.FirstOrDefault(p => !string.IsNullOrEmpty(row.PortName)
+                    ? string.Equals(p.PortName, row.PortName, StringComparison.OrdinalIgnoreCase)
+                    : !string.IsNullOrEmpty(row.PortCode) && string.Equals(p.PortNumber, row.PortCode, StringComparison.OrdinalIgnoreCase));
+                var terminal = port == null
+                    ? null
+                    : terminals.FirstOrDefault(t => t.PortId == port.PortId && (!string.IsNullOrEmpty(row.TerminalName)
+                        ? string.Equals(t.TerminalName, row.TerminalName, StringComparison.OrdinalIgnoreCase)
+                        : !string.IsNullOrEmpty(row.TerminalCode) && string.Equals(t.TerminalNumber, row.TerminalCode, StringComparison.OrdinalIgnoreCase)));
+                var service = services.FirstOrDefault(s => !string.IsNullOrEmpty(row.ServiceName)
+                    ? string.Equals(s.ServiceName, row.ServiceName, StringComparison.OrdinalIgnoreCase)
+                    : !string.IsNullOrEmpty(row.ServiceCode) && string.Equals(s.ServiceNumber, row.ServiceCode, StringComparison.OrdinalIgnoreCase));
+
+                if (customer == null || port == null || terminal == null || service == null)
+                {
+                    resolutionErrors.Add($"Excel row {row.RowNumber}: unable to match Customer, Port, Terminal, or Service in MMSI master files.");
+                    continue;
+                }
+
+                row.CustomerId = customer.CustomerId;
+                row.PortId = port.PortId;
+                row.TerminalId = terminal.TerminalId;
+                row.ServiceId = service.ServiceId;
+            }
+
+            if (resolutionErrors.Count > 0)
+            {
+                return ServiceResult<Guid>.Failure(string.Join("\n", resolutionErrors.Take(25)));
+            }
+
+            var draftResult = await SaveDraftAsync(new RateEditorViewModel { Kind = kind, Rows = rows }, userId, ct);
+            if (draftResult.IsSuccess && !string.IsNullOrWhiteSpace(fileName))
+            {
+                var draft = await _db.MsapRateUploads.FindAsync([draftResult.Data], ct);
+                if (draft != null)
+                {
+                    draft.FileName = Path.GetFileName(fileName);
+                    await _db.SaveChangesAsync(ct);
+                }
+            }
+
+            return draftResult;
         }
 
         public async Task<ServiceResult> SaveAsync(Guid id, string userId, bool refresh, int[] selectedRows, CancellationToken ct)

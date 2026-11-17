@@ -83,26 +83,27 @@
                         data: "isActive",
                         className: "text-center",
                         render: (d) => d
-                            ? '<span class="modern-badge-sm status-posted">Active</span>'
-                            : '<span class="modern-badge-sm status-voided">Inactive</span>'
+                            ? ModernTable.render.badge('YES', 'ui-status ui-complete')
+                            : ModernTable.render.badge('NO', 'ui-status')
                     },
                     {
-                        data: "representativeId",
+                        data: null,
                         className: "text-center",
                         orderable: false,
-                        render: (id) => `
-                            <div class="flex justify-center gap-1">
-                                <a href="${editUrl}/${id}" class="modern-btn-icon" title="Edit"><span class="material-symbols-outlined">edit</span></a>
-                                <button type="button" class="modern-btn-icon text-error js-delete-rep" data-id="${id}" title="Delete / Deactivate">
-                                    <span class="material-symbols-outlined">delete</span>
-                                </button>
-                            </div>`
+                        render: (data, type, row) => ModernTable.render.dropdown([
+                            { label: 'Edit Representative', icon: 'edit', url: `${editUrl}/${row.representativeId}` },
+                            {
+                                label: 'Delete / Deactivate',
+                                icon: 'delete',
+                                isError: true,
+                                onclick: `confirmDeleteRep(${row.representativeId})`
+                            }
+                        ])
                     }
                 ]
             }));
 
-            $('#representativesTable').on('click', '.js-delete-rep', async function () {
-                const id = $(this).data('id');
+            window.confirmDeleteRep = async function (id) {
                 const confirm = await ModernAlert.confirm({
                     title: 'Remove representative?',
                     text: 'If already used in billings, it will be marked inactive instead of deleted.',
@@ -122,7 +123,7 @@
                         }
                     })
                     .fail(() => ModernAlert.error('Unable to remove representative.'));
-            });
+            };
         });
     </script>
 }

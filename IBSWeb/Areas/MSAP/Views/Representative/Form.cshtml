@@ -119,7 +119,6 @@
 </div>
 
 @section Scripts {
-    @{ await Html.RenderPartialAsync("_ValidationScriptsPartial"); }
     <script>
         $(function () {
             const principalsUrl = '@Url.Action("GetPrincipalsByCustomer", "Representative", new { area = "MSAP" })';

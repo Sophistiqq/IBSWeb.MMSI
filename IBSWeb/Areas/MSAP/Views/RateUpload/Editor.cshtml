@@ -170,7 +170,7 @@
                 <h2 class="ui-section-title">Load / export current @Model.Kind rates</h2>
                 <div class="rate-export-fields"><div class="ui-field"><label class="ui-label" for="asOfDate">As of date</label><input id="asOfDate" name="asOfDate" type="date" class="modern-input" value="@Model.AsOfDate.ToString("yyyy-MM-dd")" min="1900-01-01" max="9998-12-31" required /></div><button type="submit" class="modern-btn-secondary">Load rates</button><button type="submit" formaction="@Url.Action("Export", "TariffRate")" data-export class="modern-btn-secondary">Export current</button></div>
             </form>
-            <form asp-controller="TariffRate" asp-action="Export" method="get" class="ui-panel ui-stack">
+            <form asp-controller="TariffRate" asp-action="Export" method="get" class="ui-panel ui-stack" data-download>
                 <input type="hidden" name="kind" value="@Model.Kind" /><input type="hidden" name="history" value="true" />
                 <h2 class="ui-section-title">Export @Model.Kind history</h2>
                 <div class="rate-export-fields"><div class="ui-field"><label class="ui-label" for="dateFrom">Effective from</label><input id="dateFrom" name="dateFrom" type="date" class="modern-input" min="1900-01-01" max="9998-12-31" required /></div><div class="ui-field"><label class="ui-label" for="dateTo">Effective through</label><input id="dateTo" name="dateTo" type="date" class="modern-input" value="@Model.AsOfDate.ToString("yyyy-MM-dd")" min="1900-01-01" max="9998-12-31" required /></div><button type="submit" class="modern-btn-secondary" data-export>Export history</button></div>

@@ -9,6 +9,7 @@ $(document).ready(function () {
 
     $(document).on('submit', 'form:not([data-download])', function (event) {
         if (event.isDefaultPrevented()) return;
+        if (event.originalEvent?.submitter?.hasAttribute('data-export')) return;
         if ($(this).data('submitting')) return false;
         $(this).data('submitting', 'true');
 

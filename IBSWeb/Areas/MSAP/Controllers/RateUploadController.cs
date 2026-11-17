@@ -25,11 +25,17 @@ namespace IBSWeb.Areas.MSAP.Controllers
             _logger = logger;
         }
 
-        public async Task<IActionResult> Index(CancellationToken ct, bool awaitingReview = false)
+        public async Task<IActionResult> Index(CancellationToken ct, bool awaitingReview = false, int page = 1)
         {
+            const int pageSize = 10;
+            var (items, totalCount) = await _rates.GetPagedAsync(awaitingReview, page, pageSize, ct);
+            var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
             ViewData["CanUpload"] = await _access.HasAccessAsync(UserId, ProcedureEnum.ManageRates);
             ViewData["AwaitingReview"] = awaitingReview;
-            return View(await _rates.GetRecentAsync(awaitingReview, ct));
+            ViewData["Page"] = Math.Clamp(page, 1, totalPages);
+            ViewData["TotalPages"] = totalPages;
+            ViewData["TotalCount"] = totalCount;
+            return View(items);
         }
 
         [HttpGet]
@@ -169,6 +175,48 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 _logger.LogError(ex, "Could not save rate draft");
                 return StatusCode(500, new { message = "The draft could not be saved. Your edits remain on this page; try again." });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAccess(ProcedureEnum.ManageRates)]
+        [RequestSizeLimit(10 * 1024 * 1024)]
+        public async Task<IActionResult> ImportExcel(IFormFile? file, RateTableKind kind, CancellationToken ct)
+        {
+            if (file == null || file.Length == 0)
+            {
+                TempData["error"] = "Choose an exported .xlsx workbook to stage.";
+                return RedirectToAction(nameof(Index));
+            }
+            if (!string.Equals(Path.GetExtension(file.FileName), ".xlsx", StringComparison.OrdinalIgnoreCase))
+            {
+                TempData["error"] = "Only .xlsx Excel workbooks are supported.";
+                return RedirectToAction(nameof(Index));
+            }
+            if (!Enum.IsDefined(kind))
+            {
+                TempData["error"] = "Choose Tariff or BAF.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            try
+            {
+                await using var stream = file.OpenReadStream();
+                var result = await _rates.StageExcelUploadAsync(stream, file.FileName, kind, UserId, ct);
+                if (result.IsSuccess)
+                {
+                    TempData["success"] = result.Message;
+                    return RedirectToAction(nameof(Details), new { id = result.Data });
+                }
+                TempData["error"] = result.Message;
+                return RedirectToAction(nameof(Index));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Could not stage rate Excel upload");
+                TempData["error"] = "Unable to read the uploaded workbook. Export a fresh template and try again.";
+                return RedirectToAction(nameof(Index));
             }
         }
 
