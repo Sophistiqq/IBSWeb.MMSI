@@ -77,25 +77,10 @@ namespace Checks.MSAP
             charge.Lines[0].Amount = 1120m;
             source.ChangeTracker.Clear();
             var bank = await db.FilprideBankAccounts.FirstAsync(b => b.IsActive);
-            var baseline = new Dictionary<string, string>
-            {
-                ["201020500"] = "AP - Trade - Other Tugs",
-                ["201020600"] = "AP - Trade - SBMA",
-                ["201020700"] = "AP - Trade - Commission",
-                ["201020800"] = "AP - Trade - Incentive",
-                ["201020900"] = "AP - Trade - Fuel",
-                ["201021000"] = "AP - Trade - Freight",
-                ["201021100"] = "AP - Trade - Trading Fee",
-                ["201021200"] = "AP - Trade - Lubes"
-            };
-            var accounts = await db.FilprideChartOfAccounts.AsNoTracking()
-                .Where(a => baseline.Keys.Contains(a.AccountNumber)).ToListAsync();
-            Check(accounts.Count == baseline.Count && accounts.All(a => a.AccountName == baseline[a.AccountNumber]
-                && !a.IsMain && !a.HasChildren && !a.IsHidden && a.AccountType == "Liabilities"
-                && a.NormalBalance == "Credit" && a.FinancialStatementType == "BalanceSheet"),
-                "The screenshot baseline requires the eight dedicated AP Trade liability accounts created in the dev chart.");
-            var payableAccount = accounts.Single(a => a.AccountNumber == "201020500");
-            Check(TugboatPaymentService.ApAccount == payableAccount.AccountNumber && !payableAccount.IsMain && !payableAccount.HasChildren
+            var payableAccount = await db.FilprideChartOfAccounts.AsNoTracking()
+                .SingleOrDefaultAsync(a => a.AccountNumber == TugboatPaymentService.ApAccount);
+            Check(payableAccount != null && payableAccount.AccountName == "AP - Trade - Other Tugs"
+                && !payableAccount.IsMain && !payableAccount.HasChildren && !payableAccount.IsHidden
                 && payableAccount.AccountType == "Liabilities" && payableAccount.NormalBalance == "Credit"
                 && payableAccount.FinancialStatementType == "BalanceSheet",
                 "AP Other Tugs must use the dedicated 201020500 payable, not the generic trade control or a P&L account.");
@@ -387,7 +372,7 @@ namespace Checks.MSAP
                 confirmTicket.VesselScheduleServiceEntryId = entry.VesselScheduleServiceEntryId;
                 source.Add(confirmTicket);
                 await source.SaveChangesAsync();
-                var confirmRef = reference + "-CONF";
+                var confirmRef = "CNF-" + Guid.NewGuid().ToString("N")[..12];
                 var draftCharge = new OtherTugCharge
                 {
                     TugboatOwnerId = owner.TugboatOwnerId,

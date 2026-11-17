@@ -98,13 +98,30 @@ namespace Checks.MSAP
             var reviewed = await billing.ReviewBillingAsync(id, revision, "Billing check", actor, default);
             Check(reviewed.IsSuccess, reviewed.Message ?? "Commercial review failed.");
 
-            var closed = new MsapPostedPeriod { Year = saved.Date.Year, Month = saved.Date.Month, IsClosed = true, ClosedBy = "Billing check" };
-            db.Add(closed);
+            var existingPeriod = await db.MsapPostedPeriods.SingleOrDefaultAsync(x => x.Year == saved.Date.Year && x.Month == saved.Date.Month);
+            var wasClosed = existingPeriod?.IsClosed ?? false;
+            var prevClosedBy = existingPeriod?.ClosedBy;
+            var closed = existingPeriod ?? new MsapPostedPeriod { Year = saved.Date.Year, Month = saved.Date.Month };
+            closed.IsClosed = true;
+            closed.ClosedBy = "Billing check";
+            if (existingPeriod == null)
+            {
+                db.Add(closed);
+            }
             await db.SaveChangesAsync();
             Check(!(await billing.PostBillingAsync(id, "Billing check", default, actor, revision)).IsSuccess,
                 "Billing ignored an actual closed-period record.");
             db.ChangeTracker.Clear();
-            db.Remove(await db.MsapPostedPeriods.SingleAsync(x => x.Id == closed.Id));
+            var trackedPeriod = await db.MsapPostedPeriods.SingleAsync(x => x.Id == closed.Id);
+            if (existingPeriod == null)
+            {
+                db.Remove(trackedPeriod);
+            }
+            else
+            {
+                trackedPeriod.IsClosed = wasClosed;
+                trackedPeriod.ClosedBy = prevClosedBy;
+            }
             await db.SaveChangesAsync();
             Check(!(await billing.PostBillingAsync(id, "Billing check", default, "denied", revision)).IsSuccess,
                 "Unauthorized final approval was accepted.");

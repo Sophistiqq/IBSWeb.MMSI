@@ -561,8 +561,11 @@ namespace IBS.Services.MSAP
                     recognitionDate = charge.DocumentDate >= minOpenDate ? charge.DocumentDate : recognitionDate;
                 }
             }
+            var glRef = charge.ProviderReference.Length <= 20
+                ? charge.ProviderReference
+                : charge.ProviderReference[..20];
             var existing = await accounting.FilprideGeneralLedgerBooks.IgnoreQueryFilters(["TugboatWorkspace"])
-                .AnyAsync(g => g.WorkspaceTugboatId == null && g.Reference == charge.ProviderReference
+                .AnyAsync(g => g.WorkspaceTugboatId == null && g.Reference == glRef
                     && g.CounterpartyId == owner.TugboatOwnerId, ct);
             if (existing)
             {
@@ -583,7 +586,7 @@ namespace IBS.Services.MSAP
                 {
                     WorkspaceTugboatId = null,
                     Date = recognitionDate,
-                    Reference = charge.ProviderReference,
+                    Reference = glRef,
                     Description = particulars,
                     AccountId = contraAccount.AccountId,
                     AccountNo = ContraRevenueAccount,
@@ -607,7 +610,7 @@ namespace IBS.Services.MSAP
                 {
                     WorkspaceTugboatId = null,
                     Date = recognitionDate,
-                    Reference = charge.ProviderReference,
+                    Reference = glRef,
                     Description = particulars,
                     AccountId = vatAccount.AccountId,
                     AccountNo = InputVatAccount,
@@ -627,7 +630,7 @@ namespace IBS.Services.MSAP
             {
                 WorkspaceTugboatId = null,
                 Date = recognitionDate,
-                Reference = charge.ProviderReference,
+                Reference = glRef,
                 Description = particulars,
                 AccountId = apAccount.AccountId,
                 AccountNo = TugboatPaymentService.ApAccount,
