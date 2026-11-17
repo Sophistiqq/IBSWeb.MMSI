@@ -55,6 +55,10 @@
                         <button type="submit" class="modern-btn-secondary ui-page-action">Record urgent service</button>
                     </form>
                 }
+                @if (Model.Revision > 1 || hasRevisionChanges)
+                {
+                    <a asp-action="Revisions" asp-route-id="@Model.VesselScheduleId" class="modern-btn-secondary ui-page-action">Revision history</a>
+                }
                 <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
             </div>
             <p class="ui-body ui-muted ui-page-description">@(canViewRates ? (pending ? "Review the booking, service rates and commercial terms before approval." : "Booking details, service requirements and commercial terms.") : "Booking details, assigned tugboats and expected services.")</p>
@@ -71,9 +75,9 @@
                     <p class="ui-panel ui-body ui-attention">
                         <strong>Revised for reapproval:</strong>
                         @string.Join(" · ", revisionChanges.Values.Select(c => string.IsNullOrWhiteSpace(c.Before) ? $"{c.Label}: {c.After}" : $"{c.Label}: {c.Before} → {c.After}"))
+                        <a asp-action="Revisions" asp-route-id="@Model.VesselScheduleId" class="ms-2 font-semibold underline">View full revision comparison →</a>
                     </p>
                 }
-                @* TODO(Linear): Make highlighted revision fields clickable to open a dedicated schedule adjustment / revision-diff page. *@
                 <dl class="schedule-review-fields schedule-review-booking-fields">
                     @{
                         revisionChanges.TryGetValue(nameof(VesselSchedule.CustomerId), out var customerChange);
@@ -83,14 +87,38 @@
                         revisionChanges.TryGetValue(nameof(VesselSchedule.VoyageNumber), out var voyageChange);
                         revisionChanges.TryGetValue(nameof(VesselSchedule.PlannedStart), out var plannedStartChange);
                         revisionChanges.TryGetValue(nameof(VesselSchedule.PlannedEnd), out var plannedEndChange);
+                        string? RevisionUrl(MsapFieldChange? change) => hasRevisionChanges && change != null
+                            ? Url.Action("Revisions", new { id = Model.VesselScheduleId, field = change.Field })
+                            : null;
                     }
-                    <div class="@(hasRevisionChanges && customerChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Customer</dt><dd class="ui-value">@(Model.Customer?.CustomerName ?? "Not selected")</dd>@if (hasRevisionChanges && customerChange != null) {<small class="ui-caption">Revised from @customerChange.Before</small>}</div>
-                    <div class="@(hasRevisionChanges && vesselChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Vessel</dt><dd class="ui-value">@Model.Vessel.VesselName</dd>@if (hasRevisionChanges && vesselChange != null) {<small class="ui-caption">Revised from @vesselChange.Before</small>}</div>
-                    <div class="@(hasRevisionChanges && portChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Port</dt><dd class="ui-value">@Model.Port.PortName</dd>@if (hasRevisionChanges && portChange != null) {<small class="ui-caption">Revised from @portChange.Before</small>}</div>
-                    <div class="@(hasRevisionChanges && terminalChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Terminal</dt><dd class="ui-value">@Model.Terminal.TerminalName</dd>@if (hasRevisionChanges && terminalChange != null) {<small class="ui-caption">Revised from @terminalChange.Before</small>}</div>
-                    <div class="@(hasRevisionChanges && voyageChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Voyage number</dt><dd class="ui-value">@(Model.VoyageNumber ?? "—")</dd>@if (hasRevisionChanges && voyageChange != null) {<small class="ui-caption">Revised from @voyageChange.Before</small>}</div>
-                    <div class="@(hasRevisionChanges && plannedStartChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Planned start · Philippine time</dt><dd class="ui-value">@Model.PlannedStart.ToString("dd MMM yyyy, HH:mm")</dd>@if (hasRevisionChanges && plannedStartChange != null) {<small class="ui-caption">Revised from @plannedStartChange.Before</small>}</div>
-                    <div class="@(hasRevisionChanges && plannedEndChange != null ? "schedule-review-attention" : "")"><dt class="ui-caption ui-muted">Planned end · Philippine time</dt><dd class="ui-value">@Model.PlannedEnd.ToString("dd MMM yyyy, HH:mm")</dd>@if (hasRevisionChanges && plannedEndChange != null) {<small class="ui-caption">Revised from @plannedEndChange.Before</small>}</div>
+                    @foreach (var field in new[]
+                    {
+                        (Label: "Customer", Value: Model.Customer?.CustomerName ?? "Not selected", Change: customerChange),
+                        (Label: "Vessel", Value: Model.Vessel.VesselName, Change: vesselChange),
+                        (Label: "Port", Value: Model.Port.PortName, Change: portChange),
+                        (Label: "Terminal", Value: Model.Terminal.TerminalName, Change: terminalChange),
+                        (Label: "Voyage number", Value: Model.VoyageNumber ?? "—", Change: voyageChange),
+                        (Label: "Planned start · Philippine time", Value: Model.PlannedStart.ToString("dd MMM yyyy, HH:mm"), Change: plannedStartChange),
+                        (Label: "Planned end · Philippine time", Value: Model.PlannedEnd.ToString("dd MMM yyyy, HH:mm"), Change: plannedEndChange)
+                    })
+                    {
+                        var url = RevisionUrl(field.Change);
+                        if (url != null)
+                        {
+                            <a href="@url" class="schedule-review-attention schedule-revision-link" title="View revision history for @field.Label">
+                                <dt class="ui-caption ui-muted">@field.Label</dt>
+                                <dd class="ui-value">@field.Value</dd>
+                                <small class="ui-caption">Revised from @field.Change!.Before · Compare →</small>
+                            </a>
+                        }
+                        else
+                        {
+                            <div>
+                                <dt class="ui-caption ui-muted">@field.Label</dt>
+                                <dd class="ui-value">@field.Value</dd>
+                            </div>
+                        }
+                    }
                 </dl>
             </section>
             <section class="ui-panel ui-panel--compact ui-stack" aria-labelledby="reviewCommercialTitle">

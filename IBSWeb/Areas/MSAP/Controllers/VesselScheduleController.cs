@@ -243,6 +243,150 @@ namespace IBSWeb.Areas.MSAP.Controllers
             return View(schedule);
         }
 
+        [HttpGet]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
+        public async Task<IActionResult> Revisions(int id, string? field, CancellationToken ct)
+        {
+            var schedule = await LoadDetailsAsync(id, ct);
+            if (schedule == null)
+            {
+                return NotFound();
+            }
+
+            var adjustmentLogs = (await unitOfWork.MsapAdjustmentLog.GetAllAsync(
+                a => a.DocumentType == "VesselSchedule" && a.RecordId == id, ct))
+                .OrderByDescending(a => a.EditedDate)
+                .ThenByDescending(a => a.Id)
+                .ToList();
+
+            var revisions = new List<ScheduleRevisionEntryViewModel>();
+            foreach (var log in adjustmentLogs)
+            {
+                List<MsapFieldChange> parsed = [];
+                if (!string.IsNullOrWhiteSpace(log.ChangesJson))
+                {
+                    try
+                    {
+                        parsed = JsonSerializer.Deserialize<List<MsapFieldChange>>(log.ChangesJson) ?? [];
+                    }
+                    catch (JsonException)
+                    {
+                        parsed = [];
+                    }
+                }
+
+                var visible = parsed
+                    .Where(c => c.Field is not "_AddedTugboatIds" and not "_AddedServiceEntryIds")
+                    .ToList();
+                revisions.Add(new ScheduleRevisionEntryViewModel
+                {
+                    EditedDate = log.EditedDate,
+                    EditedBy = log.EditedBy,
+                    Reason = log.Reason,
+                    Changes = visible
+                });
+            }
+
+            var auditLogs = (await unitOfWork.AuditTrail.GetAllAsync(
+                a => a.DocumentType == "Vessel Schedule" && a.RecordId == id, ct))
+                .OrderByDescending(a => a.Date)
+                .ThenByDescending(a => a.Id)
+                .ToList();
+
+            foreach (var audit in auditLogs.Where(a => a.Activity.StartsWith("Re-approval revision:", StringComparison.Ordinal)))
+            {
+                if (revisions.Any(r => Math.Abs((r.EditedDate - audit.Date).TotalSeconds) <= 5
+                    && string.Equals(r.EditedBy, audit.Username, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                var parsed = ParseRevisionChangesFromActivity(audit.Activity);
+                await ResolveFallbackTugboatNamesAsync(parsed, ct);
+                revisions.Add(new ScheduleRevisionEntryViewModel
+                {
+                    EditedDate = audit.Date,
+                    EditedBy = audit.Username,
+                    Reason = "Re-approval revision",
+                    Changes = parsed
+                });
+            }
+
+            var chronologicalRevisions = revisions
+                .OrderBy(r => r.EditedDate)
+                .ToList();
+
+            var netChanges = chronologicalRevisions
+                .SelectMany(r => r.Changes)
+                .GroupBy(c => c.Field, StringComparer.OrdinalIgnoreCase)
+                .Select(g =>
+                {
+                    var first = g.First();
+                    var last = g.Last();
+                    return new ScheduleNetChangeViewModel
+                    {
+                        Field = first.Field,
+                        Label = last.Label,
+                        OriginalValue = first.Before ?? string.Empty,
+                        CurrentValue = last.After ?? string.Empty,
+                        RevisionCount = g.Count(),
+                        DeltaHint = FormatScheduleTimeDelta(first.Field, first.Before, last.After)
+                    };
+                })
+                .ToList();
+
+            foreach (var audit in auditLogs.Where(a =>
+                a.Activity.Contains("Confirmed", StringComparison.OrdinalIgnoreCase)
+                || a.Activity.Contains("Approved", StringComparison.OrdinalIgnoreCase)
+                || a.Activity.Contains("Reapproved", StringComparison.OrdinalIgnoreCase)))
+            {
+                revisions.Add(new ScheduleRevisionEntryViewModel
+                {
+                    EditedDate = audit.Date,
+                    EditedBy = audit.Username,
+                    Reason = audit.Activity,
+                    IsApprovalCheckpoint = true
+                });
+            }
+
+            revisions = revisions
+                .OrderByDescending(r => r.EditedDate)
+                .ThenByDescending(r => r.IsApprovalCheckpoint)
+                .ToList();
+
+            return View(new ScheduleRevisionViewModel
+            {
+                Schedule = schedule,
+                FocusedField = field,
+                NetChanges = netChanges,
+                Revisions = revisions
+            });
+        }
+
+        private static string? FormatScheduleTimeDelta(string field, string? before, string? after)
+        {
+            if (field is not (nameof(VesselSchedule.PlannedStart) or nameof(VesselSchedule.PlannedEnd)))
+            {
+                return null;
+            }
+            if (!DateTime.TryParse(before, out var b) || !DateTime.TryParse(after, out var a))
+            {
+                return null;
+            }
+            var diff = a - b;
+            if (diff == TimeSpan.Zero)
+            {
+                return null;
+            }
+            var sign = diff < TimeSpan.Zero ? "-" : "+";
+            var abs = diff.Duration();
+            if (abs.Days > 0)
+            {
+                return $"{sign}{abs.Days}d {abs.Hours}h {abs.Minutes}m";
+            }
+            return abs.Hours > 0 ? $"{sign}{abs.Hours}h {abs.Minutes}m" : $"{sign}{abs.Minutes}m";
+        }
+
         private async Task<(List<MsapFieldChange> Changes, HashSet<int> AddedTugboatIds, HashSet<int> AddedEntryIds)> LoadRevisionChangesAsync(int scheduleId, CancellationToken ct)
         {
             List<MsapFieldChange> rawChanges = [];

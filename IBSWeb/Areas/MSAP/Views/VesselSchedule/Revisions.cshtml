@@ -1,0 +1,254 @@
+@model ScheduleRevisionViewModel
+@{
+    var schedule = Model.Schedule;
+    var closed = schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
+    var pendingReapproval = !closed && schedule.ApprovedRevision.HasValue && schedule.ApprovedRevision != schedule.Revision;
+    var revisionCount = Model.Revisions.Count(r => !r.IsApprovalCheckpoint);
+    ViewData["Title"] = $"Revision history · Booking #{schedule.VesselScheduleId}";
+    ViewData["IsFullWidth"] = true;
+
+    (string Label, string Css) ChangeKind(string? before, string? after)
+    {
+        var hasBefore = !string.IsNullOrWhiteSpace(before) && before != "—";
+        var hasAfter = !string.IsNullOrWhiteSpace(after) && after != "—";
+        if (!hasBefore && hasAfter) return ("Added", "status-posted");
+        if (hasBefore && !hasAfter) return ("Removed", "status-voided");
+        return ("Updated", "status-tariff");
+    }
+
+    string? TimeDelta(string field, string? before, string? after)
+    {
+        if (field is not (nameof(VesselSchedule.PlannedStart) or nameof(VesselSchedule.PlannedEnd))) return null;
+        if (!DateTime.TryParse(before, out var b) || !DateTime.TryParse(after, out var a)) return null;
+        var diff = a - b;
+        if (diff == TimeSpan.Zero) return null;
+        var sign = diff < TimeSpan.Zero ? "-" : "+";
+        var abs = diff.Duration();
+        if (abs.Days > 0) return $"{sign}{abs.Days}d {abs.Hours}h {abs.Minutes}m";
+        return abs.Hours > 0 ? $"{sign}{abs.Hours}h {abs.Minutes}m" : $"{sign}{abs.Minutes}m";
+    }
+}
+<link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
+<div class="modern-layout app-ui">
+    <main class="modern-container ui-page ui-stack">
+        <header class="schedule-header-stack ui-page-header">
+            <nav aria-label="Breadcrumb">
+                <ol class="ui-breadcrumb">
+                    <li><a asp-action="Index">Vessel schedules</a></li>
+                    <li><a asp-action="Details" asp-route-id="@schedule.VesselScheduleId">Booking #@schedule.VesselScheduleId</a></li>
+                    <li aria-current="page">Revision history</li>
+                </ol>
+            </nav>
+            <h1 class="ui-page-title" data-page-header>Schedule revision &amp; adjustment comparison</h1>
+            <div class="schedule-details-header-actions">
+                <a asp-action="Details" asp-route-id="@schedule.VesselScheduleId" class="modern-btn-secondary ui-page-action" data-ui-back>Back to schedule</a>
+            </div>
+            <div class="schedule-status-banner ui-page-description">
+                <span class="schedule-status-pill ui-status @(pendingReapproval ? "ui-attention" : "")">@(pendingReapproval ? "Pending reapproval" : MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status))</span>
+                <span class="ui-body ui-muted">Booking #@schedule.VesselScheduleId · Revision @schedule.Revision@(schedule.ApprovedRevision.HasValue ? $" (Last approved: rev {schedule.ApprovedRevision})" : "")</span>
+            </div>
+        </header>
+
+        @if (pendingReapproval)
+        {
+            <div class="ui-panel ui-attention flex justify-between items-center flex-wrap gap-3" role="status">
+                <div>
+                    <strong>Pending reapproval:</strong>
+                    <span>@revisionCount revision log@(revisionCount == 1 ? "" : "s") recorded on this booking. Review the net impact and timeline below before signing off.</span>
+                </div>
+                <a asp-action="Details" asp-route-id="@schedule.VesselScheduleId" class="modern-btn-primary">Return to review &amp; approve →</a>
+            </div>
+        }
+
+        <section class="ui-panel ui-panel--compact ui-stack" aria-label="Current schedule summary">
+            <dl class="schedule-review-fields schedule-review-booking-fields">
+                <div><dt class="ui-caption ui-muted">Customer</dt><dd class="ui-value">@(schedule.Customer?.CustomerName ?? "Not selected")</dd></div>
+                <div><dt class="ui-caption ui-muted">Vessel</dt><dd class="ui-value">@schedule.Vessel.VesselName</dd></div>
+                <div><dt class="ui-caption ui-muted">Port / Terminal</dt><dd class="ui-value">@schedule.Port.PortName / @schedule.Terminal.TerminalName</dd></div>
+                <div><dt class="ui-caption ui-muted">Voyage</dt><dd class="ui-value">@(schedule.VoyageNumber ?? "—")</dd></div>
+                <div><dt class="ui-caption ui-muted">Planned start</dt><dd class="ui-value">@schedule.PlannedStart.ToString("dd MMM yyyy, HH:mm")</dd></div>
+                <div><dt class="ui-caption ui-muted">Planned end</dt><dd class="ui-value">@schedule.PlannedEnd.ToString("dd MMM yyyy, HH:mm")</dd></div>
+            </dl>
+        </section>
+
+        @if (Model.NetChanges.Count > 0)
+        {
+            <section class="modern-card ui-card" aria-label="Net changes summary">
+                <div class="modern-card-header-action flex justify-between items-center w-full flex-wrap gap-2 ui-card-header">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary" aria-hidden="true">compare_arrows</span>
+                        <h2 class="modern-headline-md ui-section-title mb-0">Net impact (Original → Current)</h2>
+                    </div>
+                    <span class="modern-badge-sm status-billing">@Model.NetChanges.Count field@(Model.NetChanges.Count == 1 ? "" : "s") changed</span>
+                </div>
+                <div class="modern-card-body ui-card-body">
+                    <div class="modern-table-container">
+                        <table class="modern-table ui-table">
+                            <thead>
+                                <tr>
+                                    <th>Changed field</th>
+                                    <th>Change</th>
+                                    <th>Original</th>
+                                    <th>Current</th>
+                                    <th class="text-center">Edits</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var net in Model.NetChanges)
+                                {
+                                    var kind = ChangeKind(net.OriginalValue, net.CurrentValue);
+                                    var isFocused = !string.IsNullOrWhiteSpace(Model.FocusedField)
+                                        && string.Equals(net.Field, Model.FocusedField, StringComparison.OrdinalIgnoreCase);
+                                    <tr class="@(isFocused ? "ui-attention" : "")" data-field="@net.Field">
+                                        <td><strong>@net.Label</strong></td>
+                                        <td><span class="modern-badge-sm @kind.Css">@kind.Label</span></td>
+                                        <td class="ui-muted">@(string.IsNullOrWhiteSpace(net.OriginalValue) ? "—" : net.OriginalValue)</td>
+                                        <td>
+                                            <strong>@(string.IsNullOrWhiteSpace(net.CurrentValue) ? "—" : net.CurrentValue)</strong>
+                                            @if (!string.IsNullOrEmpty(net.DeltaHint))
+                                            {
+                                                <span class="modern-badge-sm status-tariff ms-1">@net.DeltaHint</span>
+                                            }
+                                        </td>
+                                        <td class="text-center">@net.RevisionCount</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Filter revisions by field" id="revisionFieldFilters">
+                <span class="ui-caption ui-muted me-1">Filter by field:</span>
+                <button type="button" class="modern-btn-secondary @(string.IsNullOrWhiteSpace(Model.FocusedField) ? "active" : "")" data-filter-field="">All changes</button>
+                @foreach (var net in Model.NetChanges)
+                {
+                    var isActive = !string.IsNullOrWhiteSpace(Model.FocusedField)
+                        && string.Equals(net.Field, Model.FocusedField, StringComparison.OrdinalIgnoreCase);
+                    <button type="button" class="modern-btn-secondary @(isActive ? "active" : "")" data-filter-field="@net.Field">
+                        @net.Label (@net.RevisionCount)
+                    </button>
+                }
+            </div>
+        }
+
+        @if (Model.Revisions.Count == 0)
+        {
+            <section class="ui-panel ui-stack">
+                <p class="ui-body ui-muted mb-0">No revision or adjustment logs have been recorded for this booking.</p>
+            </section>
+        }
+        else
+        {
+            var revisionIndex = 0;
+            foreach (var entry in Model.Revisions)
+            {
+                if (entry.IsApprovalCheckpoint)
+                {
+                    <div class="ui-panel ui-complete flex justify-between items-center flex-wrap gap-2 js-revision-checkpoint" role="note">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined" aria-hidden="true">verified</span>
+                            <strong>@entry.Reason</strong>
+                        </div>
+                        <span class="ui-caption ui-muted">@entry.EditedBy · @entry.EditedDate.ToString("dd MMM yyyy, HH:mm")</span>
+                    </div>
+                    continue;
+                }
+
+                var isLatest = revisionIndex++ == 0;
+                <section class="modern-card ui-card @(isLatest ? "ui-attention" : "") js-revision-card" aria-label="Revision log entry">
+                    <div class="modern-card-header-action flex justify-between items-center w-full flex-wrap gap-2 ui-card-header">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="material-symbols-outlined text-primary" aria-hidden="true">history</span>
+                            <h2 class="modern-headline-md ui-section-title mb-0">
+                                @(isLatest ? "Latest revision" : "Earlier revision") · @entry.EditedDate.ToString("dd MMM yyyy, HH:mm")
+                            </h2>
+                            <span class="ui-caption ui-muted">by <strong>@entry.EditedBy</strong></span>
+                        </div>
+                        <span class="modern-badge-sm status-tariff">@entry.Changes.Count change@(entry.Changes.Count == 1 ? "" : "s")</span>
+                    </div>
+                    <div class="modern-card-body ui-card-body ui-stack">
+                        @if (!string.IsNullOrWhiteSpace(entry.Reason))
+                        {
+                            <p class="ui-caption ui-muted mb-0"><strong>Reason:</strong> @entry.Reason</p>
+                        }
+                        @if (entry.Changes.Count > 0)
+                        {
+                            <div class="modern-table-container">
+                                <table class="modern-table ui-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Changed field</th>
+                                            <th>Change</th>
+                                            <th>Previous</th>
+                                            <th>Revised</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var change in entry.Changes)
+                                        {
+                                            var kind = ChangeKind(change.Before, change.After);
+                                            var delta = TimeDelta(change.Field, change.Before, change.After);
+                                            var isFocused = !string.IsNullOrWhiteSpace(Model.FocusedField)
+                                                && string.Equals(change.Field, Model.FocusedField, StringComparison.OrdinalIgnoreCase);
+                                            <tr class="@(isFocused ? "ui-attention" : "") js-revision-row" data-field="@change.Field">
+                                                <td><strong>@change.Label</strong></td>
+                                                <td><span class="modern-badge-sm @kind.Css">@kind.Label</span></td>
+                                                <td class="ui-muted">@(string.IsNullOrWhiteSpace(change.Before) ? "—" : change.Before)</td>
+                                                <td>
+                                                    <strong>@(string.IsNullOrWhiteSpace(change.After) ? "—" : change.After)</strong>
+                                                    @if (!string.IsNullOrEmpty(delta))
+                                                    {
+                                                        <span class="modern-badge-sm status-tariff ms-1">@delta</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </section>
+            }
+        }
+    </main>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const filterContainer = document.getElementById('revisionFieldFilters');
+            if (!filterContainer) return;
+
+            function applyFilter(field) {
+                filterContainer.querySelectorAll('[data-filter-field]').forEach((btn) => {
+                    btn.classList.toggle('active', (btn.dataset.filterField || '') === field);
+                });
+                document.querySelectorAll('.js-revision-card').forEach((card) => {
+                    const rows = card.querySelectorAll('.js-revision-row');
+                    let visible = 0;
+                    rows.forEach((row) => {
+                        const match = !field || (row.dataset.field || '').toLowerCase() === field.toLowerCase();
+                        row.hidden = !match;
+                        if (match) visible++;
+                    });
+                    card.hidden = field !== '' && visible === 0;
+                });
+            }
+
+            filterContainer.addEventListener('click', (event) => {
+                const btn = event.target.closest('[data-filter-field]');
+                if (!btn) return;
+                applyFilter(btn.dataset.filterField || '');
+            });
+
+            const initial = filterContainer.querySelector('[data-filter-field].active');
+            if (initial && initial.dataset.filterField) {
+                applyFilter(initial.dataset.filterField);
+            }
+        })();
+    </script>
+}
