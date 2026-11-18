@@ -1,0 +1,4 @@
+interface:
+  display_name: "Proof-Based Verification"
+  short_description: "Verify code and .cshtml changes with static gates, Desktop/Mobile browser proofs on port 5073, OpenCode free models, and Linear issue logging"
+  default_prompt: "Use $proof-verify to validate the current changes with static checks, Desktop and Mobile runtime browser proofs on port 5073, delegated OpenCode model verification, and log any detected issues to Linear (IBS-MSAP)."
