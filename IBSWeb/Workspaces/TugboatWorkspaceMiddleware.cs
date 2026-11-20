@@ -1,5 +1,6 @@
 using IBS.Services;
 using IBS.Utility;
+using IBS.Utility.MSAP.Constants;
 using Microsoft.AspNetCore.Authorization;
 
 namespace IBSWeb.Workspaces
@@ -15,7 +16,14 @@ namespace IBSWeb.Workspaces
 
         public async Task InvokeAsync(HttpContext http, TugboatWorkspace workspace, TugboatWorkspaceService service)
         {
+            var isMsapPath = http.Request.Path.StartsWithSegments("/MSAP")
+                || http.Request.Path.StartsWithSegments("/MSAPAdmin");
+            var isMsapOnlyUser = http.User.IsInRole(MsapRoles.IdentityUserRole)
+                && !http.User.IsInRole(MsapRoles.Admin);
+
             if (http.User.Identity?.IsAuthenticated == true
+                && !isMsapPath
+                && !isMsapOnlyUser
                 && http.GetEndpoint()?.Metadata.GetMetadata<IAllowAnonymous>() == null
                 && http.Request.Cookies.TryGetValue(TugboatWorkspace.CookieName, out string? token))
             {

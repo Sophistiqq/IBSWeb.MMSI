@@ -109,7 +109,7 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 mb-3" id="departmentGroup">
                             <label for="department" class="form-label">Department <span
                                     class="text-danger">*</span></label>
                             <select class="form-select js-select2" id="department" required>
@@ -348,12 +348,15 @@
 
         loadRoles();
 
+        $('#role').on('change', toggleDepartmentField);
+
         $('#isActive').on('change', function () {
             $('#statusLabel').text(this.checked ? 'Active' : 'Inactive');
         });
 
         $('#upsertModal').on('shown.bs.modal', function () {
             initializeSelect2();
+            toggleDepartmentField();
         });
 
         $('#upsertModal').on('hidden.bs.modal', function () {
@@ -426,6 +429,28 @@
             });
     }
 
+    function isMsapUserRole(role) {
+        return role === 'MSAP - User';
+    }
+
+    function toggleDepartmentField() {
+        const role = $('#role').val();
+        const isMsap = isMsapUserRole(role);
+        const $group = $('#departmentGroup');
+        const $department = $('#department');
+
+        if (isMsap) {
+            $group.hide();
+            $department.prop('required', false).val('');
+            if ($department.hasClass('select2-hidden-accessible')) {
+                $department.trigger('change.select2');
+            }
+        } else {
+            $group.show();
+            $department.prop('required', true);
+        }
+    }
+
     function openUpsertModal(userId = null) {
         $('#userForm')[0].reset();
         $('#userId').val('');
@@ -437,6 +462,7 @@
         $('#isActive').prop('checked', true);
         $('#statusLabel').text('Active');
         $('#department, #role').val('').trigger('change');
+        toggleDepartmentField();
 
         if (userId) {
             $.get(`/Admin/User/GetUser?id=${encodeURIComponent(userId)}`)
@@ -453,6 +479,7 @@
                         $('#passwordSection').hide();
                         $('#password, #confirmPassword').val('').prop('required', false);
                         $('#role').val(user.role).trigger('change');
+                        toggleDepartmentField();
                     } else {
                         Swal.fire({
                             icon: 'error',
@@ -482,8 +509,9 @@
         const password = $('#password').val();
         const confirmPassword = $('#confirmPassword').val();
         const isActive = $('#isActive').is(':checked');
+        const msapOnly = isMsapUserRole(role);
 
-        if (!username || !name || !department || !role) {
+        if (!username || !name || (!msapOnly && !department) || !role) {
             Swal.fire({
                 icon: 'warning',
                 title: 'Validation Error',
@@ -518,7 +546,7 @@
             Id: userId || null,
             Username: username,
             Name: name,
-            Department: department,
+            Department: msapOnly ? null : department,
             Role: role,
             Password: userId ? null : password,
             IsActive: isActive

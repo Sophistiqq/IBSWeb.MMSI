@@ -7,6 +7,7 @@ using IBS.Utility.MSAP;
 using IBS.Utility.MSAP.Constants;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.AspNetCore.Mvc.Razor;
@@ -53,6 +54,8 @@ namespace IBSWeb.MSAP
             services.AddScoped<IAuthorizationHandler, MsapRoleHandler>();
             services.AddAuthorization(options =>
             {
+                options.AddPolicy(MsapRoles.EntryPolicy, policy => policy.RequireAuthenticatedUser()
+                    .RequireClaim(MsapRoles.EntryClaimType, MsapRoles.Admin, MsapRoles.User));
                 options.AddPolicy(MsapRoles.AccessPolicy, policy => policy.RequireAuthenticatedUser()
                     .RequireClaim(MsapRoles.ClaimType, MsapRoles.Admin, MsapRoles.User));
                 options.AddPolicy(MsapRoles.AdminPolicy, policy => policy.RequireAuthenticatedUser()
@@ -71,6 +74,15 @@ namespace IBSWeb.MSAP
 
         public static async Task UseMsapModuleAsync(this WebApplication app)
         {
+            using (var roleScope = app.Services.CreateScope())
+            {
+                var roleManager = roleScope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+                if (!await roleManager.RoleExistsAsync(MsapRoles.IdentityUserRole))
+                {
+                    await roleManager.CreateAsync(new IdentityRole(MsapRoles.IdentityUserRole));
+                }
+            }
+
             if (app.Environment.IsDevelopment())
             {
                 var storagePath = app.Configuration["MSAP:LocalStoragePath"] ?? "App_Data/MSAP/LocalStorage";
@@ -132,7 +144,10 @@ namespace IBSWeb.MSAP
             if (controller.RouteValues.TryGetValue("area", out string? area)
                 && area is "MSAP" or "MSAPAdmin")
             {
-                controller.Filters.Add(new AuthorizeFilter(MsapRoles.AccessPolicy));
+                var policy = area == "MSAP" && controller.ControllerName == "Home"
+                    ? MsapRoles.EntryPolicy
+                    : MsapRoles.AccessPolicy;
+                controller.Filters.Add(new AuthorizeFilter(policy));
             }
         }
     }

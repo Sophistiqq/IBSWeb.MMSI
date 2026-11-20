@@ -1,4 +1,10 @@
-﻿
+@using IBS.Utility.MSAP.Constants
 @{
-    Layout = "/Views/Shared/_Layout.cshtml";
+    var isMsapOnlyUser = User.Identity?.IsAuthenticated == true
+        && User.IsInRole(MsapRoles.IdentityUserRole)
+        && !User.IsInRole(MsapRoles.Admin);
+
+    Layout = isMsapOnlyUser
+        ? "/Areas/MSAP/Views/Shared/_Layout.cshtml"
+        : "/Views/Shared/_Layout.cshtml";
 }

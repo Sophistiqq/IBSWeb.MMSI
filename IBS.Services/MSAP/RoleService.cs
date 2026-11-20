@@ -39,8 +39,10 @@ namespace IBS.Services.MSAP
                 return null;
             }
 
-            role = MsapRoles.GetRole(await _userManager.GetClaimsAsync(user),
-                await _userManager.IsInRoleAsync(user, MsapRoles.Admin));
+            role = MsapRoles.GetRole(
+                await _userManager.GetClaimsAsync(user),
+                await _userManager.IsInRoleAsync(user, MsapRoles.Admin),
+                await _userManager.IsInRoleAsync(user, MsapRoles.IdentityUserRole));
             _userRoles[userId] = role;
             return role;
         }

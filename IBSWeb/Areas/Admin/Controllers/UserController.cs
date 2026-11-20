@@ -4,6 +4,7 @@ using IBS.DataAccess.Data;
 using IBS.Models.Filpride.Books;
 using IBS.Models;
 using IBS.Utility.Helpers;
+using IBS.Utility.MSAP.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -114,9 +115,11 @@ namespace IBSWeb.Areas.Admin.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Upsert([FromBody] UserUpsertModel model)
         {
+            var isMsapOnlyRole = string.Equals(model.Role, MsapRoles.IdentityUserRole, StringComparison.OrdinalIgnoreCase);
+
             if (string.IsNullOrWhiteSpace(model.Username) ||
                 string.IsNullOrWhiteSpace(model.Name) ||
-                string.IsNullOrWhiteSpace(model.Department) ||
+                (!isMsapOnlyRole && string.IsNullOrWhiteSpace(model.Department)) ||
                 string.IsNullOrWhiteSpace(model.Role))
             {
                 return Json(new { success = false, message = "Missing required fields" });
@@ -126,6 +129,8 @@ namespace IBSWeb.Areas.Admin.Controllers
             {
                 return Json(new { success = false, message = "Password is required for new users" });
             }
+
+            var department = isMsapOnlyRole ? "MSAP" : model.Department!.Trim();
 
             try
             {
@@ -138,7 +143,7 @@ namespace IBSWeb.Areas.Admin.Controllers
                     {
                         UserName = model.Username,
                         Name = model.Name.ToUpper(),
-                        Department = model.Department,
+                        Department = department,
                         IsActive = model.IsActive,
                         CreatedDate = DateTimeHelper.GetCurrentPhilippineTime()
                     };
@@ -192,9 +197,9 @@ namespace IBSWeb.Areas.Admin.Controllers
                         changes.Add($"Name: {user.Name} → {model.Name}");
                     }
 
-                    if (user.Department != model.Department)
+                    if (user.Department != department)
                     {
-                        changes.Add($"Department: {user.Department} → {model.Department}");
+                        changes.Add($"Department: {user.Department} → {department}");
                     }
 
                     if (user.IsActive != model.IsActive)
@@ -239,7 +244,7 @@ namespace IBSWeb.Areas.Admin.Controllers
 
                     // Update user properties
                     user.Name = model.Name.ToUpper();
-                    user.Department = model.Department;
+                    user.Department = department;
                     user.IsActive = model.IsActive;
                     user.ModifiedDate = DateTimeHelper.GetCurrentPhilippineTime();
                     user.ModifiedBy = currentUser;
@@ -428,8 +433,7 @@ namespace IBSWeb.Areas.Admin.Controllers
         public string Username { get; set; } = null!;
         [Required]
         public string Name { get; set; } = null!;
-        [Required]
-        public string Department { get; set; } = null!;
+        public string? Department { get; set; }
         [Required]
         public string Role { get; set; } = null!;
         public string? Password { get; set; }

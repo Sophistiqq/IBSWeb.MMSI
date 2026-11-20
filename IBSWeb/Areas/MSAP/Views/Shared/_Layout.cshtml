@@ -69,7 +69,7 @@
             document.body.classList.add('mnav-enabled');
         })();
     </script>
-    <partial name="_Navbar" />
+    <partial name="/Areas/MSAP/Views/Shared/_Navbar.cshtml" />
     <div class="@(ViewData["IsFullWidth"] is true ? "container-fluid p-0" : "container") main-content-wrapper">
         <main role="main">
             <input type="hidden" id="hfUsername" value="@userName" />
@@ -106,7 +106,7 @@
     <script src="~/msap/js/tutorial.js" asp-append-version="true"></script>
 
     <!-- TempData flash messages -->
-    <partial name="_Notification" />
+    <partial name="/Areas/MSAP/Views/Shared/_Notification.cshtml" />
 
     @await RenderSectionAsync("Scripts", required: false)
     <script>

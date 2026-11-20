@@ -20,17 +20,21 @@ namespace IBS.Services.MSAP.AccessControl
         protected override async Task HandleRequirementAsync(
             AuthorizationHandlerContext context, ClaimsAuthorizationRequirement requirement)
         {
-            if (requirement.ClaimType != MsapRoles.ClaimType)
+            if (requirement.ClaimType is not (MsapRoles.ClaimType or MsapRoles.EntryClaimType))
             {
                 return;
             }
 
-            string? userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            string? role = context.User.Identity?.IsAuthenticated == true && userId is not null
+            var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var role = context.User.Identity?.IsAuthenticated == true && userId is not null
                 ? await _roleService.GetUserRoleAsync(userId)
                 : null;
-            if (role is not null && requirement.AllowedValues!.Contains(role)
-                && userId is not null && await _accessControl.HasAccessAsync(userId, ProcedureEnum.AccessMsap))
+            var hasAccess = role is not null
+                && requirement.AllowedValues!.Contains(role)
+                && userId is not null
+                && (requirement.ClaimType == MsapRoles.EntryClaimType
+                    || await _accessControl.HasAccessAsync(userId, ProcedureEnum.AccessMsap));
+            if (hasAccess)
             {
                 context.Succeed(requirement);
             }

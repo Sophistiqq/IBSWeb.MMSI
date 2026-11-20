@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using IBS.Models;
+using IBS.Utility.MSAP.Constants;
 using Microsoft.AspNetCore.Authorization;
 
 namespace IBSWeb.Areas.Identity.Pages.Account
@@ -97,7 +98,16 @@ namespace IBSWeb.Areas.Identity.Pages.Account
         {
             if (User.Identity.IsAuthenticated)
             {
-                Response.Redirect("/");
+                if (User.IsInRole(MsapRoles.IdentityUserRole) && !User.IsInRole(MsapRoles.Admin))
+                {
+                    Response.Redirect(Url.Action("Index", "Home", new { area = "MSAP" }) ?? "/MSAP/Home/Index");
+                }
+                else
+                {
+                    Response.Redirect("/");
+                }
+
+                return;
             }
 
             if (!string.IsNullOrEmpty(ErrorMessage))
@@ -149,6 +159,22 @@ namespace IBSWeb.Areas.Identity.Pages.Account
                     await _signInManager.SignInAsync(user, Input.RememberMe);
 
                     _logger.LogInformation("User logged in.");
+
+                    var isAdmin = await _signInManager.UserManager.IsInRoleAsync(user, MsapRoles.Admin);
+                    var isMsapUser = await _signInManager.UserManager.IsInRoleAsync(user, MsapRoles.IdentityUserRole);
+
+                    if (isMsapUser && !isAdmin)
+                    {
+                        if (!Url.IsLocalUrl(returnUrl) || !IsMsapUrl(returnUrl))
+                        {
+                            return RedirectToAction("Index", "Home", new { area = "MSAP" });
+                        }
+                    }
+                    else if (!isAdmin && IsMsapUrl(returnUrl))
+                    {
+                        return LocalRedirect(Url.Content("~/"));
+                    }
+
                     return LocalRedirect(returnUrl);
                 }
 
@@ -184,5 +210,41 @@ namespace IBSWeb.Areas.Identity.Pages.Account
                 .ToList() ?? [];
         }
 
+        private static bool IsMsapUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                return false;
+            }
+
+            var normalized = url.StartsWith("~/", StringComparison.Ordinal)
+                ? url[1..]
+                : url;
+
+            if (!normalized.StartsWith('/') || normalized.StartsWith("//", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return IsSegmentPrefix(normalized, "/MSAP")
+                || IsSegmentPrefix(normalized, "/MSAPAdmin")
+                || IsSegmentPrefix(normalized, "/msap-storage");
+        }
+
+        private static bool IsSegmentPrefix(string path, string prefix)
+        {
+            if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (path.Length == prefix.Length)
+            {
+                return true;
+            }
+
+            var nextChar = path[prefix.Length];
+            return nextChar is '/' or '?' or '#';
+        }
     }
 }

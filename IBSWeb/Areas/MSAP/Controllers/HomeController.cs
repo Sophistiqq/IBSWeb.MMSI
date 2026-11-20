@@ -39,7 +39,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             await dashboardService.SetAccessAsync(model, userId, accessControl);
             if (!model.ShowDashboard)
             {
-                return Forbid();
+                return View(model);
             }
 
             await dashboardService.LoadAsync(model, ct);

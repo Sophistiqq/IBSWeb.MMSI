@@ -4,9 +4,10 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.WebUtilities;
+using MsapRoles = IBS.Utility.MSAP.Constants.MsapRoles;
 
 namespace IBS.Services
 {
@@ -55,9 +56,12 @@ namespace IBS.Services
                     .FirstOrDefaultAsync();
 
                 if (isMaintenanceMode && !context.User.IsInRole("Admin") &&
-                    !context.Request.Path.StartsWithSegments("/User/Home/Maintenance"))
+                    !context.Request.Path.StartsWithSegments("/User/Home/Maintenance") &&
+                    !context.Request.Path.StartsWithSegments("/MSAP/Home/Maintenance"))
                 {
-                    const string maintenanceUrl = "/User/Home/Maintenance";
+                    var maintenanceUrl = context.User.IsInRole(MsapRoles.IdentityUserRole)
+                        ? "/MSAP/Home/Maintenance"
+                        : "/User/Home/Maintenance";
 
                     await context.SignOutAsync(IdentityConstants.ApplicationScheme);
 

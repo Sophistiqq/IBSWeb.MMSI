@@ -9,11 +9,14 @@ using IBS.Services;
 using IBS.Services.Attributes;
 using IBS.Utility;
 using IBS.Utility.Helpers;
+using IBS.Utility.MSAP.Constants;
 using IBSWeb.Api;
 using IBSWeb.MSAP;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.ApplicationModels;
+using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.EntityFrameworkCore;
 using QuestPDF;
 using QuestPDF.Infrastructure;
@@ -47,6 +50,10 @@ builder.Services.AddAuthorization(options =>
     options.FallbackPolicy = new AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
         .Build();
+    options.AddPolicy(MsapRoles.IbsAccessPolicy, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context =>
+            context.User.IsInRole(MsapRoles.Admin) || !context.User.IsInRole(MsapRoles.IdentityUserRole)));
 });
 
 // DBContext (scoped)
@@ -80,7 +87,11 @@ if (builder.Environment.IsDevelopment())
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IBS.Utility.TugboatWorkspace>();
 builder.Services.AddScoped<TugboatWorkspaceService>();
-builder.Services.AddControllersWithViews(options => options.Filters.Add<IBSWeb.Workspaces.TugboatWorkspaceFilter>());
+builder.Services.AddControllersWithViews(options =>
+{
+    options.Filters.Add<IBSWeb.Workspaces.TugboatWorkspaceFilter>();
+    options.Conventions.Add(new IbsAuthorizationConvention());
+});
 builder.Services.AddMsapModule(builder.Configuration);
 builder.Services.AddScoped<ProvisionalReceiptTaggingService>();
 builder.Services.AddScoped<CheckVoucherDocumentationService>();
@@ -168,3 +179,22 @@ app.MapControllerRoute(
 DateTimeHelper.Initialize(app.Configuration);
 
 app.Run();
+
+internal class IbsAuthorizationConvention : IControllerModelConvention
+{
+    public void Apply(ControllerModel controller)
+    {
+        if (!controller.RouteValues.TryGetValue("area", out var area)
+            || area is not ("Admin" or "Filpride" or "User"))
+        {
+            return;
+        }
+
+        if (area == "User" && controller.ControllerName == "Home")
+        {
+            return;
+        }
+
+        controller.Filters.Add(new AuthorizeFilter(MsapRoles.IbsAccessPolicy));
+    }
+}

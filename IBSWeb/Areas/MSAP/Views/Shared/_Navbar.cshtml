@@ -73,9 +73,12 @@
         <!-- ── Desktop navigation ── -->
         <nav class="mnav-nav-area" aria-label="Main menu">
             <ul class="mnav-list" role="menubar">
-                <li class="mnav-item" role="none">
-                    <a class="mnav-trigger" asp-area="User" asp-controller="Home" asp-action="Index" role="menuitem">IBSWeb</a>
-                </li>
+                @if (User.IsInRole(MsapRoles.Admin))
+                {
+                    <li class="mnav-item" role="none">
+                        <a class="mnav-trigger" asp-area="User" asp-controller="Home" asp-action="Index" role="menuitem">IBSWeb</a>
+                    </li>
+                }
 
                 <!-- Home -->
                 <li class="mnav-item" role="none">
@@ -439,6 +442,11 @@
                         <span class="material-symbols-outlined">school</span>
                         <span>Guided Tour</span>
                     </button>
+
+                    <a class="mnav-dropdown-item" asp-area="Identity" asp-page="/Account/Manage/ChangePassword">
+                        <span class="material-symbols-outlined">lock_reset</span>
+                        <span>Change Password</span>
+                    </a>
 
                     <div class="mnav-dropdown-divider"></div>
 

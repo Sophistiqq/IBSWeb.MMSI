@@ -40,11 +40,30 @@
 
 @if (!Model.ShowDashboard)
 {
-    <div class="container text-center my-5">
-        <h1 class="modern-headline-lg">Welcome to MSAP</h1>
-        <p class="text-muted">MMSI Sales and Accounting Program</p>
-        <a class="modern-btn-primary ui-button ui-button--primary" asp-area="Identity" asp-page="/Account/Login">Login</a>
-    </div>
+    if (User.Identity?.IsAuthenticated == true)
+    {
+        <div class="modern-layout app-ui">
+            <main class="modern-container ui-page">
+                <div class="modern-card ui-card" style="max-width: 540px; margin: 4rem auto;">
+                    <div class="modern-card-body ui-card-body text-center py-5 px-4">
+                        <span class="material-symbols-outlined text-primary mb-3" style="font-size: 3rem;">lock_person</span>
+                        <h1 class="modern-headline-lg mb-2">No MSAP Permissions assigned yet</h1>
+                        <p class="ui-body text-muted mb-0">
+                            Your MSAP account is active, but no module permissions have been assigned to you yet. Please contact your administrator to configure your access.
+                        </p>
+                    </div>
+                </div>
+            </main>
+        </div>
+    }
+    else
+    {
+        <div class="container text-center my-5">
+            <h1 class="modern-headline-lg">Welcome to MSAP</h1>
+            <p class="text-muted">MMSI Sales and Accounting Program</p>
+            <a class="modern-btn-primary ui-button ui-button--primary" asp-area="Identity" asp-page="/Account/Login">Login</a>
+        </div>
+    }
 }
 else
 {

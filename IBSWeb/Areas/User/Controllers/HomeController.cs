@@ -5,6 +5,7 @@ using IBS.Models.Filpride.AccountsPayable;
 using IBS.Models.Filpride.AccountsReceivable;
 using IBS.Models.Filpride.Integrated;
 using IBS.Models.Filpride.ViewModels;
+using IBS.Utility.MSAP.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -32,6 +33,11 @@ namespace IBSWeb.Areas.User.Controllers
 
         public async Task<IActionResult> Index()
         {
+            if (User.IsInRole(MsapRoles.IdentityUserRole) && !User.IsInRole(MsapRoles.Admin))
+            {
+                return RedirectToAction("Index", "Home", new { area = "MSAP" });
+            }
+
             var findUser = await _dbContext.ApplicationUsers
                 .Where(user => user.Id == _userManager.GetUserId(this.User))
                 .FirstOrDefaultAsync();

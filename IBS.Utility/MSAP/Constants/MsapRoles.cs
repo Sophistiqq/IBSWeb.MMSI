@@ -5,26 +5,23 @@ namespace IBS.Utility.MSAP.Constants
     public static class MsapRoles
     {
         public const string ClaimType = "MSAP.Role";
+        public const string EntryClaimType = "MSAP.Entry";
         public const string Admin = "Admin";
         public const string User = "User";
+        public const string IdentityUserRole = "MSAP - User";
         public const string AccessPolicy = "MSAP.Access";
+        public const string EntryPolicy = "MSAP.Entry";
         public const string AdminPolicy = "MSAP.Admin";
+        public const string IbsAccessPolicy = "IBS.Access";
 
-        public static string? GetRole(IEnumerable<Claim> claims, bool isSharedAdmin = false)
+        public static string? GetRole(IEnumerable<Claim> claims, bool isSharedAdmin = false, bool isMsapUser = false)
         {
-            // Existing legacy assignments retain ordinary Admin access.
-            var roles = claims.Where(claim => claim.Type == ClaimType)
-                .Select(claim => claim.Value == "SuperAdmin" ? Admin : claim.Value).ToArray();
-            if (isSharedAdmin && (roles.Length == 0 || roles.Length == 1 && IsValid(roles[0])))
+            if (isSharedAdmin)
             {
                 return Admin;
             }
-            return roles.Length switch
-            {
-                0 => isSharedAdmin ? Admin : User,
-                1 when IsValid(roles[0]) => roles[0],
-                _ => null
-            };
+
+            return isMsapUser ? User : null;
         }
 
         public static bool IsValid(string? role)
