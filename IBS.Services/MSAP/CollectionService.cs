@@ -55,9 +55,9 @@ namespace IBS.Services.MSAP
                             throw new InvalidOperationException(guard.Message);
                         }
                     }
-                    if (date == default || date < collection.Date || date > DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()))
+                    if (date == default)
                     {
-                        throw new InvalidOperationException("Use an actual transaction date on or after the collection date, up to today.");
+                        throw new InvalidOperationException("Enter a valid transaction date.");
                     }
                     if (collection.ClearedDate.HasValue)
                     {
@@ -74,9 +74,9 @@ namespace IBS.Services.MSAP
                             {
                                 throw new InvalidOperationException("This collection is already deposited.");
                             }
-                            if ((collection.CheckAmount > 0 && date < collection.CheckDate) || date < collection.ReturnedDate)
+                            if (date < collection.ReturnedDate)
                             {
-                                throw new InvalidOperationException("Deposit date cannot precede the check date or the last return date.");
+                                throw new InvalidOperationException("Redeposit date cannot precede the last return date.");
                             }
                             var bank = bankId.HasValue
                                 ? await unitOfWork.BankAccount.GetAsync(b => b.BankAccountId == bankId.Value && b.Company == MsapConstants.Company_MMSI, ct) : null;

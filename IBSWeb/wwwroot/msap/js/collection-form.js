@@ -25,6 +25,7 @@ if (typeof document !== 'undefined') $(function () {
     let saving = false;
     let paymentMode = form.dataset.initialMode || 'check';
     let autoSplitCheck = true;
+    let checkDateTouched = Boolean($('#CheckDate').val());
     const selected = () => bills.filter(b => b.selected);
     const error = message => $('#collectionError').text(message).prop('hidden', !message);
 
@@ -37,7 +38,7 @@ if (typeof document !== 'undefined') $(function () {
         $('#checkAmountField').prop('hidden', paymentMode === 'cash');
         $('#CashAmount').prop('readOnly', paymentMode === 'cash');
         $('#CheckAmount').prop('readOnly', paymentMode === 'check');
-        if (paymentMode !== 'cash' && !$('#CheckDate').val() && $('#Date').val()) {
+        if (paymentMode !== 'cash' && (!checkDateTouched || !$('#CheckDate').val()) && $('#Date').val()) {
             $('#CheckDate').val($('#Date').val());
         }
     }
@@ -170,8 +171,9 @@ if (typeof document !== 'undefined') $(function () {
         syncPaymentModeUi();
         updateTotals();
     });
+    $('#CheckDate').on('change input', () => { checkDateTouched = Boolean($('#CheckDate').val()); });
     $('#Date').on('change', () => {
-        if (paymentMode !== 'cash' && !$('#CheckDate').val()) {
+        if (paymentMode !== 'cash' && (!checkDateTouched || !$('#CheckDate').val())) {
             $('#CheckDate').val($('#Date').val());
         }
     });

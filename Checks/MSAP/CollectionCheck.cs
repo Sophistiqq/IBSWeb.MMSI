@@ -51,8 +51,7 @@ namespace Checks.MSAP
             }
             await Expect(CollectionBankingAction.Clear, today, false);
             await Expect(CollectionBankingAction.ReturnCheck, today, false);
-            await Expect(CollectionBankingAction.Deposit, receipt.Date, false);
-            await Expect(CollectionBankingAction.Deposit, today.AddDays(1), false);
+            await Expect(CollectionBankingAction.Deposit, default, false);
             await Expect(CollectionBankingAction.Deposit, today, false, null);
             await Expect(CollectionBankingAction.Deposit, today, false, 99);
             bank.Company = "Filpride";
@@ -61,10 +60,10 @@ namespace Checks.MSAP
             closed = true;
             await Expect(CollectionBankingAction.Deposit, today, false);
             closed = false;
-            await Expect(CollectionBankingAction.Deposit, today.AddDays(-1), true);
-            Check(receipt.PaymentStatus == "Deposited" && receipt.BankId == 1, "Deposit was not recorded.");
+            await Expect(CollectionBankingAction.Deposit, receipt.Date.AddDays(-5), true);
+            Check(receipt.PaymentStatus == "Deposited" && receipt.BankId == 1 && receipt.DepositDate == receipt.Date.AddDays(-5), "Backdated deposit before collection/check date must succeed.");
             await Expect(CollectionBankingAction.Deposit, today, false);
-            await Expect(CollectionBankingAction.ReturnCheck, today.AddDays(-2), false);
+            await Expect(CollectionBankingAction.ReturnCheck, receipt.Date.AddDays(-6), false);
             await Expect(CollectionBankingAction.ReturnCheck, today, true);
             Check(receipt.PaymentStatus == "Returned" && receipt.DepositDate == null && receipt.Amount == 100, "Return must retain the receipt and require redeposit.");
             await Expect(CollectionBankingAction.Clear, today, false);
@@ -80,7 +79,14 @@ namespace Checks.MSAP
             receipt.CheckAmount = 0;
             await Expect(CollectionBankingAction.ReturnCheck, today, false);
             await Expect((CollectionBankingAction)99, today, false);
-            Console.WriteLine("PASS: collection deposit, return, redeposit, clearing, date guards, bank ownership, closed periods and audits.");
+            receipt.DepositDate = null;
+            receipt.ReturnedDate = null;
+            receipt.CheckAmount = 100;
+            receipt.CheckDate = today.AddDays(5);
+            await Expect(CollectionBankingAction.Deposit, today.AddDays(4), true);
+            await Expect(CollectionBankingAction.Clear, today.AddDays(6), true);
+            Check(receipt.PaymentStatus == "Cleared" && receipt.DepositDate == today.AddDays(4) && receipt.ClearedDate == today.AddDays(6), "Future deposit and clearing must succeed.");
+            Console.WriteLine("PASS: collection deposit, backdated/future dates, return, redeposit, clearing, bank ownership, closed periods and audits.");
             await CheckFullSettlementAsync();
         }
 

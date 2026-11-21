@@ -6,11 +6,11 @@
     bool depositing = action == CollectionBankingAction.Deposit;
     string label = depositing ? (Model.ReturnedDate.HasValue ? "Redeposit Date" : "Deposit Date")
         : action == CollectionBankingAction.ReturnCheck ? "Return Date" : "Clearing Date";
-    var today = DateTimeHelper.GetCurrentPhilippineTime().ToString("yyyy-MM-dd");
-    var minimumDate = Model.Date;
-    if (depositing && Model.CheckAmount > 0 && Model.CheckDate > minimumDate) { minimumDate = Model.CheckDate.Value; }
-    if (Model.ReturnedDate > minimumDate) { minimumDate = Model.ReturnedDate.Value; }
-    if (Model.DepositDate > minimumDate) { minimumDate = Model.DepositDate.Value; }
+    var todayDate = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime());
+    DateOnly? minimumDate = null;
+    if (Model.ReturnedDate.HasValue && (!minimumDate.HasValue || Model.ReturnedDate > minimumDate)) { minimumDate = Model.ReturnedDate.Value; }
+    if (Model.DepositDate.HasValue && (!minimumDate.HasValue || Model.DepositDate > minimumDate)) { minimumDate = Model.DepositDate.Value; }
+    var defaultDate = (minimumDate.HasValue && minimumDate.Value > todayDate ? minimumDate.Value : todayDate).ToString("yyyy-MM-dd");
     var checkSummaryParts = new List<string>();
     if (!string.IsNullOrWhiteSpace(Model.CheckNumber)) { checkSummaryParts.Add($"Check #{Model.CheckNumber}"); }
     if (Model.CheckDate.HasValue) { checkSummaryParts.Add(Model.CheckDate.Value.ToString(MsapConstants.Date_Format)); }
@@ -61,7 +61,7 @@
     }
     <div class="ui-field">
         <label class="ui-label" for="bankingDate">@label *</label>
-        <input name="date" id="bankingDate" type="date" class="modern-input" min="@minimumDate.ToString("yyyy-MM-dd")" max="@today" value="@today" required />
+        <input name="date" id="bankingDate" type="date" class="modern-input" min="@minimumDate?.ToString("yyyy-MM-dd")" value="@defaultDate" required />
     </div>
     <p class="ui-caption ui-muted">@(depositing ? "Use the actual deposit date. Deposit does not mark the receipt as cleared." : action == CollectionBankingAction.ReturnCheck ? "The returned check must be redeposited before clearing." : "Clearing applies to this receipt and all billing payments it covers.")</p>
 </form>
