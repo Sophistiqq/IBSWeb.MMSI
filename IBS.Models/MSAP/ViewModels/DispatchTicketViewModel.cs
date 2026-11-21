@@ -70,6 +70,12 @@ namespace IBS.Models.MSAP.ViewModels
         [StringLength(100)]
         public string? Remarks { get; set; }
 
+        [Display(Name = "Tons")]
+        public decimal? Tons { get; set; }
+
+        [Display(Name = "Rate")]
+        public decimal? DispatchRate { get; set; }
+
         public string? Status { get; set; }
 
         #region ---Select Lists---
@@ -114,6 +120,8 @@ namespace IBS.Models.MSAP.ViewModels
                 VesselId = VesselId,
                 PortId = PortId,
                 Remarks = Remarks,
+                Tons = Tons,
+                DispatchRate = DispatchRate ?? 0m,
                 CustomerOrderSlipId = CustomerOrderSlipId
             };
         }
@@ -137,6 +145,8 @@ namespace IBS.Models.MSAP.ViewModels
             Terminal = entity.Terminal;
             PortId = entity.PortId;
             Remarks = entity.Remarks;
+            Tons = entity.Tons;
+            DispatchRate = entity.DispatchRate;
             ImageName = entity.ImageName;
             ImageSignedUrl = entity.ImageSignedUrl;
             VideoName = entity.VideoName;

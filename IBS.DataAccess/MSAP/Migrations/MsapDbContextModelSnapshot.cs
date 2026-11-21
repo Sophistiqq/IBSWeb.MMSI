@@ -1452,6 +1452,11 @@ namespace IBS.DataAccess.MSAP.Migrations
                         .HasColumnType("time without time zone")
                         .HasColumnName("time_left");
 
+                    b.Property<decimal?>("Tons")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("tons");
+
                     b.Property<decimal>("TotalBilling")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,2)")

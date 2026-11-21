@@ -103,6 +103,14 @@ const initializeCosTicketEntry = () => {
         if (submitting) return;
         let message = timeError(times());
         if (!message && !form.elements.TugMasterId.value) message = 'Select the captain / tug master for this service.';
+        if (!message && form.elements.Tons) {
+            const tons = Number.parseFloat(form.elements.Tons.value);
+            if (!Number.isFinite(tons) || tons <= 0) message = 'Enter the watering tons (greater than 0).';
+        }
+        if (!message && form.elements.DispatchRate) {
+            const rate = Number.parseFloat(form.elements.DispatchRate.value);
+            if (!Number.isFinite(rate) || rate < 0) message = 'Enter a valid watering rate.';
+        }
         preview();
         if (message || !form.reportValidity()) {
             if (message) ModernAlert.error(message);

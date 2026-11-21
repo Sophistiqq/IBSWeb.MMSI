@@ -74,6 +74,10 @@ namespace IBS.Models.MSAP
 
         public decimal TotalHours { get; set; }
 
+        [Display(Name = "Tons")]
+        [Column(TypeName = "numeric(18,4)")]
+        public decimal? Tons { get; set; }
+
         [Display(Name = "Raw Duration (Hours)")]
         [Column(TypeName = "numeric(18,4)")]
         public decimal? RawDurationHours { get; set; }

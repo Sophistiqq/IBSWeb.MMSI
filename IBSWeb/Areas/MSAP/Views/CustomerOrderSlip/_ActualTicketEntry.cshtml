@@ -14,6 +14,7 @@
     var role = readOnly || userId == null ? null : await MsapRoleService.GetUserRoleAsync(userId);
     var imageRequired = role != MsapRoles.Admin && string.IsNullOrEmpty(Model.ImageName);
     var canVoid = canEdit && savedTicket != null && savedTicket?.Status != MsapConstants.DispatchTicketStatus.Billed && savedTicket?.Status != MsapConstants.DispatchTicketStatus.Deleted;
+    var isWatering = Model.ServiceId == MsapConstants.WateringServiceId;
 }
 <form asp-controller="DispatchTicket" asp-action="@(editing ? "EditTicket" : "Create")" method="post" enctype="multipart/form-data" class="ui-stack" id="@(readOnly ? "cosActualTicketDetails" : "cosActualTicketForm")" onsubmit="@(readOnly ? "return false;" : null)">
     <input name="inlineEntry" type="hidden" value="true" />
@@ -92,6 +93,11 @@
                 }
             }
         </div>
+        @if (isWatering)
+        {
+            <div class="ui-field cos-entry-half"><label asp-for="Tons" class="ui-label">Tons *</label><input asp-for="Tons" type="number" step="0.0001" min="0.0001" class="modern-input ui-input" placeholder="e.g. 11" required /></div>
+            <div class="ui-field cos-entry-half"><label asp-for="DispatchRate" class="ui-label">Rate (₱ / ton) *</label><input asp-for="DispatchRate" type="number" step="0.01" min="0" class="modern-input ui-input" placeholder="e.g. 500.00" required /></div>
+        }
         <div class="ui-field cos-entry-remarks"><label asp-for="Remarks" class="ui-label">Remarks</label><textarea asp-for="Remarks" class="modern-input ui-input" rows="2" maxlength="100"></textarea></div>
     </fieldset>
     <div class="cos-duration-preview" aria-live="polite">
@@ -141,7 +147,7 @@
                             <tr>
                                 <th scope="row">Basic tariff</th><td>@tariffMethod</td>
                                 <td>@(calculated ? savedTicket.DispatchRate.ToString("N2") : "Pending")</td>
-                                <td>@(calculated ? (savedTicket.IsManualTariffRate ? "Manual rate" : "Rate table") : "Rate table")</td>
+                                <td>@(isWatering ? "Ticket entry" : calculated ? (savedTicket.IsManualTariffRate ? "Manual rate" : "Rate table") : "Rate table")</td>
                                 <td>@(calculated ? savedTicket.DispatchBillingAmount.ToString("N2") : "Pending")</td>
                                 <td>@(calculated ? $"{savedTicket.DispatchDiscount:0.##}%" : "—")</td>
                                 <td>@(calculated ? savedTicket.DispatchNetRevenue.ToString("N2") : "Pending")</td>

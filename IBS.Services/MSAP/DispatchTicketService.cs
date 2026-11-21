@@ -589,6 +589,11 @@ namespace IBS.Services.MSAP
                 AddChange(nameof(viewModel.TugMasterId), currentModel.TugMasterId, viewModel.TugMasterId);
                 AddChange(nameof(viewModel.VesselId), currentModel.VesselId, viewModel.VesselId);
                 AddChange(nameof(viewModel.Remarks), currentModel.Remarks, viewModel.Remarks);
+                if (currentModel.ServiceId == MsapConstants.WateringServiceId)
+                {
+                    AddChange(nameof(viewModel.Tons), currentModel.Tons, viewModel.Tons, "Tons");
+                    AddChange(nameof(viewModel.DispatchRate), currentModel.DispatchRate, viewModel.DispatchRate ?? 0m, "Rate");
+                }
 
                 currentModel.Date = viewModel.Date;
                 currentModel.DispatchNumber = viewModel.DispatchNumber;
@@ -606,6 +611,11 @@ namespace IBS.Services.MSAP
                 currentModel.TugMasterId = viewModel.TugMasterId;
                 currentModel.VesselId = viewModel.VesselId;
                 currentModel.Remarks = viewModel.Remarks;
+                currentModel.Tons = viewModel.Tons;
+                if (currentModel.ServiceId == MsapConstants.WateringServiceId)
+                {
+                    currentModel.DispatchRate = viewModel.DispatchRate ?? 0m;
+                }
                 currentModel.CustomerOrderSlipId = viewModel.CustomerOrderSlipId;
                 currentModel.EditedBy = username;
                 currentModel.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
@@ -628,7 +638,9 @@ namespace IBS.Services.MSAP
                     c.StartsWith("TimeLeft:") ||
                     c.StartsWith("DateArrived:") ||
                     c.StartsWith("TimeArrived:") ||
-                    c.StartsWith("TotalHours:"));
+                    c.StartsWith("TotalHours:") ||
+                    c.StartsWith("Tons:") ||
+                    c.StartsWith("DispatchRate:"));
 
                 if (criticalFieldsChanged && !currentModel.VesselScheduleServiceEntryId.HasValue)
                 {
@@ -1183,6 +1195,17 @@ namespace IBS.Services.MSAP
             if (model.Date == default || model.Date > DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()))
             {
                 return "Enter a valid actual ticket date that is not in the future.";
+            }
+            if (model.ServiceId == MsapConstants.WateringServiceId)
+            {
+                if (!model.Tons.HasValue || model.Tons.Value <= 0m)
+                {
+                    return "Enter the watering tons (greater than 0).";
+                }
+                if (!model.DispatchRate.HasValue || model.DispatchRate.Value < 0m)
+                {
+                    return "Enter the watering rate.";
+                }
             }
             if (skipClosedPeriodGuard)
             {

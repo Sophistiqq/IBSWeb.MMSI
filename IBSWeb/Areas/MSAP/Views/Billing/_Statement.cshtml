@@ -112,10 +112,11 @@
                                 @foreach (var dt in dispatchNetTickets)
                                 {
                                     var hasTicketDiscount = dt.DispatchDiscount > 0 && dt.DispatchBillingAmount > dt.DispatchNetRevenue;
-                                    var effectiveRate = dt.TotalHours > 0 ? Math.Round(dt.DispatchNetRevenue / dt.TotalHours, 2) : dt.DispatchRate;
+                                    var unitCount = MsapConstants.GetEffectiveUnitCount(dt.ServiceId, dt.Tons, dt.TotalHours);
+                                    var effectiveRate = unitCount > 0 ? Math.Round(dt.DispatchNetRevenue / unitCount, 2) : dt.DispatchRate;
                                     <tr>
                                         <td class="text-left">@dt.Date.ToString("dd-MMM")</td>
-                                        <td>@dt.Service.ServiceName</td>
+                                        <td>@MsapConstants.FormatServiceDisplay(dt.ServiceId, dt.Service.ServiceName, dt.Tons)</td>
                                         <td class="text-left">@dt.DateLeft?.ToString("MM/dd/yyyy") @dt.TimeLeft?.ToString(@"HH\:mm")</td>
                                         <td class="text-left">@dt.DateArrived?.ToString("MM/dd/yyyy") @dt.TimeArrived?.ToString(@"HH\:mm")</td>
                                         <td class="text-center">@dt.TotalHours.ToString("N2")</td>
