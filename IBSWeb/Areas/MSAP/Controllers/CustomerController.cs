@@ -5,10 +5,8 @@ using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.MasterFile;
 using IBS.Services.MSAP.Attributes;
 using IBS.Utility.MSAP.Constants;
-using IBS.Utility.MSAP.Helpers;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using OfficeOpenXml;
 using ApplicationUser = IBS.Models.ApplicationUser;
 
 namespace IBSWeb.Areas.MSAP.Controllers
@@ -40,21 +38,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
             return claims.FirstOrDefault(c => c.Type == "Company")?.Value ?? MsapConstants.Company_MMSI;
         }
 
-        public Task<IActionResult> Index(string? view, CancellationToken cancellationToken)
+        public IActionResult Index()
         {
-            try
-            {
-                if (view == nameof(DynamicView.Customer))
-                {
-                    return Task.FromResult<IActionResult>(View("ExportIndex"));
-                }
-
-                return Task.FromResult<IActionResult>(View(Enumerable.Empty<Customer>()));
-            }
-            catch (Exception exception)
-            {
-                return Task.FromException<IActionResult>(exception);
-            }
+            return View(Enumerable.Empty<Customer>());
         }
 
         [HttpGet]
@@ -405,109 +391,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
         }
 
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> GetCustomerList(
-            [FromForm] DataTablesParameters parameters,
-            DateTime? dateFrom,
-            DateTime? dateTo,
-            CancellationToken cancellationToken)
-        {
-            try
-            {
-                var customers = await unitOfWork.Customer
-                    .GetAllAsync(null, cancellationToken);
-                var totalRecords = customers.Count();
-
-                // Apply date range filter if provided (using CreatedDate)
-                if (dateFrom.HasValue)
-                {
-                    customers = customers
-                        .Where(s => s.CreatedDate >= dateFrom.Value)
-                        .ToList();
-                }
-
-                if (dateTo.HasValue)
-                {
-                    // Add one day to include the entire end date
-                    var dateToInclusive = dateTo.Value.AddDays(1);
-                    customers = customers
-                        .Where(s => s.CreatedDate < dateToInclusive)
-                        .ToList();
-                }
-
-                // Apply search filter if provided
-                var searchValue = parameters?.Search?.Value;
-                if (!string.IsNullOrEmpty(searchValue))
-                {
-                    var searchLower = searchValue.ToLower();
-
-                    customers = customers
-                        .Where(s =>
-                            s.CustomerCode.ToLower().Contains(searchLower)
-                            || s.CustomerName.ToLower().Contains(searchLower)
-                            || s.CustomerTin.ToLower().Contains(searchLower)
-                            || (s.BusinessStyle != null && s.BusinessStyle.ToLower().Contains(searchLower))
-                            || s.CustomerTerms.ToLower().Contains(searchLower)
-                            || s.CustomerType.ToLower().Contains(searchLower)
-                            || s.CreatedDate.ToString("MMM dd, yyyy").ToLower().Contains(searchLower))
-                        .ToList();
-                }
-
-                // Apply sorting if provided
-                customers = ApplyCustomerSort(customers, parameters).ToList();
-
-                var filteredRecords = customers.Count();
-
-                // Apply pagination - HANDLE -1 FOR "ALL"
-                IEnumerable<Customer> pagedCustomers;
-
-                if (parameters?.Length == -1)
-                {
-                    // "All" selected - return all records
-                    pagedCustomers = customers;
-                }
-                else
-                {
-                    // Normal pagination
-                    var start = Math.Max(0, parameters?.Start ?? 0);
-                    var length = parameters?.Length >= 0 ? parameters.Length : 10;
-                    pagedCustomers = customers
-                        .Skip(start)
-                        .Take(length);
-                }
-
-                var pagedData = pagedCustomers
-                    .Select(x => new
-                    {
-                        x.CustomerId,
-                        x.CustomerCode,
-                        x.CustomerName,
-                        x.CustomerTin,
-                        x.BusinessStyle,
-                        x.CustomerTerms,
-                        x.CustomerType,
-                        x.CreatedDate
-                    })
-                    .ToList();
-
-                return Json(new
-                {
-                    draw = parameters?.Draw ?? 0,
-                    recordsTotal = totalRecords,
-                    recordsFiltered = filteredRecords,
-                    data = pagedData
-                });
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to get customers. Error: {ErrorMessage}, Stack: {StackTrace}",
-                    ex.Message, ex.StackTrace);
-                TempData["error"] = ex.Message;
-                return RedirectToAction(nameof(Index));
-            }
-        }
-
         private static IEnumerable<Customer> ApplyCustomerSort(IEnumerable<Customer> customers, DataTablesParameters? parameters)
         {
             var orderColumn = parameters?.Order?.FirstOrDefault();
@@ -538,80 +421,5 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 _ => isDescending ? customers.OrderByDescending(c => c.CustomerCode) : customers.OrderBy(c => c.CustomerCode)
             };
         }
-
-        //Download as .xlsx file.(Export)
-
-        #region -- export xlsx record --
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Export(string selectedRecord)
-        {
-            if (string.IsNullOrEmpty(selectedRecord))
-            {
-                // Handle the case where no invoices are selected
-                return RedirectToAction(nameof(Index));
-            }
-
-            var recordIds = selectedRecord.Split(',').Select(int.Parse).ToList();
-
-            // Retrieve the selected invoices from the database
-            var selectedList = await unitOfWork.Customer
-                .GetAllAsync(c => recordIds.Contains(c.CustomerId));
-
-            // Create the Excel package
-            using var package = new ExcelPackage();
-            // Add a new worksheet to the Excel package
-            var worksheet = package.Workbook.Worksheets.Add("Customers");
-
-            worksheet.Cells["A1"].Value = "CustomerName";
-            worksheet.Cells["B1"].Value = "CustomerAddress";
-            worksheet.Cells["C1"].Value = "CustomerZipCode";
-            worksheet.Cells["D1"].Value = "CustomerTinNumber";
-            worksheet.Cells["E1"].Value = "BusinessStyle";
-            worksheet.Cells["F1"].Value = "Terms";
-            worksheet.Cells["G1"].Value = "CustomerType";
-            worksheet.Cells["H1"].Value = "WithHoldingVat";
-            worksheet.Cells["I1"].Value = "WithHoldingTax";
-            worksheet.Cells["J1"].Value = "CreatedBy";
-            worksheet.Cells["K1"].Value = "CreatedDate";
-            worksheet.Cells["L1"].Value = "OriginalCustomerId";
-            worksheet.Cells["M1"].Value = "OriginalCustomerNumber";
-            worksheet.Cells["N1"].Value = "DefaultCosDiscountPercent";
-
-            int row = 2;
-
-            foreach (var item in selectedList)
-            {
-                worksheet.Cells[row, 1].Value = item.CustomerName;
-                worksheet.Cells[row, 2].Value = item.CustomerAddress;
-                worksheet.Cells[row, 3].Value = item.ZipCode;
-                worksheet.Cells[row, 4].Value = item.CustomerTin;
-                worksheet.Cells[row, 5].Value = item.BusinessStyle;
-                worksheet.Cells[row, 6].Value = item.CustomerTerms;
-                worksheet.Cells[row, 7].Value = item.VatType;
-                worksheet.Cells[row, 8].Value = item.WithHoldingVat;
-                worksheet.Cells[row, 9].Value = item.WithHoldingTax;
-                worksheet.Cells[row, 10].Value = item.CreatedBy;
-                worksheet.Cells[row, 11].Value = item.CreatedDate.ToString("yyyy-MM-dd HH:mm:ss.ffffff");
-                worksheet.Cells[row, 12].Value = item.CustomerId;
-                worksheet.Cells[row, 13].Value = item.CustomerCode;
-                worksheet.Cells[row, 14].Value = item.DefaultCosDiscountPercent;
-
-                row++;
-            }
-
-            //Ser password in Excel
-            worksheet.Protection.IsProtected = true;
-            worksheet.Protection.SetPassword("mis123");
-
-            // Convert the Excel package to a byte array
-            var excelBytes = await package.GetAsByteArrayAsync();
-
-            return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"CustomerList_IBS_{DateTimeHelper.GetCurrentPhilippineTime():yyyyddMMHHmmss}.xlsx");
-        }
-
-        #endregion -- export xlsx record --
-
     }
 }

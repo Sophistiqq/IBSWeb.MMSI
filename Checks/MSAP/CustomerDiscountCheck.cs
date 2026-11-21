@@ -68,11 +68,6 @@ namespace Checks.MSAP
             controller.ModelState.Clear();
             ExcelPackage.Configure(options => options.Configuration = new ConfigurationBuilder()
                 .SetBasePath(Path.GetFullPath("IBSWeb")).AddJsonFile("appsettings.json").Build());
-            var export = (FileContentResult)await controller.Export(saved.CustomerId.ToString());
-            using var package = new ExcelPackage(new MemoryStream(export.FileContents));
-            Check(package.Workbook.Worksheets[0].Cells[1, 14].Text == "DefaultCosDiscountPercent"
-                && package.Workbook.Worksheets[0].Cells[2, 14].GetValue<decimal>() == 12.5m,
-                "Customer export lost the default discount.");
             var masterController = new MasterFileController(users, work, NullLogger<MasterFileController>.Instance)
             {
                 ControllerContext = new ControllerContext { HttpContext = http },

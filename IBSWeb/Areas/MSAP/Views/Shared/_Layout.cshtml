@@ -12,7 +12,13 @@
 
     var userName = UserManager.GetUserName(User);
 
-    ViewBag.AppVersion = "0.1.233";
+    var assembly = typeof(Program).Assembly;
+    var informationalVersion = System.Reflection.CustomAttributeExtensions
+        .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(assembly)?
+        .InformationalVersion;
+    ViewBag.AppVersion = informationalVersion?.Split('+')[0]
+                         ?? assembly.GetName().Version?.ToString()
+                         ?? "0.0.0";
 }
 
 <!DOCTYPE html>

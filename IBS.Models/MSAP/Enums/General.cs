@@ -6,10 +6,4 @@ namespace IBS.Models.MSAP.Enums
         Industrial,
         Reseller
     }
-
-    public enum DynamicView
-    {
-        Customer,
-        Supplier
-    }
 }

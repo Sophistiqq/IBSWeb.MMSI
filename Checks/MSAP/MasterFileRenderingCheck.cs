@@ -30,7 +30,7 @@ namespace Checks.MSAP
             foreach ((string controller, object model) in files)
             {
                 string[] actions = controller == "Customer"
-                    ? ["Index", "Create", "Edit", "Activate", "Deactivate", "ExportIndex"]
+                    ? ["Index", "Create", "Edit", "Activate", "Deactivate"]
                     : ["Index", "Create", "Edit"];
                 foreach (string action in actions)
                 {
@@ -59,7 +59,7 @@ namespace Checks.MSAP
                     await File.WriteAllTextAsync(Path.Combine(outputDirectory, $"{controller}-{action}.html"), html);
                 }
             }
-            Console.WriteLine($"PASS: 33 master-file pages render with shared actions, escaped validation and antiforgery tokens. HTML: {outputDirectory}");
+            Console.WriteLine($"PASS: 32 master-file pages render with shared actions, escaped validation and antiforgery tokens. HTML: {outputDirectory}");
         }
     }
 }
