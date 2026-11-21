@@ -61,12 +61,13 @@ namespace IBSWeb.Areas.MSAP.Controllers
         /// </summary>
         [HttpGet]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to create Billings.")]
-        public async Task<IActionResult> Create(CancellationToken cancellationToken, int? customerOrderSlipId = null)
+        public async Task<IActionResult> Create(CancellationToken cancellationToken, int? customerOrderSlipId = null, int? cosId = null)
         {
+            var effectiveCosId = customerOrderSlipId ?? cosId;
             var model = new Billing();
-            if (customerOrderSlipId.HasValue)
+            if (effectiveCosId.HasValue)
             {
-                var job = await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == customerOrderSlipId.Value, cancellationToken);
+                var job = await unitOfWork.CustomerOrderSlip.GetAsync(j => j.CustomerOrderSlipId == effectiveCosId.Value, cancellationToken);
                 if (job == null)
                 {
                     return NotFound();
@@ -74,7 +75,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 model.CustomerId = job.CustomerId;
                 model.CustomerOrderSlipId = job.CustomerOrderSlipId;
                 var existingDraft = await unitOfWork.Billing.GetAsync(
-                    b => b.CustomerOrderSlipId == customerOrderSlipId.Value && b.Status == MsapConstants.BillingStatus.ForPosting && b.BasicBillingId == null,
+                    b => b.CustomerOrderSlipId == effectiveCosId.Value && b.Status == MsapConstants.BillingStatus.ForPosting && b.BasicBillingId == null,
                     cancellationToken);
                 if (existingDraft != null)
                 {
@@ -299,10 +300,17 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             billing = await billingService.PopulateTicketListsAsync(billing, cancellationToken);
-            var tickets = (billing.PaidDispatchTickets ?? [])
+            static bool IsSubconTicket(DispatchTicket t)
+            {
+                return t.Tugboat is { IsCompanyOwned: false, TugboatOwnerId: not null };
+            }
+
+            var paidTickets = (billing.PaidDispatchTickets ?? [])
                 .DistinctBy(t => t.DispatchTicketId)
                 .OrderBy(t => t.DateLeft)
                 .ThenBy(t => t.DispatchTicketId)
+                .ToList();
+            var tickets = paidTickets
                 .Select(t => new BillingAdjustTicketItemViewModel
                 {
                     DispatchTicketId = t.DispatchTicketId,
@@ -315,19 +323,31 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     DispatchRate = t.DispatchRate,
                     BAFChargeType = t.BAFChargeType ?? "Per hour",
                     BAFRate = t.BAFRate,
-                    IsSubcon = t.Tugboat is { IsCompanyOwned: false, TugboatOwnerId: not null },
+                    IsSubcon = IsSubconTicket(t),
                     SubconCost = t.OtherTugChargeLine?.Amount
                 })
                 .ToList();
+
+            var eligibleGross = paidTickets
+                .Where(t => billing.IncludeSubconInDiscount || !IsSubconTicket(t))
+                .Sum(t => (billing.DiscountOnTariff ? t.DispatchBillingAmount : 0m)
+                    + (billing.DiscountOnBaf ? t.BAFBillingAmount : 0m));
+            var totalDiscount = billing.Discount + (billing.BasicBilling?.Discount ?? billing.BafBilling?.Discount ?? 0m);
 
             var schedule = billing.CustomerOrderSlipId.HasValue
                 ? await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == billing.CustomerOrderSlipId.Value, cancellationToken)
                 : null;
             var cosDefaultDiscount = schedule?.CosDiscountPercent ?? 0m;
             var currentDiscountPercent = schedule?.CosDiscountPercent
-                ?? (billing.Discount > 0m && (billing.Amount + billing.Discount) > 0m
-                    ? Math.Round(billing.Discount / (billing.Amount + billing.Discount) * 100m, 2)
+                ?? (totalDiscount > 0m && eligibleGross > 0m
+                    ? Math.Round((totalDiscount / eligibleGross) * 100m, 2)
                     : cosDefaultDiscount);
+            var hasNoAppliedDiscount = totalDiscount <= 0m
+                && billing.FlatDiscountTariff <= 0m
+                && billing.FlatDiscountBaf <= 0m;
+            var skipCosDiscount = schedule != null
+                ? schedule.SkipCosDiscount || (eligibleGross > 0m && schedule.CosDiscountPercent > 0m && hasNoAppliedDiscount)
+                : eligibleGross > 0m && hasNoAppliedDiscount;
 
             var vm = new BillingAdjustViewModel
             {
@@ -339,7 +359,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 RejectionReason = billing.RejectionReason,
                 CosDefaultDiscountPercent = cosDefaultDiscount,
                 CosDiscountPercent = currentDiscountPercent,
-                SkipCosDiscount = billing.Discount <= 0m,
+                SkipCosDiscount = skipCosDiscount,
                 DiscountOnTariff = billing.DiscountOnTariff,
                 DiscountOnBaf = billing.DiscountOnBaf,
                 DiscountType = string.Equals(billing.DiscountType, "Flat", StringComparison.OrdinalIgnoreCase) ? "Flat" : "Percentage",

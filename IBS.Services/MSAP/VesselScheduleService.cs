@@ -132,7 +132,7 @@ namespace IBS.Services.MSAP
                     await unitOfWork.SaveAsync(ct);
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
                         $"Created vessel schedule #{model.VesselScheduleId} ({model.Status}, {model.PlannedStart:MM/dd HH:mm} – {model.PlannedEnd:MM/dd HH:mm}). Overlap override: {allowConflicts}",
-                        "Vessel Schedule", model.VesselScheduleId), ct);
+                        "Vessel Schedule", model.VesselScheduleId, $"VS-{model.VesselScheduleId}"), ct);
                     await unitOfWork.SaveAsync(ct);
                 }, ct);
 
@@ -448,7 +448,7 @@ namespace IBS.Services.MSAP
                     var auditText = existing.CustomerOrderSlipId.HasValue
                         ? $"Re-approval revision: Vessel schedule #{model.VesselScheduleId} (Rev {previousRevision} -> Rev {existing.Revision}, requires re-approval). Changes: {changeSummary}. Overlap override: {allowConflicts}"
                         : $"Updated tentative vessel schedule #{model.VesselScheduleId}. Changes: {changeSummary}. Overlap override: {allowConflicts}";
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, auditText, "Vessel Schedule", model.VesselScheduleId), ct);
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, auditText, "Vessel Schedule", model.VesselScheduleId, $"VS-{model.VesselScheduleId}"), ct);
                     await unitOfWork.SaveAsync(ct);
 
                     if (existing.CustomerOrderSlipId.HasValue && fieldDiffs.Count > 0)
@@ -528,7 +528,7 @@ namespace IBS.Services.MSAP
                     }
                     schedule.CustomerOrderSlipId = created.Data;
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
-                        $"Opened urgent ticket entry for booking #{id}; approval remains pending and billing is blocked.", "Vessel Schedule", id), ct);
+                        $"Opened urgent ticket entry for booking #{id}; approval remains pending and billing is blocked.", "Vessel Schedule", id, $"VS-{id}"), ct);
                     await unitOfWork.SaveAsync(ct);
                     result = ServiceResult<int>.Success(created.Data, "Record the actual service. Schedule approval is still required before billing.");
                 }, ct);
@@ -657,7 +657,7 @@ namespace IBS.Services.MSAP
                     schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
                     await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
-                        $"Confirmed vessel schedule #{id} revision #{schedule.Revision}; linked COS #{schedule.CustomerOrderSlipId}. Overlap override: {allowConflicts}", "Vessel Schedule", id), ct);
+                        $"Confirmed vessel schedule #{id} revision #{schedule.Revision}; linked COS #{schedule.CustomerOrderSlipId}. Overlap override: {allowConflicts}", "Vessel Schedule", id, $"VS-{id}"), ct);
                     await unitOfWork.SaveAsync(ct);
                     result = ServiceResult<int>.Success(schedule.CustomerOrderSlipId.Value, "Schedule approved. The linked COS and any recorded tickets were retained.");
                 }, ct);
@@ -725,7 +725,7 @@ namespace IBS.Services.MSAP
                     var cancelAudit = status == MsapConstants.VesselScheduleStatus.Cancelled
                         ? $"User-initiated cancellation: Vessel schedule #{id} cancelled by {username}{reasonSuffix}; booking records retained."
                         : $"Vessel schedule #{id} marked {status}; booking records retained.";
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, cancelAudit, "Vessel Schedule", id), ct);
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, cancelAudit, "Vessel Schedule", id, $"VS-{id}"), ct);
                     await unitOfWork.SaveAsync(ct);
                     result = ServiceResult.Success($"Schedule marked {status.ToLowerInvariant()}. Linked operational records were retained.");
                 }, ct);
@@ -780,7 +780,7 @@ namespace IBS.Services.MSAP
                         existing.ServiceEntries.Clear();
                     }
                     await unitOfWork.VesselSchedule.RemoveAsync(existing, ct);
-                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Deleted vessel schedule #{id}", "Vessel Schedule", id), ct);
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Deleted vessel schedule #{id}", "Vessel Schedule", id, $"VS-{id}"), ct);
                     await unitOfWork.SaveAsync(ct);
                     result = ServiceResult.Success("Schedule deleted successfully.");
                 }, ct);

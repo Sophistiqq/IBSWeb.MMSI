@@ -64,6 +64,7 @@ namespace IBS.Services.MSAP
                     {
                         throw new InvalidOperationException(prepared.Message ?? "Unable to prepare billing.");
                     }
+                    var sbmaSuffix = model.SbmaEnabled.HasValue ? $"; SBMA: {model.SbmaEnabled.Value}" : string.Empty;
                     if (existingDraft != null)
                     {
                         var fieldDiffs = new List<MsapFieldChange>();
@@ -183,7 +184,7 @@ namespace IBS.Services.MSAP
                         }
 
                         await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
-                            $"Updated Billing #{existingDraft.MsapBillingNumber} (rev {existingDraft.Revision}). COS discount: {model.CosDiscountPercent}; skipped: {model.SkipCosDiscount}; SBMA: {model.SbmaEnabled}.",
+                            $"Updated Billing #{existingDraft.MsapBillingNumber} (rev {existingDraft.Revision}). COS discount: {model.CosDiscountPercent}; skipped: {model.SkipCosDiscount}{sbmaSuffix}.",
                             "Billing", existingDraft.MsapBillingId, existingDraft.MsapBillingNumber), cancellationToken);
                         await unitOfWork.SaveAsync(cancellationToken);
                         model.MsapBillingId = existingDraft.MsapBillingId;
@@ -271,7 +272,7 @@ namespace IBS.Services.MSAP
                         }
                         await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
                             $"Created Billing #{bill.MsapBillingNumber}" + (model.SeparateBaf ? " (separate Basic/BAF preparation)" : "")
-                            + $". COS discount: {model.CosDiscountPercent}; skipped: {model.SkipCosDiscount}; SBMA: {model.SbmaEnabled}.{overrideNote}",
+                            + $". COS discount: {model.CosDiscountPercent}; skipped: {model.SkipCosDiscount}{sbmaSuffix}.{overrideNote}",
                             "Billing", bill.MsapBillingId, bill.MsapBillingNumber), cancellationToken);
                     }
                     await unitOfWork.SaveAsync(cancellationToken);
@@ -993,6 +994,7 @@ namespace IBS.Services.MSAP
                         if (ticket.BAFRate != ticketInput.BAFRate)
                         {
                             fieldDiffs.Add(new MsapFieldChange { Field = $"Ticket_{ticket.DispatchTicketId}_BafRate", Label = $"{ticket.DispatchNumber} BAF Rate", Before = ticket.BAFRate.ToString("N2"), After = ticketInput.BAFRate.ToString("N2") });
+                            ticket.IsManualBafRate = true;
                         }
 
                         ticket.DispatchChargeType = newDispatchType;
