@@ -29,26 +29,24 @@ namespace IBSWeb.Areas.MSAPAdmin.Controllers
         {
             var start = new DateOnly(year, month, 1);
             var end = start.AddMonths(1).AddDays(-1);
-            var startDateTime = new DateTime(year, month, 1, 0, 0, 0);
-            var endDateTime = startDateTime.AddMonths(1);
 
-            var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(
+            var tickets = await unitOfWork.DispatchTicket.CountAsync(
                 t => (t.DateLeft ?? t.Date) >= start && (t.DateLeft ?? t.Date) <= end &&
                      (t.Status == MsapConstants.DispatchTicketStatus.ForBilling || t.Status == MsapConstants.DispatchTicketStatus.Billed),
-                cancellationToken)).Count();
+                cancellationToken);
 
-            var billings = (await unitOfWork.Billing.GetAllAsync(
+            var billings = await unitOfWork.Billing.CountAsync(
                 b => b.Date >= start && b.Date <= end &&
                      (b.Status == MsapConstants.BillingStatus.ForCollection || b.Status == MsapConstants.BillingStatus.Collected),
-                cancellationToken)).Count();
+                cancellationToken);
 
-            var draftBillings = (await unitOfWork.Billing.GetAllAsync(
+            var draftBillings = await unitOfWork.Billing.CountAsync(
                 b => b.Date >= start && b.Date <= end && b.Status == MsapConstants.BillingStatus.ForPosting,
-                cancellationToken)).Count();
+                cancellationToken);
 
-            var collections = (await unitOfWork.Collection.GetAllAsync(
+            var collections = await unitOfWork.Collection.CountAsync(
                 c => c.Date >= start && c.Date <= end,
-                cancellationToken)).Count();
+                cancellationToken);
 
             return Json(new
             {

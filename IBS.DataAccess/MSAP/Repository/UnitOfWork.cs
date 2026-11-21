@@ -6,6 +6,7 @@ using IBS.DataAccess.MSAP.Repository.MasterFile;
 using IBS.DataAccess.MSAP.Repository.MasterFile.IRepository;
 using IBS.DataAccess.MSAP.Repository.Msap;
 using IBS.DataAccess.MSAP.Repository.Msap.IRepository;
+using IBS.Models.MSAP;
 using IBS.Models.MSAP.MasterFile;
 using IBS.Utility.MSAP.Constants;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -18,6 +19,7 @@ namespace IBS.DataAccess.MSAP.Repository
     {
         private readonly MsapDbContext _db;
 
+        public IRepository<AppSetting> AppSetting { get; }
         public ICompanyRepository Company { get; }
 
         public async Task ExecuteInTransactionAsync(Func<Task> action, CancellationToken cancellationToken = default)
@@ -93,10 +95,12 @@ namespace IBS.DataAccess.MSAP.Repository
 
         #endregion
 
-        public UnitOfWork(MsapDbContext db, ApplicationDbContext sharedDb)
+        public UnitOfWork(MsapDbContext db, ApplicationDbContext sharedDb, IAccountingContextFactory? accountingContextFactory = null)
         {
             _db = db;
+            var contextFactory = accountingContextFactory ?? AccountingContextFactory.Default;
 
+            AppSetting = new Repository<AppSetting>(_db);
             Company = new CompanyRepository(_db);
 
             #region--Master Files
@@ -115,7 +119,7 @@ namespace IBS.DataAccess.MSAP.Repository
 
             #region --MSAP
 
-            Billing = new BillingRepository(_db);
+            Billing = new BillingRepository(_db, contextFactory);
             Collection = new CollectionRepository(_db);
             DispatchTicket = new DispatchTicketRepository(_db);
             CustomerOrderSlip = new CustomerOrderSlipRepository(_db);

@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = "Posting Periods";
     ViewData["IsFullWidth"] = true;
+    var currentPhilippineTime = IBS.Utility.MSAP.Helpers.DateTimeHelper.GetCurrentPhilippineTime();
 }
 
 <div class="modern-layout app-ui">
@@ -25,15 +26,15 @@
                         <select name="month" class="js-modern-select" data-placeholder="Select month" data-searchable="true" required>
                             @for (var m = 1; m <= 12; m++)
                             {
-                                <option value="@m" selected="@(m == DateTime.Now.Month ? true : null)">@(new DateOnly(2000, m, 1).ToString("MMMM"))</option>
+                                <option value="@m" selected="@(m == currentPhilippineTime.Month ? true : null)">@(new DateOnly(2000, m, 1).ToString("MMMM"))</option>
                             }
                         </select>
                     </div>
                     <div class="posted-period-year-select">
                         <select name="year" class="js-modern-select" data-placeholder="Select year" data-searchable="true" required>
-                            @for (var y = DateTime.Now.Year - 5; y <= DateTime.Now.Year + 1; y++)
+                            @for (var y = currentPhilippineTime.Year - 5; y <= currentPhilippineTime.Year + 1; y++)
                             {
-                                <option value="@y" selected="@(y == DateTime.Now.Year ? true : null)">@y</option>
+                                <option value="@y" selected="@(y == currentPhilippineTime.Year ? true : null)">@y</option>
                             }
                         </select>
                     </div>

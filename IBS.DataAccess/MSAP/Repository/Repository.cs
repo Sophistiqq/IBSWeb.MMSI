@@ -27,6 +27,28 @@ namespace IBS.DataAccess.MSAP.Repository
             return await query.ToListAsync(cancellationToken);
         }
 
+        public virtual IQueryable<T> GetAllQuery(Expression<Func<T, bool>>? filter = null)
+        {
+            var query = dbSet.AsNoTracking();
+            if (filter != null)
+            {
+                query = query.Where(filter);
+            }
+
+            return query;
+        }
+
+        public virtual async Task<int> CountAsync(Expression<Func<T, bool>>? filter = null, CancellationToken cancellationToken = default)
+        {
+            var query = dbSet.AsNoTracking();
+            if (filter != null)
+            {
+                query = query.Where(filter);
+            }
+
+            return await query.CountAsync(cancellationToken);
+        }
+
         public virtual async Task<(IEnumerable<T> Data, int Total)> GetPagedAsync(
             Expression<Func<T, bool>>? filter,
             string? orderBy, string orderDir, int skip, int take,

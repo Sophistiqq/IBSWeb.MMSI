@@ -7,6 +7,7 @@ using IBS.Services.MSAP.Attributes;
 using IBS.Utility.MSAP.Constants;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using ApplicationUser = IBS.Models.ApplicationUser;
 
 namespace IBSWeb.Areas.MSAP.Controllers
@@ -199,9 +200,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
         {
             try
             {
-                var query = await unitOfWork.Customer
-                    .GetAllAsync(null, cancellationToken);
-                var totalRecords = query.Count();
+                var baseQuery = unitOfWork.Customer.GetAllQuery();
+                var totalRecords = await baseQuery.CountAsync(cancellationToken);
+                var query = baseQuery;
 
                 // Global search
                 var searchValue = parameters?.Search?.Value;
@@ -209,25 +210,24 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 {
                     var searchLower = searchValue.ToLower();
 
-                    query = query
-                        .Where(c =>
-                            c.CustomerCode.ToLower().Contains(searchLower)
-                            || c.CustomerName.ToLower().Contains(searchLower)
-                            || c.CustomerTerms.ToLower().Contains(searchLower)
-                            || c.VatType.ToLower().Contains(searchLower))
-                        .ToList();
+                    query = query.Where(c =>
+                        c.CustomerCode.ToLower().Contains(searchLower)
+                        || c.CustomerName.ToLower().Contains(searchLower)
+                        || c.CustomerTerms.ToLower().Contains(searchLower)
+                        || c.VatType.ToLower().Contains(searchLower));
                 }
+
+                var filteredRecords = await query.CountAsync(cancellationToken);
 
                 // Sorting
                 query = ApplyCustomerSort(query, parameters);
 
-                var filteredRecords = query.Count();
                 var start = Math.Max(0, parameters?.Start ?? 0);
                 var length = parameters?.Length >= 0 ? parameters.Length : 10;
-                var pagedData = query
+                var pagedData = await query
                     .Skip(start)
                     .Take(length)
-                    .ToList();
+                    .ToListAsync(cancellationToken);
 
                 return Json(new
                 {
@@ -391,7 +391,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
         }
 
-        private static IEnumerable<Customer> ApplyCustomerSort(IEnumerable<Customer> customers, DataTablesParameters? parameters)
+        private static IQueryable<Customer> ApplyCustomerSort(IQueryable<Customer> customers, DataTablesParameters? parameters)
         {
             var orderColumn = parameters?.Order?.FirstOrDefault();
             if (orderColumn == null)

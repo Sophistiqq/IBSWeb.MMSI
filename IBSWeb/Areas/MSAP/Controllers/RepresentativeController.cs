@@ -1,6 +1,4 @@
-using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository.IRepository;
-using IBS.Models;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.MasterFile;
@@ -19,7 +17,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
     [RequireAnyAccess("Access denied. You don't have permission to manage Representatives.",
         ProcedureEnum.ManageCustomerMasterFile, ProcedureEnum.ManagePrincipalMasterFile, ProcedureEnum.ManageRates)]
     public class RepresentativeController(
-        MsapDbContext db,
         IUnitOfWork unitOfWork,
         UserManager<ApplicationUser> userManager)
         : Controller
@@ -33,9 +30,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> GetRepresentativeList(CancellationToken cancellationToken)
         {
-            var list = await db.MsapRepresentatives.AsNoTracking()
-                .Include(r => r.Customer)
-                .Include(r => r.Principal)
+            var list = await unitOfWork.Representative.GetAllQuery()
                 .OrderBy(r => r.RepresentativeName)
                 .ThenBy(r => r.Category)
                 .Select(r => new
@@ -85,8 +80,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 model.WithholdingTaxPercent);
             model.CreatedBy = username;
             model.CreatedDate = DateTimeHelper.GetCurrentPhilippineTime();
-            await db.MsapRepresentatives.AddAsync(model, cancellationToken);
-            await db.SaveChangesAsync(cancellationToken);
+            await unitOfWork.Representative.AddAsync(model, cancellationToken);
+            await unitOfWork.SaveAsync(cancellationToken);
 
             await unitOfWork.AuditTrail.AddAsync(new AuditTrail(
                 username,
@@ -101,7 +96,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpGet]
         public async Task<IActionResult> Edit(int id, CancellationToken cancellationToken)
         {
-            var entity = await db.MsapRepresentatives.FindAsync([id], cancellationToken);
+            var entity = await unitOfWork.Representative.GetAsync(r => r.RepresentativeId == id, cancellationToken);
             if (entity == null)
             {
                 return NotFound();
@@ -131,7 +126,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return View("Form", model);
             }
 
-            var existing = await db.MsapRepresentatives.FindAsync([id], cancellationToken);
+            var existing = await unitOfWork.Representative.GetAsync(r => r.RepresentativeId == id, cancellationToken);
             if (existing == null)
             {
                 return NotFound();
@@ -156,7 +151,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             existing.EditedBy = username;
             existing.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
 
-            await db.SaveChangesAsync(cancellationToken);
+            await unitOfWork.SaveAsync(cancellationToken);
             await unitOfWork.AuditTrail.AddAsync(new AuditTrail(
                 username,
                 $"Updated Representative {existing.RepresentativeName} ({existing.Category}, {existing.RateMode} {existing.RateValue}, base {existing.CalculationBase}, active={existing.IsActive})",
@@ -171,34 +166,33 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
         {
-            var existing = await db.MsapRepresentatives.FindAsync([id], cancellationToken);
+            var existing = await unitOfWork.Representative.GetAsync(r => r.RepresentativeId == id, cancellationToken);
             if (existing == null)
             {
                 return Json(new { success = false, message = "Representative not found." });
             }
 
-            var inUse = await db.MsapBillings.AnyAsync(
-                b => b.AgencyIncentiveRepresentativeId == id || b.AgentCommissionRepresentativeId == id,
-                cancellationToken);
+            var inUse = await unitOfWork.Billing.GetAllQuery(
+                b => b.AgencyIncentiveRepresentativeId == id || b.AgentCommissionRepresentativeId == id)
+                .AnyAsync(cancellationToken);
             if (inUse)
             {
                 existing.IsActive = false;
                 existing.EditedBy = userManager.GetUserName(User);
                 existing.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                await db.SaveChangesAsync(cancellationToken);
+                await unitOfWork.SaveAsync(cancellationToken);
                 return Json(new { success = true, message = "Representative is linked to existing billings and was marked inactive." });
             }
 
-            db.MsapRepresentatives.Remove(existing);
-            await db.SaveChangesAsync(cancellationToken);
+            await unitOfWork.Representative.RemoveAsync(existing, cancellationToken);
+            await unitOfWork.SaveAsync(cancellationToken);
             return Json(new { success = true, message = "Representative deleted successfully." });
         }
 
         [HttpGet]
         public async Task<JsonResult> GetPrincipalsByCustomer(int customerId, CancellationToken cancellationToken)
         {
-            var principals = await db.MsapPrincipals.AsNoTracking()
-                .Where(p => p.CustomerId == customerId && p.IsActive)
+            var principals = await unitOfWork.Principal.GetAllQuery(p => p.CustomerId == customerId && p.IsActive)
                 .OrderBy(p => p.PrincipalName)
                 .Select(p => new { value = p.PrincipalId, text = p.PrincipalName })
                 .ToListAsync(cancellationToken);
@@ -247,15 +241,13 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         private async Task PopulateSelectListsAsync(int? customerId, CancellationToken cancellationToken)
         {
-            ViewBag.Customers = await db.Customers.AsNoTracking()
-                .Where(c => c.IsActive)
+            ViewBag.Customers = await unitOfWork.Customer.GetAllQuery(c => c.IsActive)
                 .OrderBy(c => c.CustomerName)
                 .Select(c => new SelectListItem(c.CustomerName, c.CustomerId.ToString()))
                 .ToListAsync(cancellationToken);
 
             ViewBag.Principals = customerId.HasValue
-                ? await db.MsapPrincipals.AsNoTracking()
-                    .Where(p => p.CustomerId == customerId.Value && p.IsActive)
+                ? await unitOfWork.Principal.GetAllQuery(p => p.CustomerId == customerId.Value && p.IsActive)
                     .OrderBy(p => p.PrincipalName)
                     .Select(p => new SelectListItem(p.PrincipalName, p.PrincipalId.ToString()))
                     .ToListAsync(cancellationToken)

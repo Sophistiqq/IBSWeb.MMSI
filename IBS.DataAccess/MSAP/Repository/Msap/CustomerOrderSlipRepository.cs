@@ -2,6 +2,7 @@ using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository.Msap.IRepository;
 using IBS.Models.MSAP;
 using IBS.Utility.MSAP.Constants;
+using IBS.Utility.MSAP.Helpers;
 using Microsoft.EntityFrameworkCore;
 
 namespace IBS.DataAccess.MSAP.Repository.Msap
@@ -54,23 +55,16 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .FirstOrDefaultAsync(j => j.CustomerOrderSlipId == id, cancellationToken);
         }
 
-        public async Task<CustomerOrderSlip?> GetForUpdateAsync(int id, CancellationToken ct = default)
+        public Task<CustomerOrderSlip?> GetForUpdateAsync(int id, CancellationToken ct = default)
         {
-            var job = await _db.MsapCustomerOrderSlips
-                .FromSqlInterpolated($"SELECT * FROM msap.mmsi_customer_order_slips WHERE customer_order_slip_id = {id} FOR UPDATE")
-                .FirstOrDefaultAsync(ct);
-            if (job != null)
-            {
-                await _db.Entry(job).ReloadAsync(ct);
-            }
-            return job;
+            return _db.FindForUpdateAsync<CustomerOrderSlip, int>(id, ct: ct);
         }
 
         public async Task<string> GenerateCustomerOrderSlipNumber(CancellationToken cancellationToken)
         {
             // Direct creation and schedule confirmation share the same number sequence.
-            await _db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(20771001)", cancellationToken);
-            var year = DateTime.Now.Year;
+            await _db.AcquireAdvisoryXactLockAsync(MsapLockExtensions.CustomerOrderSlipNumberSeries, cancellationToken);
+            var year = DateTimeHelper.GetCurrentPhilippineTime().Year;
             var lastRecord = await _db.MsapCustomerOrderSlips
                 .Where(j => j.CustomerOrderSlipNumber.StartsWith($"COS-{year}"))
                 .OrderByDescending(j => j.CustomerOrderSlipNumber)

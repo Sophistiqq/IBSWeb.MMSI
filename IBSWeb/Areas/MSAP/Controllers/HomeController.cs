@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using IBS.DataAccess.MSAP.Data;
+using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP;
@@ -16,7 +16,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
     [Area("MSAP")]
     public class HomeController(
         UserManager<ApplicationUser> userManager,
-        MsapDbContext dbContext,
+        IUnitOfWork unitOfWork,
         IAccessControlService accessControl,
         DashboardService dashboardService) : Controller
     {
@@ -53,12 +53,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         [AllowAnonymous]
-        public async Task<IActionResult> Maintenance()
+        public async Task<IActionResult> Maintenance(CancellationToken ct)
         {
-            if (await dbContext.AppSettings
-                    .Where(s => s.SettingKey == "MaintenanceMode")
+            if (await unitOfWork.AppSetting.GetAllQuery(s => s.SettingKey == "MaintenanceMode")
                     .Select(s => s.Value == "true")
-                    .FirstOrDefaultAsync())
+                    .FirstOrDefaultAsync(ct))
             {
                 return View("Maintenance");
             }

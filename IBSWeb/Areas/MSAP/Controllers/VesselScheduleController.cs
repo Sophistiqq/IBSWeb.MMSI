@@ -12,6 +12,7 @@ using IBS.Utility.MSAP.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.EntityFrameworkCore;
 
 namespace IBSWeb.Areas.MSAP.Controllers
 {
@@ -803,8 +804,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> GetTerminalsByPort(int portId, CancellationToken ct)
         {
-            var terminals = await unitOfWork.Terminal.GetAllAsync(t => t.PortId == portId, ct);
-            return Json(terminals.OrderBy(t => t.TerminalName).Select(t => new { value = t.TerminalId.ToString(), text = t.TerminalName, isIoc = t.IsIoc }));
+            var terminals = await unitOfWork.Terminal.GetAllQuery(t => t.PortId == portId)
+                .OrderBy(t => t.TerminalName)
+                .Select(t => new { value = t.TerminalId.ToString(), text = t.TerminalName, isIoc = t.IsIoc })
+                .ToListAsync(ct);
+            return Json(terminals);
         }
 
         [HttpGet]
@@ -838,32 +842,33 @@ namespace IBSWeb.Areas.MSAP.Controllers
         private async Task PopulateDropdownsAsync(VesselScheduleViewModel vm, CancellationToken ct, int? selectedPortId = null)
         {
             vm.Customers = await unitOfWork.GetCustomerListAsyncById(ct);
-            vm.Vessels = (await unitOfWork.Vessel.GetAllAsync(null, ct))
+            vm.Vessels = await unitOfWork.Vessel.GetAllQuery()
                 .OrderBy(v => v.VesselName)
-                .Select(v => new SelectListItem { Value = v.VesselId.ToString(), Text = $"{v.VesselName} ({v.VesselNumber})" })
-                .ToList();
-            vm.Ports = (await unitOfWork.Port.GetAllAsync(null, ct))
-                .OrderBy(p => p.PortName)
-                .Select(p => new SelectListItem { Value = p.PortId.ToString(), Text = p.PortName })
-                .ToList();
-            var allTugboats = (await unitOfWork.Tugboat.GetAllAsync(null, ct))
+                .Select(v => new SelectListItem { Value = v.VesselId.ToString(), Text = v.VesselName + " (" + v.VesselNumber + ")" })
+                .ToListAsync(ct);
+            vm.Ports = await unitOfWork.Port.GetMsapPortsSelectList(ct);
+            var allTugboats = await unitOfWork.Tugboat.GetAllQuery()
                 .OrderBy(t => t.TugboatName)
-                .ToList();
+                .Select(t => new { t.TugboatId, t.TugboatName, t.TugboatNumber, t.IsCompanyOwned })
+                .ToListAsync(ct);
             vm.Tugboats = allTugboats
                 .Select(t => new SelectListItem { Value = t.TugboatId.ToString(), Text = $"{t.TugboatName} (#{t.TugboatNumber})" })
                 .ToList();
             ViewBag.TugboatOwnerMap = allTugboats.ToDictionary(t => t.TugboatId, t => t.IsCompanyOwned);
-            vm.Services = (await unitOfWork.Service.GetAllAsync(null, ct))
+            vm.Services = await unitOfWork.Service.GetAllQuery()
                 .OrderBy(s => s.ServiceName)
                 .Select(s => new SelectListItem { Value = s.ServiceId.ToString(), Text = s.ServiceName })
-                .ToList();
+                .ToListAsync(ct);
 
             var portId = selectedPortId ?? vm.PortId;
             if (portId > 0)
             {
-                var terminals = (await unitOfWork.Terminal.GetAllAsync(t => t.PortId == portId, ct)).ToList();
+                var terminals = await unitOfWork.Terminal.GetAllQuery(t => t.PortId == portId)
+                    .OrderBy(t => t.TerminalName)
+                    .Select(t => new { t.TerminalId, t.TerminalName, t.IsIoc })
+                    .ToListAsync(ct);
                 ViewBag.TerminalIocMap = terminals.ToDictionary(t => t.TerminalId, t => t.IsIoc);
-                vm.Terminals = terminals.OrderBy(t => t.TerminalName)
+                vm.Terminals = terminals
                     .Select(t => new SelectListItem { Value = t.TerminalId.ToString(), Text = t.TerminalName })
                     .ToList();
             }

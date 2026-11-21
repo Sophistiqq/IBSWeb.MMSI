@@ -133,7 +133,7 @@ namespace Checks.MSAP
                 before = await SchemaAsync(settings.ConnectionString);
                 var roles = new RoleService(users);
                 var access = new AccessControlService(users, new UserAccessService(dashboardWork, users, roles, NullLogger<UserAccessService>.Instance));
-                var dashboard = new IBSWeb.Areas.MSAP.Controllers.HomeController(users, module, access, new DashboardService(module,
+                var dashboard = new IBSWeb.Areas.MSAP.Controllers.HomeController(users, dashboardWork, access, new DashboardService(module,
                     new VesselScheduleService(dashboardWork, new CustomerOrderSlipService(dashboardWork, NullLogger<CustomerOrderSlipService>.Instance), NullLogger<VesselScheduleService>.Instance),
                     NullLogger<DashboardService>.Instance));
                 var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "shared-check"), new Claim("Company", "Filpride")], "check");

@@ -3,6 +3,7 @@ using IBS.Models.MSAP;
 using IBS.Models.MSAP.Enums;
 using IBS.Services.MSAP.Attributes;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace IBSWeb.Areas.MSAP.Controllers
 {
@@ -25,23 +26,26 @@ namespace IBSWeb.Areas.MSAP.Controllers
         {
             try
             {
-                var terms = await unitOfWork.Terms
-                    .GetAllAsync(null, cancellationToken);
-                var totalRecords = terms.Count();
-                var queried = terms.AsQueryable();
+                var baseQuery = unitOfWork.Terms.GetAllQuery();
+                var totalRecords = await baseQuery.CountAsync(cancellationToken);
+                var queried = baseQuery;
 
                 // Global search
                 var searchValue = parameters?.Search?.Value;
                 if (!string.IsNullOrEmpty(searchValue))
                 {
                     var searchLower = searchValue.ToLower();
+                    var searchNumeric = searchLower.Replace(",", string.Empty);
 
-                    queried = queried
-                        .Where(s =>
+                    queried = string.IsNullOrEmpty(searchNumeric)
+                        ? queried.Where(s => s.TermsCode.ToLower().Contains(searchLower))
+                        : queried.Where(s =>
                             s.TermsCode.ToLower().Contains(searchLower)
-                            || s.NumberOfDays.ToString("N0").Contains(searchLower)
-                            || s.NumberOfMonths.ToString("N0").Contains(searchLower));
+                            || s.NumberOfDays.ToString().Contains(searchNumeric)
+                            || s.NumberOfMonths.ToString().Contains(searchNumeric));
                 }
+
+                var recordsFiltered = await queried.CountAsync(cancellationToken);
 
                 // Sorting
                 var orderColumn = parameters?.Order?.FirstOrDefault();
@@ -63,13 +67,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     _ => isDescending ? queried.OrderByDescending(s => s.TermsCode) : queried.OrderBy(s => s.TermsCode)
                 };
 
-                var recordsFiltered = queried.Count();
                 var start = Math.Max(0, parameters?.Start ?? 0);
                 var length = parameters?.Length >= 0 ? parameters.Length : 10;
-                var pagedData = queried
+                var pagedData = await queried
                     .Skip(start)
                     .Take(length)
-                    .ToList();
+                    .ToListAsync(cancellationToken);
 
                 return Json(new
                 {

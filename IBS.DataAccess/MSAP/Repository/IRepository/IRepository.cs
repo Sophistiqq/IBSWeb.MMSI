@@ -6,6 +6,10 @@ namespace IBS.DataAccess.MSAP.Repository.IRepository
     {
         Task<IEnumerable<T>> GetAllAsync(Expression<Func<T, bool>>? filter = null, CancellationToken cancellationToken = default);
 
+        IQueryable<T> GetAllQuery(Expression<Func<T, bool>>? filter = null);
+
+        Task<int> CountAsync(Expression<Func<T, bool>>? filter = null, CancellationToken cancellationToken = default);
+
         Task<(IEnumerable<T> Data, int Total)> GetPagedAsync(
             Expression<Func<T, bool>>? filter,
             string? orderBy, string orderDir, int skip, int take,
