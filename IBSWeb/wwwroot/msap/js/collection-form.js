@@ -23,9 +23,24 @@ if (typeof document !== 'undefined') $(function () {
     let request = 0;
     let loading = false;
     let saving = false;
-    let autoCheck = Number($('#CashAmount').val()) === 0 && Number($('#CheckAmount').val()) === 0;
+    let paymentMode = form.dataset.initialMode || 'check';
+    let autoSplitCheck = true;
     const selected = () => bills.filter(b => b.selected);
     const error = message => $('#collectionError').text(message).prop('hidden', !message);
+
+    function syncPaymentModeUi() {
+        $('.collection-mode-btn').each(function () {
+            const active = this.dataset.paymentMode === paymentMode;
+            $(this).toggleClass('is-active', active).attr('aria-pressed', String(active));
+        });
+        $('#cashAmountField').prop('hidden', paymentMode === 'check');
+        $('#checkAmountField').prop('hidden', paymentMode === 'cash');
+        $('#CashAmount').prop('readOnly', paymentMode === 'cash');
+        $('#CheckAmount').prop('readOnly', paymentMode === 'check');
+        if (paymentMode !== 'cash' && !$('#CheckDate').val() && $('#Date').val()) {
+            $('#CheckDate').val($('#Date').val());
+        }
+    }
 
     function updateProgress() {
         const picker = document.getElementById('progressCos');
@@ -47,9 +62,23 @@ if (typeof document !== 'undefined') $(function () {
             const part = CollectionAllocation.calculate(b, b.payment);
             gross += b.amount; net += b.payment; ewt += part.ewt; wvat += part.wvat; allocated += part.gross;
         });
-        ewt = CollectionAllocation.round(ewt); wvat = CollectionAllocation.round(wvat);
-        if (autoCheck) $('#CheckAmount').val(Math.max(0, CollectionAllocation.round(net - Number($('#CashAmount').val()))).toFixed(2));
-        const received = CollectionAllocation.round(Number($('#CashAmount').val()) + Number($('#CheckAmount').val()));
+        net = CollectionAllocation.round(net);
+        ewt = CollectionAllocation.round(ewt);
+        wvat = CollectionAllocation.round(wvat);
+
+        if (paymentMode === 'check') {
+            $('#CashAmount').val('0.00');
+            $('#CheckAmount').val(net.toFixed(2));
+        } else if (paymentMode === 'cash') {
+            $('#CashAmount').val(net.toFixed(2));
+            $('#CheckAmount').val('0.00');
+        } else if (autoSplitCheck) {
+            $('#CheckAmount').val(Math.max(0, CollectionAllocation.round(net - Number($('#CashAmount').val()))).toFixed(2));
+        }
+
+        const cashVal = Number($('#CashAmount').val()) || 0;
+        const checkVal = Number($('#CheckAmount').val()) || 0;
+        const received = CollectionAllocation.round(cashVal + checkVal);
         $('#Amount').val(received.toFixed(2));
         $('#EWT').val(ewt.toFixed(2)); $('#WVAT').val(wvat.toFixed(2));
         $('#summaryCount').text(selected().length);
@@ -59,8 +88,10 @@ if (typeof document !== 'undefined') $(function () {
         $('#summaryAllocated').text(money(allocated)); $('#summaryRemaining').text(money(gross - allocated));
         const matches = CollectionAllocation.round(received - net) === 0;
         $('#settlementStatus').text(matches ? 'Cash plus check matches the allocated net payments.' : `Cash plus check must equal ${money(net)} in allocated net payments.`).toggleClass('text-error', !matches);
-        $('#CheckDate, #CheckNumber, #CheckBank').prop('required', Number($('#CheckAmount').val()) > 0);
-        $('#saveCollection').prop('disabled', saving || loading || !selected().length);
+        const needsCheck = paymentMode === 'check' || (paymentMode === 'split' && checkVal > 0);
+        $('#checkDetailsSection').prop('hidden', !needsCheck);
+        $('#CheckDate, #CheckNumber').prop('required', needsCheck && checkVal > 0);
+        $('#saveCollection').prop('disabled', saving || loading || !selected().length || !matches);
         if (progressChanged) updateProgress();
     }
 
@@ -85,7 +116,14 @@ if (typeof document !== 'undefined') $(function () {
             row.append($('<td>').text(money(b.selected ? 0 : b.amount))); body.append(row);
             checkbox.on('change', function () { b.selected = this.checked; render(); updateTotals(true); });
         });
-        if (!body.children().length) body.append($('<tr>').append($('<td colspan="8">').text(loading ? 'Loading billings...' : 'No billings match the current filters.')));
+        if (!body.children().length) {
+            const emptyText = loading
+                ? 'Loading billings...'
+                : !$('#CustomerId').val()
+                    ? 'Select a service customer to load approved billings.'
+                    : 'No billings match the current filters.';
+            body.append($('<tr>').append($('<td colspan="8">').text(emptyText)));
+        }
         const eligible = bills.filter(b => b.eligible && visible(b));
         $('#selectAllBillings').prop({ checked: eligible.length > 0 && eligible.every(b => b.selected), indeterminate: eligible.some(b => b.selected) && !eligible.every(b => b.selected), disabled: !eligible.length });
     }
@@ -123,17 +161,40 @@ if (typeof document !== 'undefined') $(function () {
     $('#billingSearch').on('input', render);
     $('#progressCos').on('change', function () { JobProgress.load(document.getElementById('financialJobProgress'), { customerOrderSlipId: this.value }); });
     $('#selectAllBillings').on('change', function () { bills.filter(b => b.eligible && visible(b)).forEach(b => b.selected = this.checked); render(); updateTotals(true); });
-    $('#CashAmount').on('input', () => updateTotals());
-    $('#CheckAmount').on('input', () => { autoCheck = false; updateTotals(); });
+    $('.collection-mode-btn').on('click', function () {
+        paymentMode = this.dataset.paymentMode;
+        autoSplitCheck = true;
+        if (paymentMode === 'split' && Number($('#CashAmount').val()) === 0 && Number($('#CheckAmount').val()) === 0) {
+            $('#CashAmount').val('0.00');
+        }
+        syncPaymentModeUi();
+        updateTotals();
+    });
+    $('#Date').on('change', () => {
+        if (paymentMode !== 'cash' && !$('#CheckDate').val()) {
+            $('#CheckDate').val($('#Date').val());
+        }
+    });
+    $('#CashAmount').on('input', () => { autoSplitCheck = true; updateTotals(); });
+    $('#CheckAmount').on('input', () => { autoSplitCheck = false; updateTotals(); });
     function documentationChanged() {
         const undocumented = $('#IsUndocumented').prop('checked');
-        $('#MsapCollectionNumber').prop({ required: !undocumented, readOnly: undocumented });
+        const $num = $('#MsapCollectionNumber');
+        $num.prop({ required: !undocumented, readOnly: undocumented })
+            .attr('placeholder', undocumented ? 'Auto-generated on save' : 'Enter receipt number');
+        if (undocumented && !$('#MsapCollectionId').val()) {
+            $num.val('');
+        }
     }
     $('#IsUndocumented').on('change', documentationChanged);
     $(form).on('submit', async function (event) {
         event.preventDefault();
         if (saving || loading) return;
         error(''); updateTotals();
+        if (Number($('#CheckAmount').val()) <= 0) {
+            $('#CheckDate').val('');
+            $('#CheckNumber').val('');
+        }
         if (!form.reportValidity()) return;
         const payments = selected();
         if (!payments.length || payments.some(b => !b.eligible || !Number.isFinite(b.payment) || b.payment <= 0 || b.payment !== b.net)) {
@@ -158,5 +219,7 @@ if (typeof document !== 'undefined') $(function () {
             if (!navigating) { saving = false; updateTotals(); }
         }
     });
-    documentationChanged(); loadBillings();
+    syncPaymentModeUi();
+    documentationChanged();
+    loadBillings();
 });

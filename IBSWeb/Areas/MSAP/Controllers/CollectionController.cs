@@ -192,8 +192,14 @@ namespace IBSWeb.Areas.MSAP.Controllers
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to get collections");
-                TempData["error"] = ExceptionHelper.GetErrorMessage(ex);
-                return RedirectToAction(nameof(Index));
+                return Json(new
+                {
+                    draw = parameters?.Draw ?? 0,
+                    recordsTotal = 0,
+                    recordsFiltered = 0,
+                    data = Array.Empty<object>(),
+                    error = "Failed to fetch collections."
+                });
             }
         }
 

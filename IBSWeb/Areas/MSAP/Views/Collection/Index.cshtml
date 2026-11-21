@@ -55,7 +55,11 @@
                         .toggleClass('ui-attention', data.paymentStatus !== 'Returned' && data.paymentStatus !== 'Cleared');
                 },
                 columnDefs: [{ orderable: false, targets: [6, 7] }],
-                ajax: ModernTable.ajax("@Url.Action("GetCollectionList", "Collection", new { area = "MSAP" })"),
+                ajax: $.extend(ModernTable.ajax("@Url.Action("GetCollectionList", "Collection", new { area = "MSAP" })"), {
+                    error: function () {
+                        ModernAlert.error('Failed to load collection records.');
+                    }
+                }),
                 columns: [
                     {
                         data: "date",
@@ -65,7 +69,7 @@
                     {
                         data: "msapCollectionNumber",
                         defaultContent: "",
-                        render: (data, type, row) => `<a href="${previewUrl}?id=${row.msapCollectionId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${ModernTable.render.text(data)}</a>`
+                        render: (data, type, row) => `<a href="${previewUrl}?id=${row.msapCollectionId}" class="font-bold collection-receipt-link">${ModernTable.render.text(data)}</a>`
                     },
                     {
                         data: "checkDate",
@@ -101,7 +105,7 @@
                         className: "text-center",
                         render: (data, type, row) => ModernTable.render.dropdown([
                             { label: 'View Details', icon: 'visibility', url: `${previewUrl}?id=${row.msapCollectionId}` },
-                            { label: 'Edit Record', icon: 'edit', url: `${editUrl}?id=${row.msapCollectionId}`, condition: canPrepare && !row.isMonthClosed && !row.isPrinted && !row.depositDate && !row.returnedDate && !row.clearedDate }
+                            { label: 'Edit Record', icon: 'edit', url: `${editUrl}?id=${row.msapCollectionId}`, condition: canPrepare && !row.isMonthClosed && !row.depositDate && !row.returnedDate && !row.clearedDate }
                         ])
                     }
                 ]

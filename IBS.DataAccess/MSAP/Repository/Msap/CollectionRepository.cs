@@ -195,7 +195,9 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 var s = globalSearch.ToLower();
                 query = query.Where(c =>
                     c.MsapCollectionNumber.ToLower().Contains(s)
-                    || c.Customer.CustomerName.ToLower().Contains(s));
+                    || c.Customer.CustomerName.ToLower().Contains(s)
+                    || (c.CheckNumber != null && c.CheckNumber.ToLower().Contains(s))
+                    || (c.ReferenceNo != null && c.ReferenceNo.ToLower().Contains(s)));
             }
 
             // Column-specific search

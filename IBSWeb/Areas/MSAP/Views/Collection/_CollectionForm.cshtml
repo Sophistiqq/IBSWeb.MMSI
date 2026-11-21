@@ -2,11 +2,17 @@
 @{
     bool editing = Model.MsapCollectionId.HasValue;
     string title = editing ? "Edit collection" : "Record collection";
+    string initialMode = Model.CashAmount > 0 && Model.CheckAmount > 0
+        ? "split"
+        : Model.CashAmount > 0 && Model.CheckAmount <= 0
+            ? "cash"
+            : "check";
 }
 <div class="modern-layout app-ui collection-form collection-entry">
     <form id="collectionForm" method="post" asp-action="@(editing ? "Edit" : "Create")"
           data-billings-url="@Url.Action("GetUncollectedBillingsForTable")"
-          data-initial-cos="@Model.CustomerOrderSlipId">
+          data-initial-cos="@Model.CustomerOrderSlipId"
+          data-initial-mode="@initialMode">
         @Html.AntiForgeryToken()
         <input asp-for="MsapCollectionId" type="hidden" />
         <input asp-for="Amount" type="hidden" />
@@ -25,7 +31,7 @@
                     <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">Collections</a></li><li aria-current="page">@title</li></ol></nav>
                     <h1 class="ui-page-title" data-page-header>@title</h1>
                     <a asp-action="Index" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
-                    <p class="ui-page-description ui-caption ui-muted">One receipt / check / Separate allocation and balance for each bill</p>
+                    <p class="ui-page-description ui-caption ui-muted">One receipt covers the selected bills, with separate allocation and balance for each bill.</p>
                 </header>
                 <div asp-validation-summary="All" class="text-error" role="alert"></div>
                 <p id="collectionError" class="text-error" role="alert" hidden></p>
@@ -50,7 +56,7 @@
                     <div class="collection-table-scroll">
                         <table class="modern-table ui-table collection-table">
                             <thead><tr><th><input id="selectAllBillings" type="checkbox" aria-label="Select all visible eligible bills" /></th><th>Billing / COS</th><th>Gross balance</th><th>EWT</th><th>WVAT</th><th>Net available</th><th>Full net payment</th><th>Balance after allocation</th></tr></thead>
-                            <tbody id="collectionBillings"><tr><td colspan="8">Select a customer to load billings.</td></tr></tbody>
+                            <tbody id="collectionBillings"><tr><td colspan="8">Select a service customer to load approved billings.</td></tr></tbody>
                         </table>
                     </div>
                     <p class="ui-caption ui-muted">Each selected bill is paid in full at its net balance after withholding. One receipt can cover multiple bills. Unapproved bills cannot be selected. Bills on another receipt must be reviewed on that receipt.</p>
@@ -58,30 +64,35 @@
                 <section class="ui-panel ui-stack" aria-labelledby="collectionDetailsHeading">
                     <div class="collection-heading"><h2 id="collectionDetailsHeading" class="ui-section-title">Collection details</h2><label class="collection-check"><input asp-for="IsUndocumented" /> Undocumented</label></div>
                     <div class="collection-fields">
-                        <div class="ui-field"><label asp-for="MsapCollectionNumber" class="ui-label">Collection / receipt number *</label><input asp-for="MsapCollectionNumber" class="modern-input" maxlength="10" required /><span asp-validation-for="MsapCollectionNumber" class="text-error"></span></div>
+                        <div class="ui-field"><label asp-for="MsapCollectionNumber" class="ui-label">Collection / receipt number *</label><input asp-for="MsapCollectionNumber" class="modern-input" maxlength="10" placeholder="Enter receipt number" required /><span asp-validation-for="MsapCollectionNumber" class="text-error"></span></div>
                         <div class="ui-field"><label asp-for="Date" class="ui-label">Collection date *</label><input asp-for="Date" type="date" class="modern-input" required value="@(Model.Date != default ? Model.Date.ToString("yyyy-MM-dd") : DateTimeHelper.GetCurrentPhilippineTime().ToString("yyyy-MM-dd"))" /></div>
-                        <div class="ui-field"><label asp-for="ReferenceNo" class="ui-label">Reference number</label><input asp-for="ReferenceNo" class="modern-input" /></div>
+                        <div class="ui-field"><label asp-for="ReferenceNo" class="ui-label">Reference number</label><input asp-for="ReferenceNo" class="modern-input" placeholder="Optional reference #" /></div>
                     </div>
                 </section>
                 <div class="collection-settlement-layout">
                     <div class="ui-stack">
                         <section class="ui-panel ui-stack" aria-labelledby="paymentHeading">
-                            <h2 id="paymentHeading" class="ui-section-title">Payment and withholding</h2>
+                            <div class="collection-heading">
+                                <h2 id="paymentHeading" class="ui-section-title">Payment and withholding</h2>
+                                <div class="collection-mode-group" role="group" aria-label="Payment method">
+                                    <button type="button" class="collection-mode-btn @(initialMode == "check" ? "is-active" : "")" data-payment-mode="check" aria-pressed="@(initialMode == "check" ? "true" : "false")">Check</button>
+                                    <button type="button" class="collection-mode-btn @(initialMode == "cash" ? "is-active" : "")" data-payment-mode="cash" aria-pressed="@(initialMode == "cash" ? "true" : "false")">Cash</button>
+                                    <button type="button" class="collection-mode-btn @(initialMode == "split" ? "is-active" : "")" data-payment-mode="split" aria-pressed="@(initialMode == "split" ? "true" : "false")">Cash + Check</button>
+                                </div>
+                            </div>
                             <div class="collection-fields collection-fields--two">
-                                <div class="ui-field"><label asp-for="CashAmount" class="ui-label">Cash payment</label><input asp-for="CashAmount" type="number" min="0" step="0.01" class="modern-input" required /></div>
-                                <div class="ui-field"><label asp-for="CheckAmount" class="ui-label">Check payment</label><input asp-for="CheckAmount" type="number" min="0" step="0.01" class="modern-input" required /></div>
-                                <div class="ui-field"><label asp-for="EWT" class="ui-label">Total EWT / From selected allocations</label><input asp-for="EWT" type="number" min="0" step="0.01" class="modern-input" readonly /></div>
-                                <div class="ui-field"><label asp-for="WVAT" class="ui-label">Total WVAT / From selected allocations</label><input asp-for="WVAT" type="number" min="0" step="0.01" class="modern-input" readonly /></div>
+                                <div class="ui-field" id="cashAmountField" hidden="@(initialMode == "check")"><label asp-for="CashAmount" class="ui-label">Cash payment</label><input asp-for="CashAmount" type="number" min="0" step="0.01" class="modern-input" required /></div>
+                                <div class="ui-field" id="checkAmountField" hidden="@(initialMode == "cash")"><label asp-for="CheckAmount" class="ui-label">Check payment</label><input asp-for="CheckAmount" type="number" min="0" step="0.01" class="modern-input" required /></div>
+                                <div class="ui-field"><label asp-for="EWT" class="ui-label">Total EWT (from selected bills)</label><input asp-for="EWT" type="number" min="0" step="0.01" class="modern-input" readonly /></div>
+                                <div class="ui-field"><label asp-for="WVAT" class="ui-label">Total WVAT (from selected bills)</label><input asp-for="WVAT" type="number" min="0" step="0.01" class="modern-input" readonly /></div>
                             </div>
                         </section>
-                        <section class="ui-panel ui-stack" aria-labelledby="checkHeading">
+                        <section class="ui-panel ui-stack" id="checkDetailsSection" aria-labelledby="checkHeading" hidden="@(initialMode == "cash")">
                             <h2 id="checkHeading" class="ui-section-title">Check details</h2>
-                            <p class="ui-caption ui-muted">Date, number and issuing bank are required when receiving a check.</p>
+                            <p class="ui-caption ui-muted">Check number and check date are required when receiving a check.</p>
                             <div class="collection-fields collection-fields--two">
-                                <div class="ui-field"><label asp-for="CheckDate" class="ui-label">Check date</label><input asp-for="CheckDate" type="date" class="modern-input" /></div>
-                                <div class="ui-field"><label asp-for="CheckNumber" class="ui-label">Check number</label><input asp-for="CheckNumber" type="text" class="modern-input" /></div>
-                                <div class="ui-field"><label asp-for="CheckBank" class="ui-label">Issuing bank</label><input asp-for="CheckBank" type="text" class="modern-input" /></div>
-                                <div class="ui-field"><label asp-for="CheckBranch" class="ui-label">Bank branch</label><input asp-for="CheckBranch" type="text" class="modern-input" /></div>
+                                <div class="ui-field"><label asp-for="CheckNumber" class="ui-label">Check number *</label><input asp-for="CheckNumber" type="text" class="modern-input" placeholder="Enter check number" maxlength="50" /></div>
+                                <div class="ui-field"><label asp-for="CheckDate" class="ui-label">Check date *</label><input asp-for="CheckDate" type="date" class="modern-input" /></div>
                             </div>
                         </section>
                     </div>
@@ -110,11 +121,14 @@
     window.IBS_TOUR_STEPS = [
         { selector: '[aria-label="Billing filters"]', title: 'Service customer and billed party', text: 'Select the service customer to load its billings, then use the billed-party filter if needed. The service customer is fixed when editing a receipt.', interactive: false },
         { selector: '[aria-labelledby="allocationHeading"]', title: 'Select bills for full net payment', text: 'Search by billing number or COS and select eligible approved bills. Each selected bill is paid at its full net balance after withholding. Unapproved bills and bills reserved on another receipt cannot be selected.', interactive: false },
-        { selector: '[aria-labelledby="collectionDetailsHeading"]', title: 'Receipt details', text: 'Enter the receipt number and collection date, and add a payment reference when available. Check the Undocumented setting for this receipt.', interactive: false },
-        { selector: '[aria-labelledby="paymentHeading"]', title: 'Payment and withholding', text: 'Enter the cash and check amounts actually received. EWT and WVAT are calculated from the selected billing allocations and are read-only. Cash plus check must match the selected net payments.', interactive: false },
-        { selector: '[aria-labelledby="checkHeading"]', title: 'Check details', text: 'When a check amount is entered, supply the check date, number and issuing bank. This is the payer’s bank; the MMSI receiving account is recorded when depositing the receipt.', interactive: false },
+        { selector: '[aria-labelledby="collectionDetailsHeading"]', title: 'Receipt details', text: 'Enter the receipt number and collection date, or check Undocumented to auto-generate a receipt number on save.', interactive: false },
+        { selector: '[aria-labelledby="paymentHeading"]', title: 'Payment and withholding', text: 'Choose Check, Cash, or Cash + Check. Single-method receipts auto-fill the exact net payment after withholding; split mode lets you divide between cash and check.', interactive: false },
+        { selector: '[aria-labelledby="checkHeading"]', title: 'Check details', text: 'When receiving a check, enter the check number and check date. The MMSI receiving bank account is confirmed when recording the deposit.', interactive: false },
         { selector: '[aria-labelledby="settlementHeading"]', title: 'Receipt settlement', text: 'Compare the selected gross balance, received payment, withholding and allocated total. Resolve any mismatch before saving. A paid balance does not mean the receipt has cleared.', interactive: false },
         { selector: '.collection-entry footer', title: 'Save the receipt', text: 'Add any remarks and save. One receipt covers the selected bills, with a separate allocation for each. Record deposit and clearing afterward from the receipt page.', interactive: false },
         { selector: '[aria-label="Job Progress"]', title: 'Progress for each COS', text: 'When the selected bills cover more than one COS, use Viewing COS to review each job’s progress.', interactive: false }
-    ];
+    ].filter(function (step) {
+        const el = document.querySelector(step.selector);
+        return el && !el.hidden;
+    });
 </script>

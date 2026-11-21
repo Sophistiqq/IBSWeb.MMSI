@@ -335,9 +335,9 @@ namespace IBS.Services.MSAP
                 throw new InvalidOperationException("Enter the collection / receipt number or mark it undocumented.");
             }
             if (model.Date == default || (model.CheckAmount > 0 &&
-                (!model.CheckDate.HasValue || string.IsNullOrWhiteSpace(model.CheckNumber) || string.IsNullOrWhiteSpace(model.CheckBank))))
+                (!model.CheckDate.HasValue || string.IsNullOrWhiteSpace(model.CheckNumber))))
             {
-                throw new InvalidOperationException("Enter a collection date and, for checks, the check date, number and issuing bank.");
+                throw new InvalidOperationException("Enter a collection date and, for checks, the check date and check number.");
             }
             if (model.BillingPayments == null || model.BillingPayments.Count == 0)
             {
@@ -613,14 +613,30 @@ namespace IBS.Services.MSAP
                     currentModel.Date = viewModel.Date;
                     currentModel.CustomerId = viewModel.CustomerId;
                     currentModel.IsUndocumented = viewModel.IsUndocumented;
-                    currentModel.ReferenceNo = viewModel.ReferenceNo;
-                    currentModel.Remarks = viewModel.Remarks;
+                    currentModel.ReferenceNo = viewModel.ReferenceNo?.Trim();
+                    currentModel.Remarks = viewModel.Remarks?.Trim();
                     currentModel.CashAmount = viewModel.CashAmount;
                     currentModel.CheckAmount = viewModel.CheckAmount;
-                    currentModel.CheckNumber = viewModel.CheckNumber;
-                    currentModel.CheckDate = viewModel.CheckDate;
-                    currentModel.CheckBank = viewModel.CheckBank;
-                    currentModel.CheckBranch = viewModel.CheckBranch;
+                    if (viewModel.CheckAmount > 0)
+                    {
+                        currentModel.CheckNumber = viewModel.CheckNumber?.Trim();
+                        currentModel.CheckDate = viewModel.CheckDate;
+                        if (!string.IsNullOrWhiteSpace(viewModel.CheckBank))
+                        {
+                            currentModel.CheckBank = viewModel.CheckBank.Trim();
+                        }
+                        if (!string.IsNullOrWhiteSpace(viewModel.CheckBranch))
+                        {
+                            currentModel.CheckBranch = viewModel.CheckBranch.Trim();
+                        }
+                    }
+                    else
+                    {
+                        currentModel.CheckNumber = null;
+                        currentModel.CheckDate = null;
+                        currentModel.CheckBank = null;
+                        currentModel.CheckBranch = null;
+                    }
                     currentModel.Amount = viewModel.Amount;
                     currentModel.EWT = viewModel.EWT;
                     currentModel.WVAT = viewModel.WVAT;
@@ -752,12 +768,12 @@ namespace IBS.Services.MSAP
                 Total = viewModel.Amount + viewModel.EWT + viewModel.WVAT, // Total should be Gross (Cash + EWT + WVAT)
                 CashAmount = viewModel.CashAmount,
                 CheckAmount = viewModel.CheckAmount,
-                CheckNumber = viewModel.CheckNumber,
-                CheckDate = viewModel.CheckDate,
-                CheckBank = viewModel.CheckBank,
-                CheckBranch = viewModel.CheckBranch,
-                ReferenceNo = viewModel.ReferenceNo,
-                Remarks = viewModel.Remarks,
+                CheckNumber = viewModel.CheckAmount > 0 ? viewModel.CheckNumber?.Trim() : null,
+                CheckDate = viewModel.CheckAmount > 0 ? viewModel.CheckDate : null,
+                CheckBank = viewModel.CheckAmount > 0 ? viewModel.CheckBank?.Trim() : null,
+                CheckBranch = viewModel.CheckAmount > 0 ? viewModel.CheckBranch?.Trim() : null,
+                ReferenceNo = viewModel.ReferenceNo?.Trim(),
+                Remarks = viewModel.Remarks?.Trim(),
                 Customer = (await unitOfWork.Customer.GetAsync(c => c.CustomerId == viewModel.CustomerId, cancellationToken))!,
                 Company = MsapConstants.Company_MMSI
             };

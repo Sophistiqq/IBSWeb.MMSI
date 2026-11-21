@@ -53,6 +53,8 @@
 }
 @media (max-width: 767px) {
     .collection-workspace { grid-template-columns: minmax(0, 1fr); padding: var(--ui-space-2); }
+    .collection-content { order: 1; }
+    .collection-workspace > .schedule-details-progress { order: 2; }
     .collection-fields { grid-template-columns: minmax(0, 1fr); }
     .collection-heading { flex-wrap: wrap; }
     .collection-heading input[type="search"] { width: 100%; }
@@ -69,6 +71,53 @@
     align-items: center;
     gap: var(--ui-space-3);
 }
+.collection-date-filter .ui-label {
+    white-space: nowrap;
+}
+.collection-receipt-link {
+    text-decoration: none;
+    color: var(--primary);
+}
+.collection-receipt-link:hover {
+    text-decoration: underline;
+}
+.collection-mode-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface-container-low);
+    border: 1px solid var(--outline-variant);
+}
+.collection-mode-btn {
+    border: 0;
+    background: transparent;
+    color: var(--on-surface-variant);
+    font-size: var(--ui-text-caption, 0.8125rem);
+    font-weight: var(--ui-weight-semibold, 600);
+    padding: 6px 12px;
+    border-radius: calc(var(--radius-md, 8px) - 2px);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+.collection-mode-btn:hover {
+    color: var(--on-surface);
+}
+.collection-mode-btn.is-active {
+    background: var(--primary);
+    color: var(--on-primary, #fff);
+}
+.collection-bank-readonly {
+    padding: 10px 12px;
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface-container-low);
+    border: 1px solid var(--outline-variant);
+    color: var(--on-surface);
+    font-size: var(--ui-text-body, 0.9375rem);
+    font-weight: var(--ui-weight-medium, 500);
+}
 .collection-remarks { white-space: pre-wrap; overflow-wrap: anywhere; }
 .collection-form .financial-job-progress { margin: 0; }
 .collection-form .financial-job-progress > .job-progress + a { display: block; margin-top: var(--ui-space-5); }
@@ -77,4 +126,6 @@
 @media (max-width: 767px) {
     .collection-page { padding: var(--ui-space-2); }
     .collection-date-filter { width: 100%; flex-wrap: wrap; }
+    .collection-mode-group { width: 100%; }
+    .collection-mode-btn { flex: 1; text-align: center; }
 }

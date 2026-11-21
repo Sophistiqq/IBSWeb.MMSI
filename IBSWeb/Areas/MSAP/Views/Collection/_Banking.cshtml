@@ -11,39 +11,53 @@
     if (depositing && Model.CheckAmount > 0 && Model.CheckDate > minimumDate) { minimumDate = Model.CheckDate.Value; }
     if (Model.ReturnedDate > minimumDate) { minimumDate = Model.ReturnedDate.Value; }
     if (Model.DepositDate > minimumDate) { minimumDate = Model.DepositDate.Value; }
+    var checkSummaryParts = new List<string>();
+    if (!string.IsNullOrWhiteSpace(Model.CheckNumber)) { checkSummaryParts.Add($"Check #{Model.CheckNumber}"); }
+    if (Model.CheckDate.HasValue) { checkSummaryParts.Add(Model.CheckDate.Value.ToString(MsapConstants.Date_Format)); }
+    if (!string.IsNullOrWhiteSpace(Model.CheckBank)) { checkSummaryParts.Add(Model.CheckBank); }
+    if (!string.IsNullOrWhiteSpace(Model.CheckBranch)) { checkSummaryParts.Add(Model.CheckBranch); }
 }
 <form asp-action="Banking" asp-controller="Collection" asp-area="MSAP" method="post" id="collectionBankingForm" class="app-ui ui-stack text-left">
     <input type="hidden" name="id" value="@Model.MsapCollectionId" />
     <input type="hidden" name="bankingAction" value="@action" />
     <div class="ui-field">
         <p class="ui-label">Receipt @Model.MsapCollectionNumber</p>
-        <p class="ui-caption ui-muted">@Model.Customer?.CustomerName / Net received @Model.Amount.ToString("N2")</p>
-        @if (Model.CheckAmount > 0)
+        <p class="ui-caption ui-muted">@Model.Customer?.CustomerName · Net received ₱@Model.Amount.ToString("N2")</p>
+        @if (Model.CheckAmount > 0 && checkSummaryParts.Count > 0)
         {
-            <p class="ui-caption ui-muted">Check @Model.CheckNumber / @Model.CheckBank / @Model.CheckBranch</p>
+            <p class="ui-caption ui-muted">@string.Join(" · ", checkSummaryParts)</p>
         }
     </div>
     @if (depositing)
     {
         <div class="ui-field">
-            <label class="ui-label" for="depositBank">Deposit to MMSI account *</label>
-            <select name="bankId" id="depositBank" class="js-modern-select" data-placeholder="Select receiving bank account" required>
-                <option value="">-- Select receiving bank account --</option>
-                @foreach (var bank in banks)
-                {
-                    <option value="@bank.Value" selected="@(bank.Value == selectedBank)">@bank.Text</option>
-                }
-            </select>
-            <p class="ui-caption ui-muted">MMSI's receiving account, separate from the check's issuing bank.</p>
-            @if (banks.Count == 0)
+            @if (banks.Count == 1)
             {
+                <span class="ui-label" id="depositBankLabel">Deposit to MMSI account *</span>
+                <input type="hidden" name="bankId" value="@banks[0].Value" />
+                <div class="collection-bank-readonly" aria-labelledby="depositBankLabel">@banks[0].Text</div>
+            }
+            else if (banks.Count > 1)
+            {
+                <label class="ui-label" for="depositBank">Deposit to MMSI account *</label>
+                <select name="bankId" id="depositBank" class="js-modern-select" data-placeholder="Select receiving bank account" required>
+                    <option value="">-- Select receiving bank account --</option>
+                    @foreach (var bank in banks)
+                    {
+                        <option value="@bank.Value" selected="@(bank.Value == selectedBank)">@bank.Text</option>
+                    }
+                </select>
+            }
+            else
+            {
+                <span class="ui-label">Deposit to MMSI account *</span>
                 <p class="text-error ui-caption">No MMSI receiving account is available. Add an account before recording the deposit.</p>
             }
         </div>
     }
     else
     {
-        <div class="ui-field"><span class="ui-caption ui-muted">Receiving bank account</span><p class="ui-body">@Model.BankAccount?.Bank / @(Model.BankAccountNumber ?? Model.BankAccount?.AccountNo)</p></div>
+        <div class="ui-field"><span class="ui-caption ui-muted">Receiving bank account</span><p class="ui-body">@(Model.BankAccount?.Bank ?? "Not recorded") · @(Model.BankAccountNumber ?? Model.BankAccount?.AccountNo ?? "—")</p></div>
     }
     <div class="ui-field">
         <label class="ui-label" for="bankingDate">@label *</label>
