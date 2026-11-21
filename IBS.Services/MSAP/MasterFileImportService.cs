@@ -6,7 +6,6 @@ using System.Text.RegularExpressions;
 using CsvHelper;
 using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository.IRepository;
-using IBS.Models.Filpride.MasterFile;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.MasterFile;
 using IBS.Models.MSAP.Enums;
@@ -427,13 +426,13 @@ namespace IBS.Services.MSAP
             }
         }
 
-        private static string ResolveTerms(string code, List<FilprideTerms> terms)
+        private static string ResolveTerms(string code, List<Terms> terms)
         {
-            int days = code == "COD" ? 0 : int.Parse(code[..^1]);
+            var days = code == "COD" ? 0 : int.Parse(code[..^1]);
             var term = terms.SingleOrDefault(term => term.TermsCode == code);
             if (term == null || term.NumberOfDays != days || term.NumberOfMonths != 0)
             {
-                throw new InvalidDataException($"Shared payment term {code} is missing or differs from the source's {days} days. Review IBS Payment Terms first; no local fallback is created.");
+                throw new InvalidDataException($"MSAP payment term {code} is missing or differs from the source's {days} days. Review MSAP Payment Terms first.");
             }
             return term.TermsCode;
         }

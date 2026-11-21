@@ -1,0 +1,64 @@
+@model IBS.Models.MSAP.MasterFile.PaymentTermsViewModel
+
+@{
+    ViewData["Title"] = "Edit Payment Term";
+    ViewData["IsFullWidth"] = true;
+}
+
+<div class="modern-layout app-ui">
+    <form asp-action="Edit" method="post" id="mainForm">
+        <main class="modern-container ui-page">
+            <div class="flex-stack ui-page-toolbar">
+                <div>
+                    <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li><a asp-action="Index">Payment Terms</a></li><li aria-current="page">Edit Payment Term</li></ol></nav>
+                    <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
+                </div>
+                <div class="flex gap-2 ui-actions">
+                    <button type="submit" class="modern-btn-primary ui-page-action">
+                        <span class="material-symbols-outlined">save</span> Save Changes
+                    </button>
+                    <a asp-action="Index" class="modern-btn-secondary ui-page-action">
+                        <span class="material-symbols-outlined">cancel</span> Cancel
+                    </a>
+                </div>
+            </div>
+
+            <div class="modern-grid justify-center">
+                <section class="modern-col-6">
+                    <div class="modern-card ui-card">
+                        <div class="modern-card-header-info ui-card-header">
+                            <span class="material-symbols-outlined">edit</span>
+                            <h2 class="modern-headline-md ui-section-title">Payment Term Details</h2>
+                        </div>
+                        <div class="modern-card-body ui-card-body">
+                            <div asp-validation-summary="ModelOnly" class="text-error mb-2"></div>
+
+                            <div class="flex flex-column gap-4">
+                                <div>
+                                    <label asp-for="TermsCode" class="modern-label ui-label">Terms Code</label>
+                                    <input asp-for="TermsCode" class="modern-input ui-input" readonly />
+                                    <span asp-validation-for="TermsCode" class="text-error ui-caption"></span>
+                                </div>
+
+                                <div>
+                                    <label asp-for="NumberOfDays" class="modern-label ui-label">Number of Days <span class="text-error">*</span></label>
+                                    <input asp-for="NumberOfDays" type="number" min="0" class="form-control ui-input" required />
+                                    <span asp-validation-for="NumberOfDays" class="text-error ui-caption"></span>
+                                </div>
+
+                                <div>
+                                    <label asp-for="NumberOfMonths" class="modern-label ui-label">Number of Months <span class="text-error">*</span></label>
+                                    <input asp-for="NumberOfMonths" type="number" min="0" class="form-control ui-input" required />
+                                    <span asp-validation-for="NumberOfMonths" class="text-error ui-caption"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </form>
+</div>
+
+@section Scripts {
+}

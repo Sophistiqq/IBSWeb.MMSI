@@ -107,12 +107,13 @@ namespace Checks.MSAP
                     .Services.BuildServiceProvider();
                 var users = identityServices.GetRequiredService<UserManager<ApplicationUser>>();
                 var dashboardWork = new UnitOfWork(module, original);
-                Check(!await module.Terms.AnyAsync(), "MSAP seeded an independent payment terms list.");
-                List<SelectListItem> paymentTerms = await dashboardWork.Terms.GetFilprideTermsListAsyncByCode();
-                Check(paymentTerms.Select(term => term.Value).SequenceEqual(new[] { "CHECK17", "COD", "M15" }),
-                    "MSAP term selection does not use Filpride terms.");
+                Check(await module.Terms.AnyAsync(), "MSAP did not seed its own payment terms list.");
+                List<SelectListItem> paymentTerms = await dashboardWork.Terms.GetTermsListAsyncByCode();
+                Check(paymentTerms.Any(term => term.Value == "COD") && paymentTerms.Any(term => term.Value == "M15")
+                    && !paymentTerms.Any(term => term.Value == "CHECK17"),
+                    "MSAP term selection must use MSAP terms rather than Filpride terms.");
                 Check(await dashboardWork.Terms.ComputeDueDateAsync("M15", new DateOnly(2026, 10, 6)) == new DateOnly(2026, 11, 15),
-                    "Shared month-based due-date calculation changed.");
+                    "MSAP month-based due-date calculation changed.");
                 await RoleCheck.RunAsync(users, identityServices.GetRequiredService<RoleManager<IdentityRole>>(), dashboardWork);
                 if (customerDiscountOnly)
                 {

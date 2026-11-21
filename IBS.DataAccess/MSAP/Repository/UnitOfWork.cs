@@ -11,7 +11,6 @@ using IBS.Models.MSAP.MasterFile;
 using IBS.Utility.MSAP.Constants;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
-using ITermsRepository = IBS.DataAccess.Repository.Filpride.IRepository.ITermsRepository;
 
 namespace IBS.DataAccess.MSAP.Repository
 {
@@ -107,7 +106,7 @@ namespace IBS.DataAccess.MSAP.Repository
 
             Customer = new CustomerRepository(_db);
             AuditTrail = new AuditTrailRepository(_db);
-            Terms = new IBS.DataAccess.Repository.Filpride.TermsRepository(sharedDb);
+            Terms = new TermsRepository(_db);
 
             #endregion
 

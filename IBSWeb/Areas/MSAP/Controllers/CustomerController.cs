@@ -56,7 +56,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
 
                 PaymentTerms = await unitOfWork.Terms
-                    .GetFilprideTermsListAsyncByCode(cancellationToken),
+                    .GetTermsListAsyncByCode(cancellationToken),
             };
             return View(model);
         }
@@ -73,7 +73,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             model.PaymentTerms = await unitOfWork.Terms
-                .GetFilprideTermsListAsyncByCode(cancellationToken);
+                .GetTermsListAsyncByCode(cancellationToken);
 
             // Customer codes are generated after validation, never supplied by the create form.
             ModelState.Remove(nameof(CustomerViewModel.CustomerCode));
@@ -140,7 +140,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 var model = new CustomerViewModel(customer);
                 model.PaymentTerms = await unitOfWork.Terms
-                    .GetFilprideTermsListAsyncByCode(cancellationToken);
+                    .GetTermsListAsyncByCode(cancellationToken);
                 return View(model);
             }
 
@@ -158,7 +158,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             model.PaymentTerms = await unitOfWork.Terms
-                .GetFilprideTermsListAsyncByCode(cancellationToken);
+                .GetTermsListAsyncByCode(cancellationToken);
 
             if (!ModelState.IsValid)
             {
@@ -263,7 +263,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             customer.PaymentTerms = await unitOfWork.Terms
-                .GetFilprideTermsListAsyncByCode(cancellationToken);
+                .GetTermsListAsyncByCode(cancellationToken);
 
             return View(customer);
         }
@@ -287,7 +287,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             customer.PaymentTerms = await unitOfWork.Terms
-                .GetFilprideTermsListAsyncByCode(cancellationToken);
+                .GetTermsListAsyncByCode(cancellationToken);
 
             try
             {
@@ -334,7 +334,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             if (customer != null)
             {
                 customer.PaymentTerms = await unitOfWork.Terms
-                    .GetFilprideTermsListAsyncByCode(cancellationToken);
+                    .GetTermsListAsyncByCode(cancellationToken);
 
                 return View(customer);
             }
@@ -361,7 +361,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             customer.PaymentTerms = await unitOfWork.Terms
-                .GetFilprideTermsListAsyncByCode(cancellationToken);
+                .GetTermsListAsyncByCode(cancellationToken);
 
             try
             {

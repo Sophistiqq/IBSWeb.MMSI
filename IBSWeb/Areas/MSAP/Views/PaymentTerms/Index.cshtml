@@ -5,13 +5,17 @@
 
 <div class="modern-layout app-ui">
     <main class="modern-container ui-page">
-        @Html.AntiForgeryToken()
         <div class="flex-stack ui-page-toolbar">
             <div>
                 <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Payment Terms</li></ol></nav>
                 <h1 class="modern-headline-lg ui-page-title">@ViewData["Title"]</h1>
             </div>
-            <p>Payment terms are maintained in Filpride and shared with MSAP.</p>
+            <div class="flex gap-2 ui-actions">
+                <a asp-action="Create" class="modern-btn-primary ui-page-action">
+                    <span class="material-symbols-outlined">add_circle</span>
+                    CREATE NEW
+                </a>
+            </div>
         </div>
 
         <div class="modern-card ui-card">
@@ -28,6 +32,7 @@
                             <th>Terms Code</th>
                             <th>Days</th>
                             <th>Months</th>
+                            <th class="text-center">Actions</th>
                         </tr>
                     </thead>
                 </table>
@@ -36,9 +41,14 @@
     </main>
 </div>
 
+<form id="deleteForm" method="post" asp-antiforgery="false" hidden>@Html.AntiForgeryToken()</form>
+
 @section Scripts {
     <script>
         $(document).ready(function () {
+            const editUrl = '@Url.Action("Edit", "PaymentTerms", new { area = "MSAP" })';
+            const deleteUrl = '@Url.Action("Delete", "PaymentTerms", new { area = "MSAP" })';
+
             $('#paginatedTable').DataTable(ModernTable.config({
                 order: [[0, 'asc']],
                 ajax: $.extend(ModernTable.ajax("@Url.Action("GetPaymentTerms", "PaymentTerms", new { area = "MSAP" })"), {
@@ -47,11 +57,50 @@
                     }
                 }),
                 columns: [
-                    { data: "termsCode", render: ModernTable.render.text },
+                    {
+                        data: "termsCode",
+                        render: (data, type) => type === 'display'
+                            ? `<span class="font-bold uppercase">${ModernTable.render.text(data)}</span>`
+                            : data
+                    },
                     { data: "numberOfDays", render: ModernTable.render.text },
-                    { data: "numberOfMonths", render: ModernTable.render.text }
+                    { data: "numberOfMonths", render: ModernTable.render.text },
+                    {
+                        data: null,
+                        orderable: false,
+                        className: "text-center",
+                        render: (data, type, row) => {
+                            const encoded = encodeURIComponent(row.termsCode || '');
+                            return ModernTable.render.dropdown([
+                                { label: 'Edit Term', icon: 'edit', url: `${editUrl}?id=${encoded}` },
+                                {
+                                    label: 'Delete Term',
+                                    icon: 'delete',
+                                    isError: true,
+                                    onclick: `confirmDelete('${deleteUrl}?id=${encoded}', '${encoded}')`
+                                }
+                            ]);
+                        }
+                    }
                 ]
             }));
         });
+
+        function confirmDelete(url, encodedCode) {
+            const code = decodeURIComponent(encodedCode || '');
+            ModernAlert.confirm({
+                title: 'Delete Payment Term?',
+                text: `Are you sure you want to delete payment term "${code}"?`,
+                icon: 'warning',
+                confirmText: 'Yes, Delete',
+                cancelText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const form = document.getElementById('deleteForm');
+                    form.action = url;
+                    form.submit();
+                }
+            });
+        }
     </script>
 }

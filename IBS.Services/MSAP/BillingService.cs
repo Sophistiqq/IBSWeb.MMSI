@@ -1672,7 +1672,7 @@ namespace IBS.Services.MSAP
 
         public async Task<Billing> PopulateBillingSelectListsAsync(Billing model, CancellationToken cancellationToken)
         {
-            model.PaymentTerms = await unitOfWork.Terms.GetFilprideTermsListAsyncByCode(cancellationToken);
+            model.PaymentTerms = await unitOfWork.Terms.GetTermsListAsyncByCode(cancellationToken);
             model.Vessels = await unitOfWork.Vessel.GetMsapVesselsSelectList(cancellationToken);
             model.Ports = await unitOfWork.Port.GetMsapPortsSelectList(cancellationToken);
             model.Customers = await unitOfWork.Billing.GetMsapCustomersWithBillablesSelectList(model.CustomerId, "", cancellationToken);
