@@ -1,4 +1,3 @@
-using System.Linq.Dynamic.Core;
 using System.Security.Claims;
 using IBS.DataAccess.MSAP.Repository.IRepository;
 using IBS.Models.MSAP;
@@ -219,39 +218,34 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 var totalRecords = query.Count();
 
                 // Global search
-                if (!string.IsNullOrEmpty(parameters.Search.Value))
+                var searchValue = parameters?.Search?.Value;
+                if (!string.IsNullOrEmpty(searchValue))
                 {
-                    var searchValue = parameters.Search.Value.ToLower();
+                    var searchLower = searchValue.ToLower();
 
                     query = query
-                    .Where(c =>
-                        c.CustomerCode.ToLower().Contains(searchValue) ||
-                        c.CustomerName.ToLower().Contains(searchValue) ||
-                        c.CustomerTerms.ToLower().Contains(searchValue) ||
-                        c.VatType.ToLower().Contains(searchValue)
-                        ).ToList();
+                        .Where(c =>
+                            c.CustomerCode.ToLower().Contains(searchLower)
+                            || c.CustomerName.ToLower().Contains(searchLower)
+                            || c.CustomerTerms.ToLower().Contains(searchLower)
+                            || c.VatType.ToLower().Contains(searchLower))
+                        .ToList();
                 }
 
                 // Sorting
-                if (parameters.Order?.Count > 0)
-                {
-                    var orderColumn = parameters.Order[0];
-                    var columnName = parameters.Columns[orderColumn.Column].Data;
-                    var sortDirection = orderColumn.Dir.ToLower() == "asc" ? "ascending" : "descending";
-                    query = query
-                        .AsQueryable()
-                        .OrderBy($"{columnName} {sortDirection}");
-                }
+                query = ApplyCustomerSort(query, parameters);
 
                 var filteredRecords = query.Count();
+                var start = Math.Max(0, parameters?.Start ?? 0);
+                var length = parameters?.Length >= 0 ? parameters.Length : 10;
                 var pagedData = query
-                    .Skip(parameters.Start)
-                    .Take(parameters.Length)
+                    .Skip(start)
+                    .Take(length)
                     .ToList();
 
                 return Json(new
                 {
-                    draw = parameters.Draw,
+                    draw = parameters?.Draw ?? 0,
                     recordsTotal = totalRecords,
                     recordsFiltered = filteredRecords,
                     data = pagedData
@@ -443,58 +437,32 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 }
 
                 // Apply search filter if provided
-                if (!string.IsNullOrEmpty(parameters.Search.Value))
+                var searchValue = parameters?.Search?.Value;
+                if (!string.IsNullOrEmpty(searchValue))
                 {
-                    var searchValue = parameters.Search.Value.ToLower();
+                    var searchLower = searchValue.ToLower();
 
                     customers = customers
                         .Where(s =>
-                            (s.CustomerCode.ToLower().Contains(searchValue)) ||
-                            (s.CustomerName.ToLower().Contains(searchValue)) ||
-                            (s.CustomerTin.ToLower().Contains(searchValue)) ||
-                            (s.BusinessStyle != null && s.BusinessStyle.ToLower().Contains(searchValue)) ||
-                            (s.CustomerTerms.ToLower().Contains(searchValue)) ||
-                            (s.CustomerType.ToLower().Contains(searchValue)) ||
-                            s.CreatedDate.ToString("MMM dd, yyyy").ToLower().Contains(searchValue)
-                        )
+                            s.CustomerCode.ToLower().Contains(searchLower)
+                            || s.CustomerName.ToLower().Contains(searchLower)
+                            || s.CustomerTin.ToLower().Contains(searchLower)
+                            || (s.BusinessStyle != null && s.BusinessStyle.ToLower().Contains(searchLower))
+                            || s.CustomerTerms.ToLower().Contains(searchLower)
+                            || s.CustomerType.ToLower().Contains(searchLower)
+                            || s.CreatedDate.ToString("MMM dd, yyyy").ToLower().Contains(searchLower))
                         .ToList();
                 }
 
                 // Apply sorting if provided
-                if (parameters.Order?.Count > 0)
-                {
-                    var orderColumn = parameters.Order[0];
-                    var columnName = parameters.Columns[orderColumn.Column].Data;
-                    var sortDirection = orderColumn.Dir.ToLower() == "asc" ? "ascending" : "descending";
-
-                    // Map frontend column names to actual entity property names
-                    var columnMapping = new Dictionary<string, string>
-                    {
-                        { "customerCode", "CustomerCode" },
-                        { "customerName", "CustomerName" },
-                        { "customerTin", "CustomerTin" },
-                        { "businessStyle", "BusinessStyle" },
-                        { "customerTerms", "CustomerTerms" },
-                        { "customerType", "CustomerType" },
-                        { "createdDate", "CreatedDate" }
-                    };
-
-                    // Get the actual property name
-                    var actualColumnName = columnMapping.TryGetValue(columnName, out string? value)
-                        ? value : columnName;
-
-                    customers = customers
-                        .AsQueryable()
-                        .OrderBy($"{actualColumnName} {sortDirection}")
-                        .ToList();
-                }
+                customers = ApplyCustomerSort(customers, parameters).ToList();
 
                 var filteredRecords = customers.Count();
 
                 // Apply pagination - HANDLE -1 FOR "ALL"
                 IEnumerable<Customer> pagedCustomers;
 
-                if (parameters.Length == -1)
+                if (parameters?.Length == -1)
                 {
                     // "All" selected - return all records
                     pagedCustomers = customers;
@@ -502,9 +470,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 else
                 {
                     // Normal pagination
+                    var start = Math.Max(0, parameters?.Start ?? 0);
+                    var length = parameters?.Length >= 0 ? parameters.Length : 10;
                     pagedCustomers = customers
-                        .Skip(parameters.Start)
-                        .Take(parameters.Length);
+                        .Skip(start)
+                        .Take(length);
                 }
 
                 var pagedData = pagedCustomers
@@ -523,7 +493,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
                 return Json(new
                 {
-                    draw = parameters.Draw,
+                    draw = parameters?.Draw ?? 0,
                     recordsTotal = totalRecords,
                     recordsFiltered = filteredRecords,
                     data = pagedData
@@ -536,6 +506,37 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 TempData["error"] = ex.Message;
                 return RedirectToAction(nameof(Index));
             }
+        }
+
+        private static IEnumerable<Customer> ApplyCustomerSort(IEnumerable<Customer> customers, DataTablesParameters? parameters)
+        {
+            var orderColumn = parameters?.Order?.FirstOrDefault();
+            if (orderColumn == null)
+            {
+                return customers.OrderBy(c => c.CustomerCode);
+            }
+
+            var columnName = parameters?.Columns != null
+                && orderColumn.Column >= 0
+                && orderColumn.Column < parameters.Columns.Count
+                ? parameters.Columns[orderColumn.Column]?.Data?.ToLowerInvariant()
+                : null;
+            var isDescending = string.Equals(orderColumn.Dir, "desc", StringComparison.OrdinalIgnoreCase);
+
+            return columnName switch
+            {
+                "customerid" => isDescending ? customers.OrderByDescending(c => c.CustomerId) : customers.OrderBy(c => c.CustomerId),
+                "customercode" => isDescending ? customers.OrderByDescending(c => c.CustomerCode) : customers.OrderBy(c => c.CustomerCode),
+                "customername" => isDescending ? customers.OrderByDescending(c => c.CustomerName) : customers.OrderBy(c => c.CustomerName),
+                "customertin" => isDescending ? customers.OrderByDescending(c => c.CustomerTin) : customers.OrderBy(c => c.CustomerTin),
+                "businessstyle" => isDescending ? customers.OrderByDescending(c => c.BusinessStyle) : customers.OrderBy(c => c.BusinessStyle),
+                "customerterms" => isDescending ? customers.OrderByDescending(c => c.CustomerTerms) : customers.OrderBy(c => c.CustomerTerms),
+                "customertype" => isDescending ? customers.OrderByDescending(c => c.CustomerType) : customers.OrderBy(c => c.CustomerType),
+                "vattype" => isDescending ? customers.OrderByDescending(c => c.VatType) : customers.OrderBy(c => c.VatType),
+                "isactive" => isDescending ? customers.OrderByDescending(c => c.IsActive) : customers.OrderBy(c => c.IsActive),
+                "createddate" => isDescending ? customers.OrderByDescending(c => c.CreatedDate) : customers.OrderBy(c => c.CreatedDate),
+                _ => isDescending ? customers.OrderByDescending(c => c.CustomerCode) : customers.OrderBy(c => c.CustomerCode)
+            };
         }
 
         //Download as .xlsx file.(Export)

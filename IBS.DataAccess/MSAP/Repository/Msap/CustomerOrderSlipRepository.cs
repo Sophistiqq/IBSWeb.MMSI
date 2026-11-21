@@ -120,22 +120,22 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Include(j => j.Terminal)
                 .Include(j => j.DispatchTickets.Where(dt => dt.Status != MsapConstants.DispatchTicketStatus.Deleted));
 
-            if (!string.IsNullOrEmpty(parameters.Search.Value))
+            var globalSearch = parameters?.Search?.Value;
+            if (!string.IsNullOrEmpty(globalSearch))
             {
-                var s = parameters.Search.Value.ToLower();
+                var s = globalSearch.ToLower();
                 query = query.Where(dt =>
-                    dt.CustomerOrderSlipNumber.ToLower().Contains(s) ||
-                    dt.Customer.CustomerName.ToLower().Contains(s) ||
-                    dt.Status.ToLower().Contains(s)
-                );
+                    dt.CustomerOrderSlipNumber.ToLower().Contains(s)
+                    || dt.Customer.CustomerName.ToLower().Contains(s)
+                    || dt.Status.ToLower().Contains(s));
             }
 
             // Column-specific search
-            if (parameters.Columns != null)
+            if (parameters?.Columns != null)
             {
                 foreach (var column in parameters.Columns)
                 {
-                    if (column.Search?.Value is { Length: > 0 } searchValue)
+                    if (column?.Search?.Value is { Length: > 0 } searchValue)
                     {
                         if (column.Data == "status")
                         {
@@ -155,23 +155,40 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             var totalRecords = await dbSet.CountAsync(cancellationToken);
             var recordsFiltered = await query.CountAsync(cancellationToken);
 
-            if (parameters.Order?.Count > 0 && parameters.Columns != null)
+            var order = parameters?.Order?.FirstOrDefault();
+            if (order != null
+                && parameters?.Columns != null
+                && order.Column >= 0
+                && order.Column < parameters.Columns.Count)
             {
-                var order = parameters.Order[0];
-                var column = parameters.Columns[order.Column];
+                var col = parameters.Columns[order.Column]?.Data?.ToLowerInvariant();
+                var isDescending = string.Equals(order.Dir, "desc", StringComparison.OrdinalIgnoreCase);
 
-                query = order.Dir == "desc"
-                    ? query.OrderByDescending(e => EF.Property<object>(e, char.ToUpper(column.Data[0]) + column.Data.Substring(1)))
-                    : query.OrderBy(e => EF.Property<object>(e, char.ToUpper(column.Data[0]) + column.Data.Substring(1)));
+                query = col switch
+                {
+                    "date" => isDescending ? query.OrderByDescending(j => j.Date) : query.OrderBy(j => j.Date),
+                    "customerorderslipnumber" => isDescending ? query.OrderByDescending(j => j.CustomerOrderSlipNumber) : query.OrderBy(j => j.CustomerOrderSlipNumber),
+                    "customer.customername" => isDescending ? query.OrderByDescending(j => j.Customer.CustomerName) : query.OrderBy(j => j.Customer.CustomerName),
+                    "vessel.vesselname" => isDescending ? query.OrderByDescending(j => j.Vessel.VesselName) : query.OrderBy(j => j.Vessel.VesselName),
+                    "cosnumber" => isDescending ? query.OrderByDescending(j => j.COSNumber) : query.OrderBy(j => j.COSNumber),
+                    "voyagenumber" => isDescending ? query.OrderByDescending(j => j.VoyageNumber) : query.OrderBy(j => j.VoyageNumber),
+                    "dispatchtickets" => isDescending
+                        ? query.OrderByDescending(j => j.DispatchTickets.Count(dt => dt.Status != MsapConstants.DispatchTicketStatus.Deleted))
+                        : query.OrderBy(j => j.DispatchTickets.Count(dt => dt.Status != MsapConstants.DispatchTicketStatus.Deleted)),
+                    "status" => isDescending ? query.OrderByDescending(j => j.Status) : query.OrderBy(j => j.Status),
+                    _ => query.OrderByDescending(j => j.Date)
+                };
             }
             else
             {
                 query = query.OrderByDescending(j => j.Date);
             }
 
+            var start = Math.Max(0, parameters?.Start ?? 0);
+            var length = parameters?.Length >= 0 ? parameters.Length : 10;
             var data = await query
-                .Skip(parameters.Start)
-                .Take(parameters.Length)
+                .Skip(start)
+                .Take(length)
                 .ToListAsync(cancellationToken);
 
             return (data, recordsFiltered, totalRecords);

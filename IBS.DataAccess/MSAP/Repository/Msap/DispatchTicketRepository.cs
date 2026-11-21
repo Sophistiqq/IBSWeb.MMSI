@@ -1,4 +1,3 @@
-using System.Linq.Dynamic.Core;
 using System.Linq.Expressions;
 using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository.Msap.IRepository;
@@ -170,26 +169,27 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 query = query.Where(dt => dt.Status != MsapConstants.DispatchTicketStatus.Deleted);
             }
 
-            if (!string.IsNullOrEmpty(parameters.Search.Value))
+            var globalSearch = parameters?.Search?.Value;
+            if (!string.IsNullOrEmpty(globalSearch))
             {
-                var s = parameters.Search.Value.ToLower();
+                var s = globalSearch.ToLower();
                 query = query.Where(dt =>
-                    (dt.COSNumber != null && dt.COSNumber.ToLower().Contains(s)) ||
-                    dt.DispatchNumber.ToLower().Contains(s) ||
-                    (dt.Service != null && dt.Service.ServiceName.ToLower().Contains(s)) ||
-                    (dt.Tugboat != null && dt.Tugboat.TugboatName.ToLower().Contains(s)) ||
-                    (dt.Customer != null && dt.Customer.CustomerName.ToLower().Contains(s)) ||
-                    (dt.Vessel != null && dt.Vessel.VesselName.ToLower().Contains(s)) ||
-                    (dt.Billing != null && dt.Billing.MsapBillingNumber.ToLower().Contains(s)) ||
-                    dt.Status.ToLower().Contains(s));
+                    (dt.COSNumber != null && dt.COSNumber.ToLower().Contains(s))
+                    || dt.DispatchNumber.ToLower().Contains(s)
+                    || (dt.Service != null && dt.Service.ServiceName.ToLower().Contains(s))
+                    || (dt.Tugboat != null && dt.Tugboat.TugboatName.ToLower().Contains(s))
+                    || (dt.Customer != null && dt.Customer.CustomerName.ToLower().Contains(s))
+                    || (dt.Vessel != null && dt.Vessel.VesselName.ToLower().Contains(s))
+                    || (dt.Billing != null && dt.Billing.MsapBillingNumber.ToLower().Contains(s))
+                    || dt.Status.ToLower().Contains(s));
             }
 
             // Column-specific search
-            if (parameters.Columns != null)
+            if (parameters?.Columns != null)
             {
                 foreach (var column in parameters.Columns)
                 {
-                    if (column.Search?.Value is { Length: > 0 } searchValue)
+                    if (column?.Search?.Value is { Length: > 0 } searchValue)
                     {
                         if (column.Data == "status")
                         {
@@ -201,7 +201,9 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                             if (range.Length == 2
                                 && DateOnly.TryParseExact(range[0], "yyyy-MM-dd", out var from)
                                 && DateOnly.TryParseExact(range[1], "yyyy-MM-dd", out var to) && from <= to)
+                            {
                                 query = query.Where(dt => dt.Date >= from && dt.Date <= to);
+                            }
                             else if (DateOnly.TryParse(searchValue, out var parsedDate))
                             {
                                 query = query.Where(dt => dt.Date == parsedDate);
@@ -214,20 +216,46 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             var totalRecords = await dbSet.CountAsync(dt => dt.Status != "For Posting" && dt.Status != "Incomplete" && dt.Status != "Draft" && dt.Status != "Requested" && dt.Status != MsapConstants.DispatchTicketStatus.Deleted, cancellationToken);
             var recordsFiltered = await query.CountAsync(cancellationToken);
 
-            if (parameters.Order?.Count > 0 && parameters.Columns != null)
+            var order = parameters?.Order?.FirstOrDefault();
+            if (order != null
+                && parameters?.Columns != null
+                && order.Column >= 0
+                && order.Column < parameters.Columns.Count)
             {
-                var col = parameters.Columns[parameters.Order[0].Column].Data;
-                var dir = parameters.Order[0].Dir.ToLower() == "asc" ? "ascending" : "descending";
-                query = query.OrderBy($"{col} {dir}");
+                var col = parameters.Columns[order.Column]?.Data?.ToLowerInvariant();
+                var isAscending = string.Equals(order.Dir, "asc", StringComparison.OrdinalIgnoreCase);
+                query = col switch
+                {
+                    "date" => isAscending ? query.OrderBy(dt => dt.Date) : query.OrderByDescending(dt => dt.Date),
+                    "cosnumber" => isAscending ? query.OrderBy(dt => dt.COSNumber) : query.OrderByDescending(dt => dt.COSNumber),
+                    "dispatchnumber" => isAscending ? query.OrderBy(dt => dt.DispatchNumber) : query.OrderByDescending(dt => dt.DispatchNumber),
+                    "billing.msapbillingnumber" => isAscending
+                        ? query.OrderBy(dt => dt.Billing != null ? dt.Billing.MsapBillingNumber : null)
+                        : query.OrderByDescending(dt => dt.Billing != null ? dt.Billing.MsapBillingNumber : null),
+                    "dateleft" => isAscending
+                        ? query.OrderBy(dt => dt.DateLeft).ThenBy(dt => dt.TimeLeft)
+                        : query.OrderByDescending(dt => dt.DateLeft).ThenByDescending(dt => dt.TimeLeft),
+                    "datearrived" => isAscending
+                        ? query.OrderBy(dt => dt.DateArrived).ThenBy(dt => dt.TimeArrived)
+                        : query.OrderByDescending(dt => dt.DateArrived).ThenByDescending(dt => dt.TimeArrived),
+                    "service.servicename" => isAscending ? query.OrderBy(dt => dt.Service.ServiceName) : query.OrderByDescending(dt => dt.Service.ServiceName),
+                    "tugboat.tugboatname" => isAscending ? query.OrderBy(dt => dt.Tugboat.TugboatName) : query.OrderByDescending(dt => dt.Tugboat.TugboatName),
+                    "customer.customername" => isAscending ? query.OrderBy(dt => dt.Customer.CustomerName) : query.OrderByDescending(dt => dt.Customer.CustomerName),
+                    "vessel.vesselname" => isAscending ? query.OrderBy(dt => dt.Vessel.VesselName) : query.OrderByDescending(dt => dt.Vessel.VesselName),
+                    "status" => isAscending ? query.OrderBy(dt => dt.Status) : query.OrderByDescending(dt => dt.Status),
+                    _ => query.OrderByDescending(dt => dt.Date)
+                };
             }
             else
             {
                 query = query.OrderByDescending(dt => dt.Date);
             }
 
+            var start = Math.Max(0, parameters?.Start ?? 0);
+            var length = parameters?.Length >= 0 ? parameters.Length : 10;
             var data = await query
-                .Skip(parameters.Start)
-                .Take(parameters.Length)
+                .Skip(start)
+                .Take(length)
                 .ToListAsync(cancellationToken);
 
             return (data, recordsFiltered, totalRecords);

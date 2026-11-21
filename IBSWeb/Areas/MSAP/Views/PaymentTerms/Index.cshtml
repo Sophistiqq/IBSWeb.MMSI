@@ -5,6 +5,7 @@
 
 <div class="modern-layout app-ui">
     <main class="modern-container ui-page">
+        @Html.AntiForgeryToken()
         <div class="flex-stack ui-page-toolbar">
             <div>
                 <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li>MSAP</li><li aria-current="page">Payment Terms</li></ol></nav>
@@ -35,47 +36,22 @@
     </main>
 </div>
 
-@section Scripts{
+@section Scripts {
     <script>
         $(document).ready(function () {
-            let table = $('#paginatedTable').DataTable({
-                "order": [[0, 'asc']],
-                "processing": true,
-                "serverSide": true,
-                "stateDuration": 86400,
-                "language": {
-                    "processing": `<div class="d-flex justify-content-center">
-                                    <div class="spinner-border text-primary" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                 </div>`
-                },
-                "ajax": {
-                    "url": "@Url.Action("GetPaymentTerms", "PaymentTerms", new { area = "MSAP" })",
-                    "type": "POST",
-                    "data": function (d) {
-                        return $.extend({}, d, {
-                            __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
-                        });
-                    },
-                    "error": function (xhr, error, thrown) {
-                        console.error('DataTables error:', error);
-                        alert('An error occurred while loading the data');
+            $('#paginatedTable').DataTable(ModernTable.config({
+                order: [[0, 'asc']],
+                ajax: $.extend(ModernTable.ajax("@Url.Action("GetPaymentTerms", "PaymentTerms", new { area = "MSAP" })"), {
+                    error: function () {
+                        ModernAlert.error('An error occurred while loading the data.');
                     }
-                },
-                "preDrawCallback": function (settings) {
-                    $('#paginatedTable').addClass('table-loading');
-                },
-                "drawCallback": function (settings) {
-                    $('#paginatedTable').removeClass('table-loading');
-                    $('[data-bs-toggle="tooltip"]').tooltip();
-                },
-                "columns": [
-                    { "data": "termsCode" },
-                    { "data": "numberOfDays" },
-                    { "data": "numberOfMonths" }
+                }),
+                columns: [
+                    { data: "termsCode", render: ModernTable.render.text },
+                    { data: "numberOfDays", render: ModernTable.render.text },
+                    { data: "numberOfMonths", render: ModernTable.render.text }
                 ]
-            });
+            }));
         });
     </script>
 }

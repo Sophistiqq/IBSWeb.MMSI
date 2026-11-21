@@ -1,4 +1,3 @@
-using System.Linq.Dynamic.Core;
 using System.Linq.Expressions;
 using IBS.DataAccess.Data;
 using IBS.DataAccess.MSAP.Data;
@@ -346,29 +345,29 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             }
             int totalRecords = await query.CountAsync(cancellationToken);
 
-            if (!string.IsNullOrEmpty(parameters.Search.Value))
+            var globalSearch = parameters?.Search?.Value;
+            if (!string.IsNullOrEmpty(globalSearch))
             {
-                var s = parameters.Search.Value.ToLower();
+                var s = globalSearch.ToLower();
                 var matchingBillingIds = await _db.Set<DispatchTicket>()
                     .Where(dt => dt.BillingId != null && dt.DispatchNumber.ToLower().Contains(s))
                     .Select(dt => dt.BillingId!.Value)
                     .Distinct()
                     .ToListAsync(cancellationToken);
                 query = query.Where(dt =>
-                    dt.MsapBillingNumber.ToLower().Contains(s) ||
-                    dt.Customer.CustomerName.ToLower().Contains(s) ||
-                    dt.Vessel.VesselName.ToLower().Contains(s) ||
-                    dt.Status.ToLower().Contains(s) ||
-                    matchingBillingIds.Contains(dt.MsapBillingId)
-                );
+                    dt.MsapBillingNumber.ToLower().Contains(s)
+                    || dt.Customer.CustomerName.ToLower().Contains(s)
+                    || dt.Vessel.VesselName.ToLower().Contains(s)
+                    || dt.Status.ToLower().Contains(s)
+                    || matchingBillingIds.Contains(dt.MsapBillingId));
             }
 
             // Column-specific search
-            if (parameters.Columns != null)
+            if (parameters?.Columns != null)
             {
                 foreach (var column in parameters.Columns)
                 {
-                    if (column.Search?.Value is { Length: > 0 } searchValue)
+                    if (column?.Search?.Value is { Length: > 0 } searchValue)
                     {
                         if (column.Data == "status")
                         {
@@ -387,16 +386,40 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
             var recordsFiltered = await query.CountAsync(cancellationToken);
 
-            if (parameters.Order?.Count > 0 && parameters.Columns != null)
+            var order = parameters?.Order?.FirstOrDefault();
+            if (order != null
+                && parameters?.Columns != null
+                && order.Column >= 0
+                && order.Column < parameters.Columns.Count)
             {
-                var col = parameters.Columns[parameters.Order[0].Column].Data;
-                var dir = parameters.Order[0].Dir.ToLower() == "asc" ? "ascending" : "descending";
-                query = query.OrderBy($"{col} {dir}");
+                var col = parameters.Columns[order.Column]?.Data?.ToLowerInvariant();
+                var isAscending = string.Equals(order.Dir, "asc", StringComparison.OrdinalIgnoreCase);
+                query = col switch
+                {
+                    "date" => isAscending ? query.OrderBy(b => b.Date) : query.OrderByDescending(b => b.Date),
+                    "msapbillingnumber" => isAscending ? query.OrderBy(b => b.MsapBillingNumber) : query.OrderByDescending(b => b.MsapBillingNumber),
+                    "amount" => isAscending ? query.OrderBy(b => b.Amount) : query.OrderByDescending(b => b.Amount),
+                    "customer.customername" => isAscending ? query.OrderBy(b => b.Customer.CustomerName) : query.OrderByDescending(b => b.Customer.CustomerName),
+                    "vessel.vesselname" => isAscending ? query.OrderBy(b => b.Vessel.VesselName) : query.OrderByDescending(b => b.Vessel.VesselName),
+                    "status" => isAscending ? query.OrderBy(b => b.Status) : query.OrderByDescending(b => b.Status),
+                    "duedate" => isAscending ? query.OrderBy(b => b.DueDate) : query.OrderByDescending(b => b.DueDate),
+                    "balance" => isAscending ? query.OrderBy(b => b.Balance) : query.OrderByDescending(b => b.Balance),
+                    "amountpaid" => isAscending ? query.OrderBy(b => b.AmountPaid) : query.OrderByDescending(b => b.AmountPaid),
+                    "cosnumber" => isAscending ? query.OrderBy(b => b.COSNumber) : query.OrderByDescending(b => b.COSNumber),
+                    "voyagenumber" => isAscending ? query.OrderBy(b => b.VoyageNumber) : query.OrderByDescending(b => b.VoyageNumber),
+                    _ => query.OrderByDescending(b => b.Date)
+                };
+            }
+            else
+            {
+                query = query.OrderByDescending(b => b.Date);
             }
 
+            var start = Math.Max(0, parameters?.Start ?? 0);
+            var length = parameters?.Length >= 0 ? parameters.Length : 10;
             var data = await query
-                .Skip(parameters.Start)
-                .Take(parameters.Length)
+                .Skip(start)
+                .Take(length)
                 .ToListAsync(cancellationToken);
 
             var billingIds = data.Select(b => b.MsapBillingId).ToList();

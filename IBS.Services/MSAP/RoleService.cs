@@ -50,18 +50,36 @@ namespace IBS.Services.MSAP
         public async Task<(IEnumerable<object> Data, int TotalRecords)> GetPagedRolesAsync(
             DataTablesParameters parameters, CancellationToken cancellationToken)
         {
-            IEnumerable<IdentityRole> roles = await GetAllRolesAsync(cancellationToken);
-            if (!string.IsNullOrWhiteSpace(parameters.Search.Value))
+            var roles = await GetAllRolesAsync(cancellationToken);
+            var searchValue = parameters?.Search?.Value;
+            if (!string.IsNullOrWhiteSpace(searchValue))
             {
-                roles = roles.Where(role => role.Name!.Contains(parameters.Search.Value, StringComparison.OrdinalIgnoreCase));
+                roles = roles.Where(role => role.Name!.Contains(searchValue, StringComparison.OrdinalIgnoreCase));
             }
 
-            roles = parameters.Order?.FirstOrDefault()?.Dir == "desc"
-                ? roles.OrderByDescending(role => role.Name)
-                : roles.OrderBy(role => role.Name);
-            int totalRecords = roles.Count();
-            IEnumerable<object> data = roles.Skip(parameters.Start).Take(parameters.Length)
-                .Select(role => new { role.Name }).ToList();
+            var order = parameters?.Order?.FirstOrDefault();
+            var columnName = order != null
+                && parameters?.Columns != null
+                && order.Column >= 0
+                && order.Column < parameters.Columns.Count
+                ? parameters.Columns[order.Column]?.Data?.ToLowerInvariant()
+                : null;
+            var isDescending = string.Equals(order?.Dir, "desc", StringComparison.OrdinalIgnoreCase);
+
+            roles = columnName switch
+            {
+                "name" => isDescending ? roles.OrderByDescending(role => role.Name) : roles.OrderBy(role => role.Name),
+                _ => isDescending ? roles.OrderByDescending(role => role.Name) : roles.OrderBy(role => role.Name)
+            };
+
+            var totalRecords = roles.Count();
+            var start = Math.Max(0, parameters?.Start ?? 0);
+            var length = parameters?.Length >= 0 ? parameters.Length : 10;
+            var data = roles
+                .Skip(start)
+                .Take(length)
+                .Select(role => (object)new { role.Name })
+                .ToList();
             return (data, totalRecords);
         }
     }
