@@ -786,6 +786,7 @@ namespace IBS.Services.MSAP
             List<DispatchTicket> candidates = await _db.MsapDispatchTickets
                 .Include(t => t.CustomerOrderSlip)
                 .Include(t => t.ExpectedServiceEntry)
+                .Include(t => t.Service)
                 .Where(t => customers.Contains(t.CustomerId)
                     && t.Customer.Company == MsapConstants.Company_MMSI
                     && t.DateLeft != null && t.DateLeft >= minDate

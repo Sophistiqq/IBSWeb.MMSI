@@ -308,7 +308,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     DispatchTicketId = t.DispatchTicketId,
                     DispatchNumber = t.DispatchNumber,
                     TugboatName = t.Tugboat?.TugboatName ?? "-",
-                    ServiceName = MsapConstants.FormatServiceDisplay(t.ServiceId, t.Service?.ServiceName ?? "-", t.Tons),
+                    ServiceName = MsapConstants.FormatServiceDisplay(t.Service?.ServiceNumber, t.Service?.ServiceName ?? "-", t.Tons),
                     TotalHours = t.TotalHours,
                     EffectiveHours = Math.Max(t.RawDurationHours ?? t.TotalHours, 1m),
                     DispatchChargeType = t.DispatchChargeType ?? "Per hour",
@@ -564,12 +564,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
                         foreach (var ticket in billing.PaidDispatchTickets!.Where(t => t.Tugboat.TugboatName == tugboat))
                         {
                             var hasTicketDiscount = ticket.DispatchDiscount > 0 && ticket.DispatchBillingAmount > ticket.DispatchNetRevenue;
-                            var unitCount = MsapConstants.GetEffectiveUnitCount(ticket.ServiceId, ticket.Tons, ticket.TotalHours);
+                            var unitCount = MsapConstants.GetEffectiveUnitCount(ticket.Service?.ServiceNumber, ticket.Tons, ticket.TotalHours);
                             var effectiveRate = unitCount > 0 ? Math.Round(ticket.DispatchNetRevenue / unitCount, 2) : ticket.DispatchRate;
 
                             worksheet.Cells[row, 1].Value = "1";
                             worksheet.Cells[row, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
-                            worksheet.Cells[row, 2].Value = $"{MsapConstants.FormatServiceDisplay(ticket.ServiceId, ticket.Service.ServiceName, ticket.Tons)}          {ticket.DateLeft} {ticket.TimeLeft}          {ticket.DateArrived} {ticket.TimeArrived}";
+                            worksheet.Cells[row, 2].Value = $"{MsapConstants.FormatServiceDisplay(ticket.Service?.ServiceNumber, ticket.Service?.ServiceName, ticket.Tons)}          {ticket.DateLeft} {ticket.TimeLeft}          {ticket.DateArrived} {ticket.TimeArrived}";
                             worksheet.Cells[row, 4].Value = printDiscount ? ticket.DispatchRate : effectiveRate;
                             worksheet.Cells[row, 4].Style.Numberformat.Format = "#,##0.00";
                             worksheet.Cells[row, 4].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;

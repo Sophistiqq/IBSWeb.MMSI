@@ -252,7 +252,7 @@
                                     var netAmountOverridden = netAmountChange != null;
                                     <tr style="@(ticketHasOverride ? "background: rgba(245, 158, 11, 0.08);" : "")">
                                         <td>
-                                            <strong>@MsapConstants.FormatServiceDisplay(ticket.ServiceId, ticket.Service.ServiceName, ticket.Tons)</strong><span class="billing-ticket-number"><strong>@ticket.DispatchNumber</strong></span>
+                                            <strong>@MsapConstants.FormatServiceDisplay(ticket.Service?.ServiceNumber, ticket.Service?.ServiceName ?? "—", ticket.Tons)</strong><span class="billing-ticket-number"><strong>@ticket.DispatchNumber</strong></span>
                                             @if (ticketHasOverride)
                                             {
                                                 <span class="schedule-status-pill ui-status ui-attention" style="margin-left: 0.35rem;">Overridden</span>
@@ -427,7 +427,7 @@
                                     <div class="flex items-center gap-2">
                                         <span class="material-symbols-outlined text-primary" aria-hidden="true">image</span>
                                         <span class="ui-body"><strong>Dispatch Ticket #@dt.DispatchNumber</strong></span>
-                                        <span class="ui-caption ui-muted">@(dt.Tugboat?.TugboatName ?? "—") · @(dt.Service != null ? MsapConstants.FormatServiceDisplay(dt.ServiceId, dt.Service.ServiceName, dt.Tons) : "—")</span>
+                                        <span class="ui-caption ui-muted">@(dt.Tugboat?.TugboatName ?? "—") · @(dt.Service != null ? MsapConstants.FormatServiceDisplay(dt.Service.ServiceNumber, dt.Service.ServiceName, dt.Tons) : "—")</span>
                                     </div>
                                     <span class="material-symbols-outlined ui-muted js-fold-icon" aria-hidden="true">expand_more</span>
                                 </summary>

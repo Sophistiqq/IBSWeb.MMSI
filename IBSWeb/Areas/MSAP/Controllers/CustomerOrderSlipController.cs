@@ -17,6 +17,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
     /// </summary>
     [Area("MSAP")]
     [Route("MSAP/COS/[action]/{id?}", Order = 0)]
+    [Route("MSAP/CustomerOrderSlip/[action]/{id?}", Order = 1)]
     public class CustomerOrderSlipController(
         IUnitOfWork unitOfWork,
         CustomerOrderSlipService customerOrderSlipService,
@@ -202,6 +203,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 ViewData["ViewedTicket"] = ticket;
                 var ticketDetails = new DispatchTicketViewModel();
                 ticketDetails.FromEntity(ticket);
+                if (ViewData["CanViewRates"] is not true
+                    || (MsapConstants.IsWateringService(ticket.Service?.ServiceNumber) && ticket.DispatchRate <= 0m))
+                {
+                    ticketDetails.DispatchRate = null;
+                }
                 ViewBag.ActualTicketEntry = await dispatchTicketService.PopulateDispatchTicketViewModelAsync(ticketDetails, id, cancellationToken);
             }
 

@@ -99,6 +99,16 @@ namespace Checks.MSAP
                         throw new NotSupportedException(method.Name);
                 }
             });
+            var services = Proxy<IServiceRepository>((_, args) =>
+            {
+                var predicate = (Expression<Func<Service, bool>>)args![0]!;
+                var catalog = new[]
+                {
+                    new Service { ServiceId = 1, ServiceNumber = "001", ServiceName = "Assist" },
+                    new Service { ServiceId = 99, ServiceNumber = MsapConstants.WateringServiceNumber, ServiceName = "Watering" }
+                };
+                return Task.FromResult(catalog.FirstOrDefault(predicate.Compile()));
+            });
             var periods = Proxy<IPostedPeriodRepository>((_, _) => Task.FromResult<MsapPostedPeriod?>(null));
             var captains = Proxy<ITugMasterRepository>((_, _) => Task.FromResult<TugMaster?>(new TugMaster { TugMasterId = 1 }));
             var tariffs = Proxy<ITariffTableRepository>((_, _) => Task.FromResult<TariffRate?>(null));
@@ -110,6 +120,7 @@ namespace Checks.MSAP
                 "get_VesselSchedule" => schedules,
                 "get_CustomerOrderSlip" => jobs,
                 "get_DispatchTicket" => tickets,
+                "get_Service" => services,
                 "get_PostedPeriod" => periods,
                 "get_TugMaster" => captains,
                 "get_TariffTable" => tariffs,
@@ -168,7 +179,52 @@ namespace Checks.MSAP
                 "Approved urgent ticket could not be reviewed and recalculated for billing.");
             entry.CancelledAt = DateTime.Now;
             Check(!(await service.UpdateDispatchTicketAsync(input, null, null, "Check", default)).IsSuccess, "Cancelled service accepted actual-ticket changes.");
-            Console.WriteLine("PASS: urgent create/edit/restore, duplicate and cancelled-service guards, approval blocking and reviewed recalculation (no database).");
+
+            var wateringEntry = new VesselScheduleServiceEntry
+            {
+                VesselScheduleServiceEntryId = 2,
+                TugboatId = 1,
+                ServiceId = 99,
+                Service = new Service { ServiceId = 99, ServiceNumber = MsapConstants.WateringServiceNumber, ServiceName = "Watering" }
+            };
+            schedule.ServiceEntries.Add(wateringEntry);
+            var wateringInput = new DispatchTicketViewModel
+            {
+                CustomerOrderSlipId = 1,
+                VesselScheduleServiceEntryId = 2,
+                DispatchNumber = "WATER-1",
+                TugBoatId = 1,
+                ServiceId = 99,
+                TugMasterId = 1,
+                Date = new DateOnly(2026, 1, 1),
+                DateLeft = new DateOnly(2026, 1, 1),
+                DateArrived = new DateOnly(2026, 1, 1),
+                TimeLeft = new TimeOnly(8, 0),
+                TimeArrived = new TimeOnly(9, 0),
+                Tons = 10m,
+                DispatchRate = 0m
+            };
+            Check(!(await service.CreateDispatchTicketAsync(wateringInput, null, null, "Check", default, canEditWateringRate: true)).IsSuccess,
+                "Commercial create accepted zero watering rate.");
+            wateringInput.DispatchRate = 999m;
+            var opsCreated = await service.CreateDispatchTicketAsync(wateringInput, null, null, "Check", default, canEditWateringRate: false);
+            Check(opsCreated.IsSuccess, $"Operations watering create failed: {opsCreated.Message}");
+            var wateringTicket = saved.Single(t => t.DispatchTicketId == opsCreated.Data);
+            Check(wateringTicket.DispatchRate == 0m && wateringTicket.Status == MsapConstants.DispatchTicketStatus.AwaitingRate,
+                "Operations watering create did not clear tampered rate or stay awaiting rate.");
+            wateringInput.FromEntity(wateringTicket);
+            wateringInput.DispatchRate = 500m;
+            Check((await service.UpdateDispatchTicketAsync(wateringInput, null, null, "Check", default, canEditWateringRate: true)).IsSuccess
+                && wateringTicket.Status == MsapConstants.DispatchTicketStatus.ForBilling
+                && wateringTicket.TotalBilling == 5000m,
+                "Commercial watering rate entry did not calculate charges.");
+            wateringInput.FromEntity(wateringTicket);
+            wateringInput.Tons = 12m;
+            wateringInput.DispatchRate = 1m;
+            Check((await service.UpdateDispatchTicketAsync(wateringInput, null, null, "Check", default, canEditWateringRate: false)).IsSuccess
+                && wateringTicket.DispatchRate == 500m && wateringTicket.TotalBilling == 6000m,
+                "Operations watering edit did not preserve existing rate or recalculate tons.");
+            Console.WriteLine("PASS: urgent create/edit/restore, duplicate and cancelled-service guards, approval blocking, reviewed recalculation and watering rate confidentiality (no database).");
         }
 
         private static T Proxy<T>(Func<MethodInfo, object?[]?, object?> handler) where T : class

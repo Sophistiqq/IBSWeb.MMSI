@@ -53,6 +53,8 @@ namespace IBS.Models.MSAP.ViewModels
 
         public int ServiceId { get; set; }
 
+        public string? ServiceNumber { get; set; }
+
         public int TugBoatId { get; set; }
 
         public int? TugMasterId { get; set; }
@@ -139,6 +141,7 @@ namespace IBS.Models.MSAP.ViewModels
             TimeArrived = entity.TimeArrived;
             TerminalId = entity.TerminalId;
             ServiceId = entity.ServiceId;
+            ServiceNumber = entity.Service?.ServiceNumber;
             TugBoatId = entity.TugBoatId;
             TugMasterId = entity.TugMasterId;
             VesselId = entity.VesselId;

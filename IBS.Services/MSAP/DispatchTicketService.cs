@@ -62,7 +62,7 @@ namespace IBS.Services.MSAP
             return schedule == null ? null : JsonSerializer.Deserialize<List<int>>(schedule.AssignedTugboatIds ?? "[]") ?? [];
         }
 
-        public async Task<ServiceResult<int>> CreateDispatchTicketAsync(DispatchTicketViewModel viewModel, IFormFile? imageFile, IFormFile? videoFile, string username, CancellationToken cancellationToken)
+        public async Task<ServiceResult<int>> CreateDispatchTicketAsync(DispatchTicketViewModel viewModel, IFormFile? imageFile, IFormFile? videoFile, string username, CancellationToken cancellationToken, bool canEditWateringRate = true)
         {
             DispatchTicket? created = null;
             try
@@ -72,7 +72,7 @@ namespace IBS.Services.MSAP
                     return ServiceResult<int>.Failure("Dispatch tickets must be created under a COS.");
                 }
 
-                string? readinessError = await ValidateReadyAsync(viewModel, cancellationToken);
+                var readinessError = await ValidateReadyAsync(viewModel, cancellationToken, canEditWateringRate);
                 if (readinessError != null)
                 {
                     return ServiceResult<int>.Failure(readinessError);
@@ -110,7 +110,7 @@ namespace IBS.Services.MSAP
                     {
                         return ServiceResult<int>.Failure("Choose an expected service from this COS before recording its ticket.");
                     }
-                    var actualError = await ValidateExpectedActualAsync(viewModel, cancellationToken);
+                    var actualError = await ValidateExpectedActualAsync(viewModel, cancellationToken, canEditWateringRate: canEditWateringRate);
                     if (actualError != null)
                     {
                         return ServiceResult<int>.Failure(actualError);
@@ -118,6 +118,10 @@ namespace IBS.Services.MSAP
                 }
 
                 var model = viewModel.ToEntity();
+                if (!canEditWateringRate && await IsWateringServiceAsync(model.ServiceId, cancellationToken))
+                {
+                    model.DispatchRate = 0m;
+                }
                 created = model;
 
                 model.CreatedBy = username;
@@ -198,7 +202,7 @@ namespace IBS.Services.MSAP
                     {
                         throw new InvalidOperationException("Choose a tugboat assigned to this vessel schedule.");
                     }
-                    readinessError = await ValidateReadyAsync(viewModel, cancellationToken);
+                    readinessError = await ValidateReadyAsync(viewModel, cancellationToken, canEditWateringRate);
                     if (readinessError != null)
                     {
                         throw new InvalidOperationException(readinessError);
@@ -419,7 +423,7 @@ namespace IBS.Services.MSAP
             }
         }
 
-        public async Task<ServiceResult> UpdateDispatchTicketAsync(DispatchTicketViewModel viewModel, IFormFile? imageFile, IFormFile? videoFile, string username, CancellationToken cancellationToken)
+        public async Task<ServiceResult> UpdateDispatchTicketAsync(DispatchTicketViewModel viewModel, IFormFile? imageFile, IFormFile? videoFile, string username, CancellationToken cancellationToken, bool canEditWateringRate = true)
         {
             DispatchTicket? ticket = null;
             string? originalImage = null;
@@ -453,7 +457,7 @@ namespace IBS.Services.MSAP
                     {
                         return;
                     }
-                    result = await UpdateDispatchTicketCoreAsync(viewModel, imageFile, videoFile, username, cancellationToken);
+                    result = await UpdateDispatchTicketCoreAsync(viewModel, imageFile, videoFile, username, cancellationToken, canEditWateringRate);
                     if (!result.IsSuccess)
                     {
                         throw new InvalidOperationException(result.Message);
@@ -483,11 +487,11 @@ namespace IBS.Services.MSAP
             }
         }
 
-        private async Task<ServiceResult> UpdateDispatchTicketCoreAsync(DispatchTicketViewModel viewModel, IFormFile? imageFile, IFormFile? videoFile, string username, CancellationToken cancellationToken)
+        private async Task<ServiceResult> UpdateDispatchTicketCoreAsync(DispatchTicketViewModel viewModel, IFormFile? imageFile, IFormFile? videoFile, string username, CancellationToken cancellationToken, bool canEditWateringRate = true)
         {
             try
             {
-                string? readinessError = await ValidateReadyAsync(viewModel, cancellationToken);
+                var readinessError = await ValidateReadyAsync(viewModel, cancellationToken, canEditWateringRate);
                 if (readinessError != null)
                 {
                     return ServiceResult.Failure(readinessError);
@@ -527,7 +531,7 @@ namespace IBS.Services.MSAP
                     {
                         return ServiceResult.Failure("The ticket must retain its approved COS, tugboat, service and booking details.");
                     }
-                    var actualError = await ValidateExpectedActualAsync(viewModel, cancellationToken, isAuthorizedAdjustment);
+                    var actualError = await ValidateExpectedActualAsync(viewModel, cancellationToken, isAuthorizedAdjustment, canEditWateringRate);
                     if (actualError != null)
                     {
                         return ServiceResult.Failure(actualError);
@@ -589,10 +593,15 @@ namespace IBS.Services.MSAP
                 AddChange(nameof(viewModel.TugMasterId), currentModel.TugMasterId, viewModel.TugMasterId);
                 AddChange(nameof(viewModel.VesselId), currentModel.VesselId, viewModel.VesselId);
                 AddChange(nameof(viewModel.Remarks), currentModel.Remarks, viewModel.Remarks);
-                if (currentModel.ServiceId == MsapConstants.WateringServiceId)
+                var isWatering = MsapConstants.IsWateringService(currentModel.Service?.ServiceNumber)
+                    || await IsWateringServiceAsync(currentModel.ServiceId, cancellationToken);
+                if (isWatering)
                 {
                     AddChange(nameof(viewModel.Tons), currentModel.Tons, viewModel.Tons, "Tons");
-                    AddChange(nameof(viewModel.DispatchRate), currentModel.DispatchRate, viewModel.DispatchRate ?? 0m, "Rate");
+                    if (canEditWateringRate)
+                    {
+                        AddChange(nameof(viewModel.DispatchRate), currentModel.DispatchRate, viewModel.DispatchRate ?? 0m, "Rate");
+                    }
                 }
 
                 currentModel.Date = viewModel.Date;
@@ -612,7 +621,7 @@ namespace IBS.Services.MSAP
                 currentModel.VesselId = viewModel.VesselId;
                 currentModel.Remarks = viewModel.Remarks;
                 currentModel.Tons = viewModel.Tons;
-                if (currentModel.ServiceId == MsapConstants.WateringServiceId)
+                if (isWatering && canEditWateringRate)
                 {
                     currentModel.DispatchRate = viewModel.DispatchRate ?? 0m;
                 }
@@ -964,7 +973,7 @@ namespace IBS.Services.MSAP
 
                 var restoredInput = new DispatchTicketViewModel();
                 restoredInput.FromEntity(model);
-                string? readinessError = await ValidateReadyAsync(restoredInput, cancellationToken);
+                var readinessError = await ValidateReadyAsync(restoredInput, cancellationToken, canEditWateringRate: false);
                 if (readinessError != null)
                 {
                     return ServiceResult.Failure(readinessError);
@@ -986,7 +995,7 @@ namespace IBS.Services.MSAP
                             throw new InvalidOperationException("Cannot restore a ticket under a closed, cancelled or operationally completed booking.");
                         }
                     }
-                    readinessError = await ValidateReadyAsync(restoredInput, cancellationToken);
+                    readinessError = await ValidateReadyAsync(restoredInput, cancellationToken, canEditWateringRate: false);
                     if (readinessError != null)
                     {
                         throw new InvalidOperationException(readinessError);
@@ -1056,14 +1065,20 @@ namespace IBS.Services.MSAP
                 {
                     viewModel.TugBoatId = entry.TugboatId;
                     viewModel.ServiceId = entry.ServiceId;
+                    viewModel.ServiceNumber = entry.Service?.ServiceNumber;
                 }
+            }
+            if (string.IsNullOrEmpty(viewModel.ServiceNumber) && viewModel.ServiceId > 0)
+            {
+                var service = await unitOfWork.Service.GetAsync(s => s.ServiceId == viewModel.ServiceId, cancellationToken);
+                viewModel.ServiceNumber = service?.ServiceNumber;
             }
             viewModel = await unitOfWork.DispatchTicket.GetDispatchTicketSelectLists(viewModel, cancellationToken);
             viewModel.Customers = await unitOfWork.GetCustomerListAsyncById(cancellationToken);
             return viewModel;
         }
 
-        private async Task<string?> ValidateReadyAsync(DispatchTicketViewModel model, CancellationToken ct)
+        private async Task<string?> ValidateReadyAsync(DispatchTicketViewModel model, CancellationToken ct, bool canEditWateringRate = true)
         {
             var results = new List<ValidationResult>();
             if (!Validator.TryValidateObject(model, new ValidationContext(model), results, true))
@@ -1076,7 +1091,7 @@ namespace IBS.Services.MSAP
                 var existing = await unitOfWork.DispatchTicket.GetAsync(t => t.DispatchTicketId == model.DispatchTicketId.Value, ct);
                 skipClosedPeriodGuard = existing?.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted || existing?.BillingId.HasValue == true;
             }
-            string? error = await ValidateExpectedActualAsync(model, ct, skipClosedPeriodGuard);
+            var error = await ValidateExpectedActualAsync(model, ct, skipClosedPeriodGuard, canEditWateringRate);
             if (error != null)
             {
                 return error;
@@ -1175,7 +1190,17 @@ namespace IBS.Services.MSAP
             }
         }
 
-        private async Task<string?> ValidateExpectedActualAsync(DispatchTicketViewModel model, CancellationToken ct, bool skipClosedPeriodGuard = false)
+        private async Task<bool> IsWateringServiceAsync(int serviceId, CancellationToken ct)
+        {
+            if (serviceId <= 0)
+            {
+                return false;
+            }
+            var service = await unitOfWork.Service.GetAsync(s => s.ServiceId == serviceId, ct);
+            return MsapConstants.IsWateringService(service?.ServiceNumber);
+        }
+
+        private async Task<string?> ValidateExpectedActualAsync(DispatchTicketViewModel model, CancellationToken ct, bool skipClosedPeriodGuard = false, bool canEditWateringRate = true)
         {
             if (string.IsNullOrWhiteSpace(model.DispatchNumber) || model.DispatchNumber.Trim().Length > 20
                 || !model.DateLeft.HasValue || !model.DateArrived.HasValue || !model.TimeLeft.HasValue || !model.TimeArrived.HasValue)
@@ -1196,15 +1221,15 @@ namespace IBS.Services.MSAP
             {
                 return "Enter a valid actual ticket date that is not in the future.";
             }
-            if (model.ServiceId == MsapConstants.WateringServiceId)
+            if (await IsWateringServiceAsync(model.ServiceId, ct))
             {
                 if (!model.Tons.HasValue || model.Tons.Value <= 0m)
                 {
                     return "Enter the watering tons (greater than 0).";
                 }
-                if (!model.DispatchRate.HasValue || model.DispatchRate.Value < 0m)
+                if (canEditWateringRate && (!model.DispatchRate.HasValue || model.DispatchRate.Value <= 0m))
                 {
-                    return "Enter the watering rate.";
+                    return "Enter a watering rate greater than 0.";
                 }
             }
             if (skipClosedPeriodGuard)

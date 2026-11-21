@@ -5,18 +5,24 @@ namespace IBS.Utility.MSAP.Constants
     public static class MsapConstants
     {
         public const string Company_MMSI = "MMSI";
-        public const int WateringServiceId = 14;
+        public const string WateringServiceNumber = "014";
 
-        public static string FormatServiceDisplay(int serviceId, string serviceName, decimal? tons)
+        public static bool IsWateringService(string? serviceNumber)
         {
-            return serviceId == WateringServiceId && tons is > 0m
-                ? $"{serviceName} - {tons.Value.ToString("0.####", CultureInfo.InvariantCulture)} TONS"
-                : serviceName;
+            return string.Equals(serviceNumber?.Trim(), WateringServiceNumber, StringComparison.Ordinal);
         }
 
-        public static decimal GetEffectiveUnitCount(int serviceId, decimal? tons, decimal totalHours)
+        public static string FormatServiceDisplay(string? serviceNumber, string? serviceName, decimal? tons)
         {
-            return serviceId == WateringServiceId && tons is > 0m ? tons.Value : totalHours;
+            var displayName = serviceName ?? string.Empty;
+            return IsWateringService(serviceNumber) && tons is > 0m
+                ? $"{displayName} - {tons.Value.ToString("0.####", CultureInfo.InvariantCulture)} TONS"
+                : displayName;
+        }
+
+        public static decimal GetEffectiveUnitCount(string? serviceNumber, decimal? tons, decimal totalHours)
+        {
+            return IsWateringService(serviceNumber) && tons is > 0m ? tons.Value : totalHours;
         }
 
         // MSAP month closing policy: closing stamps finalized records and blocks closed-period backdating while allowing open-month downstream progression.

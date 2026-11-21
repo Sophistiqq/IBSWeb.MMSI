@@ -37,12 +37,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ViewBag.FilterType = filterType;
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewBag.CanEditTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditDispatchTicket);
-            ViewData["CanViewRates"] = userId != null && await accessControl.HasAnyAccessAsync(
-                userId,
-                ProcedureEnum.ApproveSchedule,
-                ProcedureEnum.ManageRates,
-                ProcedureEnum.ApproveRateUpload,
-                ProcedureEnum.ViewBillings);
+            ViewData["CanViewRates"] = await CanViewRatesAsync(userId);
             return View(Enumerable.Empty<DispatchTicket>());
         }
 
@@ -100,7 +95,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 await dispatchTicketService.PopulateDispatchTicketViewModelAsync(viewModel, viewModel.CustomerOrderSlipId, cancellationToken);
                 return View(viewModel);
             }
-            var result = await dispatchTicketService.CreateDispatchTicketAsync(viewModel, imageFile, videoFile, User.Identity?.Name ?? "System", cancellationToken);
+            var canEditWateringRate = await CanViewRatesAsync(userId);
+            var result = await dispatchTicketService.CreateDispatchTicketAsync(viewModel, imageFile, videoFile, User.Identity?.Name ?? "System", cancellationToken, canEditWateringRate);
 
             if (result.IsSuccess)
             {
@@ -165,12 +161,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewBag.CanEditTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditDispatchTicket);
-            ViewData["CanViewRates"] = userId != null && await accessControl.HasAnyAccessAsync(
-                userId,
-                ProcedureEnum.ApproveSchedule,
-                ProcedureEnum.ManageRates,
-                ProcedureEnum.ApproveRateUpload,
-                ProcedureEnum.ViewBillings);
+            ViewData["CanViewRates"] = await CanViewRatesAsync(userId);
 
             return View(model);
         }
@@ -245,7 +236,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 return Json(new { success = false, message = "Review the ticket number, dates and required fields before saving." });
             }
-            var result = await dispatchTicketService.UpdateDispatchTicketAsync(viewModel, imageFile, videoFile, User.Identity?.Name ?? "System", cancellationToken);
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var canEditWateringRate = await CanViewRatesAsync(userId);
+            var result = await dispatchTicketService.UpdateDispatchTicketAsync(viewModel, imageFile, videoFile, User.Identity?.Name ?? "System", cancellationToken, canEditWateringRate);
 
             if (result.IsSuccess)
             {
@@ -395,6 +388,16 @@ namespace IBSWeb.Areas.MSAP.Controllers
         }
 
         #endregion
+
+        private async Task<bool> CanViewRatesAsync(string? userId)
+        {
+            return userId != null && await accessControl.HasAnyAccessAsync(
+                userId,
+                ProcedureEnum.ApproveSchedule,
+                ProcedureEnum.ManageRates,
+                ProcedureEnum.ApproveRateUpload,
+                ProcedureEnum.ViewBillings);
+        }
     }
 
 }

@@ -12,9 +12,25 @@ namespace IBS.Services.MSAP
 {
     public static class ScheduledTicketCharges
     {
+        private static bool IsWatering(DispatchTicket ticket, VesselScheduleServiceEntry? entry = null)
+        {
+            var serviceNumber = ticket.Service?.ServiceNumber
+                ?? entry?.Service?.ServiceNumber
+                ?? ticket.ExpectedServiceEntry?.Service?.ServiceNumber;
+            return MsapConstants.IsWateringService(serviceNumber);
+        }
+
         public static async Task<string?> ApplyAsync(IUnitOfWork unitOfWork, DispatchTicket ticket, VesselSchedule schedule, string username, CancellationToken ct)
         {
             var entry = schedule.ServiceEntries.Single(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
+            if (ticket.Service == null && entry.Service == null && ticket.ExpectedServiceEntry?.Service == null)
+            {
+                var service = await unitOfWork.Service.GetAsync(s => s.ServiceId == ticket.ServiceId, ct);
+                if (service != null)
+                {
+                    ticket.Service = service;
+                }
+            }
             var (rate, bafRate) = await ResolveRatesAsync(unitOfWork, ticket, ct);
             var blocker = Apply(ticket, schedule, entry, rate, bafRate);
             ticket.TariffBy = username;
@@ -35,6 +51,7 @@ namespace IBS.Services.MSAP
 
         public static async Task<(DispatchTicket Ticket, TariffRate? Tariff, BafRate? Baf)> PreviewAsync(IUnitOfWork work, DispatchTicket ticket, VesselSchedule schedule, CancellationToken ct)
         {
+            var entry = schedule.ServiceEntries.Single(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
             var preview = new DispatchTicket
             {
                 DispatchTicketId = ticket.DispatchTicketId, CustomerOrderSlipId = ticket.CustomerOrderSlipId,
@@ -44,8 +61,13 @@ namespace IBS.Services.MSAP
                 TimeLeft = ticket.TimeLeft, TimeArrived = ticket.TimeArrived,
                 Tons = ticket.Tons, DispatchRate = ticket.DispatchRate
             };
+            var service = ticket.Service ?? entry.Service ?? ticket.ExpectedServiceEntry?.Service
+                ?? await work.Service.GetAsync(s => s.ServiceId == ticket.ServiceId, ct);
+            if (service != null)
+            {
+                preview.Service = service;
+            }
             var (tariff, baf) = await ResolveRatesAsync(work, ticket, ct);
-            var entry = schedule.ServiceEntries.Single(e => e.VesselScheduleServiceEntryId == ticket.VesselScheduleServiceEntryId);
             Apply(preview, schedule, entry, tariff, baf);
             return (preview, tariff, baf);
         }
@@ -85,7 +107,7 @@ namespace IBS.Services.MSAP
 
         public static string? Apply(DispatchTicket ticket, VesselSchedule schedule, VesselScheduleServiceEntry entry, TariffRate? rate, BafRate? bafRate)
         {
-            var isWatering = ticket.ServiceId == MsapConstants.WateringServiceId;
+            var isWatering = IsWatering(ticket, entry);
             var wateringRate = ticket.DispatchRate;
             ticket.Status = MsapConstants.DispatchTicketStatus.AwaitingRate;
             ticket.DispatchChargeType = null;
@@ -144,20 +166,20 @@ namespace IBS.Services.MSAP
                 ticket.IsManualTariffRate = ManualTariffForServiceDate(ticket, entry, rate).HasValue;
                 ticket.IsManualBafRate = ManualBafForServiceDate(ticket, schedule, entry, bafRate).HasValue;
             }
-            ApplyDiscount(ticket, discount);
+            ApplyDiscount(ticket, discount, isWateringOverride: isWatering);
             ticket.Status = MsapConstants.DispatchTicketStatus.ForBilling;
             return null;
         }
 
-        public static void ApplyDiscount(DispatchTicket ticket, decimal discount, bool discountOnTariff = true, bool discountOnBaf = true)
+        public static void ApplyDiscount(DispatchTicket ticket, decimal discount, bool discountOnTariff = true, bool discountOnBaf = true, bool? isWateringOverride = null)
         {
             if (discount is < 0 or > 100)
             {
                 throw new ArgumentOutOfRangeException(nameof(discount), "Discount must be between 0% and 100%.");
             }
             var hours = Math.Max(ticket.RawDurationHours ?? ticket.TotalHours, 1m);
-            var isWatering = ticket.ServiceId == MsapConstants.WateringServiceId;
-            var quantity = isWatering && ticket.Tons.HasValue
+            var isWatering = isWateringOverride ?? IsWatering(ticket);
+            var quantity = isWatering && ticket.Tons is > 0m
                 ? ticket.Tons.Value
                 : ticket.DispatchChargeType == "Per hour" ? hours : 1m;
             var dispatchGross = ticket.DispatchRate * quantity;
@@ -336,15 +358,15 @@ namespace IBS.Services.MSAP
             {
                 return "Actual end must follow start and cannot be in the future.";
             }
-            if (ticket.ServiceId == MsapConstants.WateringServiceId)
+            if (IsWatering(ticket, entry))
             {
                 if (!ticket.Tons.HasValue || ticket.Tons.Value <= 0m)
                 {
                     return "Enter the watering tons on the ticket entry.";
                 }
-                if (ticket.DispatchRate < 0m)
+                if (ticket.DispatchRate <= 0m)
                 {
-                    return "Enter a valid watering rate on the ticket entry.";
+                    return "Enter the watering rate on the ticket entry.";
                 }
                 var wateringDiscount = schedule.SkipCosDiscount ? 0m : schedule.CosDiscountPercent.GetValueOrDefault();
                 return wateringDiscount is < 0 or > 100 ? "The approved COS discount must be between 0% and 100%." : null;

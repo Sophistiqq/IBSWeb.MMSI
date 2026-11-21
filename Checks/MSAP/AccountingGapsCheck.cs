@@ -80,7 +80,30 @@ namespace Checks.MSAP
             var entity = db.Model.FindEntityType(typeof(IBS.Models.MSAP.Books.SalesBook))!;
             Check(entity.GetIndexes().Any(i => i.IsUnique && i.Properties.Select(p => p.Name)
                 .SequenceEqual(new[] { "DocumentId", "BillingRevision" })), "Duplicate Sales Book revision is not prevented.");
-            Console.WriteLine("PASS: weekly BAF boundaries, pending/recalculation, source identity, SBMA actual time, and Sales Book date/tax snapshots (no database).");
+            var wateringService = new Service { ServiceId = 99, ServiceNumber = MsapConstants.WateringServiceNumber, ServiceName = "Watering" };
+            var wateringEntry = new VesselScheduleServiceEntry { VesselScheduleServiceEntryId = 9, TugboatId = 2, ServiceId = 99, Service = wateringService };
+            var wateringTicket = new DispatchTicket
+            {
+                DispatchTicketId = 9, VesselScheduleServiceEntryId = 9, TugBoatId = 2, ServiceId = 99, Service = wateringService,
+                CustomerOrderSlipId = 1, DateLeft = date, DateArrived = date, TimeLeft = new TimeOnly(8, 0), TimeArrived = new TimeOnly(9, 0),
+                TotalHours = 1m, Tons = null, DispatchRate = 500m
+            };
+            Check(ScheduledTicketCharges.GetBlocker(wateringTicket, schedule, wateringEntry, null, null) == "Enter the watering tons on the ticket entry.",
+                "Missing watering tons did not trigger blocker.");
+            Check(MsapConstants.FormatServiceDisplay(wateringService.ServiceNumber, wateringService.ServiceName, null) == "Watering"
+                && MsapConstants.GetEffectiveUnitCount(wateringService.ServiceNumber, null, 2m) == 2m,
+                "Legacy watering ticket with null tons did not fall back safely.");
+            wateringTicket.Tons = 11m;
+            wateringTicket.DispatchRate = 0m;
+            Check(ScheduledTicketCharges.GetBlocker(wateringTicket, schedule, wateringEntry, null, null) == "Enter the watering rate on the ticket entry.",
+                "Zero watering rate did not trigger blocker.");
+            wateringTicket.DispatchRate = 500m;
+            Check(ScheduledTicketCharges.Apply(wateringTicket, schedule, wateringEntry, null, null) == null
+                && wateringTicket.TotalBilling == 5500m && wateringTicket.BAFBillingAmount == 0m
+                && MsapConstants.FormatServiceDisplay(wateringService.ServiceNumber, wateringService.ServiceName, wateringTicket.Tons) == "Watering - 11 TONS"
+                && MsapConstants.GetEffectiveUnitCount(wateringService.ServiceNumber, wateringTicket.Tons, 1m) == 11m,
+                "Watering ticket calculation or display failed for non-14 ServiceId with ServiceNumber 014.");
+            Console.WriteLine("PASS: weekly BAF boundaries, pending/recalculation, source identity, SBMA actual time, Sales Book date/tax snapshots, and watering rules (no database).");
         }
 
         private static void Check(bool condition, string message)

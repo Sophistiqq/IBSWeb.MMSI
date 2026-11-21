@@ -1602,7 +1602,7 @@ namespace IBS.Services.MSAP
                     DispatchTicketId = t.DispatchTicketId,
                     DispatchNo = t.DispatchNumber,
                     Tugboat = t.Tugboat.TugboatName,
-                    Service = MsapConstants.FormatServiceDisplay(t.ServiceId, t.Service.ServiceName, t.Tons),
+                    Service = MsapConstants.FormatServiceDisplay(t.Service?.ServiceNumber, t.Service?.ServiceName, t.Tons),
                     Duration = t.TotalHours,
                     ActualHours = t.RawDurationHours,
                     IsCompanyOwned = t.Tugboat.IsCompanyOwned,

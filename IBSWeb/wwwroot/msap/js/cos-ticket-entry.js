@@ -54,7 +54,7 @@ const initializeCosTicketEntry = () => {
             const saved = await response.json();
             if (!saved.success) { await ModernAlert.error(saved.message || 'The ticket could not be voided.'); return; }
             await ModernAlert.success(saved.message);
-            window.location.href = `/MSAP/CustomerOrderSlip/Details/${encodeURIComponent(button.dataset.cosId)}`;
+            window.location.href = button.dataset.cosUrl || `/MSAP/COS/Details/${encodeURIComponent(button.dataset.cosId)}`;
         } catch {
             await ModernAlert.error('Unable to void the ticket. Refresh the COS and try again.');
         } finally { button.disabled = false; }
@@ -109,7 +109,7 @@ const initializeCosTicketEntry = () => {
         }
         if (!message && form.elements.DispatchRate) {
             const rate = Number.parseFloat(form.elements.DispatchRate.value);
-            if (!Number.isFinite(rate) || rate < 0) message = 'Enter a valid watering rate.';
+            if (!Number.isFinite(rate) || rate <= 0) message = 'Enter a watering rate greater than 0.';
         }
         preview();
         if (message || !form.reportValidity()) {

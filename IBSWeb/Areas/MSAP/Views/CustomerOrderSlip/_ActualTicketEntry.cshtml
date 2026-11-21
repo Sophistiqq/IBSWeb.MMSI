@@ -14,7 +14,10 @@
     var role = readOnly || userId == null ? null : await MsapRoleService.GetUserRoleAsync(userId);
     var imageRequired = role != MsapRoles.Admin && string.IsNullOrEmpty(Model.ImageName);
     var canVoid = canEdit && savedTicket != null && savedTicket?.Status != MsapConstants.DispatchTicketStatus.Billed && savedTicket?.Status != MsapConstants.DispatchTicketStatus.Deleted;
-    var isWatering = Model.ServiceId == MsapConstants.WateringServiceId;
+    var canViewRates = ViewData["CanViewRates"] is true;
+    var serviceEntry = booking?.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == (savedTicket?.VesselScheduleServiceEntryId ?? Model.VesselScheduleServiceEntryId));
+    var serviceNumber = Model.ServiceNumber ?? savedTicket?.Service?.ServiceNumber ?? serviceEntry?.Service?.ServiceNumber;
+    var isWatering = MsapConstants.IsWateringService(serviceNumber);
 }
 <form asp-controller="DispatchTicket" asp-action="@(editing ? "EditTicket" : "Create")" method="post" enctype="multipart/form-data" class="ui-stack" id="@(readOnly ? "cosActualTicketDetails" : "cosActualTicketForm")" onsubmit="@(readOnly ? "return false;" : null)">
     <input name="inlineEntry" type="hidden" value="true" />
@@ -96,7 +99,10 @@
         @if (isWatering)
         {
             <div class="ui-field cos-entry-half"><label asp-for="Tons" class="ui-label">Tons *</label><input asp-for="Tons" type="number" step="0.0001" min="0.0001" class="modern-input ui-input" placeholder="e.g. 11" required /></div>
-            <div class="ui-field cos-entry-half"><label asp-for="DispatchRate" class="ui-label">Rate (₱ / ton) *</label><input asp-for="DispatchRate" type="number" step="0.01" min="0" class="modern-input ui-input" placeholder="e.g. 500.00" required /></div>
+            @if (canViewRates)
+            {
+                <div class="ui-field cos-entry-half"><label asp-for="DispatchRate" class="ui-label">Rate (₱ / ton) *</label><input asp-for="DispatchRate" type="number" step="0.01" min="0.01" class="modern-input ui-input" placeholder="e.g. 500.00" required /></div>
+            }
         }
         <div class="ui-field cos-entry-remarks"><label asp-for="Remarks" class="ui-label">Remarks</label><textarea asp-for="Remarks" class="modern-input ui-input" rows="2" maxlength="100"></textarea></div>
     </fieldset>
@@ -127,7 +133,6 @@
             BafCalculationMethod.Industry => "Industry",
             _ => "Not specified"
         };
-        var canViewRates = ViewData["CanViewRates"] is true;
 
         @if (canViewRates)
         {
@@ -188,6 +193,7 @@
             <button type="button" class="modern-btn-error" style="margin-right: auto;"
                 data-void-ticket="@savedTicket!.DispatchTicketId"
                 data-cos-id="@savedTicket!.CustomerOrderSlipId"
+                data-cos-url="@Url.Action("Details", "CustomerOrderSlip", new { area = "MSAP", id = savedTicket!.CustomerOrderSlipId })"
                 data-dispatch-number="@savedTicket!.DispatchNumber"
                 data-finalized="@(savedTicket!.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")"
                 data-url="@Url.Action("VoidTicket", "DispatchTicket")">
