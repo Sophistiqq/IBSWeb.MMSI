@@ -13,16 +13,9 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
     {
         private readonly MsapDbContext _db = db;
 
-        public async Task<Collection?> GetForUpdateAsync(int id, CancellationToken ct = default)
+        public Task<Collection?> GetForUpdateAsync(int id, CancellationToken ct = default)
         {
-            var record = await _db.MsapCollections
-                .FromSqlInterpolated($"SELECT * FROM msap.mmsi_collections WHERE \"RECID\" = {id} FOR UPDATE")
-                .FirstOrDefaultAsync(ct);
-            if (record != null)
-            {
-                await _db.Entry(record).ReloadAsync(ct);
-            }
-            return record;
+            return _db.FindForUpdateAsync<Collection, int>(id, reload: true, ct);
         }
 
         public async Task SaveAsync(CancellationToken cancellationToken)

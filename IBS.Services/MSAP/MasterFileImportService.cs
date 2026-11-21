@@ -124,7 +124,7 @@ namespace IBS.Services.MSAP
 
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
             // Serialize this import path; the fingerprint also rechecks ordinary master-file edits.
-            await db.Database.ExecuteSqlRawAsync("LOCK TABLE msap.customers, msap.mmsi_ports, msap.mmsi_services, msap.mmsi_tugboat_owners, msap.mmsi_tug_masters, msap.mmsi_vessels, msap.mmsi_terminals, msap.mmsi_tugboats, msap.mmsi_principals, msap.bank_accounts, msap.mmsi_rate_uploads IN SHARE ROW EXCLUSIVE MODE", ct);
+            await db.AcquireAdvisoryXactLockAsync(MsapLockExtensions.MasterFileImport, ct);
             try
             {
                 var customers = await db.Customers.Where(item => item.Company == MsapConstants.Company_MMSI).ToListAsync(ct);

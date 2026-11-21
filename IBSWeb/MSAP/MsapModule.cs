@@ -24,6 +24,7 @@ namespace IBSWeb.MSAP
                 .UseNpgsql(configuration.GetConnectionString("MMSIConnection"),
                     postgres => postgres.MigrationsHistoryTable("__EFMigrationsHistory", "msap"))
                 .Options));
+            services.AddSingleton<IAccountingContextFactory, AccountingContextFactory>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<IUserAccessService, UserAccessService>();
             services.AddScoped<IAccessControlService, AccessControlService>();

@@ -10,24 +10,17 @@ using IBS.Utility.Helpers;
 using IBS.Utility.MSAP.Constants;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace IBS.DataAccess.MSAP.Repository.Msap
 {
-    public class BillingRepository(MsapDbContext db): Repository<Billing>(db), IBillingRepository
+    public class BillingRepository(MsapDbContext db, IAccountingContextFactory? accountingContextFactory = null): Repository<Billing>(db), IBillingRepository
     {
         private readonly MsapDbContext _db = db;
+        private readonly IAccountingContextFactory _accountingContextFactory = accountingContextFactory ?? AccountingContextFactory.Default;
 
-        public async Task<Billing?> GetForUpdateAsync(int id, CancellationToken ct = default)
+        public Task<Billing?> GetForUpdateAsync(int id, CancellationToken ct = default)
         {
-            var record = await _db.MsapBillings
-                .FromSqlInterpolated($"SELECT * FROM msap.mmsi_billings WHERE \"RECID\" = {id} FOR UPDATE")
-                .FirstOrDefaultAsync(ct);
-            if (record != null)
-            {
-                await _db.Entry(record).ReloadAsync(ct);
-            }
-            return record;
+            return _db.FindForUpdateAsync<Billing, int>(id, reload: true, ct);
         }
 
         public async Task AddSalesBookAsync(IBS.Models.MSAP.Books.SalesBook entry, CancellationToken ct)
@@ -221,7 +214,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<string> GenerateBillingNumber(int year, CancellationToken cancellationToken = default)
         {
-            await _db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(20771002)", cancellationToken);
+            await _db.AcquireAdvisoryXactLockAsync(MsapLockExtensions.BillingNumberSeries, cancellationToken);
             var lastRecord = await _db.MsapBillings
                 .Where(b => b.Year == year)
                 .Where(b => !string.IsNullOrEmpty(b.MsapBillingNumber) && b.MsapBillingNumber.StartsWith("B"))
@@ -470,8 +463,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 return;
             }
 
-            await using var accounting = await OpenAccountingContextAsync(ct);
-            var work = new IBS.DataAccess.Repository.UnitOfWork(accounting);
+            var (accounting, work) = await _accountingContextFactory.OpenAccountingScopeAsync(_db, ct);
+            await using var _ = accounting;
             var glRef = billing.MsapBillingNumber.Length <= 20
                 ? billing.MsapBillingNumber
                 : billing.MsapBillingNumber[..20];
@@ -628,7 +621,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<string?> GetActiveCommissionVoucherNumberAsync(int billingId, CancellationToken ct = default)
         {
-            await using var accounting = await OpenAccountingContextAsync(ct);
+            await using var accounting = await _accountingContextFactory.OpenAccountingContextAsync(_db, ct);
             return await accounting.FilprideMsapCommissionPayments
                 .IgnoreQueryFilters(["TugboatWorkspace"])
                 .Include(p => p.Voucher)
@@ -646,7 +639,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 ? billing.MsapBillingNumber
                 : billing.MsapBillingNumber[..20];
 
-            await using var accounting = await OpenAccountingContextAsync(ct);
+            await using var accounting = await _accountingContextFactory.OpenAccountingContextAsync(_db, ct);
             var glEntries = await accounting.FilprideGeneralLedgerBooks
                 .IgnoreQueryFilters(["TugboatWorkspace"])
                 .Where(g => g.WorkspaceTugboatId == null
@@ -659,17 +652,6 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 accounting.FilprideGeneralLedgerBooks.RemoveRange(glEntries);
                 await accounting.SaveChangesAsync(ct);
             }
-        }
-
-        private async Task<ApplicationDbContext> OpenAccountingContextAsync(CancellationToken ct)
-        {
-            var accounting = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
-                .UseNpgsql(_db.Database.GetDbConnection()).Options);
-            if (_db.Database.CurrentTransaction != null)
-            {
-                await accounting.Database.UseTransactionAsync(_db.Database.CurrentTransaction.GetDbTransaction(), ct);
-            }
-            return accounting;
         }
     }
 }

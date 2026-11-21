@@ -28,9 +28,7 @@ namespace IBS.DataAccess.MSAP.Repository.MasterFile
                 throw new InvalidOperationException("Customer codes must be generated inside the customer creation transaction.");
             }
 
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtext('msap_customer_code'), hashtext({customerType}))",
-                cancellationToken);
+            await _db.AcquireAdvisoryXactLockAsync(MsapLockExtensions.CustomerCodeScope, customerType, cancellationToken);
 
             var codes = await _db.Customers.Where(c => c.CustomerCode.StartsWith(prefix))
                 .Select(c => c.CustomerCode).ToListAsync(cancellationToken);

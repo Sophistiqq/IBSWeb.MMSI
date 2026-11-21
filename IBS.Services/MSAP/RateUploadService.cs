@@ -617,7 +617,7 @@ namespace IBS.Services.MSAP
                 return ServiceResult.Success("This update is already approved.");
             }
             // Serialize activation so two approvals cannot both pass the same baseline check.
-            await _db.Database.ExecuteSqlRawAsync("LOCK TABLE msap.mmsi_tariff_rates, msap.mmsi_baf_rates IN SHARE ROW EXCLUSIVE MODE", ct);
+            await _db.AcquireAdvisoryXactLockAsync(MsapLockExtensions.RateTableActivation, ct);
             List<RateUploadRowViewModel> rows = JsonSerializer.Deserialize<List<RateUploadRowViewModel>>(update.RowsJson)!.Where(row => row.Selected).ToList();
             if (ValidateRows(rows).Count > 0 || !Enum.IsDefined(update.RateKind))
             {
@@ -659,7 +659,7 @@ namespace IBS.Services.MSAP
                 return ServiceResult.Success("This update is already approved.");
             }
 
-            await _db.Database.ExecuteSqlRawAsync("LOCK TABLE msap.mmsi_tariff_rates, msap.mmsi_baf_rates IN SHARE ROW EXCLUSIVE MODE", ct);
+            await _db.AcquireAdvisoryXactLockAsync(MsapLockExtensions.RateTableActivation, ct);
 
             var allRows = JsonSerializer.Deserialize<List<RateUploadRowViewModel>>(update.RowsJson)!;
             if (!update.SubmittedAt.HasValue)
@@ -976,7 +976,7 @@ namespace IBS.Services.MSAP
 
         private async Task<RateUpload?> LockAsync(Guid id, CancellationToken ct)
         {
-            return await _db.MsapRateUploads.FromSqlInterpolated($"SELECT * FROM msap.mmsi_rate_uploads WHERE rate_upload_id = {id} FOR UPDATE")
+            return await _db.QueryForUpdate<RateUpload, Guid>(id)
                 .SingleOrDefaultAsync(update => update.Company == MsapConstants.Company_MMSI, ct);
         }
 

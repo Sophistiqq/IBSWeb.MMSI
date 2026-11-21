@@ -1,10 +1,12 @@
 using System.Text.Json;
 using IBS.DataAccess.Data;
+using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.Repository.Filpride;
 using IBS.DataAccess.Repository.IRepository;
 using IBS.Models.Enums;
 using IBS.Models.Filpride.AccountsPayable;
 using IBS.Models.Filpride.Books;
+using IBS.Models.Filpride.MasterFile;
 using IBS.Models.Filpride.ViewModels;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.MasterFile;
@@ -34,11 +36,12 @@ namespace IBS.Services
             IUnitOfWork work,
             CheckVoucherDocumentationService documentation,
             ICloudStorageService storage,
-            ILogger<MsapCommissionPaymentService> logger)
+            ILogger<MsapCommissionPaymentService> logger,
+            IAccountingContextFactory? accountingContextFactory = null)
         {
             _db = db;
             _work = work;
-            _sources = new MsapCommissionPaymentRepository(db);
+            _sources = new MsapCommissionPaymentRepository(db, accountingContextFactory);
             _documentation = documentation;
             _storage = storage;
             _logger = logger;
@@ -192,9 +195,10 @@ namespace IBS.Services
                     }
                 }
 
-                await _db.FilprideBankAccounts
-                    .FromSqlInterpolated($"SELECT * FROM filpride_bank_accounts WHERE bank_account_id={form.BankId} FOR UPDATE")
-                    .LoadAsync(ct);
+                if (form.BankId.HasValue)
+                {
+                    await _db.LockRowForUpdateAsync<FilprideBankAccount, int>(form.BankId.Value, ct);
+                }
 
                 var bank = await _db.FilprideBankAccounts
                     .SingleOrDefaultAsync(b => b.BankAccountId == form.BankId && b.IsActive, ct)
@@ -225,7 +229,7 @@ namespace IBS.Services
                     throw new InvalidOperationException("The selected MSAP commission items and entries do not produce a valid positive Cash in Bank amount.");
                 }
 
-                await _db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(20771010)", ct);
+                await _db.AcquireAdvisoryXactLockAsync(MsapLockExtensions.CommissionVoucherSeries, ct);
                 var cvNo = await _work.FilprideCheckVoucher.GenerateCodeAsync(form.Type!, ct);
 
                 var header = new FilprideCheckVoucherHeader
@@ -318,11 +322,8 @@ namespace IBS.Services
 
             try
             {
-                var header = await _db.FilprideCheckVoucherHeaders
-                    .FromSqlInterpolated($"SELECT * FROM filpride_check_voucher_headers WHERE check_voucher_header_id={form.CvId} FOR UPDATE")
-                    .SingleOrDefaultAsync(ct)
+                var header = await _db.FindForUpdateAsync<FilprideCheckVoucherHeader, int>(form.CvId, reload: true, ct)
                     ?? throw new InvalidOperationException("Check voucher not found.");
-                await _db.Entry(header).ReloadAsync(ct);
 
                 if (header.CvType != nameof(CVType.Commission) || header.PostedBy != null || header.CanceledBy != null || header.VoidedBy != null)
                 {
@@ -344,9 +345,10 @@ namespace IBS.Services
                     }
                 }
 
-                await _db.FilprideBankAccounts
-                    .FromSqlInterpolated($"SELECT * FROM filpride_bank_accounts WHERE bank_account_id={form.BankId} FOR UPDATE")
-                    .LoadAsync(ct);
+                if (form.BankId.HasValue)
+                {
+                    await _db.LockRowForUpdateAsync<FilprideBankAccount, int>(form.BankId.Value, ct);
+                }
 
                 var bank = await _db.FilprideBankAccounts
                     .SingleOrDefaultAsync(b => b.BankAccountId == form.BankId && b.IsActive, ct)

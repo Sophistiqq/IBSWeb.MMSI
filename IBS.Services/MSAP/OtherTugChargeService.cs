@@ -1,8 +1,6 @@
 using System.Text.Json;
-using IBS.DataAccess.Data;
 using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository.Msap;
-using IBS.DataAccess.Repository;
 using IBS.Models.Enums;
 using IBS.Models.Filpride.AccountsPayable;
 using IBS.Models.Filpride.Books;
@@ -13,7 +11,6 @@ using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace IBS.Services.MSAP
@@ -25,12 +22,18 @@ namespace IBS.Services.MSAP
         private readonly MsapDbContext _db;
         private readonly ICloudStorageService _storage;
         private readonly ILogger<OtherTugChargeService> _logger;
+        private readonly IAccountingContextFactory _accountingContextFactory;
 
-        public OtherTugChargeService(MsapDbContext db, ICloudStorageService storage, ILogger<OtherTugChargeService> logger)
+        public OtherTugChargeService(
+            MsapDbContext db,
+            ICloudStorageService storage,
+            ILogger<OtherTugChargeService> logger,
+            IAccountingContextFactory? accountingContextFactory = null)
         {
             _db = db;
             _storage = storage;
             _logger = logger;
+            _accountingContextFactory = accountingContextFactory ?? AccountingContextFactory.Default;
         }
 
         private IQueryable<DispatchTicket> EligibleTickets()
@@ -177,9 +180,9 @@ namespace IBS.Services.MSAP
                 }
                 string before = Snapshot(charge);
                 List<int> ids = model.Allocations.Select(l => l.DispatchTicketId).Order().ToList();
-                foreach (int id in ids)
+                foreach (var id in ids)
                 {
-                    await _db.MsapDispatchTickets.FromSqlInterpolated($"SELECT * FROM msap.mmsi_dispatch_tickets WHERE \"RECID\" = {id} FOR UPDATE").LoadAsync(ct);
+                    await _db.LockRowForUpdateAsync<DispatchTicket, int>(id, ct);
                 }
                 var tickets = await AllocationTickets(model.CustomerOrderSlipId, model.Id).Include(t => t.Tugboat).ThenInclude(t => t.TugboatOwner)
                     .Where(t => ids.Contains(t.DispatchTicketId)).ToListAsync(ct);
@@ -344,7 +347,7 @@ namespace IBS.Services.MSAP
                 var schedule = await _db.MsapVesselSchedules.Where(s => s.CustomerOrderSlipId == cosId).SingleOrDefaultAsync(ct);
                 if (schedule != null)
                 {
-                    await _db.MsapVesselSchedules.FromSqlInterpolated($"SELECT * FROM msap.mmsi_vessel_schedules WHERE vessel_schedule_id = {schedule.VesselScheduleId} FOR UPDATE").LoadAsync(ct);
+                    await _db.LockRowForUpdateAsync<VesselSchedule, int>(schedule.VesselScheduleId, ct);
                     await _db.Entry(schedule).ReloadAsync(ct);
                     if (schedule.ApprovedRevision != schedule.Revision || schedule.Status == MsapConstants.VesselScheduleStatus.Tentative
                         || schedule.Status == MsapConstants.VesselScheduleStatus.Cancelled)
@@ -352,11 +355,11 @@ namespace IBS.Services.MSAP
                         return ServiceResult.Failure("Approve each linked schedule before confirming its provider charge.");
                     }
                 }
-                await _db.MsapCustomerOrderSlips.FromSqlInterpolated($"SELECT * FROM msap.mmsi_customer_order_slips WHERE customer_order_slip_id = {cosId} FOR UPDATE").LoadAsync(ct);
+                await _db.LockRowForUpdateAsync<IBS.Models.MSAP.CustomerOrderSlip, int>(cosId, ct);
             }
             foreach (var line in charge.Lines.OrderBy(l => l.DispatchTicketId))
             {
-                await _db.MsapDispatchTickets.FromSqlInterpolated($"SELECT * FROM msap.mmsi_dispatch_tickets WHERE \"RECID\" = {line.DispatchTicketId} FOR UPDATE").LoadAsync(ct);
+                await _db.LockRowForUpdateAsync<DispatchTicket, int>(line.DispatchTicketId, ct);
             }
             var tickets = await EligibleTickets().Include(t => t.Billing)
                 .Where(t => ids.Contains(t.DispatchTicketId) && t.Tugboat.TugboatOwnerId == charge.TugboatOwnerId).ToListAsync(ct);
@@ -364,7 +367,7 @@ namespace IBS.Services.MSAP
             {
                 return ServiceResult.Failure("Provider assignments or actual tickets changed. Review the charge again.");
             }
-            await _db.MsapTugboatOwners.FromSqlInterpolated($"SELECT * FROM msap.mmsi_tugboat_owners WHERE tugboat_owner_id = {charge.TugboatOwnerId} FOR SHARE").LoadAsync(ct);
+            await _db.LockRowForShareAsync<TugboatOwner, int>(charge.TugboatOwnerId, ct);
             var owner = await _db.MsapTugboatOwners.AsNoTracking().SingleAsync(o => o.TugboatOwnerId == charge.TugboatOwnerId, ct);
             var totalAmount = charge.Lines.Sum(l => l.Amount);
             if (totalAmount > 0m)
@@ -440,12 +443,7 @@ namespace IBS.Services.MSAP
                 }
 
                 // Check if an active (non-voided/non-canceled) Check Voucher payment exists in IBS AP
-                await using var accounting = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
-                    .UseNpgsql(_db.Database.GetDbConnection()).Options);
-                if (_db.Database.CurrentTransaction != null)
-                {
-                    await accounting.Database.UseTransactionAsync(_db.Database.CurrentTransaction.GetDbTransaction(), ct);
-                }
+                await using var accounting = await _accountingContextFactory.OpenAccountingContextAsync(_db, ct);
 
                 var activePayment = await accounting.FilprideTugboatPayments
                     .Include(p => p.Voucher)
@@ -540,13 +538,8 @@ namespace IBS.Services.MSAP
 
         private async Task<bool> RecognizeLiabilityAsync(TugboatOwner owner, OtherTugCharge charge, List<DispatchTicket> tickets, string actor, CancellationToken ct)
         {
-            await using var accounting = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
-                .UseNpgsql(_db.Database.GetDbConnection()).Options);
-            if (_db.Database.CurrentTransaction != null)
-            {
-                await accounting.Database.UseTransactionAsync(_db.Database.CurrentTransaction.GetDbTransaction(), ct);
-            }
-            var work = new UnitOfWork(accounting);
+            var (accounting, work) = await _accountingContextFactory.OpenAccountingScopeAsync(_db, ct);
+            await using var _ = accounting;
             var (gross, net, inputVat) = CalculateRecognition(owner, charge);
             var billingDate = tickets.Where(t => t.Billing != null).Select(t => t.Billing!.Date).DefaultIfEmpty(charge.DocumentDate).Max();
             var recognitionDate = billingDate;
@@ -653,10 +646,9 @@ namespace IBS.Services.MSAP
 
         private async Task<OtherTugCharge?> LockAsync(int id, CancellationToken ct)
         {
-            var charge = await _db.MsapOtherTugCharges.FromSqlInterpolated($"SELECT * FROM msap.mmsi_other_tug_charges WHERE other_tug_charge_id = {id} FOR UPDATE").SingleOrDefaultAsync(ct);
+            var charge = await _db.FindForUpdateAsync<OtherTugCharge, int>(id, reload: true, ct);
             if (charge != null)
             {
-                await _db.Entry(charge).ReloadAsync(ct);
                 await _db.Entry(charge).Collection(c => c.Lines).LoadAsync(ct);
                 if (charge.Lines.Count == 0 || await _db.MsapOtherTugChargeLines.AnyAsync(l => l.OtherTugChargeId == id
                     && l.Ticket.Customer.Company != MsapConstants.Company_MMSI, ct))

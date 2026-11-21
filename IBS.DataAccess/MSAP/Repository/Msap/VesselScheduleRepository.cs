@@ -12,12 +12,9 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
         public async Task<VesselSchedule?> GetForUpdateAsync(int id, CancellationToken ct = default)
         {
             // Serialize confirmation, revisions and deletion so one booking creates only one order.
-            var schedule = await _db.MsapVesselSchedules
-                .FromSqlInterpolated($"SELECT * FROM msap.mmsi_vessel_schedules WHERE vessel_schedule_id = {id} FOR UPDATE")
-                .FirstOrDefaultAsync(ct);
+            var schedule = await _db.FindForUpdateAsync<VesselSchedule, int>(id, reload: true, ct);
             if (schedule != null)
             {
-                await _db.Entry(schedule).ReloadAsync(ct);
                 await _db.Entry(schedule).Collection(s => s.ServiceEntries).LoadAsync(ct);
             }
             return schedule;

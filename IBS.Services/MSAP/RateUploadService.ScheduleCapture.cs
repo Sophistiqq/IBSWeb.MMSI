@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using IBS.DataAccess.MSAP.Data;
 using IBS.Models;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.Enums;
@@ -169,7 +170,7 @@ namespace IBS.Services.MSAP
             {
                 return ServiceResult<Guid>.Failure("Schedule not found.");
             }
-            await _db.Database.ExecuteSqlRawAsync("LOCK TABLE msap.mmsi_tariff_rates, msap.mmsi_baf_rates IN SHARE ROW EXCLUSIVE MODE", ct);
+            await _db.AcquireAdvisoryXactLockAsync(MsapLockExtensions.RateTableActivation, ct);
             ServiceResult<ScheduleRateCaptureViewModel> preview = await BuildScheduleCaptureAsync(schedule, entryId, kind, effectiveDate, ct);
             if (!preview.IsSuccess)
             {
@@ -212,7 +213,7 @@ namespace IBS.Services.MSAP
             {
                 return (ServiceResult<int>.Failure("Schedule not found."), null);
             }
-            await _db.Database.ExecuteSqlRawAsync("LOCK TABLE msap.mmsi_tariff_rates, msap.mmsi_baf_rates IN SHARE MODE", ct);
+            await _db.AcquireSharedAdvisoryXactLockAsync(MsapLockExtensions.RateTableActivation, ct);
             List<ScheduleRateCaptureViewModel> captures = await GetScheduleCapturesAsync(schedule, ct);
             if (captures.Any(item => !item.PublishedUpdateId.HasValue))
             {
@@ -420,7 +421,7 @@ namespace IBS.Services.MSAP
 
             if (action == "approve")
             {
-                await _db.Database.ExecuteSqlRawAsync("LOCK TABLE msap.mmsi_tariff_rates, msap.mmsi_baf_rates IN SHARE ROW EXCLUSIVE MODE", ct);
+                await _db.AcquireAdvisoryXactLockAsync(MsapLockExtensions.RateTableActivation, ct);
             }
 
             if (request.TariffRows.Count > 0)

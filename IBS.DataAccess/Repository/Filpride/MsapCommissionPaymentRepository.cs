@@ -4,28 +4,25 @@ using IBS.Models.MSAP;
 using IBS.Models.MSAP.MasterFile;
 using IBS.Utility.MSAP.Constants;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace IBS.DataAccess.Repository.Filpride
 {
     public class MsapCommissionPaymentRepository
     {
         private readonly ApplicationDbContext _db;
+        private readonly IAccountingContextFactory _accountingContextFactory;
 
-        public MsapCommissionPaymentRepository(ApplicationDbContext db)
+        public MsapCommissionPaymentRepository(
+            ApplicationDbContext db,
+            IAccountingContextFactory? accountingContextFactory = null)
         {
             _db = db;
+            _accountingContextFactory = accountingContextFactory ?? AccountingContextFactory.Default;
         }
 
-        private async Task<MsapDbContext> SourceAsync(CancellationToken ct)
+        private Task<MsapDbContext> SourceAsync(CancellationToken ct)
         {
-            var source = new MsapDbContext(new DbContextOptionsBuilder<MsapDbContext>()
-                .UseNpgsql(_db.Database.GetDbConnection()).Options);
-            if (_db.Database.CurrentTransaction != null)
-            {
-                await source.Database.UseTransactionAsync(_db.Database.CurrentTransaction.GetDbTransaction(), ct);
-            }
-            return source;
+            return _accountingContextFactory.OpenMsapContextAsync(_db, ct);
         }
 
         public async Task<List<MsapRepresentative>> RepresentativesAsync(CancellationToken ct)
@@ -77,14 +74,10 @@ namespace IBS.DataAccess.Repository.Filpride
             await using var source = await SourceAsync(ct);
             foreach (var billingId in billingIds.Distinct().OrderBy(id => id))
             {
-                await source.MsapBillings
-                    .FromSqlInterpolated($"SELECT * FROM msap.mmsi_billings WHERE \"RECID\" = {billingId} FOR UPDATE")
-                    .LoadAsync(ct);
+                await source.LockRowForUpdateAsync<Billing, int>(billingId, ct);
             }
 
-            await source.MsapRepresentatives
-                .FromSqlInterpolated($"SELECT * FROM msap.mmsi_representatives WHERE representative_id = {representativeId} FOR SHARE")
-                .LoadAsync(ct);
+            await source.LockRowForShareAsync<MsapRepresentative, int>(representativeId, ct);
 
             var representative = await source.MsapRepresentatives.AsNoTracking()
                 .SingleOrDefaultAsync(r => r.RepresentativeId == representativeId, ct)
