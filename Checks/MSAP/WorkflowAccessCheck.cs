@@ -248,10 +248,16 @@ namespace Checks.MSAP
             grants.CanManageOtherTugCharges = true;
             await AssertAccessAsync(ProcedureEnum.ViewOperations, true);
             await AssertAccessAsync(ProcedureEnum.ConfirmOtherTugCharges, false);
+            grants.CanManageOtherTugCharges = false;
+            grants.CanManageMsapImport = true;
+            await AssertAccessAsync(ProcedureEnum.ManageMsapImport, true);
+            await AssertAccessAsync(ProcedureEnum.AccessMsap, true);
+            grants.CanManageMsapImport = false;
+            await AssertAccessAsync(ProcedureEnum.ManageMsapImport, false);
 
             ProcedureEnum[] retired = [ProcedureEnum.EditBilling, ProcedureEnum.SetTariff, ProcedureEnum.ApproveTariff, ProcedureEnum.DeleteDispatchTicket,
                 ProcedureEnum.DeleteCustomerOrderSlip, ProcedureEnum.CloseCustomerOrderSlip,
-                ProcedureEnum.CreateDisbursement, ProcedureEnum.ViewInventoryReport, ProcedureEnum.ManageMsapImport];
+                ProcedureEnum.CreateDisbursement, ProcedureEnum.ViewInventoryReport];
             foreach (PropertyInfo property in typeof(UserAccess).GetProperties().Where(p => p.PropertyType == typeof(bool)))
             {
                 property.SetValue(grants, true);

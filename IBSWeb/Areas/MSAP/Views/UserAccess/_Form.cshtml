@@ -32,7 +32,6 @@
             <p class="ui-caption ui-muted">Rates are resolved automatically. Editing includes explicit charge recalculation; it does not grant rate maintenance.</p>
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanCreateDispatchTicket" class="form-check-input" /> <span>Record actual tickets</span></label>
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanEditDispatchTicket" class="form-check-input" /> <span>Edit tickets / review and recalculate charges</span></label>
-            <label class="flex items-start gap-2 ui-body"><input asp-for="CanDeleteDispatchTicket" class="form-check-input" /> <span>Void / cancel service tickets</span></label>
         </fieldset>
         <fieldset class="ui-panel ui-stack">
             <legend class="ui-section-title">Rates</legend>
@@ -76,6 +75,7 @@
                 <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageTugMasterMasterFile" class="form-check-input" /> <span>Tug Masters</span></label>
                 <label class="flex items-start gap-2 ui-body"><input asp-for="CanManagePrincipalMasterFile" class="form-check-input" /> <span>Principals</span></label>
                 <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageBankAccountMasterFile" class="form-check-input" /> <span>Bank Account</span></label>
+                <label class="flex items-start gap-2 ui-body"><input asp-for="CanManageMsapImport" class="form-check-input" /> <span>Master File Import</span></label>
             </div>
         </fieldset>
         <fieldset class="ui-panel ui-stack">

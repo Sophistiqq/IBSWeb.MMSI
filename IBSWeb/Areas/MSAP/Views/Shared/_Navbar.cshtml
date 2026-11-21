@@ -39,7 +39,7 @@
     bool canManageTugMaster = await ModernHasAnyAccess(ProcedureEnum.ManageTugMasterMasterFile);
     bool canManagePrincipal = await ModernHasAnyAccess(ProcedureEnum.ManagePrincipalMasterFile);
     bool canManageBankAccount = await ModernHasAnyAccess(ProcedureEnum.ManageBankAccountMasterFile);
-    bool canManagePostedPeriod = await ModernHasAnyAccess(ProcedureEnum.ManagePostedPeriod);
+    var isMsapAdmin = msapRole == MsapRoles.Admin;
     bool canManageReferences = canManageCustomer || canManageService || canManagePort || canManageTerminal
         || canManageVessel || canManageTugboat || canManageTugboatOwner || canManageTugMaster || canManagePrincipal;
     bool canAccessRates = await ModernHasAnyAccess(ProcedureEnum.ViewRates, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload);
@@ -194,7 +194,7 @@
                     </li>
                 }
 
-                @if (msapRole == MsapRoles.Admin || canManageBankAccount || canManagePostedPeriod)
+                @if (isMsapAdmin || canManageBankAccount)
                 {
                     <!-- Master File mega menu -->
                     <li class="mnav-item" data-mega role="none">
@@ -230,7 +230,7 @@
                                 <div>
                                     <div class="mnav-section-label">Accounting</div>
                                     <div class="mnav-link-list">
-                                        @if (msapRole == MsapRoles.Admin || canManagePostedPeriod)
+                                        @if (isMsapAdmin)
                                         {
                                             <a class="mnav-mega-link"
                                                asp-area="MSAPAdmin" asp-controller="PostedPeriod" asp-action="Index"
