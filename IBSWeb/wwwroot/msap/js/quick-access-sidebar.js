@@ -316,8 +316,18 @@
         document.body.appendChild(panel);
 
         document.getElementById('qa-close-btn').addEventListener('click', togglePanel);
-        document.getElementById('qa-clear').addEventListener('click', () => {
-            if (confirm('Clear all Quick Access history?')) {
+        document.getElementById('qa-clear').addEventListener('click', async () => {
+            if (typeof ModernAlert === 'undefined' || typeof ModernAlert.confirm !== 'function') {
+                return;
+            }
+            const result = await ModernAlert.confirm({
+                title: 'Clear Quick Access History?',
+                text: 'Clear all Quick Access history?',
+                confirmText: 'Clear',
+                cancelText: 'Cancel',
+                icon: 'warning'
+            });
+            if (result.isConfirmed) {
                 clearClicks();
                 renderList();
             }
@@ -338,7 +348,8 @@
             const navTrigger = document.getElementById('qa-nav-trigger');
             if (!panel.classList.contains('qa-hidden') &&
                 !panel.contains(e.target) &&
-                !(navTrigger && navTrigger.contains(e.target))) {
+                !(navTrigger && navTrigger.contains(e.target)) &&
+                !(e.target.closest && e.target.closest('.swal2-container'))) {
                 togglePanel();
             }
         });

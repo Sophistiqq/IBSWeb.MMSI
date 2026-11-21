@@ -123,20 +123,26 @@ const ModernAlert = {
     confirm: function({
         title = 'Confirmation',
         text = "Are you sure you want to proceed?",
+        html = null,
         confirmText = 'OK',
         cancelText = 'Cancel',
+        showCancelButton = true,
         icon = 'question',
+        width,
         didOpen,
         preConfirm
     } = {}) {
+        const bodyHtml = html ?? `
+            ${this._getHeroIcon(icon)}
+            <div class="modern-value-md text-center max-w-[240px] mx-auto leading-relaxed mb-4" style="color: var(--on-surface-variant)">${text}</div>
+        `;
+
         return Swal.fire({
             ...this._baseConfig,
+            ...(width ? { width } : {}),
             title: title,
-            html: `
-                ${this._getHeroIcon(icon)}
-                <div class="modern-value-md text-center max-w-[240px] mx-auto leading-relaxed mb-4" style="color: var(--on-surface-variant)">${text}</div>
-            `,
-            showCancelButton: true,
+            html: bodyHtml,
+            showCancelButton: showCancelButton,
             confirmButtonText: confirmText,
             cancelButtonText: cancelText,
             didOpen: popup => { this._baseConfig.didOpen?.(popup); didOpen?.(popup); },

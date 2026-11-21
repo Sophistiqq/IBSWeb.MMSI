@@ -395,10 +395,8 @@
         injectDOM();
         steps = collectSteps();
         if (!steps.length) {
-            if (typeof ModernAlert !== 'undefined' && ModernAlert.showToast) {
-                ModernAlert.showToast('No tour steps defined for this page.', 'info');
-            } else {
-                alert('No tour steps defined for this page.');
+            if (typeof ModernAlert !== 'undefined' && typeof ModernAlert.info === 'function') {
+                ModernAlert.info('No tour steps defined for this page.');
             }
             return;
         }

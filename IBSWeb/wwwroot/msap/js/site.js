@@ -18,32 +18,22 @@ function validateDate() {
     let dateFrom = document.getElementById("dateFrom")?.value;
     let dateTo = document.getElementById("dateTo")?.value;
     if (dateFrom && dateTo && dateFrom > dateTo) {
-        alert("Date From must be less than or equal to Date To");
+        if (typeof ModernAlert !== 'undefined' && typeof ModernAlert.warning === 'function') {
+            ModernAlert.warning('Date From must be less than or equal to Date To.');
+        }
         return false;
     }
     return true;
 }
 
-// Select2 Focus Hack
-$(document).on('select2:open', () => {
-    const searchField = document.querySelector('.select2-container--open .select2-search__field');
-    if (searchField) searchField.focus();
-});
-
 // Document Ready Handlers
 $(document).ready(function () {
-    // legacy dataTable fallback
-    if ($('#dataTable').length) {
-        $('#dataTable').DataTable({
-            stateSave: true,
-            processing: true
-        });
-    }
-
     // Dynamic date sync in reports
     const $dateFrom = $('#DateFrom');
     const $dateTo = $('#DateTo');
-    $dateFrom?.on('change', () => $dateTo.val($dateFrom.val()));
+    if ($dateFrom.length && $dateTo.length) {
+        $dateFrom.on('change', () => $dateTo.val($dateFrom.val()));
+    }
 
     // TIN Number Auto-formatting
     $(document).on('input', '.formattedTinNumberInput', function(e) {

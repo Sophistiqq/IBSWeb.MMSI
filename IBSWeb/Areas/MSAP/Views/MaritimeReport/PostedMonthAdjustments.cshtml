@@ -255,8 +255,7 @@
                 const badgeClass = badgeClassMap[item.documentType] || 'status-closed';
                 const changeCount = item.changes ? item.changes.length : 0;
 
-                Swal.fire({
-                    ...ModernAlert._baseConfig,
+                ModernAlert.confirm({
                     width: 'min(92vw, 960px)',
                     title: `Audit Evidence · ${escapeHtml(item.referenceNumber)}`,
                     html: `
@@ -310,7 +309,8 @@
                             </div>
                         </div>
                     `,
-                    confirmButtonText: 'Close'
+                    confirmText: 'Close',
+                    showCancelButton: false
                 });
             });
         });

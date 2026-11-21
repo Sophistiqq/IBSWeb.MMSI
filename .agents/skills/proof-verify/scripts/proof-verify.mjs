@@ -311,24 +311,48 @@ function sanitizeRazorScriptForSyntaxCheck(rawScript) {
     s = s.replace(/@(if|for|while|switch|catch)\b/g, "$1");
     s = s.replace(/@else\b/g, "else");
 
-    // Iteratively collapse @( ... ) balanced expressions
+    // Iteratively collapse @( ... ) and @Identifier.Member( ... ) balanced expressions (including multiline @Html.Raw(...))
     for (let pass = 0; pass < 4; pass++) {
         let changed = false;
         let out = "";
         for (let i = 0; i < s.length; i++) {
-            if (s[i] === "@" && s[i + 1] === "(") {
-                let depth = 1;
-                let j = i + 2;
-                while (j < s.length && depth > 0) {
-                    if (s[j] === "(") depth++;
-                    else if (s[j] === ")") depth--;
-                    j++;
+            if (s[i] === "@") {
+                let openIdx = -1;
+                if (s[i + 1] === "(") {
+                    openIdx = i + 1;
+                } else {
+                    const m = s.slice(i + 1).match(/^[A-Za-z_][A-Za-z0-9_.]*\(/);
+                    if (m && !/^(if|for|foreach|while|switch|catch)\($/.test(m[0])) {
+                        openIdx = i + m[0].length;
+                    }
                 }
-                if (depth === 0) {
-                    out += "__RAZOR_EXPR__";
-                    i = j - 1;
-                    changed = true;
-                    continue;
+                if (openIdx !== -1) {
+                    let depth = 1;
+                    let j = openIdx + 1;
+                    let inStr = null;
+                    while (j < s.length && depth > 0) {
+                        const ch = s[j];
+                        if (inStr) {
+                            if (ch === "\\" && j + 1 < s.length) {
+                                j += 2;
+                                continue;
+                            }
+                            if (ch === inStr) inStr = null;
+                        } else if (ch === "\"" || ch === "'") {
+                            inStr = ch;
+                        } else if (ch === "(") {
+                            depth++;
+                        } else if (ch === ")") {
+                            depth--;
+                        }
+                        j++;
+                    }
+                    if (depth === 0) {
+                        out += "__RAZOR_EXPR__";
+                        i = j - 1;
+                        changed = true;
+                        continue;
+                    }
                 }
             }
             out += s[i];
@@ -556,7 +580,7 @@ function runStage1StaticChecks(repoRoot, scope, opts) {
             : content;
         const cleanJs = stripJsComments(scriptsToInspect);
 
-        if (/\b(?:window\.)?(?:alert|confirm|prompt)\s*\(/.test(cleanJs)) {
+        if (/(?<![.\w$])(?:window\.)?(?:alert|confirm|prompt)\s*\(/.test(cleanJs)) {
             errors.push(`MSAP_AGENTS.md violation in ${relPath}: native alert/confirm/prompt detected; use ModernAlert.`);
         }
         if (/\bSwal\.fire\s*\(/.test(cleanJs)) {
