@@ -90,6 +90,18 @@
     align-items: start;
 }
 
+.schedule-screen-layout.app-ui > .modern-container.ui-page {
+    padding: 0;
+}
+
+.schedule-screen-layout.app-ui > .schedule-main-workspace.ui-page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) calc(var(--ui-summary-width) + 2rem);
+    gap: var(--ui-grid-gap);
+    padding: 0;
+    align-items: start;
+}
+
 .schedule-main-workspace > form {
     min-width: 0;
 }
@@ -132,7 +144,11 @@
 }
 
 .schedule-services-table {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .schedule-pending-notice {
@@ -425,7 +441,8 @@
         grid-template-columns: calc(var(--ui-progress-width) - var(--ui-space-6)) minmax(0, 1fr);
     }
 
-    .schedule-main-workspace {
+    .schedule-main-workspace,
+    .schedule-screen-layout.app-ui > .schedule-main-workspace.ui-page {
         grid-template-columns: minmax(0, 1fr);
     }
 
@@ -433,6 +450,24 @@
         position: static;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 991.98px) {
+    .schedule-screen-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .schedule-screen-layout > main,
+    .schedule-screen-layout > .schedule-main-workspace {
+        order: 1;
+    }
+
+    .schedule-job-progress-panel {
+        position: static;
+        order: 2;
+        min-width: 0;
+        max-width: 100%;
     }
 }
 
@@ -448,6 +483,7 @@
 
     .schedule-job-progress-panel {
         position: static;
+        order: 2;
     }
 
     .schedule-header-stack {

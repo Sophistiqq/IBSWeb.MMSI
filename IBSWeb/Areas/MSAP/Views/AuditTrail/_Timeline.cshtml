@@ -13,146 +13,6 @@
 }
 else
 {
-    <style>
-        .workflow-timeline {
-            position: relative;
-            padding: 0.5rem 0;
-        }
-
-        .timeline-container {
-            position: relative;
-        }
-
-        .timeline-connector {
-            position: absolute;
-            left: 17px;
-            top: 36px; /* Start after the marker */
-            bottom: -0.75rem; /* Extend to next item's gap */
-            width: 2px;
-            background-color: var(--surface-container-high);
-            z-index: 0;
-        }
-
-        .timeline-item:last-child .timeline-connector {
-            display: none;
-        }
-
-        /* Reset global pseudo-elements that might interfere */
-        .timeline-item::before,
-        .timeline-item::after,
-        .timeline-marker::before,
-        .timeline-marker::after {
-            display: none !important;
-            content: none !important;
-        }
-
-        .timeline-item {
-            position: relative;
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 0.75rem;
-            z-index: 1;
-        }
-
-        .timeline-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .timeline-marker {
-            flex-shrink: 0;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background-color: var(--surface-container-low);
-            border: 2px solid var(--outline-variant);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: var(--shadow-sm);
-            z-index: 2;
-        }
-
-        .timeline-marker .material-symbols-outlined {
-            font-size: 18px;
-        }
-
-        .timeline-card {
-            flex-grow: 1;
-            background-color: var(--surface-container-low);
-            border: 1px solid var(--surface-container-high);
-            border-radius: var(--radius-xl);
-            padding: 0.625rem 0.875rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: all 0.2s ease;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-        }
-
-        .timeline-card:hover {
-            border-color: var(--outline-variant);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            transform: translateX(2px);
-        }
-
-        .timeline-info {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-
-        .timeline-activity {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--on-surface);
-            line-height: 1.3;
-        }
-
-        .timeline-meta {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .timeline-time-user {
-            text-align: right;
-            flex-shrink: 0;
-        }
-
-        .timeline-timestamp {
-            font-size: 11px;
-            font-weight: 500;
-            color: var(--on-surface-variant);
-            display: block;
-        }
-
-        .timeline-username {
-            font-size: 10px;
-            color: var(--on-primary-container);
-            text-transform: uppercase;
-            letter-spacing: 0.02em;
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 2px;
-            margin-top: 1px;
-        }
-
-        /* Marker Color Coding */
-        .marker-jo { border-color: #3b82f6 !important; color: #3b82f6 !important; }
-        .marker-dt { border-color: #a855f7 !important; color: #a855f7 !important; }
-        .marker-tariff { border-color: #f97316 !important; color: #f97316 !important; }
-        .marker-billing { border-color: #22c55e !important; color: #22c55e !important; }
-        .marker-collection { border-color: #eab308 !important; color: #eab308 !important; }
-
-        /* Badge Color Coding */
-        .badge-jo { background-color: rgba(59, 130, 246, 0.08); color: #2563eb; }
-        .badge-dt { background-color: rgba(168, 85, 247, 0.08); color: #9333ea; }
-        .badge-tariff { background-color: rgba(249, 115, 22, 0.08); color: #ea580c; }
-        .badge-billing { background-color: rgba(34, 197, 94, 0.08); color: #16a34a; }
-        .badge-collection { background-color: rgba(234, 179, 8, 0.08); color: #ca8a04; }
-    </style>
-
     <div class="workflow-timeline">
         <div class="timeline-container">
             @foreach (var item in Model)
@@ -207,21 +67,21 @@ else
 
                         bool isAdjustment = matchedLog != null || reason != null || item.Activity.StartsWith("Reopened") || item.Activity.StartsWith("Voided") || item.Activity.StartsWith("Reverted");
                     }
-                    <div class="timeline-card" style="@(isAdjustment ? "border-left: 3px solid var(--warning);" : "")">
+                    <div class="timeline-card @(isAdjustment ? "timeline-card--adjusted" : "")">
                         <div class="timeline-info">
                             <span class="timeline-activity">@mainActivity</span>
                             @if (!string.IsNullOrEmpty(reason))
                             {
-                                <div class="timeline-reason mt-1" style="padding: 4px 8px; border-radius: var(--radius-md); background: var(--surface-container); border-left: 2px solid var(--warning); font-size: 11px; color: var(--on-surface);">
-                                    <strong style="color: var(--warning);">Adjustment Reason:</strong> @reason
+                                <div class="timeline-reason mt-1">
+                                    <strong class="timeline-reason-label">Adjustment Reason:</strong> @reason
                                 </div>
                             }
                             @if (fieldChanges.Count > 0)
                             {
-                                <div class="mt-1" style="display: flex; flex-wrap: wrap; gap: 4px; font-size: 11px; color: var(--on-surface-variant);">
+                                <div class="timeline-changes mt-1">
                                     @foreach (var change in fieldChanges)
                                     {
-                                        <span style="padding: 2px 6px; border-radius: var(--radius-sm); background: var(--surface-container);">
+                                        <span class="timeline-change-pill">
                                             <strong>@(string.IsNullOrWhiteSpace(change.Label) ? change.Field : change.Label):</strong> @(change.Before ?? "-") &rarr; @(change.After ?? "-")
                                         </span>
                                     }
@@ -231,18 +91,18 @@ else
                                 <span class="modern-badge-sm @docClass.Badge">@item.DocumentType</span>
                                 @if (isAdjustment)
                                 {
-                                    <span class="schedule-status-pill ui-status ui-attention" style="font-size: 10px; min-height: 20px; padding: 0 8px;">Adjusted</span>
+                                    <span class="schedule-status-pill ui-status ui-attention timeline-adjusted-pill">Adjusted</span>
                                 }
                                 @if (!string.IsNullOrEmpty(item.ReferenceNumber))
                                 {
-                                    <span class="modern-label" style="margin:0; font-size:10px">REF: #@item.ReferenceNumber</span>
+                                    <span class="modern-label timeline-ref-label">REF: #@item.ReferenceNumber</span>
                                 }
                             </div>
                         </div>
                         <div class="timeline-time-user">
                             <time class="timeline-timestamp">@item.Date.ToString("MMM dd, HH:mm")</time>
                             <span class="timeline-username">
-                                <span class="material-symbols-outlined" style="font-size: 11px;">person</span>
+                                <span class="material-symbols-outlined msap-icon-xs">person</span>
                                 @(string.IsNullOrWhiteSpace(item.ActorName) ? "Name unavailable" : item.ActorName)
                             </span>
                         </div>

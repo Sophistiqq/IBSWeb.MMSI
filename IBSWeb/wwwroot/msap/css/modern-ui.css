@@ -1258,3 +1258,579 @@ html::-webkit-scrollbar-thumb {
 html::-webkit-scrollbar-thumb:hover {
     background-color: var(--on-surface-variant);
 }
+
+/* Shared Theme Utility Classes */
+.msap-initially-hidden {
+    display: none;
+}
+
+.msap-flex-1 {
+    flex: 1;
+}
+
+.msap-h-full {
+    height: 100%;
+}
+
+.msap-stack-md {
+    gap: 1.25rem;
+}
+
+.msap-stack-lg {
+    gap: 1.5rem;
+}
+
+.msap-nowrap {
+    white-space: nowrap;
+}
+
+.msap-icon-xs {
+    font-size: 11px;
+}
+
+.msap-icon-sm {
+    font-size: 15px;
+}
+
+.msap-icon-md {
+    font-size: 16px;
+}
+
+.msap-icon-lg {
+    font-size: 32px;
+}
+
+.msap-icon-warning {
+    color: var(--status-tariff);
+}
+
+.msap-divider-top {
+    border-top: 1px solid var(--outline-variant);
+}
+
+.msap-file-input {
+    padding: 0.35rem;
+}
+
+.msap-textarea-fill {
+    height: 100%;
+    min-height: 120px;
+}
+
+.msap-textarea-fill-lg {
+    height: 100%;
+    min-height: 150px;
+}
+
+.msap-card-header-subtle {
+    background-color: var(--surface-container-low);
+    color: var(--on-surface);
+}
+
+.msap-card-header-elevated {
+    background-color: var(--surface-container-high);
+    color: var(--on-surface);
+}
+
+.msap-card-header-primary {
+    background-color: var(--primary);
+    color: var(--on-primary);
+}
+
+.msap-card-header-primary .modern-headline-md,
+.msap-card-header-primary .ui-section-title,
+.msap-card-header-primary .material-symbols-outlined {
+    color: var(--on-primary);
+}
+
+.msap-duration-badge {
+    background-color: var(--surface-container-lowest);
+    color: var(--primary);
+}
+
+.msap-duration-badge--invalid {
+    background-color: var(--error);
+    color: var(--on-primary);
+}
+
+.msap-banner-warning {
+    background-color: color-mix(in srgb, var(--status-tariff) 12%, var(--surface-container-lowest));
+    border-color: var(--status-tariff);
+    color: var(--on-surface);
+    margin-bottom: 0.5rem;
+}
+
+.msap-banner-warning .material-symbols-outlined {
+    color: var(--status-tariff);
+}
+
+.msap-card-attention {
+    border-left: 4px solid var(--status-tariff);
+    background-color: color-mix(in srgb, var(--status-tariff) 7%, var(--surface-container-lowest));
+}
+
+.msap-row-override,
+.msap-row-override > td {
+    background-color: color-mix(in srgb, var(--status-tariff) 8%, var(--surface-container-lowest)) !important;
+}
+
+.msap-cell-override {
+    background-color: color-mix(in srgb, var(--status-tariff) 16%, var(--surface-container-lowest)) !important;
+}
+
+.msap-inline-pill {
+    margin-left: 0.35rem;
+}
+
+.msap-details-summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.msap-ticket-preview-img {
+    max-width: 100%;
+    max-height: 85vh;
+    object-fit: contain;
+}
+
+.billing-remarks-card {
+    background-color: var(--surface-container-low);
+    border-left: 4px solid var(--primary);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-lg);
+}
+
+.billing-remarks-label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.billing-remarks-text {
+    margin: 0.25rem 0 0;
+    white-space: pre-wrap;
+    color: var(--on-surface);
+}
+
+/* Posted Period & Report Filter Helpers */
+.msap-filter-field-sm {
+    min-width: 120px;
+}
+
+.msap-filter-field-md {
+    min-width: 150px;
+}
+
+.msap-filter-field-lg {
+    min-width: 190px;
+}
+
+.msap-cell-truncate {
+    max-width: 280px;
+}
+
+.posted-period-month-select {
+    min-width: 150px;
+}
+
+.posted-period-year-select {
+    min-width: 100px;
+}
+
+/* Audit Evidence Modal (Posted Month Adjustments) */
+.audit-evidence-modal {
+    font-size: 13px;
+    color: var(--on-surface);
+}
+
+.audit-evidence-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--radius-lg);
+    background-color: var(--surface-container-low);
+    border: 1px solid var(--outline-variant);
+    margin-bottom: 14px;
+}
+
+.audit-evidence-box {
+    padding: 12px 14px;
+    border-radius: var(--radius-lg);
+    background-color: var(--surface-container-low);
+    border: 1px solid var(--outline-variant);
+    color: var(--on-surface);
+}
+
+.audit-evidence-reason {
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.audit-evidence-label {
+    font-size: 10px;
+}
+
+.audit-evidence-value {
+    color: var(--on-surface);
+}
+
+.audit-evidence-filename {
+    color: var(--on-surface);
+    word-break: break-all;
+}
+
+.audit-evidence-diff-scroll {
+    max-height: 360px;
+    overflow: auto;
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--radius-lg);
+}
+
+.audit-evidence-diff-table {
+    font-size: 12.5px;
+}
+
+.audit-evidence-diff-table thead tr {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.audit-evidence-diff-table th {
+    padding: 9px 12px !important;
+    border-bottom: 1px solid var(--outline-variant) !important;
+}
+
+.audit-evidence-diff-table td {
+    padding: 10px 12px !important;
+    border-bottom: 1px solid var(--outline-variant) !important;
+    vertical-align: top !important;
+    white-space: normal !important;
+    word-break: break-word;
+}
+
+.audit-evidence-diff-table tbody tr:nth-child(even) {
+    background-color: var(--surface-container-low);
+}
+
+.audit-evidence-col-field {
+    width: 24%;
+}
+
+.audit-evidence-col-value {
+    width: 38%;
+}
+
+.audit-evidence-cell-field {
+    font-weight: 600;
+}
+
+.audit-evidence-cell-before {
+    color: var(--error) !important;
+}
+
+.audit-evidence-cell-after {
+    color: var(--primary) !important;
+}
+
+.audit-evidence-empty {
+    padding: 16px !important;
+    text-align: center !important;
+    color: var(--on-surface-variant) !important;
+}
+
+/* Workflow Audit Trail Timeline */
+.workflow-timeline {
+    position: relative;
+    padding: 0.5rem 0;
+}
+
+.workflow-timeline .timeline-container {
+    position: relative;
+}
+
+.workflow-timeline .timeline-connector {
+    position: absolute;
+    left: 17px;
+    top: 36px;
+    bottom: -0.75rem;
+    width: 2px;
+    background-color: var(--surface-container-high);
+    z-index: 0;
+}
+
+.workflow-timeline .timeline-item:last-child .timeline-connector {
+    display: none;
+}
+
+.workflow-timeline .timeline-item::before,
+.workflow-timeline .timeline-item::after,
+.workflow-timeline .timeline-marker::before,
+.workflow-timeline .timeline-marker::after {
+    display: none !important;
+    content: none !important;
+}
+
+.workflow-timeline .timeline-item {
+    position: relative;
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0;
+    z-index: 1;
+}
+
+.workflow-timeline .timeline-item:last-child {
+    margin-bottom: 0;
+}
+
+.workflow-timeline .timeline-marker {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    margin-top: 0;
+    border-radius: 50%;
+    background-color: var(--surface-container-low);
+    border: 2px solid var(--outline-variant);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    z-index: 2;
+}
+
+.workflow-timeline .timeline-marker .material-symbols-outlined {
+    font-size: 18px;
+}
+
+.workflow-timeline .timeline-card {
+    flex-grow: 1;
+    background-color: var(--surface-container-low);
+    border: 1px solid var(--surface-container-high);
+    border-radius: var(--radius-xl);
+    padding: 0.625rem 0.875rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.workflow-timeline .timeline-card--adjusted {
+    border-left: 3px solid var(--status-tariff);
+}
+
+.workflow-timeline .timeline-card:hover {
+    border-color: var(--outline-variant);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transform: translateX(2px);
+}
+
+.workflow-timeline .timeline-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.workflow-timeline .timeline-activity {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--on-surface);
+    line-height: 1.3;
+}
+
+.workflow-timeline .timeline-reason {
+    padding: 4px 8px;
+    border-radius: var(--radius-lg);
+    background-color: var(--surface-container);
+    border-left: 2px solid var(--status-tariff);
+    font-size: 11px;
+    color: var(--on-surface);
+}
+
+.workflow-timeline .timeline-reason-label {
+    color: var(--status-tariff);
+}
+
+.workflow-timeline .timeline-changes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--on-surface-variant);
+}
+
+.workflow-timeline .timeline-change-pill {
+    padding: 2px 6px;
+    border-radius: var(--radius-lg);
+    background-color: var(--surface-container);
+}
+
+.workflow-timeline .timeline-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.workflow-timeline .timeline-adjusted-pill {
+    font-size: 10px;
+    min-height: 20px;
+    padding: 0 8px;
+}
+
+.workflow-timeline .timeline-ref-label {
+    margin: 0;
+    font-size: 10px;
+}
+
+.workflow-timeline .timeline-time-user {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.workflow-timeline .timeline-timestamp {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--on-surface-variant);
+    display: block;
+}
+
+.workflow-timeline .timeline-username {
+    font-size: 10px;
+    color: var(--on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+    margin-top: 1px;
+}
+
+.workflow-timeline .marker-jo {
+    border-color: var(--status-billing);
+    color: var(--status-billing);
+}
+
+.workflow-timeline .marker-dt {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.workflow-timeline .marker-tariff {
+    border-color: var(--status-tariff);
+    color: var(--status-tariff);
+}
+
+.workflow-timeline .marker-billing {
+    border-color: var(--status-open);
+    color: var(--status-open);
+}
+
+.workflow-timeline .marker-collection {
+    border-color: var(--status-approval);
+    color: var(--status-approval);
+}
+
+.workflow-timeline .badge-jo {
+    background-color: color-mix(in srgb, var(--status-billing) 14%, var(--surface-container-lowest));
+    color: var(--on-surface);
+    border: 1px solid color-mix(in srgb, var(--status-billing) 35%, transparent);
+}
+
+.workflow-timeline .badge-dt {
+    background-color: color-mix(in srgb, var(--primary) 14%, var(--surface-container-lowest));
+    color: var(--text-primary);
+    border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.workflow-timeline .badge-tariff {
+    background-color: color-mix(in srgb, var(--status-tariff) 14%, var(--surface-container-lowest));
+    color: var(--on-surface);
+    border: 1px solid color-mix(in srgb, var(--status-tariff) 35%, transparent);
+}
+
+.workflow-timeline .badge-billing {
+    background-color: color-mix(in srgb, var(--status-open) 14%, var(--surface-container-lowest));
+    color: var(--on-surface);
+    border: 1px solid color-mix(in srgb, var(--status-open) 35%, transparent);
+}
+
+.workflow-timeline .badge-collection {
+    background-color: color-mix(in srgb, var(--status-approval) 14%, var(--surface-container-lowest));
+    color: var(--on-surface);
+    border: 1px solid color-mix(in srgb, var(--status-approval) 35%, transparent);
+}
+
+/* Maintenance Page */
+.msap-maintenance-page {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--surface);
+    color: var(--on-surface);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 1.5rem;
+    box-sizing: border-box;
+}
+
+.msap-maintenance-card {
+    text-align: center;
+    background-color: var(--surface-container-lowest);
+    border: 1px solid var(--outline-variant);
+    padding: 2.5rem;
+    border-radius: var(--radius-xl);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+    max-width: 600px;
+    width: 100%;
+}
+
+.msap-maintenance-icon {
+    font-size: 4rem;
+    color: var(--primary);
+    margin-bottom: 1.25rem;
+}
+
+.msap-maintenance-title {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-size: 2.25rem;
+    font-weight: 700;
+    color: var(--on-surface);
+    margin: 0 0 1rem;
+}
+
+.msap-maintenance-text {
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    color: var(--on-surface-variant);
+    margin: 0 0 1.25rem;
+}
+
+.msap-maintenance-cta {
+    font-size: 1rem;
+    color: var(--on-surface);
+    margin-top: 1.75rem;
+}
+
+.msap-maintenance-cta a {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.msap-maintenance-cta a:hover {
+    text-decoration: underline;
+}
+
+.modern-input[readonly],
+.ui-input[readonly] {
+    background-color: var(--surface-container-low);
+    color: var(--on-surface-variant);
+    cursor: default;
+}

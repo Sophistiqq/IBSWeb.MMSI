@@ -11,9 +11,9 @@
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/cos-details.css" asp-append-version="true" />
-<div class="schedule-screen-layout app-ui">
+<div class="modern-layout schedule-screen-layout app-ui">
     <partial name="_WorkflowProgress" model="Model.Progress" />
-    <main class="cos-details-workspace other-tug-charge-workspace ui-stack">
+    <main class="modern-container ui-page cos-details-workspace other-tug-charge-workspace ui-stack">
         <header class="ui-page-header">
             <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId">COS details</a></li><li aria-current="page">Other Tug Charges</li></ol></nav>
             <h1 class="ui-page-title" data-page-header>@(confirmed ? "Provider charge details" : "Review provider charges")</h1>
@@ -54,7 +54,7 @@
             <section class="ui-panel ui-panel--compact ui-stack">
                 <h2 class="ui-section-title">Allocate the provider charge to actual tickets</h2>
                 <p class="ui-caption ui-muted">Select this COS's tickets and enter each provider charge. Blank is pending; 0 means an explicitly zero charge. Existing allocations on this bill are retained.</p>
-                <div class="schedule-services-table"><table class="schedule-review-table">
+                <div class="schedule-services-table"><table class="modern-table ui-table schedule-review-table">
                     <thead><tr><th>Include</th><th>COS / ticket</th><th>Tugboat / service</th><th>Service date</th><th>Provider charge (PHP)</th></tr></thead>
                     <tbody>
                     @foreach (var ticket in Model.Tickets)

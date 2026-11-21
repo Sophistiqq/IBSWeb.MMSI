@@ -15,6 +15,11 @@
     top: var(--ui-space-5);
 }
 
+.billing-preparation .billing-progress-rail {
+    min-width: 0;
+    max-width: 100%;
+}
+
 .billing-preparation .financial-job-progress {
     margin: 0;
 }
@@ -114,7 +119,11 @@
 }
 
 .billing-preparation .billing-table-scroll {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .billing-preparation .billing-service-table {
@@ -205,6 +214,25 @@
     }
 }
 
+@media (max-width: 991.98px) {
+    .billing-preparation .billing-workspace {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .billing-preparation .billing-workspace > .billing-content {
+        order: 1;
+    }
+
+    .billing-preparation .billing-workspace > .billing-progress,
+    .billing-preparation .billing-workspace > .billing-progress-rail,
+    .billing-preparation .billing-workspace > :has(.job-progress) {
+        position: static;
+        order: 2;
+        min-width: 0;
+        max-width: 100%;
+    }
+}
+
 @media (max-width: 767px) {
     .billing-preparation .billing-details-heading {
         flex-direction: column;
@@ -222,13 +250,20 @@
         padding: var(--ui-space-2);
     }
 
-    .billing-preparation .billing-progress {
+    .billing-preparation .billing-progress,
+    .billing-preparation .billing-progress-rail {
         position: static;
+        order: 2;
     }
 
     .billing-preparation .billing-footer {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .billing-preparation .billing-footer .ui-page-action {
+        min-width: 0;
+        width: 100%;
     }
 }
 

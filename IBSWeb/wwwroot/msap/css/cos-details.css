@@ -54,9 +54,9 @@
 
 .cos-services-table .cos-tug-group th {
     background: color-mix(in srgb, var(--on-surface) 9%, var(--surface-container-lowest));
-    color: var(--on-surface);
+    color: var(--on-surface) !important;
     border: 0;
-    font-weight: var(--ui-weight-semibold);
+    font-weight: var(--ui-weight-semibold) !important;
 }
 
 .cos-tug-group .ui-caption {
@@ -191,6 +191,7 @@
 
     .cos-entry-footer :is(a, button) {
         flex: 1;
+        min-width: 0;
     }
 }
 

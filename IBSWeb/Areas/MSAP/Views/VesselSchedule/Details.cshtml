@@ -29,9 +29,9 @@
 }
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
-<div class="schedule-screen-layout app-ui">
+<div class="modern-layout schedule-screen-layout app-ui">
     <partial name="_WorkflowProgress" model="(JobProgressViewModel)ViewBag.JobProgress" />
-    <main class="schedule-main-workspace schedule-review-workspace" id="scheduleReview"
+    <main class="modern-container ui-page schedule-main-workspace schedule-review-workspace" id="scheduleReview"
           data-schedule-id="@Model.VesselScheduleId"
           data-adopt-url="@(ViewBag.CanAdoptTableRate == true ? Url.Action("AdoptTableRate") : "")"
           data-rate-url="@(canViewRates ? Url.Action("GetTariffRate") : "")" data-customer-id="@Model.CustomerId"
@@ -195,7 +195,7 @@
                         else if (canViewRates)
                         {
                             <div class="schedule-services-table" role="region" aria-label="@tug.TugboatName service rates" tabindex="0">
-                                <table class="schedule-review-table">
+                                <table class="modern-table ui-table schedule-review-table">
                                     <thead><tr><th>Service</th><th>Tariff basis</th><th>Tariff rate (₱)</th><th>BAF method</th><th>BAF rate (₱)</th></tr></thead>
                                     <tbody>
                                         @foreach (var entry in entries)
@@ -230,7 +230,7 @@
                         else
                         {
                             <div class="schedule-services-table" role="region" aria-label="@tug.TugboatName assigned services" tabindex="0">
-                                <table class="schedule-review-table">
+                                <table class="modern-table ui-table schedule-review-table">
                                     <thead><tr><th>Service</th><th>Tariff basis</th><th>BAF method</th><th>Status</th></tr></thead>
                                     <tbody>
                                         @foreach (var entry in entries)

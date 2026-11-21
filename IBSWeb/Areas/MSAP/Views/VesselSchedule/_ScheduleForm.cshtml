@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="~/msap/css/vessel-schedule-form.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 
-<div class="schedule-screen-layout app-ui">
+<div class="modern-layout schedule-screen-layout app-ui">
     @{
         var reviewing = ViewData["BookingProgressReview"] is true;
         var progress = new JobProgressViewModel
@@ -24,7 +24,7 @@
     <partial name="_WorkflowProgress" model="progress" />
 
     <!-- Center Column: Main Workspace Form -->
-    <div class="schedule-main-workspace">
+    <main class="modern-container ui-page schedule-main-workspace">
         <header class="schedule-header-stack ui-page-header">
             <nav aria-label="Breadcrumb">
                 <ol class="ui-breadcrumb">
@@ -270,7 +270,7 @@
                 <button type="submit" form="scheduleForm" class="ui-button ui-button--primary"><span class="material-symbols-outlined">save</span> Save for reviewing</button>
             </div>
         </div>
-    </div>
+    </main>
 </div>
 
 <!-- Dynamic HTML Templates -->

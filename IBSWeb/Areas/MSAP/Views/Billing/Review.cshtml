@@ -31,7 +31,7 @@
 
 <div class="modern-layout app-ui billing-preparation billing-review-screen">
     <div class="billing-workspace">
-        <div class="ui-stack">
+        <div class="ui-stack billing-progress-rail">
             @foreach (var progress in progressItems)
             {
                 <partial name="_WorkflowProgress" model="progress" />
@@ -91,10 +91,10 @@
                 var visibleChanges = billingChanges
                     .Where(c => !c.Field.EndsWith("_NetAmount", StringComparison.OrdinalIgnoreCase))
                     .ToList();
-                <section class="modern-card ui-card ui-attention" aria-label="Overridden values flagged for review and approval" style="border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.06);">
+                <section class="modern-card ui-card ui-attention msap-card-attention" aria-label="Overridden values flagged for review and approval">
                     <div class="modern-card-header-action flex justify-between items-center w-full flex-wrap gap-2 ui-card-header">
                         <div class="flex items-center gap-2">
-                            <span class="material-symbols-outlined" style="color: #d97706;" aria-hidden="true">fact_check</span>
+                            <span class="material-symbols-outlined msap-icon-warning" aria-hidden="true">fact_check</span>
                             <h2 class="modern-headline-md ui-section-title mb-0">Overridden values flagged for review &amp; approval</h2>
                             <span class="modern-badge-sm status-tariff">@visibleChanges.Count change@(visibleChanges.Count == 1 ? "" : "s")</span>
                         </div>
@@ -109,7 +109,7 @@
                         @if (visibleChanges.Count > 0)
                         {
                             <div class="billing-table-scroll">
-                                <table class="modern-table ui-table billing-override-table" style="font-size: 0.9rem;">
+                                <table class="modern-table ui-table billing-override-table">
                                     <thead>
                                         <tr>
                                             <th>Changed field</th>
@@ -132,7 +132,7 @@
                         }
                         @if (!string.IsNullOrWhiteSpace(adjustmentReason))
                         {
-                            <div class="pt-2" style="border-top: 1px solid var(--outline-variant);">
+                            <div class="pt-2 msap-divider-top">
                                 <span class="ui-caption ui-muted"><strong>Authorized reason:</strong></span>
                                 <span class="ui-body">@adjustmentReason</span>
                             </div>
@@ -218,12 +218,12 @@
                 </div>
                 @if (!string.IsNullOrWhiteSpace(Model.Remarks))
                 {
-                    <div class="billing-remarks-card" style="background: var(--bg-subtle, #f8f9fa); border-left: 4px solid var(--primary, #0d6efd); padding: 0.75rem 1rem; border-radius: 4px;">
-                        <span class="ui-caption ui-muted font-bold" style="display:flex; align-items:center; gap:0.25rem;">
-                            <span class="material-symbols-outlined" style="font-size: 16px;" aria-hidden="true">notes</span>
+                    <div class="billing-remarks-card">
+                        <span class="ui-caption ui-muted font-bold billing-remarks-label">
+                            <span class="material-symbols-outlined msap-icon-md" aria-hidden="true">notes</span>
                             Encoder Remarks for Approvers:
                         </span>
-                        <p class="ui-body" style="margin: 0.25rem 0 0; white-space: pre-wrap;">@Model.Remarks</p>
+                        <p class="ui-body billing-remarks-text">@Model.Remarks</p>
                     </div>
                 }
                 <p class="ui-caption ui-muted">@(Model.IsVatable ? "VAT" : "Non-VAT") · @(Model.IsVatInclusive ? "VAT inclusive" : "VAT exclusive") · @(Model.PrintWht ? "Print withholding" : "No printed withholding") · @(Model.PrintDiscount ? "Print discount" : "Confidential discount")</p>
@@ -231,7 +231,7 @@
             <section class="ui-panel ui-stack" aria-labelledby="reviewChargesHeading">
                 <h2 id="reviewChargesHeading" class="ui-section-title">@component charges for review</h2>
                 <div class="billing-table-scroll">
-                    <table class="billing-service-table" style="font-size: 0.95rem;">
+                    <table class="modern-table ui-table billing-service-table">
                         <thead><tr><th>Service / ticket</th><th>Actual / billed hours</th><th>Basic rate</th><th>BAF rate</th><th>Source · Basic / BAF</th><th>After discount</th></tr></thead>
                         <tbody>
                             @foreach (var group in (Model.PaidDispatchTickets ?? []).GroupBy(t => t.Tugboat.TugboatName))
@@ -250,16 +250,16 @@
                                     var basicRateOverridden = basicRateChange != null;
                                     var bafRateOverridden = bafRateChange != null;
                                     var netAmountOverridden = netAmountChange != null;
-                                    <tr style="@(ticketHasOverride ? "background: rgba(245, 158, 11, 0.08);" : "")">
+                                    <tr class="@(ticketHasOverride ? "msap-row-override" : "")">
                                         <td>
                                             <strong>@MsapConstants.FormatServiceDisplay(ticket.Service?.ServiceNumber, ticket.Service?.ServiceName ?? "—", ticket.Tons)</strong><span class="billing-ticket-number"><strong>@ticket.DispatchNumber</strong></span>
                                             @if (ticketHasOverride)
                                             {
-                                                <span class="schedule-status-pill ui-status ui-attention" style="margin-left: 0.35rem;">Overridden</span>
+                                                <span class="schedule-status-pill ui-status ui-attention msap-inline-pill">Overridden</span>
                                             }
                                         </td>
                                         <td>@(ticket.RawDurationHours?.ToString("N2") ?? "—") / <strong>@ticket.TotalHours.ToString("N2")</strong></td>
-                                        <td class="@(basicRateOverridden ? "schedule-review-attention" : "")" style="@(basicRateOverridden ? "background: rgba(245, 158, 11, 0.16);" : "")">
+                                        <td class="@(basicRateOverridden ? "schedule-review-attention msap-cell-override" : "")">
                                             @if (bafOnly)
                                             {
                                                 <span>—</span>
@@ -273,7 +273,7 @@
                                                 <small class="ui-caption d-block">Revised from <strong>@basicRateChange.Before</strong></small>
                                             }
                                         </td>
-                                        <td class="@(bafRateOverridden ? "schedule-review-attention" : "")" style="@(bafRateOverridden ? "background: rgba(245, 158, 11, 0.16);" : "")">
+                                        <td class="@(bafRateOverridden ? "schedule-review-attention msap-cell-override" : "")">
                                             @if (basicOnly)
                                             {
                                                 <span>—</span>
@@ -288,7 +288,7 @@
                                             }
                                         </td>
                                         <td>@(bafOnly ? "—" : ticket.IsManualTariffRate ? "Manual" : "Table") / @(basicOnly ? "—" : ticket.IsManualBafRate ? "Manual" : "Table")</td>
-                                        <td class="@(netAmountOverridden ? "schedule-review-attention" : "")" style="@(netAmountOverridden ? "background: rgba(245, 158, 11, 0.16);" : "")">
+                                        <td class="@(netAmountOverridden ? "schedule-review-attention msap-cell-override" : "")">
                                             <strong>@(bafOnly ? ticket.BAFNetRevenue.ToString("N2") : basicOnly ? ticket.DispatchNetRevenue.ToString("N2") : ticket.TotalNetRevenue.ToString("N2"))</strong>
                                             @if (netAmountChange != null && !string.IsNullOrWhiteSpace(netAmountChange.Before))
                                             {
@@ -423,7 +423,7 @@
                         @foreach (var dt in ticketImages)
                         {
                             <details class="modern-card ui-card js-ticket-image-fold">
-                                <summary class="modern-card-header-action flex justify-between items-center w-full ui-card-header" style="cursor: pointer; list-style: none;">
+                                <summary class="modern-card-header-action flex justify-between items-center w-full ui-card-header msap-details-summary">
                                     <div class="flex items-center gap-2">
                                         <span class="material-symbols-outlined text-primary" aria-hidden="true">image</span>
                                         <span class="ui-body"><strong>Dispatch Ticket #@dt.DispatchNumber</strong></span>
@@ -432,7 +432,7 @@
                                     <span class="material-symbols-outlined ui-muted js-fold-icon" aria-hidden="true">expand_more</span>
                                 </summary>
                                 <div class="modern-card-body ui-card-body text-center">
-                                    <img src="@dt.ImageSignedUrl" alt="Dispatch Ticket @dt.DispatchNumber" loading="lazy" style="max-width: 100%; max-height: 85vh; object-fit: contain;" />
+                                    <img src="@dt.ImageSignedUrl" alt="Dispatch Ticket @dt.DispatchNumber" loading="lazy" class="msap-ticket-preview-img" />
                                 </div>
                             </details>
                         }
@@ -551,7 +551,7 @@
     </div>
 </div>
 
-<form id="discardBillingForm" method="post" style="display:none;">@Html.AntiForgeryToken()</form>
+<form id="discardBillingForm" method="post" hidden>@Html.AntiForgeryToken()</form>
 
 @section Scripts {
     <script>

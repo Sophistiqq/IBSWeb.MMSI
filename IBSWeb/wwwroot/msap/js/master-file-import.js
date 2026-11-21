@@ -132,6 +132,7 @@
             validatedOnce = false;
             correctionsButton.disabled = true;
             fileSelect.replaceChildren(new Option('Load files to begin', ''));
+            if (typeof window.refreshModernSelect === 'function' && window.jQuery) window.refreshModernSelect(window.jQuery(fileSelect));
             renderEditor();
         }
         status.textContent = 'Selection or options changed. Validate and review again.';
@@ -192,10 +193,12 @@
                 const invalid = documents.find(doc => doc.rows.some(row => results.get(rowKey(doc, row))?.action === 'Invalid'));
                 if (invalid) fileSelect.value = invalid.kind;
             }
+            if (typeof window.refreshModernSelect === 'function' && window.jQuery) window.refreshModernSelect(window.jQuery(fileSelect));
             const port = document.getElementById('NewTugboatPortCode');
             (result.ports || []).forEach(item => {
                 if (![...port.options].some(option => option.value === item.value)) port.add(new Option(item.text, item.value));
             });
+            if (typeof window.refreshModernSelect === 'function' && window.jQuery) window.refreshModernSelect(window.jQuery(port));
             fingerprint.value = result.reviewedFingerprint || '';
             reviewed = !!fingerprint.value && !result.imported && !(result.errors || []).length;
             const rateLinks = document.getElementById('masterImportedRates');

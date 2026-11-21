@@ -36,9 +36,9 @@
 
             @if (hasTickets)
             {
-                <div class="modern-card ui-card" style="background-color: #fff8e1; border-color: #ffe082; color: #856404; margin-bottom: 0.5rem;">
+                <div class="modern-card ui-card msap-banner-warning">
                     <div class="modern-card-body flex flex-row items-center gap-4 ui-card-body">
-                        <span class="material-symbols-outlined" style="font-size: 32px;">warning</span>
+                        <span class="material-symbols-outlined msap-icon-lg">warning</span>
                         <div>
                             <p class="font-bold text-sm mb-1">Existing Dispatch Tickets Detected</p>
                             <p class="text-xs mb-0">Changing Vessel, Port, or Terminal may affect consistency with existing tickets. Please review them after saving.</p>
@@ -49,7 +49,7 @@
 
             <div class="modern-grid">
                 <!-- Left Column: Primary Logistics & Remarks (col-8) -->
-                <section class="modern-col-8 flex flex-column" style="gap: 1.5rem;">
+                <section class="modern-col-8 flex flex-column msap-stack-lg">
                     <div class="modern-card ui-card">
                         <div class="modern-card-header-info ui-card-header">
                             <span class="material-symbols-outlined">anchor</span>
@@ -101,22 +101,22 @@
                         </div>
                     </div>
 
-                    <div class="modern-card ui-card" style="flex: 1;">
-                        <div class="modern-card-header-info ui-card-header" style="background-color: var(--surface-container-low); color: var(--on-surface);">
+                    <div class="modern-card ui-card msap-flex-1">
+                        <div class="modern-card-header-info ui-card-header msap-card-header-subtle">
                             <span class="material-symbols-outlined">notes</span>
                             <h2 class="modern-headline-md ui-section-title">Remarks</h2>
                         </div>
-                        <div class="modern-card-body ui-card-body" style="height: 100%;" data-tour-step="10">
-                            <textarea asp-for="Remarks" class="modern-input ui-input" style="height: 100%; min-height: 150px;" placeholder="Additional notes..."></textarea>
+                        <div class="modern-card-body ui-card-body msap-h-full" data-tour-step="10">
+                            <textarea asp-for="Remarks" class="modern-input ui-input msap-textarea-fill-lg" placeholder="Additional notes..."></textarea>
                             <span asp-validation-for="Remarks" class="text-error text-xs"></span>
                         </div>
                     </div>
                 </section>
 
                 <!-- Right Column: Metadata & Timing (col-4) -->
-                <section class="modern-col-4 flex flex-column" style="gap: 1.5rem;">
+                <section class="modern-col-4 flex flex-column msap-stack-lg">
                     <div class="modern-card ui-card">
-                        <div class="modern-card-header-info ui-card-header" style="background-color: var(--surface-container-low); color: var(--on-surface);">
+                        <div class="modern-card-header-info ui-card-header msap-card-header-subtle">
                             <span class="material-symbols-outlined">description</span>
                             <h2 class="modern-headline-md ui-section-title">References</h2>
                         </div>
@@ -135,12 +135,12 @@
                     </div>
 
                     <div class="modern-card ui-card">
-                        <div class="modern-card-header-info ui-card-header" style="background-color: var(--surface-container-high); color: var(--on-surface);">
+                        <div class="modern-card-header-info ui-card-header msap-card-header-elevated">
                             <span class="material-symbols-outlined">schedule</span>
                             <h2 class="modern-headline-md ui-section-title">Planned Schedule</h2>
                         </div>
                         <div class="modern-card-body ui-card-body">
-                            <div class="flex flex-column" style="gap: 1.25rem;">
+                            <div class="flex flex-column msap-stack-md">
                                 <div data-tour-step="8">
                                     <label asp-for="PlannedStartTime" class="modern-label ui-label">Planned Arrival/Start</label>
                                     <input asp-for="PlannedStartTime" type="datetime-local" class="modern-input timeline-input ui-input" id="PlannedStartTime" />
@@ -150,8 +150,8 @@
                                     <label asp-for="PlannedEndTime" class="modern-label ui-label">Planned Departure/End</label>
                                     <input asp-for="PlannedEndTime" type="datetime-local" class="modern-input timeline-input ui-input" id="PlannedEndTime" />
                                     <span asp-validation-for="PlannedEndTime" class="text-error text-xs"></span>
-                                    <div id="durationWarning" class="text-error text-xs mt-1" style="display: none;">
-                                        <span class="material-symbols-outlined text-xs" style="vertical-align: middle;">warning</span> End time must be after start time.
+                                    <div id="durationWarning" class="text-error text-xs mt-1 msap-initially-hidden">
+                                        <span class="material-symbols-outlined text-xs">warning</span> End time must be after start time.
                                     </div>
                                 </div>
                             </div>

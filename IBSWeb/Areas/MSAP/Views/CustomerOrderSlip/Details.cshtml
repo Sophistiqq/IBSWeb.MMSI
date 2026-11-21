@@ -35,9 +35,9 @@
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/cos-details.css" asp-append-version="true" />
-<div class="schedule-screen-layout app-ui">
+<div class="modern-layout schedule-screen-layout app-ui">
     <partial name="_WorkflowProgress" model="progress" />
-    <main class="cos-details-workspace ui-stack">
+    <main class="modern-container ui-page cos-details-workspace ui-stack">
         @Html.AntiForgeryToken()
         <header class="ui-page-header">
             <nav aria-label="Breadcrumb"><ol class="ui-breadcrumb"><li><a asp-action="Index">COS records</a></li><li aria-current="page">@Model.CustomerOrderSlipNumber</li></ol></nav>
@@ -107,7 +107,7 @@
                 <p class="ui-body ui-muted">Billing #@ViewBag.BillingNumber is linked to this COS. Ticket modifications are restricted.</p>
             }
             <div class="schedule-services-table" role="region" aria-label="Services and tickets by tugboat" tabindex="0">
-                <table class="schedule-review-table cos-services-table">
+                <table class="modern-table ui-table schedule-review-table cos-services-table">
                     <thead><tr>
                         <th>Service</th>
                         <th>Ticket number</th>
@@ -300,7 +300,7 @@
             <section class="ui-panel ui-stack" id="otherTugCharges" aria-labelledby="otherTugChargesTitle">
                 <h2 id="otherTugChargesTitle" class="ui-section-title">Other Tug Charges</h2>
                 <p class="ui-caption ui-muted">Provider charges are reviewed separately from actual tickets and customer billing. Missing costs remain pending. Payment is handled in IBS.</p>
-                <div class="schedule-services-table"><table class="schedule-review-table">
+                <div class="schedule-services-table"><table class="modern-table ui-table schedule-review-table">
                     <thead><tr><th>Tugboat / ticket</th><th>Provider</th><th>Provider reference</th><th>Allocated charge (₱)</th><th>Status</th><th>Action</th></tr></thead>
                     <tbody>
                     @foreach (var ticket in otherTugTickets)

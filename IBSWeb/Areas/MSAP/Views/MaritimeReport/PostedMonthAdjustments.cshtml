@@ -56,7 +56,7 @@
         <div class="modern-card ui-card mb-3">
             <div class="modern-card-body ui-card-body">
                 <form id="adjustmentsFilterForm" method="get" asp-action="PostedMonthAdjustments" class="d-flex flex-wrap align-items-end gap-3">
-                    <div style="min-width: 120px;">
+                    <div class="msap-filter-field-sm">
                         <label for="filterYear" class="modern-label ui-label">Year</label>
                         <select id="filterYear" name="year" class="js-modern-select js-auto-filter" data-placeholder="All Years">
                             <option value="">All Years</option>
@@ -66,7 +66,7 @@
                             }
                         </select>
                     </div>
-                    <div style="min-width: 150px;">
+                    <div class="msap-filter-field-md">
                         <label for="filterMonth" class="modern-label ui-label">Month</label>
                         <select id="filterMonth" name="month" class="js-modern-select js-auto-filter" data-placeholder="All Months">
                             <option value="">All Months</option>
@@ -76,7 +76,7 @@
                             }
                         </select>
                     </div>
-                    <div style="min-width: 190px;">
+                    <div class="msap-filter-field-lg">
                         <label for="filterDocType" class="modern-label ui-label">Document Type</label>
                         <select id="filterDocType" name="documentType" class="js-modern-select js-auto-filter" data-placeholder="All Types">
                             <option value="">All Types</option>
@@ -140,26 +140,26 @@
                                 _ => "status-closed"
                             };
                             <tr>
-                                <td data-order="@item.EditedDate.ToString("yyyy-MM-dd HH:mm:ss")" style="white-space: nowrap;">
+                                <td data-order="@item.EditedDate.ToString("yyyy-MM-dd HH:mm:ss")" class="msap-nowrap">
                                     <span class="fw-semibold">@item.EditedDate.ToString("MMM dd, yyyy")</span>
                                     <span class="ui-caption ui-muted ms-1">@item.EditedDate.ToString("HH:mm")</span>
                                 </td>
-                                <td style="white-space: nowrap;">
+                                <td class="msap-nowrap">
                                     <span class="modern-badge-sm @badgeClass">@item.DocumentTypeLabel</span>
                                 </td>
-                                <td class="fw-semibold" style="white-space: nowrap;">@item.ReferenceNumber</td>
-                                <td style="white-space: nowrap;">@item.EditedBy</td>
-                                <td style="max-width: 280px;">
-                                    <div class="text-truncate" style="max-width: 280px;" title="@item.Reason">@item.Reason</div>
+                                <td class="fw-semibold msap-nowrap">@item.ReferenceNumber</td>
+                                <td class="msap-nowrap">@item.EditedBy</td>
+                                <td class="msap-cell-truncate">
+                                    <div class="text-truncate msap-cell-truncate" title="@item.Reason">@item.Reason</div>
                                 </td>
-                                <td class="text-center" style="white-space: nowrap;">
+                                <td class="text-center msap-nowrap">
                                     <span class="modern-badge-sm status-closed">@item.Changes.Count field@(item.Changes.Count == 1 ? "" : "s")</span>
                                 </td>
-                                <td class="text-center" style="white-space: nowrap;">
+                                <td class="text-center msap-nowrap">
                                     @if (!string.IsNullOrWhiteSpace(item.AttachmentUrl))
                                     {
                                         <a asp-action="DownloadAdjustmentAttachment" asp-route-id="@item.Id" class="modern-btn-secondary btn-sm" title="Download authorization document">
-                                            <span class="material-symbols-outlined" style="font-size: 15px;">download</span> Memo
+                                            <span class="material-symbols-outlined msap-icon-sm">download</span> Memo
                                         </a>
                                     }
                                     else
@@ -167,9 +167,9 @@
                                         <span class="ui-caption ui-muted">None</span>
                                     }
                                 </td>
-                                <td class="text-center" style="white-space: nowrap;">
+                                <td class="text-center msap-nowrap">
                                     <button type="button" class="modern-btn-secondary btn-sm js-inspect-evidence" data-index="@i">
-                                        <span class="material-symbols-outlined" style="font-size: 15px;">visibility</span> Inspect
+                                        <span class="material-symbols-outlined msap-icon-sm">visibility</span> Inspect
                                     </button>
                                 </td>
                             </tr>
@@ -230,18 +230,18 @@
                 if (!item) return;
 
                 const diffRows = item.changes && item.changes.length > 0
-                    ? item.changes.map((c, idx) => `
-                        <tr style="background: ${idx % 2 === 1 ? 'var(--surface-container-low)' : 'transparent'};">
-                            <td style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid var(--outline-variant); vertical-align: top;">${escapeHtml(c.label || c.field)}</td>
-                            <td style="padding: 10px 12px; color: var(--error); border-bottom: 1px solid var(--outline-variant); word-break: break-word; vertical-align: top;">${escapeHtml(c.before || '—')}</td>
-                            <td style="padding: 10px 12px; color: var(--primary); border-bottom: 1px solid var(--outline-variant); word-break: break-word; vertical-align: top;">${escapeHtml(c.after || '—')}</td>
+                    ? item.changes.map((c) => `
+                        <tr>
+                            <td class="audit-evidence-cell-field">${escapeHtml(c.label || c.field)}</td>
+                            <td class="audit-evidence-cell-before">${escapeHtml(c.before || '—')}</td>
+                            <td class="audit-evidence-cell-after">${escapeHtml(c.after || '—')}</td>
                         </tr>`).join('')
-                    : `<tr><td colspan="3" style="padding: 16px; text-align: center; color: var(--on-surface-variant);">No field-level diffs recorded.</td></tr>`;
+                    : `<tr><td colspan="3" class="audit-evidence-empty">No field-level diffs recorded.</td></tr>`;
 
                 const memoBlock = item.hasAttachment
                     ? `<div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
-                           <span class="ui-caption" style="color: var(--on-surface); word-break: break-all;">${escapeHtml(item.attachmentName)}</span>
-                           <a href="${escapeHtml(item.downloadUrl)}" class="modern-btn-primary btn-sm"><span class="material-symbols-outlined" style="font-size: 16px;">download</span> Download Memo</a>
+                           <span class="ui-caption audit-evidence-filename">${escapeHtml(item.attachmentName)}</span>
+                           <a href="${escapeHtml(item.downloadUrl)}" class="modern-btn-primary btn-sm"><span class="material-symbols-outlined msap-icon-md">download</span> Download Memo</a>
                        </div>`
                     : `<span class="modern-badge-sm status-closed">No Authorization Memo Attached</span>`;
 
@@ -259,48 +259,48 @@
                     width: 'min(92vw, 960px)',
                     title: `Audit Evidence · ${escapeHtml(item.referenceNumber)}`,
                     html: `
-                        <div class="text-start px-3 pb-2" style="font-size: 13px;">
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; padding: 12px 14px; border-radius: var(--radius-lg); background: var(--surface-container-low); border: 1px solid var(--outline-variant); margin-bottom: 14px;">
+                        <div class="text-start px-3 pb-2 audit-evidence-modal">
+                            <div class="audit-evidence-meta-grid">
                                 <div>
-                                    <div class="modern-label mb-1" style="font-size: 10px;">Document Type</div>
+                                    <div class="modern-label mb-1 audit-evidence-label">Document Type</div>
                                     <div><span class="modern-badge-sm ${badgeClass}">${escapeHtml(item.documentTypeLabel)}</span></div>
                                 </div>
                                 <div>
-                                    <div class="modern-label mb-1" style="font-size: 10px;">Reference &amp; Record ID</div>
-                                    <div class="fw-semibold" style="color: var(--on-surface);">${escapeHtml(item.referenceNumber)} <span class="ui-caption ui-muted">(#${item.recordId})</span></div>
+                                    <div class="modern-label mb-1 audit-evidence-label">Reference &amp; Record ID</div>
+                                    <div class="fw-semibold audit-evidence-value">${escapeHtml(item.referenceNumber)} <span class="ui-caption ui-muted">(#${item.recordId})</span></div>
                                 </div>
                                 <div>
-                                    <div class="modern-label mb-1" style="font-size: 10px;">Modified By</div>
-                                    <div class="fw-semibold" style="color: var(--on-surface);">${escapeHtml(item.editedBy)}</div>
+                                    <div class="modern-label mb-1 audit-evidence-label">Modified By</div>
+                                    <div class="fw-semibold audit-evidence-value">${escapeHtml(item.editedBy)}</div>
                                 </div>
                                 <div>
-                                    <div class="modern-label mb-1" style="font-size: 10px;">Timestamp</div>
-                                    <div class="fw-semibold" style="color: var(--on-surface);">${escapeHtml(item.editedDate)}</div>
+                                    <div class="modern-label mb-1 audit-evidence-label">Timestamp</div>
+                                    <div class="fw-semibold audit-evidence-value">${escapeHtml(item.editedDate)}</div>
                                 </div>
                             </div>
 
-                            <div class="mb-3" style="padding: 12px 14px; border-radius: var(--radius-lg); background: var(--surface-container-low); border: 1px solid var(--outline-variant);">
-                                <div class="modern-label mb-1" style="font-size: 10px;">Supporting Authorization Document</div>
+                            <div class="mb-3 audit-evidence-box">
+                                <div class="modern-label mb-1 audit-evidence-label">Supporting Authorization Document</div>
                                 ${memoBlock}
                             </div>
 
                             <div class="mb-3">
-                                <div class="modern-label mb-1" style="font-size: 10px;">Business Justification Reason</div>
-                                <div style="padding: 12px 14px; border-radius: var(--radius-lg); background: var(--surface-container-low); border: 1px solid var(--outline-variant); color: var(--on-surface); line-height: 1.5; white-space: pre-wrap;">${escapeHtml(item.reason)}</div>
+                                <div class="modern-label mb-1 audit-evidence-label">Business Justification Reason</div>
+                                <div class="audit-evidence-box audit-evidence-reason">${escapeHtml(item.reason)}</div>
                             </div>
 
                             <div>
                                 <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <div class="modern-label mb-0" style="font-size: 10px;">Before &rarr; After Field Changes</div>
+                                    <div class="modern-label mb-0 audit-evidence-label">Before &rarr; After Field Changes</div>
                                     <span class="modern-badge-sm status-closed">${changeCount} field${changeCount === 1 ? '' : 's'} changed</span>
                                 </div>
-                                <div style="max-height: 360px; overflow-y: auto; border: 1px solid var(--outline-variant); border-radius: var(--radius-lg);">
-                                    <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+                                <div class="audit-evidence-diff-scroll">
+                                    <table class="modern-table ui-table audit-evidence-diff-table">
                                         <thead>
-                                            <tr style="background: var(--surface-container-low); text-align: left; position: sticky; top: 0;">
-                                                <th style="padding: 9px 12px; border-bottom: 1px solid var(--outline-variant); width: 24%;">Field</th>
-                                                <th style="padding: 9px 12px; border-bottom: 1px solid var(--outline-variant); width: 38%;">Before</th>
-                                                <th style="padding: 9px 12px; border-bottom: 1px solid var(--outline-variant); width: 38%;">After</th>
+                                            <tr>
+                                                <th class="audit-evidence-col-field">Field</th>
+                                                <th class="audit-evidence-col-value">Before</th>
+                                                <th class="audit-evidence-col-value">After</th>
                                             </tr>
                                         </thead>
                                         <tbody>${diffRows}</tbody>

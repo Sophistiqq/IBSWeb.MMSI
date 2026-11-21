@@ -55,8 +55,8 @@
             <div id="masterImportErrors" class="ui-stack ui-caption" role="alert"></div>
             <p id="ignoredMasterFiles" class="ui-caption ui-muted"></p>
             <div class="ui-field-grid">
-                <div class="ui-field"><label class="ui-label" for="masterEditorFile">Master file</label><select id="masterEditorFile" class="ui-input"><option value="">Load files to begin</option></select></div>
-                <div class="ui-field"><label class="ui-label" for="masterEditorFilter">Show records</label><select id="masterEditorFilter" class="ui-input"><option value="all">All records</option><option value="attention">Needs attention</option><option value="edited">Edited records</option></select></div>
+                <div class="ui-field"><label class="ui-label" for="masterEditorFile">Master file</label><select id="masterEditorFile" class="js-modern-select" data-placeholder="Load files to begin" data-searchable="true"><option value="">Load files to begin</option></select></div>
+                <div class="ui-field"><label class="ui-label" for="masterEditorFilter">Show records</label><select id="masterEditorFilter" class="js-modern-select" data-searchable="false"><option value="all">All records</option><option value="attention">Needs attention</option><option value="edited">Edited records</option></select></div>
                 <div class="ui-field"><label class="ui-label" for="masterEditorSearch">Search</label><input id="masterEditorSearch" type="search" class="ui-input" placeholder="Code, name or value" /></div>
             </div>
             <p id="masterImportCounts" class="ui-caption ui-muted">Select files and validate to load the editor.</p>

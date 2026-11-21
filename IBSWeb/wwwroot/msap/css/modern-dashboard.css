@@ -478,6 +478,42 @@
     color: var(--on-surface);
 }
 
+@media (max-width: 768px) {
+    .dashboard-sidebar {
+        position: static;
+        max-height: none;
+    }
+
+    .dashboard-filter-tabs {
+        flex-wrap: wrap;
+        overflow-x: visible;
+        overflow-y: visible;
+        gap: var(--ui-space-2);
+        padding: 0 0 var(--ui-space-3);
+        border-bottom: 1px solid var(--outline-variant);
+    }
+
+    .dashboard-filter-tab {
+        margin-bottom: 0;
+        padding: 0.35rem 0.65rem;
+        border: 1px solid var(--outline-variant);
+        border-radius: var(--radius-full, 9999px);
+        background: var(--surface-container-lowest);
+    }
+
+    .dashboard-filter-tab.active,
+    :root[data-bs-theme="dark"] .dashboard-filter-tab.active {
+        background: var(--primary);
+        color: var(--on-primary);
+        border-color: var(--primary);
+    }
+
+    .dashboard-filter-tab.active .dashboard-filter-badge {
+        background: color-mix(in srgb, var(--on-primary) 20%, transparent);
+        color: var(--on-primary);
+    }
+}
+
 .dashboard-action-list {
     display: flex;
     flex-direction: column;
