@@ -460,8 +460,9 @@ namespace IBS.Services.MSAP
                 }
 
                 // Reverse recognized GL entries in FilprideGeneralLedgerBooks
+                var glRef = BuildGlReference(charge.ProviderReference);
                 var glEntries = await accounting.FilprideGeneralLedgerBooks.IgnoreQueryFilters(["TugboatWorkspace"])
-                    .Where(g => g.WorkspaceTugboatId == null && g.Reference == charge.ProviderReference
+                    .Where(g => g.WorkspaceTugboatId == null && g.Reference == glRef
                         && g.CounterpartyId == charge.TugboatOwnerId)
                     .ToListAsync(ct);
                 if (glEntries.Count != 0)
@@ -561,9 +562,7 @@ namespace IBS.Services.MSAP
                     recognitionDate = charge.DocumentDate >= minOpenDate ? charge.DocumentDate : recognitionDate;
                 }
             }
-            var glRef = charge.ProviderReference.Length <= 20
-                ? charge.ProviderReference
-                : charge.ProviderReference[..20];
+            var glRef = BuildGlReference(charge.ProviderReference);
             var existing = await accounting.FilprideGeneralLedgerBooks.IgnoreQueryFilters(["TugboatWorkspace"])
                 .AnyAsync(g => g.WorkspaceTugboatId == null && g.Reference == glRef
                     && g.CounterpartyId == owner.TugboatOwnerId, ct);
@@ -666,6 +665,13 @@ namespace IBS.Services.MSAP
                 }
             }
             return charge;
+        }
+
+        private static string BuildGlReference(string providerReference)
+        {
+            return providerReference.Length <= 20
+                ? providerReference
+                : providerReference[..20];
         }
 
         private static string Snapshot(OtherTugCharge charge)

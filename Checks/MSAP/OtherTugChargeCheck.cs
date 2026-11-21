@@ -98,7 +98,12 @@ namespace Checks.MSAP
                 "VAT-exclusive recognition split is wrong.");
             Check(OtherTugChargeService.CalculateRecognition(exemptOwner, bill) == (1000m, 1000m, 0m),
                 "Non-vatable recognition split is wrong.");
-            Console.WriteLine("PASS: VAT-inclusive default, COS-scoped allocation choices, existing allocation preservation, provider allocation validation, recognition VAT split, pending/confirmed zero, document boundaries, company-scoped query translation and unique ticket allocation (no database).");
+            var buildGlRef = typeof(OtherTugChargeService).GetMethod("BuildGlReference", BindingFlags.NonPublic | BindingFlags.Static)!;
+            Check((string)buildGlRef.Invoke(null, ["BILL-1"])! == "BILL-1", "Short provider reference was altered.");
+            Check((string)buildGlRef.Invoke(null, ["12345678901234567890"])! == "12345678901234567890", "20-character provider reference was truncated.");
+            Check((string)buildGlRef.Invoke(null, ["SUBCON-INV-2026-LONG-REF-0001"])! == "SUBCON-INV-2026-LONG",
+                "Long provider reference was not truncated to 20 characters for GL reference.");
+            Console.WriteLine("PASS: VAT-inclusive default, COS-scoped allocation choices, existing allocation preservation, provider allocation validation, recognition VAT split, GL reference truncation, pending/confirmed zero, document boundaries, company-scoped query translation and unique ticket allocation (no database).");
         }
 
         private static void Check(bool condition, string message)

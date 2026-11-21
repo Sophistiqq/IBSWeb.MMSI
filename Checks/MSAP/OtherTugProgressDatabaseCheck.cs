@@ -1,8 +1,10 @@
 using IBS.DataAccess.Data;
 using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository;
+using IBS.Models.Filpride.MasterFile;
 using IBS.Models.MSAP;
 using IBS.Models.MSAP.ViewModels;
+using IBS.Services;
 using IBS.Services.MSAP;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
@@ -88,6 +90,7 @@ namespace Checks.MSAP
             Check((await ProgressAsync()).OtherTugTicketCount == 0, "Cancelled COS exposed provider-cost actions.");
             await transaction.RollbackAsync();
             Console.WriteLine("PASS: AP Other Tugs progress/dashboard missing -> draft -> confirmed zero, distinct provider bills, billed-ticket visibility, owned/deleted/cancelled exclusions and unchanged customer progress (clone fixture rolled back).");
+            await CheckLongReferenceReopenAndReconfirmAsync(connection);
 
             async Task<JobProgressViewModel> ProgressAsync()
             {
@@ -105,6 +108,234 @@ namespace Checks.MSAP
                 await new DashboardService(db, null!, NullLogger<DashboardService>.Instance).LoadAsync(model, default);
                 Check(model.DataError == null, "Provider-cost dashboard query failed: " + model.DataError);
                 return model;
+            }
+        }
+
+        private static async Task CheckLongReferenceReopenAndReconfirmAsync(string connection)
+        {
+            const string longRef = "SUBCON-INV-2026-LONG-REF-0001";
+            var expectedGlRef = longRef[..20];
+            await using var db = new MsapDbContext(new DbContextOptionsBuilder<MsapDbContext>().UseNpgsql(connection).Options);
+            await using var accounting = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseNpgsql(connection).Options);
+
+            var addedContraAccount = false;
+            if (!await accounting.FilprideChartOfAccounts.AnyAsync(a => a.AccountNumber == OtherTugChargeService.ContraRevenueAccount))
+            {
+                accounting.FilprideChartOfAccounts.Add(new FilprideChartOfAccount
+                {
+                    AccountNumber = OtherTugChargeService.ContraRevenueAccount,
+                    AccountName = "Services by Other Tugs",
+                    AccountType = "Revenue",
+                    NormalBalance = "Credit",
+                    Level = 4,
+                    FinancialStatementType = "PnL",
+                    CreatedBy = "Long-ref check"
+                });
+                await accounting.SaveChangesAsync();
+                addedContraAccount = true;
+            }
+
+            var actor = await db.Users.AsNoTracking().FirstAsync(u => u.IsActive && u.Name != null && u.Name != "");
+            var external = await db.MsapTugboats.AsNoTracking().FirstAsync(t => !t.IsCompanyOwned && t.TugboatOwnerId != null);
+            var owner = await db.MsapTugboatOwners.SingleAsync(o => o.TugboatOwnerId == external.TugboatOwnerId);
+            var originalAddress = owner.Address;
+            var originalTin = owner.Tin;
+            var originalVatType = owner.VatType;
+            var originalTaxType = owner.TaxType;
+            var originalWht = owner.WithholdingTaxPercent;
+
+            var template = await db.MsapDispatchTickets
+                .Include(t => t.ExpectedServiceEntry)
+                .Where(t => t.Customer.Company == MsapConstants.Company_MMSI
+                    && t.CustomerOrderSlipId != null
+                    && (t.CustomerOrderSlip!.Status == MsapConstants.CustomerOrderSlipStatus.Open
+                        || t.CustomerOrderSlip.Status == MsapConstants.CustomerOrderSlipStatus.Closed)
+                    && t.VesselScheduleServiceEntryId != null
+                    && t.ExpectedServiceEntry != null
+                    && t.ExpectedServiceEntry.CancelledAt == null
+                    && t.Status != MsapConstants.DispatchTicketStatus.Deleted
+                    && !db.MsapVesselSchedules.Any(s => s.CustomerOrderSlipId == t.CustomerOrderSlipId
+                        && (s.ApprovedRevision != s.Revision
+                            || s.Status == MsapConstants.VesselScheduleStatus.Tentative
+                            || s.Status == MsapConstants.VesselScheduleStatus.Cancelled)))
+                .OrderByDescending(t => t.DispatchTicketId)
+                .FirstAsync();
+
+            var today = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime());
+            var serviceEntry = (VesselScheduleServiceEntry)db.Entry(template.ExpectedServiceEntry!).CurrentValues.ToObject();
+            serviceEntry.VesselScheduleServiceEntryId = 0;
+            serviceEntry.TugboatId = external.TugboatId;
+            serviceEntry.CancelledAt = null;
+            serviceEntry.CancelledByUserId = null;
+            serviceEntry.CancellationReason = null;
+
+            var testTicket = (DispatchTicket)db.Entry(template).CurrentValues.ToObject();
+            testTicket.DispatchTicketId = 0;
+            testTicket.AccountingSourceId = Guid.NewGuid();
+            testTicket.DispatchNumber = "LR" + Guid.NewGuid().ToString("N")[..16];
+            testTicket.TugBoatId = external.TugboatId;
+            testTicket.BillingId = null;
+            testTicket.DateLeft = today.AddDays(-1);
+            testTicket.DateArrived = today.AddDays(-1);
+            testTicket.TimeLeft = new TimeOnly(8, 0);
+            testTicket.TimeArrived = new TimeOnly(10, 0);
+            testTicket.ApOtherTugs = 0m;
+            testTicket.ApOtherTugsIncludesVat = false;
+
+            int? chargeId = null;
+            try
+            {
+                owner.Address = "Long-ref check fixture";
+                owner.Tin = "000-000-000-00000";
+                owner.VatType = "Vatable";
+                owner.TaxType = "Withholding Tax";
+                owner.WithholdingTaxPercent = 0.02m;
+
+                db.Add(serviceEntry);
+                await db.SaveChangesAsync();
+                testTicket.VesselScheduleServiceEntryId = serviceEntry.VesselScheduleServiceEntryId;
+                db.Add(testTicket);
+                await db.SaveChangesAsync();
+
+                var cosId = testTicket.CustomerOrderSlipId!.Value;
+                var service = new OtherTugChargeService(db, null!, NullLogger<OtherTugChargeService>.Instance);
+
+                var created = await service.SaveAsync(new OtherTugChargeViewModel
+                {
+                    CustomerOrderSlipId = cosId,
+                    TugboatOwnerId = owner.TugboatOwnerId,
+                    ProviderReference = longRef,
+                    DocumentDate = today,
+                    IncludesVat = true,
+                    Allocations = [new OtherTugChargeLineViewModel { DispatchTicketId = testTicket.DispatchTicketId, Amount = 1120m }]
+                }, null, actor.Id, default);
+                Check(created.IsSuccess, created.Message ?? "Failed to save long-reference provider charge.");
+                chargeId = created.Data;
+
+                var confirmed = await service.ConfirmAsync(chargeId.Value, 1, actor.Id, default);
+                Check(confirmed.IsSuccess, confirmed.Message ?? "Failed to confirm long-reference provider charge.");
+                var glConfirmed = await accounting.FilprideGeneralLedgerBooks.AsNoTracking()
+                    .IgnoreQueryFilters(["TugboatWorkspace"])
+                    .Where(g => g.WorkspaceTugboatId == null && g.Reference == expectedGlRef
+                        && g.CounterpartyId == owner.TugboatOwnerId)
+                    .ToListAsync();
+                Check(glConfirmed.Count == 3
+                    && glConfirmed.Single(g => g.AccountNo == OtherTugChargeService.ContraRevenueAccount).Debit == 1000m
+                    && glConfirmed.Single(g => g.AccountNo == OtherTugChargeService.InputVatAccount).Debit == 120m
+                    && glConfirmed.Single(g => g.AccountNo == TugboatPaymentService.ApAccount).Credit == 1120m,
+                    "Initial confirmation did not post expected truncated-reference GL entries.");
+
+                var reopened = await service.ReopenConfirmedChargeAsync(chargeId.Value, "Long-reference reopen regression check", actor.Id, default);
+                Check(reopened.IsSuccess, reopened.Message ?? "Failed to reopen long-reference provider charge.");
+                var glAfterReopen = await accounting.FilprideGeneralLedgerBooks.AsNoTracking()
+                    .IgnoreQueryFilters(["TugboatWorkspace"])
+                    .Where(g => g.WorkspaceTugboatId == null && g.Reference == expectedGlRef
+                        && g.CounterpartyId == owner.TugboatOwnerId)
+                    .ToListAsync();
+                Check(glAfterReopen.Count == 0,
+                    "ReopenConfirmedChargeAsync failed to reverse GL entries when ProviderReference exceeds 20 characters.");
+
+                var edited = await service.SaveAsync(new OtherTugChargeViewModel
+                {
+                    Id = chargeId.Value,
+                    Revision = 2,
+                    CustomerOrderSlipId = cosId,
+                    TugboatOwnerId = owner.TugboatOwnerId,
+                    ProviderReference = longRef,
+                    DocumentDate = today,
+                    IncludesVat = true,
+                    Allocations = [new OtherTugChargeLineViewModel { DispatchTicketId = testTicket.DispatchTicketId, Amount = 2240m }]
+                }, null, actor.Id, default);
+                Check(edited.IsSuccess, edited.Message ?? "Failed to edit reopened long-reference provider charge.");
+
+                var reconfirmed = await service.ConfirmAsync(chargeId.Value, 3, actor.Id, default);
+                Check(reconfirmed.IsSuccess, reconfirmed.Message ?? "Failed to re-confirm edited long-reference provider charge.");
+                var glReconfirmed = await accounting.FilprideGeneralLedgerBooks.AsNoTracking()
+                    .IgnoreQueryFilters(["TugboatWorkspace"])
+                    .Where(g => g.WorkspaceTugboatId == null && g.Reference == expectedGlRef
+                        && g.CounterpartyId == owner.TugboatOwnerId)
+                    .ToListAsync();
+                Check(glReconfirmed.Count == 3
+                    && glReconfirmed.Single(g => g.AccountNo == OtherTugChargeService.ContraRevenueAccount).Debit == 2000m
+                    && glReconfirmed.Single(g => g.AccountNo == OtherTugChargeService.InputVatAccount).Debit == 240m
+                    && glReconfirmed.Single(g => g.AccountNo == TugboatPaymentService.ApAccount).Credit == 2240m,
+                    "Re-confirmation did not post updated GL entries after reversing truncated-reference entries.");
+
+                Console.WriteLine("PASS: OtherTugChargeService confirm -> reopen -> edit -> re-confirm with >20-char ProviderReference reverses and re-posts GL entries accurately.");
+            }
+            finally
+            {
+                accounting.ChangeTracker.Clear();
+                var glToRemove = await accounting.FilprideGeneralLedgerBooks.IgnoreQueryFilters(["TugboatWorkspace"])
+                    .Where(g => g.WorkspaceTugboatId == null && g.Reference == expectedGlRef
+                        && g.CounterpartyId == owner.TugboatOwnerId)
+                    .ToListAsync();
+                if (glToRemove.Count != 0)
+                {
+                    accounting.FilprideGeneralLedgerBooks.RemoveRange(glToRemove);
+                }
+
+                var accountingAudits = await accounting.FilprideAuditTrails
+                    .Where(a => a.DocumentType == "Other Tug Charges" && a.Activity.Contains(longRef))
+                    .ToListAsync();
+                if (accountingAudits.Count != 0)
+                {
+                    accounting.FilprideAuditTrails.RemoveRange(accountingAudits);
+                }
+
+                if (addedContraAccount)
+                {
+                    var contra = await accounting.FilprideChartOfAccounts
+                        .SingleOrDefaultAsync(a => a.AccountNumber == OtherTugChargeService.ContraRevenueAccount);
+                    if (contra != null)
+                    {
+                        accounting.FilprideChartOfAccounts.Remove(contra);
+                    }
+                }
+
+                await accounting.SaveChangesAsync();
+
+                db.ChangeTracker.Clear();
+                if (chargeId.HasValue)
+                {
+                    var audits = await db.AuditTrails
+                        .Where(a => a.DocumentType == "Other Tug Charges" && a.RecordId == chargeId.Value)
+                        .ToListAsync();
+                    db.AuditTrails.RemoveRange(audits);
+                    var persistedCharge = await db.MsapOtherTugCharges.Include(c => c.Lines)
+                        .SingleOrDefaultAsync(c => c.OtherTugChargeId == chargeId.Value);
+                    if (persistedCharge != null)
+                    {
+                        db.MsapOtherTugChargeLines.RemoveRange(persistedCharge.Lines);
+                        db.MsapOtherTugCharges.Remove(persistedCharge);
+                    }
+                }
+
+                if (testTicket.DispatchTicketId != 0)
+                {
+                    var persistedTicket = await db.MsapDispatchTickets.FindAsync(testTicket.DispatchTicketId);
+                    if (persistedTicket != null)
+                    {
+                        db.MsapDispatchTickets.Remove(persistedTicket);
+                    }
+                }
+
+                if (serviceEntry.VesselScheduleServiceEntryId != 0)
+                {
+                    var persistedEntry = await db.MsapVesselScheduleServiceEntries.FindAsync(serviceEntry.VesselScheduleServiceEntryId);
+                    if (persistedEntry != null)
+                    {
+                        db.MsapVesselScheduleServiceEntries.Remove(persistedEntry);
+                    }
+                }
+
+                var persistedOwner = await db.MsapTugboatOwners.SingleAsync(o => o.TugboatOwnerId == owner.TugboatOwnerId);
+                persistedOwner.Address = originalAddress;
+                persistedOwner.Tin = originalTin;
+                persistedOwner.VatType = originalVatType;
+                persistedOwner.TaxType = originalTaxType;
+                persistedOwner.WithholdingTaxPercent = originalWht;
+                await db.SaveChangesAsync();
             }
         }
 
