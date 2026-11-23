@@ -18,8 +18,10 @@
     var serviceEntry = booking?.ServiceEntries.SingleOrDefault(e => e.VesselScheduleServiceEntryId == (savedTicket?.VesselScheduleServiceEntryId ?? Model.VesselScheduleServiceEntryId));
     var serviceNumber = Model.ServiceNumber ?? savedTicket?.Service?.ServiceNumber ?? serviceEntry?.Service?.ServiceNumber;
     var isWatering = MsapConstants.IsWateringService(serviceNumber);
+    var isNewTicket = !Model.DispatchTicketId.HasValue;
+    var hasInitialImage = !string.IsNullOrEmpty(Model.ImageSignedUrl);
 }
-<form asp-controller="DispatchTicket" asp-action="@(editing ? "EditTicket" : "Create")" method="post" enctype="multipart/form-data" class="ui-stack" id="@(readOnly ? "cosActualTicketDetails" : "cosActualTicketForm")" onsubmit="@(readOnly ? "return false;" : null)">
+<form asp-controller="DispatchTicket" asp-action="@(editing ? "EditTicket" : "Create")" method="post" enctype="multipart/form-data" class="ui-stack cos-ticket-entry-form" id="@(readOnly ? "cosActualTicketDetails" : "cosActualTicketForm")" data-is-new-ticket="@(isNewTicket ? "true" : "false")" data-is-editing="@(editing ? "true" : "false")" data-is-readonly="@(readOnly ? "true" : "false")" data-image-required="@(imageRequired ? "true" : "false")" data-has-initial-image="@(hasInitialImage ? "true" : "false")" onsubmit="@(readOnly ? "return false;" : null)">
     <input name="inlineEntry" type="hidden" value="true" />
     <input asp-for="DispatchTicketId" type="hidden" />
     <input asp-for="CustomerOrderSlipId" type="hidden" />
@@ -28,6 +30,67 @@
     <input asp-for="PortId" type="hidden" /><input asp-for="TerminalId" type="hidden" />
     <input asp-for="TugBoatId" type="hidden" /><input asp-for="ServiceId" type="hidden" />
     <input asp-for="VoyageNumber" type="hidden" />
+    @if (!readOnly)
+    {
+        <input id="cosTicketImage" name="imageFile" type="file" accept="image/*" class="cos-sr-file-input" required="@imageRequired" tabindex="-1" aria-label="Supporting dispatch ticket image" />
+    }
+    @if (isNewTicket)
+    {
+        <div class="cos-photo-first-gate" id="cosPhotoFirstGate">
+            <div class="cos-photo-dropzone" id="cosPhotoDropzone">
+                <span class="material-symbols-outlined cos-photo-dropzone-icon" aria-hidden="true">add_a_photo</span>
+                <h3 class="ui-section-title">Start with the dispatch ticket photo</h3>
+                <p class="ui-body ui-muted">Choose or capture a photo, drag &amp; drop it here, or press <kbd>Ctrl+V</kbd> to paste. The photo will open side-by-side with the entry form.</p>
+                <div class="cos-photo-dropzone-actions">
+                    <button type="button" class="modern-btn-primary" data-trigger-photo-upload>
+                        <span class="material-symbols-outlined" aria-hidden="true">upload_file</span> Choose photo
+                    </button>
+                    @if (!imageRequired)
+                    {
+                        <button type="button" class="modern-btn-secondary" data-skip-photo>Skip photo</button>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+    <div class="cos-entry-workspace" id="cosEntryWorkspace" data-has-image="@(hasInitialImage ? "true" : "false")" data-image-collapsed="false">
+        <aside class="cos-image-pane" id="cosTicketImagePane" aria-label="Dispatch ticket photo reference">
+            <div class="cos-image-pane-header">
+                <div class="cos-image-pane-heading">
+                    <span class="material-symbols-outlined" aria-hidden="true">image</span>
+                    <span class="cos-image-pane-title" id="cosTicketImageStatus">@(hasInitialImage ? "Saved photo" : "Ticket photo")</span>
+                </div>
+                <div class="cos-image-toolbar" role="toolbar" aria-label="Image controls">
+                    <button type="button" class="cos-icon-btn" data-image-zoom-out title="Zoom out" aria-label="Zoom out"><span class="material-symbols-outlined" aria-hidden="true">zoom_out</span></button>
+                    <button type="button" class="cos-icon-btn" data-image-zoom-in title="Zoom in" aria-label="Zoom in"><span class="material-symbols-outlined" aria-hidden="true">zoom_in</span></button>
+                    <button type="button" class="cos-icon-btn" data-image-rotate title="Rotate 90°" aria-label="Rotate 90 degrees"><span class="material-symbols-outlined" aria-hidden="true">rotate_right</span></button>
+                    <button type="button" class="cos-icon-btn" data-image-reset title="Reset view" aria-label="Reset view"><span class="material-symbols-outlined" aria-hidden="true">restart_alt</span></button>
+                    @if (!readOnly)
+                    {
+                        <button type="button" class="cos-icon-btn" data-trigger-photo-upload title="Replace photo" aria-label="Replace photo"><span class="material-symbols-outlined" aria-hidden="true">photo_camera</span></button>
+                    }
+                    <button type="button" class="cos-icon-btn" data-image-fullscreen title="Fullscreen" aria-label="Fullscreen preview"><span class="material-symbols-outlined" aria-hidden="true">open_in_full</span></button>
+                    <button type="button" class="cos-icon-btn cos-image-collapse-btn" data-image-toggle title="Hide photo" aria-label="Hide photo" aria-expanded="true"><span class="material-symbols-outlined" aria-hidden="true">expand_less</span></button>
+                </div>
+            </div>
+            <div class="cos-image-pane-body" id="cosTicketImageBody">
+                <div class="cos-image-pane-stage" id="cosTicketImageStage">
+                    <img id="cosTicketImagePreview" class="cos-image-pane-img" src="@(hasInitialImage ? Model.ImageSignedUrl : null)" data-initial-url="@(Model.ImageSignedUrl ?? "")" alt="Dispatch ticket photo preview" hidden="@(!hasInitialImage)" />
+                    <div class="cos-image-empty" id="cosTicketImageEmpty" hidden="@hasInitialImage">
+                        <span class="material-symbols-outlined" aria-hidden="true">hide_image</span>
+                        <p class="ui-caption ui-muted">No dispatch ticket photo attached.</p>
+                        @if (!readOnly)
+                        {
+                            <button type="button" class="modern-btn-secondary" data-trigger-photo-upload>
+                                <span class="material-symbols-outlined" aria-hidden="true">upload_file</span> Attach photo
+                            </button>
+                        }
+                    </div>
+                </div>
+                <p class="ui-caption ui-muted cos-image-pane-caption">Zoom or rotate as needed · Drag to pan when zoomed · Verify entries against hard copy</p>
+            </div>
+        </aside>
+        <div class="cos-entry-main ui-stack" id="cosEntryMain">
     @if (savedTicket?.Status == MsapConstants.DispatchTicketStatus.Deleted)
     {
         <p class="ui-notice ui-critical" role="status">Voided · This ticket entry has been voided and is excluded from billing calculations.</p>
@@ -36,7 +99,7 @@
     <fieldset class="cos-entry-fields" disabled="@readOnly">
         <div class="ui-field"><label asp-for="DispatchNumber" class="ui-label">Actual ticket number *</label><input asp-for="DispatchNumber" class="modern-input ui-input" maxlength="20" required /></div>
         <div class="ui-field"><label asp-for="Date" class="ui-label">Ticket date *</label><input asp-for="Date" type="date" class="modern-input ui-input" required /></div>
-        <div class="ui-field">
+        <div class="ui-field cos-entry-captain">
             @if (readOnly)
             {
                 <label for="cosTicketCaptain" class="ui-label">Captain / tug master</label>
@@ -56,7 +119,7 @@
                 <span class="ui-label">Supporting image</span>
                 @if (!string.IsNullOrEmpty(Model.ImageSignedUrl))
                 {
-                    <a href="@Model.ImageSignedUrl" target="_blank" rel="noopener" class="cos-ticket-link">View image</a>
+                    <a href="@Model.ImageSignedUrl" target="_blank" rel="noopener" class="cos-ticket-link">Open image in new tab</a>
                 }
                 else
                 {
@@ -65,11 +128,16 @@
             }
             else
             {
-                <label for="cosTicketImage" class="ui-label">Supporting image @(imageRequired ? "*" : "")</label><input id="cosTicketImage" name="imageFile" type="file" accept="image/*" class="modern-input ui-input" required="@imageRequired" />
+                <span class="ui-label">Supporting image @(imageRequired ? "*" : "")</span>
+                <div class="cos-file-picker-row">
+                    <button type="button" class="modern-btn-secondary cos-file-picker-btn" data-trigger-photo-upload>
+                        <span class="material-symbols-outlined" aria-hidden="true">upload_file</span> @(hasInitialImage ? "Replace photo" : "Choose photo")
+                    </button>
+                    <span class="ui-caption ui-muted cos-file-picker-name" id="cosTicketImageFileName">@(hasInitialImage ? (Model.ImageName ?? "Saved photo") : "No file selected")</span>
+                </div>
                 @if (editing && !string.IsNullOrEmpty(Model.ImageSignedUrl))
                 {
-                    <a href="@Model.ImageSignedUrl" target="_blank" rel="noopener" class="cos-ticket-link">View current image</a>
-                    <span class="ui-caption ui-muted">Choose a file only to replace the current image.</span>
+                    <a href="@Model.ImageSignedUrl" target="_blank" rel="noopener" class="cos-ticket-link">Open current image</a>
                 }
             }
         </div>
@@ -187,6 +255,8 @@
             </section>
         }
     }
+        </div>
+    </div>
     <div class="cos-entry-footer">
         @if (canVoid && savedTicket != null)
         {
@@ -200,14 +270,14 @@
                 <span class="material-symbols-outlined" aria-hidden="true">cancel</span> Void ticket
             </button>
         }
-        <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@(editing ? Model.DispatchTicketId : null)" asp-fragment="@(editing ? "actualTicketEntry" : null)" class="modern-btn-secondary">@(readOnly ? "Close ticket" : editing ? "Cancel changes" : "Cancel entry")</a>
+        <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" class="modern-btn-secondary">@(readOnly ? "Close ticket" : editing ? "Cancel changes" : "Cancel entry")</a>
         @if (canEdit)
         {
             <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@Model.DispatchTicketId" asp-route-editTicket="true" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">edit</span> Edit ticket</a>
         }
         @if (!readOnly)
         {
-            <button type="submit" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">save</span> @(editing ? "Save changes" : "Save actual ticket")</button>
+            <button type="submit" class="modern-btn-primary cos-ticket-save-btn"><span class="material-symbols-outlined" aria-hidden="true">save</span> @(editing ? "Save changes" : "Save actual ticket")</button>
         }
     </div>
 </form>

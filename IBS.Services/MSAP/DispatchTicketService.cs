@@ -37,9 +37,33 @@ namespace IBS.Services.MSAP
                     viewModel.TerminalId = customerOrderSlip.TerminalId;
                     viewModel.VoyageNumber = customerOrderSlip.VoyageNumber;
                     viewModel.COSNumber = customerOrderSlip.CustomerOrderSlipNumber;
+                    var today = DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime());
                     viewModel.Date = viewModel.VesselScheduleServiceEntryId.HasValue
-                        ? viewModel.Date == default ? DateOnly.FromDateTime(DateTimeHelper.GetCurrentPhilippineTime()) : viewModel.Date
+                        ? viewModel.Date == default ? today : viewModel.Date
                         : customerOrderSlip.Date;
+
+                    if (!viewModel.DispatchTicketId.HasValue)
+                    {
+                        var plannedStartDate = customerOrderSlip.PlannedStartTime.HasValue
+                            ? DateOnly.FromDateTime(customerOrderSlip.PlannedStartTime.Value)
+                            : (DateOnly?)null;
+                        var plannedEndDate = customerOrderSlip.PlannedEndTime.HasValue
+                            ? DateOnly.FromDateTime(customerOrderSlip.PlannedEndTime.Value)
+                            : (DateOnly?)null;
+
+                        var defaultStartDate = plannedStartDate.HasValue && plannedStartDate.Value <= today
+                            ? plannedStartDate.Value
+                            : viewModel.Date <= today ? viewModel.Date : today;
+
+                        var defaultEndDate = plannedEndDate.HasValue
+                            && plannedEndDate.Value >= defaultStartDate
+                            && plannedEndDate.Value <= today
+                            ? plannedEndDate.Value
+                            : defaultStartDate;
+
+                        viewModel.DateLeft ??= defaultStartDate;
+                        viewModel.DateArrived ??= defaultEndDate;
+                    }
                 }
             }
 

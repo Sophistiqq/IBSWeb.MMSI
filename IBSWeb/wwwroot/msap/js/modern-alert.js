@@ -189,7 +189,7 @@ const ModernAlert = {
     /**
      * Show an image preview with zoom and pan controls
      */
-    image: function(imageUrl, title = 'Image Preview') {
+    image: function(imageUrl, title = 'Image Preview', options = {}) {
         const btnStyle = 'background: rgba(255,255,255,0.2); border: none; color: white; border-radius: 4px; width: 36px; height: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; backdrop-filter: blur(4px);';
 
         return Swal.fire({
@@ -200,6 +200,7 @@ const ModernAlert = {
                     <div class="modern-image-viewer-toolbar" style="position: absolute; top: 15px; right: 15px; z-index: 100; display: flex; gap: 8px;">
                         <button class="zoom-in" style="${btnStyle}" title="Zoom In"><span class="material-symbols-outlined">zoom_in</span></button>
                         <button class="zoom-out" style="${btnStyle}" title="Zoom Out"><span class="material-symbols-outlined">zoom_out</span></button>
+                        <button class="rotate-right" style="${btnStyle}" title="Rotate 90°"><span class="material-symbols-outlined">rotate_right</span></button>
                         <button class="reset" style="${btnStyle}" title="Reset"><span class="material-symbols-outlined">restart_alt</span></button>
                         <button class="close-viewer" style="${btnStyle}; background: rgba(239, 68, 68, 0.4);" title="Close"><span class="material-symbols-outlined">close</span></button>
                     </div>
@@ -221,17 +222,20 @@ const ModernAlert = {
                 const wrapper = document.querySelector('.modern-image-viewer-wrapper');
                 const container = document.querySelector('.modern-image-viewer-container');
                 let scale = 1;
+                let rotation = Number.isFinite(options?.rotation) ? options.rotation : 0;
                 let isDragging = false;
                 let startX, startY, translateX = 0, translateY = 0;
 
                 const updateTransform = () => {
-                    img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+                    img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotation}deg)`;
                 };
+                updateTransform();
 
-                // Zoom controls
+                // Zoom and rotate controls
                 document.querySelector('.zoom-in').onclick = (e) => { e.stopPropagation(); scale += 0.3; updateTransform(); };
                 document.querySelector('.zoom-out').onclick = (e) => { e.stopPropagation(); if (scale > 0.4) scale -= 0.3; updateTransform(); };
-                document.querySelector('.reset').onclick = (e) => { e.stopPropagation(); scale = 1; translateX = 0; translateY = 0; updateTransform(); };
+                document.querySelector('.rotate-right').onclick = (e) => { e.stopPropagation(); rotation = (rotation + 90) % 360; updateTransform(); };
+                document.querySelector('.reset').onclick = (e) => { e.stopPropagation(); scale = 1; rotation = 0; translateX = 0; translateY = 0; updateTransform(); };
                 document.querySelector('.close-viewer').onclick = (e) => { e.stopPropagation(); Swal.close(); };
 
                 // Hover effects for custom buttons

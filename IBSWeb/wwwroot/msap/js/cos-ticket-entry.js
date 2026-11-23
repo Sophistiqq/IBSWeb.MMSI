@@ -59,6 +59,12 @@ const initializeCosTicketEntry = () => {
             await ModernAlert.error('Unable to void the ticket. Refresh the COS and try again.');
         } finally { button.disabled = false; }
     }));
+    const ticketPanel = document.getElementById('actualTicketEntry');
+    const ticketFormEl = document.getElementById('cosActualTicketForm') || document.getElementById('cosActualTicketDetails');
+    if (ticketPanel && ticketFormEl) {
+        initializeTicketFocusAndViewer(ticketPanel, ticketFormEl);
+    }
+
     const form = document.getElementById('cosActualTicketForm');
     if (!form) return;
 
@@ -95,6 +101,46 @@ const initializeCosTicketEntry = () => {
         billable.textContent = `${Math.max(minutes / 60, 1).toFixed(2)} hours`;
     };
     ['DateLeft', 'TimeLeft', 'DateArrived', 'TimeArrived'].forEach(name => form.elements[name].addEventListener('input', preview));
+
+    if (form.dataset.isNewTicket === 'true') {
+        const ticketDateInput = form.elements.Date;
+        const dateLeftInput = form.elements.DateLeft;
+        const dateArrivedInput = form.elements.DateArrived;
+        if (ticketDateInput && dateLeftInput && dateArrivedInput) {
+            const hadDistinctPlannedStart = Boolean(dateLeftInput.value && ticketDateInput.value && dateLeftInput.value !== ticketDateInput.value);
+            let dateLeftTouched = hadDistinctPlannedStart;
+            let dateArrivedTouched = Boolean(dateArrivedInput.value && dateLeftInput.value && dateArrivedInput.value !== dateLeftInput.value);
+
+            ticketDateInput.addEventListener('change', () => {
+                if (!ticketDateInput.value) return;
+                if (!dateLeftTouched) {
+                    dateLeftInput.value = ticketDateInput.value;
+                }
+                if (!dateArrivedTouched) {
+                    dateArrivedInput.value = dateLeftInput.value || ticketDateInput.value;
+                }
+                preview();
+            });
+
+            const onDateLeftChange = () => {
+                dateLeftTouched = true;
+                if (!dateLeftInput.value) return;
+                if (!dateArrivedTouched || (dateArrivedInput.value && dateArrivedInput.value < dateLeftInput.value)) {
+                    dateArrivedInput.value = dateLeftInput.value;
+                }
+                preview();
+            };
+            dateLeftInput.addEventListener('input', onDateLeftChange);
+            dateLeftInput.addEventListener('change', onDateLeftChange);
+
+            const onDateArrivedChange = () => {
+                dateArrivedTouched = true;
+            };
+            dateArrivedInput.addEventListener('input', onDateArrivedChange);
+            dateArrivedInput.addEventListener('change', onDateArrivedChange);
+        }
+    }
+
     form.noValidate = true;
     let submitting = false;
     form.addEventListener('submit', async event => {
@@ -103,6 +149,9 @@ const initializeCosTicketEntry = () => {
         if (submitting) return;
         let message = timeError(times());
         if (!message && !form.elements.TugMasterId.value) message = 'Select the captain / tug master for this service.';
+        if (!message && form.dataset.imageRequired === 'true' && !form.elements.imageFile?.files?.length) {
+            message = 'Attach a photo of the dispatch ticket before saving.';
+        }
         if (!message && form.elements.Tons) {
             const tons = Number.parseFloat(form.elements.Tons.value);
             if (!Number.isFinite(tons) || tons <= 0) message = 'Enter the watering tons (greater than 0).';
@@ -151,6 +200,372 @@ const initializeCosTicketEntry = () => {
         }
     }, true);
     preview();
+};
+
+const initializeTicketFocusAndViewer = (panel, formEl) => {
+    const backdrop = document.getElementById('cosTicketBackdrop');
+    const workspace = document.getElementById('cosEntryWorkspace');
+    const entryMain = document.getElementById('cosEntryMain');
+    const dropzone = document.getElementById('cosPhotoDropzone');
+    const fileInput = document.getElementById('cosTicketImage');
+    const previewImg = document.getElementById('cosTicketImagePreview');
+    const emptyState = document.getElementById('cosTicketImageEmpty');
+    const statusLabel = document.getElementById('cosTicketImageStatus');
+    const fileNameLabel = document.getElementById('cosTicketImageFileName');
+    const stage = document.getElementById('cosTicketImageStage');
+
+    const isNewTicket = formEl.dataset.isNewTicket === 'true';
+    const isReadOnly = formEl.dataset.isReadonly === 'true';
+    const initialUrl = previewImg?.dataset.initialUrl || '';
+    const closeUrl = panel.dataset.closeUrl || '';
+
+    let blobUrl = null;
+    let activeUrl = initialUrl;
+    let scale = 1;
+    let rotation = 0;
+    let panX = 0;
+    let panY = 0;
+
+    const closeModernSelects = () => {
+        document.querySelectorAll('.modern-select-dropdown.show').forEach(el => el.classList.remove('show'));
+        document.querySelectorAll('.modern-select-trigger.active').forEach(el => el.classList.remove('active'));
+    };
+
+    const applyTransform = () => {
+        if (!previewImg) return;
+        previewImg.style.transform = `translate(${panX}px, ${panY}px) scale(${scale}) rotate(${rotation}deg)`;
+        if (stage) {
+            stage.classList.toggle('is-zoomed', scale > 1);
+        }
+    };
+
+    const resetTransform = () => {
+        scale = 1;
+        rotation = 0;
+        panX = 0;
+        panY = 0;
+        applyTransform();
+    };
+
+    const setImageSource = (url, label) => {
+        activeUrl = url || '';
+        const hasImg = Boolean(activeUrl);
+        if (workspace) {
+            workspace.dataset.hasImage = hasImg ? 'true' : 'false';
+        }
+        if (previewImg) {
+            if (hasImg) {
+                previewImg.src = activeUrl;
+            } else {
+                previewImg.removeAttribute('src');
+            }
+            previewImg.hidden = !hasImg;
+        }
+        if (emptyState) {
+            emptyState.hidden = hasImg;
+        }
+        if (statusLabel) {
+            statusLabel.textContent = label || (hasImg ? 'Ticket photo' : 'No photo');
+        }
+        resetTransform();
+    };
+
+    const setStep = (step, { focusTicketNumber = false } = {}) => {
+        panel.dataset.ticketStep = step;
+        if (workspace) {
+            const isUploadStep = step === 'upload';
+            workspace.inert = isUploadStep;
+            if (isUploadStep) {
+                workspace.setAttribute('aria-hidden', 'true');
+            } else {
+                workspace.removeAttribute('aria-hidden');
+            }
+        }
+        if (focusTicketNumber && !isReadOnly) {
+            const ticketInput = formEl.elements.DispatchNumber;
+            if (ticketInput) {
+                setTimeout(() => {
+                    try { ticketInput.focus(); } catch { /* ignore focus errors */ }
+                }, 180);
+            }
+        }
+    };
+
+    const closeModal = () => {
+        if (!closeUrl) return;
+        window.location.href = closeUrl;
+    };
+
+    const assignFileToInput = file => {
+        if (!fileInput || !file) return false;
+        if (!file.type || !file.type.startsWith('image/')) {
+            ModernAlert.warning('Please choose an image file for the dispatch ticket photo.');
+            return false;
+        }
+        try {
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            fileInput.files = dt.files;
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        } catch {
+            ModernAlert.warning('Use Choose photo to attach this image on your browser.');
+            return false;
+        }
+    };
+
+    const handleFileSelected = () => {
+        if (!fileInput) return;
+        const file = fileInput.files && fileInput.files[0];
+        if (file && (!file.type || !file.type.startsWith('image/'))) {
+            fileInput.value = '';
+            if (blobUrl) {
+                URL.revokeObjectURL(blobUrl);
+                blobUrl = null;
+            }
+            setImageSource(initialUrl, initialUrl ? 'Saved photo' : 'No photo');
+            ModernAlert.warning('Please select an image file for the dispatch ticket photo.');
+            return;
+        }
+        if (blobUrl) {
+            URL.revokeObjectURL(blobUrl);
+            blobUrl = null;
+        }
+        if (file) {
+            blobUrl = URL.createObjectURL(file);
+            setImageSource(blobUrl, 'Selected photo (unsaved)');
+            if (fileNameLabel) fileNameLabel.textContent = file.name;
+            if (workspace) {
+                workspace.dataset.imageCollapsed = 'false';
+                const toggleBtn = panel.querySelector('[data-image-toggle]');
+                if (toggleBtn) {
+                    toggleBtn.setAttribute('aria-expanded', 'true');
+                    toggleBtn.title = 'Hide photo';
+                    const icon = toggleBtn.querySelector('.material-symbols-outlined');
+                    if (icon) icon.textContent = 'expand_less';
+                }
+            }
+            if (panel.dataset.ticketStep === 'upload') {
+                setStep('split', { focusTicketNumber: true });
+            }
+        } else if (initialUrl) {
+            setImageSource(initialUrl, 'Saved photo');
+            if (fileNameLabel) fileNameLabel.textContent = 'Saved photo';
+        } else {
+            setImageSource('', 'No photo');
+            if (fileNameLabel) fileNameLabel.textContent = 'No file selected';
+        }
+    };
+
+    if (fileInput) {
+        fileInput.addEventListener('change', handleFileSelected);
+    }
+
+    panel.querySelectorAll('[data-trigger-photo-upload]').forEach(btn => {
+        btn.addEventListener('click', event => {
+            event.stopPropagation();
+            if (fileInput) fileInput.click();
+        });
+    });
+
+    panel.querySelectorAll('[data-skip-photo]').forEach(btn => {
+        btn.addEventListener('click', event => {
+            event.stopPropagation();
+            setStep('split', { focusTicketNumber: true });
+        });
+    });
+
+    if (dropzone) {
+        dropzone.addEventListener('click', event => {
+            if (event.target.closest('button')) return;
+            if (fileInput) fileInput.click();
+        });
+    }
+
+    const bindDropTarget = target => {
+        if (!target || isReadOnly) return;
+        target.addEventListener('dragover', event => {
+            event.preventDefault();
+            target.classList.add('is-dragover');
+        });
+        target.addEventListener('dragleave', () => {
+            target.classList.remove('is-dragover');
+        });
+        target.addEventListener('drop', event => {
+            event.preventDefault();
+            target.classList.remove('is-dragover');
+            const dropped = event.dataTransfer?.files?.[0];
+            if (dropped) assignFileToInput(dropped);
+        });
+    };
+    bindDropTarget(dropzone);
+    bindDropTarget(stage);
+
+    if (!isReadOnly) {
+        document.addEventListener('paste', event => {
+            const items = event.clipboardData?.items;
+            if (!items) return;
+            for (const item of items) {
+                if (item.type && item.type.startsWith('image/')) {
+                    const pastedFile = item.getAsFile();
+                    if (pastedFile) {
+                        event.preventDefault();
+                        assignFileToInput(pastedFile);
+                    }
+                    break;
+                }
+            }
+        });
+    }
+
+    // Close on backdrop click or Escape when viewing or on the upload gate
+    if (backdrop) {
+        backdrop.addEventListener('click', () => {
+            if (isReadOnly || panel.dataset.ticketStep === 'upload') {
+                closeModal();
+            }
+        });
+    }
+
+    document.addEventListener('keydown', event => {
+        if (event.key !== 'Escape') return;
+        if (document.querySelector('.swal2-container.swal2-shown')) return;
+        if (document.querySelector('.modern-select-dropdown.show')) return;
+        if (isReadOnly || panel.dataset.ticketStep === 'upload') {
+            closeModal();
+        }
+    });
+
+    // Keep ModernSelect dropdowns aligned if the lifted form scrolls
+    if (entryMain) entryMain.addEventListener('scroll', closeModernSelects, { passive: true });
+    formEl.addEventListener('scroll', closeModernSelects, { passive: true });
+
+    // Image toolbar controls
+    const zoomInBtn = panel.querySelector('[data-image-zoom-in]');
+    const zoomOutBtn = panel.querySelector('[data-image-zoom-out]');
+    const rotateBtn = panel.querySelector('[data-image-rotate]');
+    const resetBtn = panel.querySelector('[data-image-reset]');
+    const fullscreenBtn = panel.querySelector('[data-image-fullscreen]');
+    const collapseBtn = panel.querySelector('[data-image-toggle]');
+
+    if (zoomInBtn) {
+        zoomInBtn.addEventListener('click', () => {
+            if (!activeUrl) return;
+            scale = Math.min(4, +(scale + 0.25).toFixed(2));
+            applyTransform();
+        });
+    }
+    if (zoomOutBtn) {
+        zoomOutBtn.addEventListener('click', () => {
+            if (!activeUrl) return;
+            scale = Math.max(0.5, +(scale - 0.25).toFixed(2));
+            if (scale <= 1) {
+                panX = 0;
+                panY = 0;
+            }
+            applyTransform();
+        });
+    }
+    if (rotateBtn) {
+        rotateBtn.addEventListener('click', () => {
+            if (!activeUrl) return;
+            rotation = (rotation + 90) % 360;
+            applyTransform();
+        });
+    }
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => resetTransform());
+    }
+    if (fullscreenBtn) {
+        fullscreenBtn.addEventListener('click', () => {
+            if (!activeUrl) return;
+            ModernAlert.image(activeUrl, 'Dispatch Ticket Image Preview', { rotation });
+        });
+    }
+    if (collapseBtn && workspace) {
+        collapseBtn.addEventListener('click', () => {
+            const collapsed = workspace.dataset.imageCollapsed === 'true';
+            const next = !collapsed;
+            workspace.dataset.imageCollapsed = next ? 'true' : 'false';
+            collapseBtn.setAttribute('aria-expanded', next ? 'false' : 'true');
+            collapseBtn.title = next ? 'Show photo' : 'Hide photo';
+            collapseBtn.setAttribute('aria-label', next ? 'Show photo' : 'Hide photo');
+            const icon = collapseBtn.querySelector('.material-symbols-outlined');
+            if (icon) icon.textContent = next ? 'expand_more' : 'expand_less';
+        });
+    }
+
+    // Pointer pan + wheel zoom + double-click zoom on stage
+    if (stage) {
+        let dragging = false;
+        let pointerId = null;
+        let startX = 0;
+        let startY = 0;
+
+        stage.addEventListener('pointerdown', event => {
+            if (!activeUrl || scale <= 1 || event.button !== 0) return;
+            dragging = true;
+            pointerId = event.pointerId;
+            startX = event.clientX - panX;
+            startY = event.clientY - panY;
+            stage.classList.add('is-dragging');
+            try { stage.setPointerCapture(pointerId); } catch { /* ignore */ }
+        });
+
+        stage.addEventListener('pointermove', event => {
+            if (!dragging || event.pointerId !== pointerId) return;
+            panX = event.clientX - startX;
+            panY = event.clientY - startY;
+            applyTransform();
+        });
+
+        const stopDrag = event => {
+            if (!dragging || (pointerId !== null && event.pointerId !== pointerId)) return;
+            dragging = false;
+            stage.classList.remove('is-dragging');
+            try { stage.releasePointerCapture(pointerId); } catch { /* ignore */ }
+            pointerId = null;
+        };
+
+        stage.addEventListener('pointerup', stopDrag);
+        stage.addEventListener('pointercancel', stopDrag);
+
+        stage.addEventListener('wheel', event => {
+            if (!activeUrl) return;
+            event.preventDefault();
+            const delta = event.deltaY > 0 ? -0.15 : 0.15;
+            scale = Math.min(4, Math.max(0.5, +(scale + delta).toFixed(2)));
+            if (scale <= 1) {
+                panX = 0;
+                panY = 0;
+            }
+            applyTransform();
+        }, { passive: false });
+
+        stage.addEventListener('dblclick', () => {
+            if (!activeUrl) return;
+            if (scale > 1) {
+                scale = 1;
+                panX = 0;
+                panY = 0;
+            } else {
+                scale = 2;
+            }
+            applyTransform();
+        });
+    }
+
+    window.addEventListener('beforeunload', () => {
+        if (blobUrl) {
+            URL.revokeObjectURL(blobUrl);
+            blobUrl = null;
+        }
+    });
+
+    // Lock body scroll and initialize modal step
+    document.body.classList.add('cos-ticket-focus-open');
+    const initialStep = isNewTicket && !activeUrl ? 'upload' : 'split';
+    setStep(initialStep);
 };
 
 if (document.readyState === 'loading') {

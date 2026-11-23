@@ -102,7 +102,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 if (inlineEntry)
                 {
-                    return Json(new { success = true, message = result.Message, redirectUrl = Url.Action("Details", "CustomerOrderSlip", new { id = viewModel.CustomerOrderSlipId, dispatchTicketId = result.Data }) });
+                    return Json(new { success = true, message = result.Message, redirectUrl = Url.Action("Details", "CustomerOrderSlip", new { id = viewModel.CustomerOrderSlipId }) });
                 }
                 TempData["success"] = result.Message;
 
@@ -244,7 +244,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 if (inlineEntry)
                 {
-                    return Json(new { success = true, message = result.Message, redirectUrl = Url.Action("Details", "CustomerOrderSlip", new { id = viewModel.CustomerOrderSlipId, dispatchTicketId = viewModel.DispatchTicketId }) });
+                    return Json(new { success = true, message = result.Message, redirectUrl = Url.Action("Details", "CustomerOrderSlip", new { id = viewModel.CustomerOrderSlipId }) });
                 }
                 TempData["success"] = result.Message;
 

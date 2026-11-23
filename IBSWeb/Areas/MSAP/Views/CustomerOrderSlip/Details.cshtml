@@ -19,6 +19,10 @@
         && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && ViewBag.HasBilling != true;
     var canVoidTicketRow = ViewBag.CanEditTicket == true && ViewBag.HasBilling != true
         && Model.Status == MsapConstants.CustomerOrderSlipStatus.Open && booking?.Status != MsapConstants.VesselScheduleStatus.Cancelled;
+    bool CanEditTicketRow(DispatchTicket ticket) => canVoidTicketRow
+        && ticket.Status != MsapConstants.DispatchTicketStatus.Billed
+        && ticket.Status != MsapConstants.DispatchTicketStatus.Deleted
+        && !Model.DispatchTickets.Any(t => t.Status == MsapConstants.DispatchTicketStatus.Billed);
     var tugIds = entries.Select(entry => entry.TugboatId).Concat(Model.DispatchTickets.Select(ticket => ticket.TugBoatId)).Distinct().ToList();
     var statusLabel = bookingClosed && booking != null ? MsapConstants.VesselScheduleStatus.GetDisplayName(booking.Status)
         : approvalPending ? booking!.ApprovedRevision.HasValue ? "Pending reapproval" : "Approval pending"
@@ -111,7 +115,7 @@
                     <thead><tr>
                         <th>Service</th>
                         <th>Ticket number</th>
-                        <th>Actual hours</th><th>Billable hours</th><th>Service status</th><th>Action</th>
+                        <th>Actual hours</th><th>Billable hours</th><th>Service status</th><th class="text-center">Action</th>
                     </tr></thead>
                     <tbody>
                         @foreach (var tugId in tugIds)
@@ -130,40 +134,55 @@
                                     <td>@entry.Service.ServiceName</td>
                                     @if (entry.CancelledAt.HasValue)
                                     {
-                                        <td colspan="4"><span class="schedule-status-pill">Service cancelled</span><small class="ui-caption ui-muted">@entry.CancellationReason · @entry.CancelledAt.Value.ToString("dd MMM yyyy, HH:mm")</small></td><td>—</td>
+                                        <td colspan="4"><span class="schedule-status-pill">Service cancelled</span><small class="ui-caption ui-muted">@entry.CancellationReason · @entry.CancelledAt.Value.ToString("dd MMM yyyy, HH:mm")</small></td><td class="text-center">—</td>
                                     }
                                     else if (ticket == null)
                                     {
+                                        var showRecordAction = ViewData["CanRecordExpectedService"] is true;
+                                        var showCancelAction = ViewData["CanCancelExpectedService"] is true;
                                         <td>Not entered</td><td>Pending</td><td>Pending</td><td><span class="ui-status ui-attention">Awaiting ticket</span></td>
-                                        <td>
-                                            <div class="cos-service-actions">
-                                                @if (ViewData["CanRecordExpectedService"] is true)
-                                                {
-                                                    @if (ticketEntry?.VesselScheduleServiceEntryId == entry.VesselScheduleServiceEntryId)
-                                                    {
-                                                        <span class="ui-status ui-active" aria-current="true">Entering ticket</span>
-                                                    }
-                                                    else
-                                                    {
-                                                        <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId"
-                                                           asp-route-expectedServiceEntryId="@entry.VesselScheduleServiceEntryId" asp-fragment="actualTicketEntry" class="cos-ticket-link cos-ticket-primary">
-                                                            <span class="material-symbols-outlined" style="font-size: 15px;">add</span> Record ticket
-                                                        </a>
-                                                    }
-                                                }
-                                                @if (ViewData["CanCancelExpectedService"] is true)
-                                                {
-                                                    <button type="button" class="cos-cancel-subtext" data-cancel-service="@entry.VesselScheduleServiceEntryId" data-cos-id="@Model.CustomerOrderSlipId" data-url="@Url.Action("CancelService", "CustomerOrderSlip")">Cancel service</button>
-                                                }
-                                            </div>
+                                        <td class="text-center">
+                                            @if (showRecordAction || showCancelAction)
+                                            {
+                                                <div class="relative inline-block text-left dropdown-container">
+                                                    <button type="button" class="modern-btn-dropdown dropdown-trigger">
+                                                        ACTIONS <span class="material-symbols-outlined">arrow_drop_down</span>
+                                                    </button>
+                                                    <div class="modern-dropdown-menu dropdown-menu">
+                                                        @if (showRecordAction)
+                                                        {
+                                                            <a class="modern-dropdown-item" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-expectedServiceEntryId="@entry.VesselScheduleServiceEntryId">
+                                                                <span class="material-symbols-outlined">add</span> Record ticket
+                                                            </a>
+                                                        }
+                                                        @if (showRecordAction && showCancelAction)
+                                                        {
+                                                            <div class="border-t border-outline-variant my-1"></div>
+                                                        }
+                                                        @if (showCancelAction)
+                                                        {
+                                                            <button type="button" class="modern-dropdown-item text-error" data-cancel-service="@entry.VesselScheduleServiceEntryId" data-cos-id="@Model.CustomerOrderSlipId" data-url="@Url.Action("CancelService", "CustomerOrderSlip")">
+                                                                <span class="material-symbols-outlined">cancel</span> Cancel service
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span>—</span>
+                                            }
                                         </td>
                                     }
                                     else
                                     {
+                                        var showViewAction = ViewData["CanViewActualTicket"] is true;
+                                        var showEditAction = CanEditTicketRow(ticket);
+                                        var showVoidAction = canVoidTicketRow && ticket.Status != MsapConstants.DispatchTicketStatus.Billed && ticket.Status != MsapConstants.DispatchTicketStatus.Deleted;
                                         <td>
-                                            @if (ViewData["CanViewActualTicket"] is true)
+                                            @if (showViewAction)
                                             {
-                                                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-fragment="actualTicketEntry" class="font-bold text-primary" style="text-decoration:none;">@ticket.DispatchNumber</a>
+                                                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" class="font-bold text-primary" style="text-decoration:none;">@ticket.DispatchNumber</a>
                                             }
                                             else
                                             {
@@ -198,19 +217,43 @@
                                                 <small class="cos-ticket-blocker ui-caption ui-muted">@calculationBlocker</small>
                                             }
                                         </td>
-                                        <td>
-                                            <div class="cos-service-actions">
-                                                @if (ViewData["CanViewActualTicket"] is true)
-                                                {
-                                                    <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-fragment="actualTicketEntry" class="cos-ticket-link">
-                                                        <span class="material-symbols-outlined" style="font-size: 15px;">visibility</span> View ticket
-                                                    </a>
-                                                }
-                                                @if (canVoidTicketRow && ticket.Status != MsapConstants.DispatchTicketStatus.Billed && ticket.Status != MsapConstants.DispatchTicketStatus.Deleted)
-                                                {
-                                                    <button type="button" class="cos-cancel-subtext" data-void-ticket="@ticket.DispatchTicketId" data-cos-id="@Model.CustomerOrderSlipId" data-dispatch-number="@ticket.DispatchNumber" data-finalized="@(ticket.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")" data-url="@Url.Action("VoidTicket", "DispatchTicket")">Void ticket</button>
-                                                }
-                                            </div>
+                                        <td class="text-center">
+                                            @if (showViewAction || showEditAction || showVoidAction)
+                                            {
+                                                <div class="relative inline-block text-left dropdown-container">
+                                                    <button type="button" class="modern-btn-dropdown dropdown-trigger">
+                                                        ACTIONS <span class="material-symbols-outlined">arrow_drop_down</span>
+                                                    </button>
+                                                    <div class="modern-dropdown-menu dropdown-menu">
+                                                        @if (showViewAction)
+                                                        {
+                                                            <a class="modern-dropdown-item" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId">
+                                                                <span class="material-symbols-outlined">visibility</span> View ticket
+                                                            </a>
+                                                        }
+                                                        @if (showEditAction)
+                                                        {
+                                                            <a class="modern-dropdown-item" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-route-editTicket="true">
+                                                                <span class="material-symbols-outlined">edit</span> Edit ticket
+                                                            </a>
+                                                        }
+                                                        @if ((showViewAction || showEditAction) && showVoidAction)
+                                                        {
+                                                            <div class="border-t border-outline-variant my-1"></div>
+                                                        }
+                                                        @if (showVoidAction)
+                                                        {
+                                                            <button type="button" class="modern-dropdown-item text-error" data-void-ticket="@ticket.DispatchTicketId" data-cos-id="@Model.CustomerOrderSlipId" data-dispatch-number="@ticket.DispatchNumber" data-finalized="@(ticket.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")" data-url="@Url.Action("VoidTicket", "DispatchTicket")">
+                                                                <span class="material-symbols-outlined">delete_forever</span> Void ticket
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span>—</span>
+                                            }
                                         </td>
                                     }
                                 </tr>
@@ -220,12 +263,15 @@
                                 var calculationBlocker = progress.CalculationBlockers.GetValueOrDefault(ticket.DispatchTicketId);
                                 var isSelected = ticketEntry != null && ticketEntry.DispatchTicketId == ticket.DispatchTicketId;
                                 var rowState = isSelected ? "ui-active" : calculationBlocker != null || ticket.Status == MsapConstants.DispatchTicketStatus.AwaitingRate ? "ui-critical" : approvalPending ? "ui-attention" : "";
+                                var showViewAction = ViewData["CanViewActualTicket"] is true;
+                                var showEditAction = CanEditTicketRow(ticket);
+                                var showVoidAction = canVoidTicketRow && ticket.Status != MsapConstants.DispatchTicketStatus.Billed && ticket.Status != MsapConstants.DispatchTicketStatus.Deleted;
                                 <tr class="@rowState">
                                     <td>@ticket.Service.ServiceName</td>
                                     <td>
-                                        @if (ViewData["CanViewActualTicket"] is true)
+                                        @if (showViewAction)
                                         {
-                                            <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-fragment="actualTicketEntry" class="font-bold text-primary" style="text-decoration:none;">@ticket.DispatchNumber</a>
+                                            <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" class="font-bold text-primary" style="text-decoration:none;">@ticket.DispatchNumber</a>
                                         }
                                         else
                                         {
@@ -260,19 +306,43 @@
                                             <small class="cos-ticket-blocker ui-caption ui-muted">@calculationBlocker</small>
                                         }
                                     </td>
-                                    <td>
-                                        <div class="cos-service-actions">
-                                            @if (ViewData["CanViewActualTicket"] is true)
-                                            {
-                                                <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-fragment="actualTicketEntry" class="cos-ticket-link">
-                                                    <span class="material-symbols-outlined" style="font-size: 15px;">visibility</span> View ticket
-                                                </a>
-                                            }
-                                            @if (canVoidTicketRow && ticket.Status != MsapConstants.DispatchTicketStatus.Billed && ticket.Status != MsapConstants.DispatchTicketStatus.Deleted)
-                                            {
-                                                <button type="button" class="cos-cancel-subtext" data-void-ticket="@ticket.DispatchTicketId" data-cos-id="@Model.CustomerOrderSlipId" data-dispatch-number="@ticket.DispatchNumber" data-finalized="@(ticket.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")" data-url="@Url.Action("VoidTicket", "DispatchTicket")">Void ticket</button>
-                                            }
-                                        </div>
+                                    <td class="text-center">
+                                        @if (showViewAction || showEditAction || showVoidAction)
+                                        {
+                                            <div class="relative inline-block text-left dropdown-container">
+                                                <button type="button" class="modern-btn-dropdown dropdown-trigger">
+                                                    ACTIONS <span class="material-symbols-outlined">arrow_drop_down</span>
+                                                </button>
+                                                <div class="modern-dropdown-menu dropdown-menu">
+                                                    @if (showViewAction)
+                                                    {
+                                                        <a class="modern-dropdown-item" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId">
+                                                            <span class="material-symbols-outlined">visibility</span> View ticket
+                                                        </a>
+                                                    }
+                                                    @if (showEditAction)
+                                                    {
+                                                        <a class="modern-dropdown-item" asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@Model.CustomerOrderSlipId" asp-route-dispatchTicketId="@ticket.DispatchTicketId" asp-route-editTicket="true">
+                                                            <span class="material-symbols-outlined">edit</span> Edit ticket
+                                                        </a>
+                                                    }
+                                                    @if ((showViewAction || showEditAction) && showVoidAction)
+                                                    {
+                                                        <div class="border-t border-outline-variant my-1"></div>
+                                                    }
+                                                    @if (showVoidAction)
+                                                    {
+                                                        <button type="button" class="modern-dropdown-item text-error" data-void-ticket="@ticket.DispatchTicketId" data-cos-id="@Model.CustomerOrderSlipId" data-dispatch-number="@ticket.DispatchNumber" data-finalized="@(ticket.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")" data-url="@Url.Action("VoidTicket", "DispatchTicket")">
+                                                            <span class="material-symbols-outlined">delete_forever</span> Void ticket
+                                                        </button>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <span>—</span>
+                                        }
                                     </td>
                                 </tr>
                             }
@@ -284,8 +354,22 @@
         </section>
         @if (ticketEntry != null)
         {
-            <section class="ui-panel ui-stack" id="actualTicketEntry" aria-labelledby="actualTicketTitle">
-                <div class="cos-section-heading"><h2 class="ui-section-title" id="actualTicketTitle">@(ViewData["EditActualTicket"] is true ? "Edit actual ticket" : ticketEntry.DispatchTicketId.HasValue ? "View actual ticket" : "Enter actual ticket") · @(selectedEntry?.Tugboat.TugboatName ?? viewedTicket?.Tugboat.TugboatName) / @(selectedEntry?.Service.ServiceName ?? viewedTicket?.Service.ServiceName)</h2><span class="schedule-status-pill">@(ticketEntry.DispatchTicketId.HasValue ? "Recorded" : "Not saved yet")</span></div>
+            var entryMode = ViewData["EditActualTicket"] is true ? "edit" : ticketEntry.DispatchTicketId.HasValue ? "view" : "create";
+            var initialStep = entryMode == "create" && string.IsNullOrEmpty(ticketEntry.ImageSignedUrl) ? "upload" : "split";
+            var closeTicketUrl = Url.Action("Details", "CustomerOrderSlip", new { id = Model.CustomerOrderSlipId });
+            <div id="cosTicketBackdrop" class="cos-ticket-backdrop is-visible"></div>
+            <section class="ui-panel ui-stack cos-ticket-entry-panel cos-ticket-lifted" id="actualTicketEntry" data-ticket-entry-mode="@entryMode" data-ticket-step="@initialStep" data-close-url="@closeTicketUrl" role="dialog" aria-modal="true" aria-labelledby="actualTicketTitle">
+                <div class="cos-section-heading cos-entry-heading">
+                    <div class="cos-entry-heading-title">
+                        <h2 class="ui-section-title" id="actualTicketTitle">@(ViewData["EditActualTicket"] is true ? "Edit actual ticket" : ticketEntry.DispatchTicketId.HasValue ? "View actual ticket" : "Enter actual ticket") · @(selectedEntry?.Tugboat.TugboatName ?? viewedTicket?.Tugboat.TugboatName) / @(selectedEntry?.Service.ServiceName ?? viewedTicket?.Service.ServiceName)</h2>
+                    </div>
+                    <div class="cos-entry-heading-actions">
+                        <span class="schedule-status-pill">@(ticketEntry.DispatchTicketId.HasValue ? "Recorded" : "Not saved yet")</span>
+                        <a href="@closeTicketUrl" class="cos-icon-btn" title="Close" aria-label="Close">
+                            <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                        </a>
+                    </div>
+                </div>
                 <partial name="_ActualTicketEntry" model="ticketEntry" />
             </section>
         }
