@@ -22,6 +22,7 @@
           data-editing-draft="@isEditingDraft.ToString().ToLowerInvariant()"
           data-initial-billed-to="@Model.BilledTo"
           data-initial-principal="@Model.PrincipalId"
+          data-initial-terms="@Model.Terms"
           data-initial-agency-inc="@Model.AgencyIncentiveRepresentativeId"
           data-initial-agent-com="@Model.AgentCommissionRepresentativeId"
           data-suggested-bir-number="@ViewData["SuggestedBirNumber"]"
@@ -192,8 +193,8 @@
                             <select asp-for="Terms" asp-items="@Model.PaymentTerms" class="modern-input js-modern-select" id="billingTerms">
                                 <option value="">-- Customer Default --</option>
                             </select>
-                            <span class="ui-caption ui-muted" style="display:block;margin-top:2px;">Master file default: <strong id="recipientTerms">—</strong></span>
-                            <small id="termsOverrideHint" class="ui-caption schedule-review-attention" hidden></small>
+                            <p id="termsDefaultNote" class="ui-caption ui-muted mt-1 mb-0">Master file default: <strong id="recipientTerms">—</strong></p>
+                            <p id="termsOverrideHint" class="ui-caption schedule-review-attention mt-1 mb-0" hidden></p>
                         </div>
                     </div>
                     <p id="recipientNote" class="ui-caption ui-muted">The statement is addressed to the service customer.</p>

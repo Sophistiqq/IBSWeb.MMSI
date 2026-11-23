@@ -14,8 +14,10 @@ $(function () {
     let cosRequest = 0;
     let saving = false;
     let initialCos = form.dataset.initialCos;
+    let initialTerms = (form.dataset.initialTerms || '').trim();
     const initialAgencyInc = form.dataset.initialAgencyInc || '';
     const initialAgentCom = form.dataset.initialAgentCom || '';
+    let syncingTerms = false;
     let commercialEnabled = false;
     let defaultDiscount = 0;
     const money = value => Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -61,6 +63,7 @@ $(function () {
         const defaultTerms = ($('#recipientTerms').text() || '').trim();
         const currentTerms = ($('#billingTerms').val() || '').trim();
         const isTermsOverride = defaultTerms !== '' && defaultTerms !== '—' && currentTerms !== '' && currentTerms !== defaultTerms;
+        $('#termsDefaultNote').prop('hidden', isTermsOverride);
         $('#termsOverrideHint').prop('hidden', !isTermsOverride).text(isTermsOverride ? `Terms override (default ${defaultTerms}) — flagged for reviewer.` : '');
     }
 
@@ -73,7 +76,9 @@ $(function () {
         $('#recipientTin').text(selected?.tinNo || '—');
         $('#recipientTerms, #bookingTerms').text(selected?.terms || '—');
         if (selected?.terms && !$('#billingTerms').data('user-overridden')) {
+            syncingTerms = true;
             $('#billingTerms').val(selected.terms).trigger('change');
+            syncingTerms = false;
         }
         updateTermsOverrideHint();
         $('#recipientNote').text(isPrincipal ? 'Both Basic and BAF statements are addressed to the selected principal.' : 'The statement is addressed to the service customer.');
@@ -361,12 +366,20 @@ $(function () {
             populateRepresentatives(isInitialEdit);
             if (!isInitialEdit) {
                 $('#IsUndocumented').prop('checked', customer.isUndoc === 'Undocumented');
+                $('#billingTerms').data('user-overridden', false);
             } else {
                 if (form.dataset.initialBilledTo === 'PRINCIPAL' && principals.length) {
                     $recipient.val('PRINCIPAL');
                 }
                 if (form.dataset.initialPrincipal) {
                     $principal.val(form.dataset.initialPrincipal);
+                }
+                if (initialTerms) {
+                    syncingTerms = true;
+                    $('#billingTerms').val(initialTerms).trigger('change');
+                    syncingTerms = false;
+                    $('#billingTerms').data('user-overridden', true);
+                    initialTerms = '';
                 }
             }
             updateSummary();
@@ -473,7 +486,12 @@ $(function () {
             enableActions();
         }
     });
-    $('#billingTerms').on('change', updateTermsOverrideHint);
+    $('#billingTerms').on('change', function () {
+        if (!syncingTerms) {
+            $(this).data('user-overridden', Boolean(($(this).val() || '').trim()));
+        }
+        updateTermsOverrideHint();
+    });
     $('#AgencyIncentiveSelect, #AgentCommissionSelect').on('change', updateSummary);
     updateSummary();
     if ($customer.val()) $customer.trigger('change');

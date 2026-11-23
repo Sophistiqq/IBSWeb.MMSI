@@ -84,6 +84,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     model.Date = existingDraft.Date;
                     model.BilledTo = existingDraft.BilledTo;
                     model.PrincipalId = existingDraft.PrincipalId;
+                    model.Terms = existingDraft.Terms;
+                    model.Remarks = existingDraft.Remarks;
+                    model.PrintDiscount = existingDraft.PrintDiscount;
+                    model.AgencyIncentiveRepresentativeId = existingDraft.AgencyIncentiveRepresentativeId;
+                    model.AgentCommissionRepresentativeId = existingDraft.AgentCommissionRepresentativeId;
                     model.IsUndocumented = existingDraft.IsUndocumented;
                     model.DiscountOnTariff = existingDraft.DiscountOnTariff;
                     model.DiscountOnBaf = existingDraft.DiscountOnBaf;
@@ -177,7 +182,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [RequireAccess(ProcedureEnum.DeleteBilling, "Access denied. You don't have permission to discard draft billings.")]
         public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
         {
-            List<JobProgressViewModel> progress = await JobProgressCalculator.LoadForBillingsAsync(unitOfWork, [id], cancellationToken);
             var result = await billingService.DeleteBillingAsync(id, User.Identity?.Name ?? "System", cancellationToken);
 
             if (result.IsSuccess)
@@ -189,7 +193,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 TempData["error"] = result.Message;
             }
 
-            return RedirectToAction(nameof(Index), new { customerOrderSlipId = progress.Count == 1 ? progress[0].CustomerOrderSlipId : null });
+            return RedirectToAction(nameof(Index));
         }
 
         #endregion
@@ -231,26 +235,50 @@ namespace IBSWeb.Areas.MSAP.Controllers
             List<MsapFieldChange> billingChanges = [];
             string? adjustmentReason = null;
             string? adjustmentAttachmentUrl = model.AdjustmentAttachmentUrl;
-            foreach (var log in adjustmentLogs.OrderByDescending(a => a.EditedDate).ThenByDescending(a => a.Id))
+            var latestLog = adjustmentLogs
+                .OrderByDescending(a => a.EditedDate)
+                .ThenByDescending(a => a.Id)
+                .FirstOrDefault();
+            if (latestLog != null)
             {
-                adjustmentReason ??= log.Reason;
-                adjustmentAttachmentUrl ??= log.AttachmentUrl;
-                if (string.IsNullOrWhiteSpace(log.ChangesJson))
+                adjustmentAttachmentUrl ??= latestLog.AttachmentUrl;
+                if (!string.IsNullOrWhiteSpace(latestLog.ChangesJson))
                 {
-                    continue;
-                }
-                try
-                {
-                    var parsed = System.Text.Json.JsonSerializer.Deserialize<List<MsapFieldChange>>(log.ChangesJson);
-                    if (parsed is { Count: > 0 })
+                    try
                     {
-                        billingChanges = parsed;
-                        break;
+                        var parsed = System.Text.Json.JsonSerializer.Deserialize<List<MsapFieldChange>>(latestLog.ChangesJson);
+                        if (parsed != null)
+                        {
+                            billingChanges = parsed;
+                        }
+                    }
+                    catch (System.Text.Json.JsonException)
+                    {
+                        // Ignore malformed change JSON.
                     }
                 }
-                catch (System.Text.Json.JsonException)
+                if (billingChanges.Count > 0)
                 {
-                    // Ignore malformed change JSON.
+                    var masterDefaultTerms = (model.Principal?.Terms ?? model.Customer.CustomerTerms)?.Trim();
+                    if (string.IsNullOrWhiteSpace(masterDefaultTerms))
+                    {
+                        masterDefaultTerms = "COD";
+                    }
+                    var currentTerms = model.Terms?.Trim() ?? string.Empty;
+                    var isFormalAdjustment = !string.IsNullOrWhiteSpace(latestLog.AttachmentUrl)
+                        || model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+                    if (!isFormalAdjustment)
+                    {
+                        billingChanges = billingChanges
+                            .Where(c => !(c.Field == nameof(Billing.Terms)
+                                && (string.Equals(currentTerms, masterDefaultTerms, StringComparison.OrdinalIgnoreCase)
+                                    || !string.Equals(c.After?.Trim(), currentTerms, StringComparison.OrdinalIgnoreCase))))
+                            .ToList();
+                    }
+                }
+                if (billingChanges.Count > 0 || !string.IsNullOrWhiteSpace(latestLog.AttachmentUrl))
+                {
+                    adjustmentReason = latestLog.Reason;
                 }
             }
             ViewBag.BillingChanges = billingChanges;

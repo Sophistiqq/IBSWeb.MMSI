@@ -7,7 +7,7 @@
     bool bafOnly = Model.BasicBillingId.HasValue;
     bool basicOnly = Model.BafBilling != null;
     string component = bafOnly ? "BAF" : basicOnly ? "Basic" : "Basic and BAF";
-    string? blocker = ViewData["PostingBlocker"] as string;
+    var blocker = ViewData["PostingBlocker"] as string;
     bool canPrint = BillingService.CanPrint(Model);
     bool isReopenedOrFinalized = Model.UnpostedDate.HasValue || Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
     bool canReview = ViewData["CanReviewBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && (ViewData["IsPeriodClosed"] is not true || isReopenedOrFinalized);
@@ -55,8 +55,8 @@
                         {
                             masterDefaultTerms = "COD";
                         }
-                        var hasTermsOverride = billingChanges.Any(c => c.Field == nameof(Billing.Terms))
-                            || (!string.IsNullOrWhiteSpace(Model.Terms) && !string.Equals(Model.Terms.Trim(), masterDefaultTerms, StringComparison.OrdinalIgnoreCase));
+                        var hasTermsOverride = !string.IsNullOrWhiteSpace(Model.Terms)
+                            && !string.Equals(Model.Terms.Trim(), masterDefaultTerms, StringComparison.OrdinalIgnoreCase);
                         var hasDueDateChange = billingChanges.Any(c => c.Field == nameof(Billing.DueDate));
                     }
                     @if (hasSeriesOverride)

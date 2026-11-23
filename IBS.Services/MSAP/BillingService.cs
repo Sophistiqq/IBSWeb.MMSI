@@ -182,6 +182,86 @@ namespace IBS.Services.MSAP
                                 EditedDate = existingDraft.EditedDate.Value
                             }, cancellationToken);
                         }
+                        else if (fieldDiffs.Any(d => d.Field is nameof(Billing.Terms) or nameof(Billing.MsapBillingNumber) or nameof(Billing.BilledTo) or nameof(Billing.PrincipalId)))
+                        {
+                            var draftDefaultTerms = (existingDraft.Principal?.Terms ?? model.Customer?.CustomerTerms)?.Trim();
+                            if (string.IsNullOrWhiteSpace(draftDefaultTerms))
+                            {
+                                draftDefaultTerms = "COD";
+                            }
+                            var draftBills = existingDraft.BafBilling != null
+                                ? new[] { existingDraft, existingDraft.BafBilling }
+                                : new[] { existingDraft };
+                            foreach (var draftBill in draftBills)
+                            {
+                                var priorLogs = await unitOfWork.MsapAdjustmentLog.GetAllAsync(
+                                    a => a.DocumentType == "Billing" && a.RecordId == draftBill.MsapBillingId,
+                                    cancellationToken);
+                                var latestPriorLog = priorLogs
+                                    .OrderByDescending(a => a.EditedDate)
+                                    .ThenByDescending(a => a.Id)
+                                    .FirstOrDefault();
+                                var priorChanges = new List<MsapFieldChange>();
+                                if (!string.IsNullOrWhiteSpace(latestPriorLog?.ChangesJson))
+                                {
+                                    try
+                                    {
+                                        priorChanges = System.Text.Json.JsonSerializer.Deserialize<List<MsapFieldChange>>(latestPriorLog.ChangesJson) ?? [];
+                                    }
+                                    catch (System.Text.Json.JsonException)
+                                    {
+                                        priorChanges = [];
+                                    }
+                                }
+                                var priorTermsChange = priorChanges.FirstOrDefault(c => c.Field == nameof(Billing.Terms));
+                                var activeChanges = priorChanges
+                                    .Where(c => c.Field != nameof(Billing.Terms))
+                                    .ToList();
+                                var isDraftTermsOverride = !string.IsNullOrWhiteSpace(draftBill.Terms)
+                                    && !string.Equals(draftBill.Terms.Trim(), draftDefaultTerms, StringComparison.OrdinalIgnoreCase);
+                                if (isDraftTermsOverride)
+                                {
+                                    activeChanges.Add(new MsapFieldChange
+                                    {
+                                        Field = nameof(Billing.Terms),
+                                        Label = "Payment Terms",
+                                        Before = draftDefaultTerms,
+                                        After = draftBill.Terms
+                                    });
+                                }
+                                var termsOverrideStateChanged = isDraftTermsOverride
+                                    ? priorTermsChange == null
+                                        || !string.Equals(priorTermsChange.Before, draftDefaultTerms, StringComparison.OrdinalIgnoreCase)
+                                        || !string.Equals(priorTermsChange.After, draftBill.Terms, StringComparison.OrdinalIgnoreCase)
+                                    : priorTermsChange != null;
+                                if (termsOverrideStateChanged)
+                                {
+                                    var draftReasonParts = new List<string>();
+                                    if (activeChanges.Any(c => c.Field == nameof(Billing.MsapBillingNumber)))
+                                    {
+                                        var seriesChange = activeChanges.First(c => c.Field == nameof(Billing.MsapBillingNumber));
+                                        draftReasonParts.Add($"BIR invoice series override ({seriesChange.Before}, prepared {seriesChange.After})");
+                                    }
+                                    if (isDraftTermsOverride)
+                                    {
+                                        draftReasonParts.Add($"Payment terms override (default {draftDefaultTerms}, prepared {draftBill.Terms})");
+                                    }
+                                    var draftReason = draftReasonParts.Count > 0
+                                        ? string.Join("; ", draftReasonParts)
+                                        : "Payment terms restored to master file default";
+                                    await unitOfWork.MsapAdjustmentLog.AddAsync(new MsapAdjustmentLog
+                                    {
+                                        DocumentType = "Billing",
+                                        RecordId = draftBill.MsapBillingId,
+                                        ReferenceNumber = draftBill.MsapBillingNumber,
+                                        Reason = draftReason,
+                                        ChangesJson = System.Text.Json.JsonSerializer.Serialize(activeChanges),
+                                        EditedBy = username,
+                                        EditedDate = existingDraft.EditedDate.Value
+                                    }, cancellationToken);
+                                }
+                            }
+                        }
 
                         await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
                             $"Updated Billing #{existingDraft.MsapBillingNumber} (rev {existingDraft.Revision}). COS discount: {model.CosDiscountPercent}; skipped: {model.SkipCosDiscount}{sbmaSuffix}.",
@@ -228,7 +308,7 @@ namespace IBS.Services.MSAP
                         {
                             overrideNote += $" [Terms override: default {defaultTerms}, prepared {bill.Terms}]";
                         }
-                        if (isSeriesOverride || isTermsOverride || model.PendingBasisDiffs.Count > 0)
+                        if (isSeriesOverride || isTermsOverride)
                         {
                             var changes = new List<MsapFieldChange>();
                             var reasonParts = new List<string>();
@@ -253,11 +333,6 @@ namespace IBS.Services.MSAP
                                     After = bill.Terms
                                 });
                                 reasonParts.Add($"Payment terms override (default {defaultTerms}, prepared {bill.Terms})");
-                            }
-                            if (model.PendingBasisDiffs.Count > 0)
-                            {
-                                changes.AddRange(model.PendingBasisDiffs);
-                                reasonParts.Add("Charge basis (Per hour / Per move) selected on billing preparation");
                             }
                             await unitOfWork.MsapAdjustmentLog.AddAsync(new MsapAdjustmentLog
                             {
@@ -441,6 +516,11 @@ namespace IBS.Services.MSAP
                 foreach (var ticket in tickets)
                 {
                     if (!basisLookup.TryGetValue(ticket.DispatchTicketId, out var basisInput))
+                    {
+                        continue;
+                    }
+
+                    if (MsapConstants.IsWateringService(ticket.Service?.ServiceNumber) || ticket.DispatchChargeType == "Per ton")
                     {
                         continue;
                     }
@@ -1508,12 +1588,25 @@ namespace IBS.Services.MSAP
                     {
                         throw new InvalidOperationException("This preparation has Sales Book history and cannot be discarded. Approved bills must be retained.");
                     }
-                    var tickets = await unitOfWork.DispatchTicket.GetAllAsync(t => t.BillingId == basic.MsapBillingId, cancellationToken);
+                    var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.BillingId == basic.MsapBillingId, cancellationToken)).ToList();
                     foreach (var ticket in tickets)
                     {
                         ticket.Billing = null;
                         ticket.BillingId = null;
                         ticket.Status = MsapConstants.DispatchTicketStatus.ForBilling;
+                    }
+                    if (basic.CustomerOrderSlipId.HasValue && tickets.Count > 0)
+                    {
+                        var booking = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == basic.CustomerOrderSlipId.Value, cancellationToken);
+                        var schedule = booking == null ? null : await unitOfWork.VesselSchedule.GetScheduleWithDetailsAsync(booking.VesselScheduleId, cancellationToken);
+                        if (schedule != null)
+                        {
+                            foreach (var ticket in tickets.Where(t => t.VesselScheduleServiceEntryId.HasValue && t.Status != MsapConstants.DispatchTicketStatus.Deleted))
+                            {
+                                await ScheduledTicketCharges.ApplyAsync(unitOfWork, ticket, schedule, username, cancellationToken);
+                            }
+                            SbmaShareCalculator.Apply(tickets.Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted), schedule.SbmaEnabled);
+                        }
                     }
                     foreach (var bill in pair.AsEnumerable().Reverse())
                     {
