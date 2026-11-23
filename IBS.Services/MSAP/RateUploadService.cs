@@ -805,7 +805,10 @@ namespace IBS.Services.MSAP
             string actorName = actor.Name.Trim();
             foreach (var cosGroup in candidates.GroupBy(t => t.CustomerOrderSlipId!.Value))
             {
-                VesselSchedule? schedule = await _work.VesselSchedule.GetScheduleWithDetailsAsync(cosGroup.Key, ct);
+                var booking = await _work.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == cosGroup.Key, ct);
+                var schedule = booking == null
+                    ? null
+                    : await _work.VesselSchedule.GetScheduleWithDetailsAsync(booking.VesselScheduleId, ct);
                 if (schedule == null || schedule.ApprovedRevision != schedule.Revision
                     || schedule.Status is not (MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress or MsapConstants.VesselScheduleStatus.Completed))
                 {
