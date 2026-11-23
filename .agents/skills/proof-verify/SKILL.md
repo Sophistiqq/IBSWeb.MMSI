@@ -65,16 +65,39 @@ node .agents/skills/proof-verify/scripts/proof-verify.mjs --skip-ai
 
 # 5. Interactive one-time sign-in to cache auth cookies for protected routes
 node .agents/skills/proof-verify/scripts/proof-verify.mjs --interactive-login --urls /MSAP/Billing/Index
+
+# 6. Interactive form filling & multi-step clicks via local Ollama ("Guided Hands")
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --url /MSAP/VesselSchedule/Create --inspect
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --steps-file plan.json --no-autostart
+node .agents/skills/proof-verify/scripts/guided-hands-bridge.mjs   # start once for zero-prompt Chrome extension mode
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --steps-file plan.json              # live cyan tab group
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --background --steps-file plan.json # quiet background tab
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-schedule-create     # instant cached replay (0ms for unchanged fields)
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-full-to-billing     # end-to-end Schedule -> Rates -> COS -> Tickets -> Billing
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-billing-to-cleared --var cosId=9  # Billing -> Review -> Approval -> Collection -> Deposit -> Cleared
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-full-lifecycle      # complete 9-stage Schedule -> Cleared chain
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-schedule-create --override PortId=SUBIC --var tomorrow=2026-11-26
 ```
 
 For unattended login against protected routes without `--interactive-login`, set `IBS_VERIFY_USER` and `IBS_VERIFY_PASS` in your shell environment (or pass `--user` and `--pass`).
+
+## Interactive Form Automation ("Guided Hands" — Local Ollama + CDP / Extension)
+
+When a change requires multi-step UI interactions (opening modals, clicking dynamic row buttons, triggering cascading AJAX dropdowns like `Port -> Terminal`, filling `ModernSelect` / Select2 controls with realistic mock data, and asserting the saved result), use `.agents/skills/proof-verify/scripts/guided-hands.mjs` before escalating to paid/heavy browser agents:
+
+- **Orchestrator–Executor Split:** The primary coding agent (Brain) supplies a concise step plan (`--steps`, `--steps-file`, or repeatable `--step` flags) and pins exact business requirements via `overrides` (matched by field key/label and option display text). The local worker executes clicks deterministically and calls local Ollama (`qwen2.5:1.5b` by default, schema-locked via JSON `format`, `keep_alive: "2m"`) only for realistic mock field generation or fuzzy button matching.
+- **Self-Updating Playbooks (`--playbook` / `--save-playbook`):** Playbooks saved under `.agents/skills/proof-verify/playbooks/*.json` store each step's `knownFields` fingerprint + last known-good values + dynamic URL captures (`capture_url` → `{scheduleId}`, `{cosId}`, `{billingId}`, `{collectionId}`) + template variables (`{today}`, `{tomorrow}`, `{rand}`, `--var`). Replays reuse unchanged fields in **0ms (0 Ollama calls)**, invoke Ollama **only on newly added or drifted fields**, enforce deterministic Philippine date/time guards, run `fill_and_submit` self-healing retries on validation errors, and auto-update the playbook file on PASS (disable with `--no-update-playbook`).
+- **Zero-Prompt Chrome Extension Mode (`--extension`):** Load `.agents/skills/proof-verify/extension` once via `chrome://extensions` (*Load unpacked*). `guided-hands.mjs --extension` auto-starts `guided-hands-bridge.mjs` if needed, opens/reuses a cyan **`Guided Hands`** tab group with a pulsing border + live HUD pill (recovering cleanly from dirty `beforeunload` pages), and never triggers Chrome's *"Allow remote debugging?"* prompt. Add `--background` to run quietly without stealing focus.
+- **Per-User Auth Profiles (Headless CDP):** Passing `--user <name>` (or `IBS_VERIFY_USER`) isolates cookies under `artifacts/proof-verify/.browser-profile-<user>` (verified gitignored) so test accounts like `OPERATIONS` never overwrite the default profile.
+- **Standalone Checks:** `--inspect` dumps visible buttons & editable fields as JSON (`0` LLM calls); `--benchmark` tests local Ollama latency and JSON schema accuracy without starting the app.
 
 ## Model Escalation Ladder
 
 1. **Tier 1 (0 tokens):** Stage 1 static checks + Stage 2 headless Desktop/Mobile DOM & telemetry proof.
 2. **Tier 2 (Free OpenCode models):** `opencode/glm-5.3-flash-free` (fallback: `opencode/deepseek-v4.1-flash-free`, `opencode/mimo-v2.6-flash-free`) for diff review; `opencode/nemotron-3.5-super-vl-free` for Desktop & Mobile screenshots.
-3. **Tier 3 (Lightweight subagent):** Invoke an Antigravity `flash_lite` / `flash` subagent if deeper multi-file codebase tracing is needed after a Stage 1–3 failure.
-4. **Tier 4 (Paid / Computer-use, e.g. `jev`):** Escalate only when a bug requires complex multi-step interactive browser clicks, modal flows, or drag/form state transitions that static scripts and single-load screenshots cannot prove.
+3. **Tier 2.5 (Local Ollama — 0 cloud tokens):** `.agents/skills/proof-verify/scripts/guided-hands.mjs` (`qwen2.5:1.5b` + native CDP) for multi-step form filling, realistic mock test data, modal flows, and cascading dropdown verification.
+4. **Tier 3 (Lightweight subagent):** Invoke an Antigravity `flash_lite` / `flash` subagent if deeper multi-file codebase tracing is needed after a Stage 1–3 failure.
+5. **Tier 4 (Paid / Computer-use, e.g. `jev` or Chrome DevTools MCP):** Escalate only when a bug requires open-ended visual exploration, deep CSS/network/performance profiling, or complex drag/canvas interactions that guided step plans cannot prove.
 
 ## Proof Artifacts
 
@@ -83,4 +106,5 @@ Each run writes timestamped proof files and updates the latest summary under git
 - `artifacts/proof-verify/latest-report.md` — Human-readable pass/fail report across Stages 1–3.
 - `artifacts/proof-verify/latest-report.json` — Machine-readable telemetry, DOM audit, and model verdicts.
 - `artifacts/proof-verify/latest-linear-payload.json` — Structured Linear issue/comment payload (`IBS-MSAP`) + screenshot upload metadata.
+- `artifacts/proof-verify/latest-guided-hands.json` — Latest interactive `guided-hands.mjs` step trace, Ollama latency stats, telemetry, and screenshot paths.
 - `artifacts/proof-verify/<timestamp>/*-desktop.png` & `*-mobile.png` — Visual proof screenshots.

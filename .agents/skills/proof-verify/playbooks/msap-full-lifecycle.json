@@ -1,0 +1,570 @@
+{
+  "name": "msap-full-lifecycle",
+  "description": "Complete 9-stage MSAP lifecycle: Create Schedule -> Approve Missing Rates -> Approve Schedule -> COS -> Record Docking & Watering Tickets -> Prepare Billing -> Commercial Review -> Final Approval -> Record Collection -> Deposit -> Clearing (Cleared).",
+  "url": "/MSAP/VesselSchedule/Create?date={today}",
+  "notes": [
+    "Defaults CustomerId=9 (PHILHUA SHIPPING INC) + Batangas Anchorage (#69) with active tariff/BAF rates.",
+    "Captures {scheduleId}, {cosId}, {billingId}, and {collectionId} dynamically without hardcoded record IDs."
+  ],
+  "steps": [
+    {
+      "action": "fill_form",
+      "onlyEmpty": true,
+      "overrides": {
+        "PortId": "BATANGAS",
+        "VoyageNumber": "VOY-{today}-{rand}"
+      },
+      "scenario": "Valid Philippine maritime vessel schedule booking.",
+      "knownFields": {
+        "CustomerId": {
+          "label": "Customer *",
+          "type": "select",
+          "value": "9"
+        },
+        "VesselId": {
+          "label": "Vessel *",
+          "type": "select",
+          "value": "346"
+        },
+        "PortId": {
+          "label": "Port *",
+          "type": "select",
+          "value": "BATANGAS"
+        },
+        "VoyageNumber": {
+          "label": "Voyage number *",
+          "type": "text",
+          "value": "VOY-{today}-{rand}"
+        },
+        "Notes": {
+          "label": "Planning notes",
+          "type": "textarea",
+          "value": "Full 9-stage automated lifecycle verification schedule."
+        }
+      }
+    },
+    {
+      "action": "wait",
+      "ms": 1200
+    },
+    {
+      "action": "click",
+      "target": "Add tugboat"
+    },
+    {
+      "action": "click",
+      "target": "Add service"
+    },
+    {
+      "action": "fill_form",
+      "onlyEmpty": true,
+      "overrides": [
+        {
+          "match": "Service",
+          "index": 0,
+          "value": "Docking"
+        },
+        {
+          "match": "Service",
+          "index": 1,
+          "value": "Watering"
+        }
+      ],
+      "scenario": "Pick an active Batangas terminal and an available tugboat.",
+      "knownFields": {
+        "TerminalId": {
+          "label": "Terminal *",
+          "type": "select",
+          "value": "69"
+        },
+        "SelectedTugboatIds": {
+          "label": "Select tugboat",
+          "type": "select",
+          "value": "145"
+        }
+      }
+    },
+    {
+      "action": "click",
+      "target": "Save for reviewing",
+      "waitAfterMs": 2200,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 400
+    },
+    {
+      "action": "click",
+      "target": "Continue",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Acknowledge and save",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 2200,
+      "waitForNavigation": true
+    },
+    {
+      "action": "capture_url",
+      "pattern": "/VesselSchedule/Details/(\\d+)",
+      "var": "scheduleId"
+    },
+    {
+      "action": "click",
+      "selector": "a.schedule-rate-editor-cta--attention",
+      "optional": true,
+      "waitAfterMs": 1200,
+      "waitForNavigation": true
+    },
+    {
+      "action": "fill_form",
+      "scope": "#rateEditorRows",
+      "onlyEmpty": true,
+      "optional": true,
+      "scenario": "Enter positive Philippine Peso maritime tugboat rates as plain numbers ONLY (e.g. 18500 for Basic and 2500 for BAF)."
+    },
+    {
+      "action": "click",
+      "selector": "#rateApprove",
+      "optional": true,
+      "waitAfterMs": 1000
+    },
+    {
+      "action": "click",
+      "target": "Save & approve",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/VesselSchedule/Details/{scheduleId}"
+    },
+    {
+      "action": "click",
+      "selector": "#confirmSchedule button[type='submit']",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Approve schedule",
+      "scope": ".swal2-popup",
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "Continue",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Acknowledge and approve",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "capture_url",
+      "pattern": "/COS/Details/(\\d+)",
+      "var": "cosId"
+    },
+    {
+      "action": "click",
+      "selector": "tr.ui-attention .dropdown-trigger",
+      "waitAfterMs": 350
+    },
+    {
+      "action": "click",
+      "selector": "tr.ui-attention a[href*='expectedServiceEntryId']",
+      "waitAfterMs": 1000,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "selector": "button[data-skip-photo]",
+      "optional": true,
+      "waitAfterMs": 450
+    },
+    {
+      "action": "fill_and_submit",
+      "scope": "#actualTicketEntry form",
+      "submitSelector": "button.cos-ticket-save-btn",
+      "maxRetries": 2,
+      "waitAfterMs": 1800,
+      "waitForNavigation": true,
+      "overrides": {
+        "DispatchNumber": "DT-{rand}-1",
+        "Date": "{today}",
+        "DateLeft": "{today}",
+        "TimeLeft": "08:00",
+        "DateArrived": "{today}",
+        "TimeArrived": "10:00"
+      },
+      "knownFields": {
+        "TugMasterId": {
+          "label": "Captain / tug master *",
+          "type": "select",
+          "value": "16"
+        },
+        "Remarks": {
+          "label": "Remarks",
+          "type": "textarea",
+          "value": "Docking completed cleanly."
+        }
+      },
+      "scenario": "Actual Docking dispatch ticket."
+    },
+    {
+      "action": "click",
+      "selector": "tr.ui-attention .dropdown-trigger",
+      "waitAfterMs": 350
+    },
+    {
+      "action": "click",
+      "selector": "tr.ui-attention a[href*='expectedServiceEntryId']",
+      "waitAfterMs": 1000,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "selector": "button[data-skip-photo]",
+      "optional": true,
+      "waitAfterMs": 450
+    },
+    {
+      "action": "fill_and_submit",
+      "scope": "#actualTicketEntry form",
+      "submitSelector": "button.cos-ticket-save-btn",
+      "maxRetries": 2,
+      "waitAfterMs": 1800,
+      "waitForNavigation": true,
+      "overrides": {
+        "DispatchNumber": "DT-{rand}-2",
+        "Date": "{today}",
+        "DateLeft": "{today}",
+        "TimeLeft": "10:00",
+        "DateArrived": "{today}",
+        "TimeArrived": "11:30",
+        "Tons": "15",
+        "DispatchRate": "500"
+      },
+      "knownFields": {
+        "TugMasterId": {
+          "label": "Captain / tug master *",
+          "type": "select",
+          "value": "17"
+        },
+        "Remarks": {
+          "label": "Remarks",
+          "type": "textarea",
+          "value": "Watering delivered as requested."
+        }
+      },
+      "scenario": "Actual Watering dispatch ticket."
+    },
+    {
+      "action": "wait",
+      "selector": ".job-progress-next a[href*='/Billing/Create']",
+      "timeoutMs": 10000
+    },
+    {
+      "action": "click",
+      "selector": ".job-progress-next a[href*='/Billing/Create']",
+      "waitAfterMs": 2000,
+      "waitForNavigation": true
+    },
+    {
+      "action": "assert",
+      "urlIncludes": "/MSAP/Billing/Create",
+      "text": "Prepare billing"
+    },
+    {
+      "action": "wait",
+      "selector": "#saveBilling:not([disabled])",
+      "timeoutMs": 12000
+    },
+    {
+      "action": "fill_form",
+      "scope": "section[aria-labelledby='remarksHeading']",
+      "onlyEmpty": true,
+      "optional": true,
+      "overrides": {
+        "Remarks": "Automated billing verification for COS #{cosId}."
+      },
+      "knownFields": {
+        "Remarks": {
+          "label": "Remarks",
+          "type": "textarea",
+          "value": "Automated billing verification for COS #{cosId}."
+        }
+      },
+      "scenario": "Concise encoder note for billing review."
+    },
+    {
+      "action": "click",
+      "selector": "#saveBilling",
+      "waitAfterMs": 1000
+    },
+    {
+      "action": "click",
+      "target": "Save billing",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2500
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 8000,
+      "waitAfterMs": 2000,
+      "waitForNavigation": true
+    },
+    {
+      "action": "capture_url",
+      "pattern": "/Billing/Review/(\\d+)",
+      "var": "billingId"
+    },
+    {
+      "action": "wait",
+      "selector": "#endorseReviewedBilling button[type='submit']",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "selector": "#endorseReviewedBilling button[type='submit']",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Endorse for approval",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "wait",
+      "selector": "#postReviewedBilling button[type='submit']",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "selector": "#postReviewedBilling button[type='submit']",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Approve final bill",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "wait",
+      "selector": ".job-progress-next a[href*='/Collection/Create']",
+      "timeoutMs": 10000
+    },
+    {
+      "action": "click",
+      "selector": ".job-progress-next a[href*='/Collection/Create']",
+      "waitAfterMs": 2000,
+      "waitForNavigation": true
+    },
+    {
+      "action": "wait",
+      "selector": "#collectionBillings input[type='checkbox']:not([disabled])",
+      "timeoutMs": 10000
+    },
+    {
+      "action": "click",
+      "selector": "#collectionBillings input[type='checkbox']:not(:checked):not([disabled])",
+      "waitAfterMs": 600
+    },
+    {
+      "action": "fill_form",
+      "scope": "section[aria-labelledby='collectionDetailsHeading']",
+      "onlyEmpty": true,
+      "overrides": {
+        "IsUndocumented": false,
+        "MsapCollectionNumber": "CR-{rand}",
+        "ReferenceNo": "REF-{rand}"
+      },
+      "knownFields": {
+        "IsUndocumented": {
+          "label": "Undocumented",
+          "type": "checkbox",
+          "value": false
+        },
+        "MsapCollectionNumber": {
+          "label": "Collection / receipt number *",
+          "type": "text",
+          "value": "CR-{rand}"
+        },
+        "ReferenceNo": {
+          "label": "Reference number",
+          "type": "text",
+          "value": "REF-{rand}"
+        }
+      },
+      "scenario": "Documented collection receipt details."
+    },
+    {
+      "action": "fill_form",
+      "scope": "#checkDetailsSection",
+      "onlyEmpty": true,
+      "overrides": {
+        "CheckNumber": "CHK-{rand}",
+        "CheckDate": "{today}"
+      },
+      "knownFields": {
+        "CheckNumber": {
+          "label": "Check number *",
+          "type": "text",
+          "value": "CHK-{rand}"
+        },
+        "CheckDate": {
+          "label": "Check date *",
+          "type": "date",
+          "value": "{today}"
+        }
+      },
+      "scenario": "Valid check payment reference."
+    },
+    {
+      "action": "wait",
+      "selector": "#saveCollection:not([disabled])",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "selector": "#saveCollection",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Save collection",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "capture_url",
+      "pattern": "/Collection/Preview/(\\d+)",
+      "var": "collectionId"
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "wait",
+      "selector": "a[data-collection-banking='Record deposit']",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "selector": "a[data-collection-banking='Record deposit']",
+      "waitAfterMs": 1000
+    },
+    {
+      "action": "wait",
+      "selector": "#collectionBankingForm",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "fill_form",
+      "scope": "#collectionBankingForm",
+      "onlyEmpty": true,
+      "optional": true,
+      "scenario": "Pick an active MMSI receiving bank account."
+    },
+    {
+      "action": "click",
+      "target": "Save",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 2000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "wait",
+      "selector": "a[data-collection-banking='Record clearing']",
+      "timeoutMs": 10000
+    },
+    {
+      "action": "click",
+      "selector": "a[data-collection-banking='Record clearing']",
+      "waitAfterMs": 1000
+    },
+    {
+      "action": "wait",
+      "selector": "#collectionBankingForm",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "target": "Save",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 2000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "assert",
+      "urlIncludes": "/MSAP/Collection/Preview",
+      "text": "Cleared"
+    }
+  ]
+}

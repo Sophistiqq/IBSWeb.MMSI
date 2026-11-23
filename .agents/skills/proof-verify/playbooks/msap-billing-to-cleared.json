@@ -1,0 +1,288 @@
+{
+  "name": "msap-billing-to-cleared",
+  "description": "End-to-end MSAP financial workflow: Prepare Billing for {cosId} -> Commercial Review -> Final Approval -> Record Collection -> Deposit -> Clearing (Cleared).",
+  "url": "/MSAP/Billing/Create?customerOrderSlipId={cosId}",
+  "notes": [
+    "Pass --var cosId=<id> for a COS that is Ready for billing.",
+    "Captures {billingId} and {collectionId} dynamically from redirect URLs.",
+    "Uses scoped fill_form steps on Billing Remarks, Collection details, Check details, and Deposit bank to avoid mutating filter/checkbox options."
+  ],
+  "lastPassedAt": "2026-11-23T07:19:52.428Z",
+  "steps": [
+    {
+      "action": "wait",
+      "selector": "#saveBilling:not([disabled])",
+      "timeoutMs": 12000
+    },
+    {
+      "action": "fill_form",
+      "scope": "section[aria-labelledby='remarksHeading']",
+      "onlyEmpty": true,
+      "optional": true,
+      "overrides": {
+        "Remarks": "Automated billing verification for COS #{cosId}."
+      },
+      "knownFields": {
+        "Remarks": {
+          "label": "e.g. Rate approved via email; 30D terms granted per customer request...",
+          "type": "textarea",
+          "value": "Automated billing verification for COS #{cosId}."
+        }
+      },
+      "scenario": "Concise encoder note for billing review."
+    },
+    {
+      "action": "click",
+      "selector": "#saveBilling",
+      "waitAfterMs": 1000
+    },
+    {
+      "action": "click",
+      "target": "Save billing",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2500
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 8000,
+      "waitAfterMs": 2000,
+      "waitForNavigation": true
+    },
+    {
+      "action": "capture_url",
+      "pattern": "/Billing/Review/(\\d+)",
+      "var": "billingId"
+    },
+    {
+      "action": "wait",
+      "selector": "#endorseReviewedBilling button[type='submit']",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "selector": "#endorseReviewedBilling button[type='submit']",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Endorse for approval",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "wait",
+      "selector": "#postReviewedBilling button[type='submit']",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "selector": "#postReviewedBilling button[type='submit']",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Approve final bill",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "wait",
+      "selector": ".job-progress-next a[href*='/Collection/Create']",
+      "timeoutMs": 10000
+    },
+    {
+      "action": "click",
+      "selector": ".job-progress-next a[href*='/Collection/Create']",
+      "waitAfterMs": 2000,
+      "waitForNavigation": true
+    },
+    {
+      "action": "wait",
+      "selector": "#collectionBillings input[type='checkbox']:not([disabled])",
+      "timeoutMs": 10000
+    },
+    {
+      "action": "click",
+      "selector": "#collectionBillings input[type='checkbox']:not(:checked):not([disabled])",
+      "waitAfterMs": 600
+    },
+    {
+      "action": "fill_form",
+      "scope": "section[aria-labelledby='collectionDetailsHeading']",
+      "onlyEmpty": true,
+      "overrides": {
+        "IsUndocumented": false,
+        "MsapCollectionNumber": "CR-{rand}",
+        "ReferenceNo": "REF-{rand}"
+      },
+      "knownFields": {
+        "IsUndocumented": {
+          "label": "Undocumented",
+          "type": "checkbox",
+          "value": false
+        },
+        "MsapCollectionNumber": {
+          "label": "Collection / receipt number *",
+          "type": "text",
+          "value": "CR-{rand}"
+        },
+        "ReferenceNo": {
+          "label": "Reference number",
+          "type": "text",
+          "value": "REF-{rand}"
+        }
+      },
+      "scenario": "Documented collection receipt details."
+    },
+    {
+      "action": "fill_form",
+      "scope": "#checkDetailsSection",
+      "onlyEmpty": true,
+      "overrides": {
+        "CheckNumber": "CHK-{rand}",
+        "CheckDate": "{today}"
+      },
+      "knownFields": {
+        "CheckNumber": {
+          "label": "Check number *",
+          "type": "text",
+          "value": "CHK-{rand}"
+        },
+        "CheckDate": {
+          "label": "Check date *",
+          "type": "date",
+          "value": "{today}"
+        }
+      },
+      "scenario": "Valid check payment reference."
+    },
+    {
+      "action": "wait",
+      "selector": "#saveCollection:not([disabled])",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "selector": "#saveCollection",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Save collection",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "capture_url",
+      "pattern": "/Collection/Preview/(\\d+)",
+      "var": "collectionId"
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "wait",
+      "selector": "a[data-collection-banking='Record deposit']",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "selector": "a[data-collection-banking='Record deposit']",
+      "waitAfterMs": 1000
+    },
+    {
+      "action": "wait",
+      "selector": "#collectionBankingForm",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "fill_form",
+      "scope": "#collectionBankingForm",
+      "onlyEmpty": true,
+      "optional": true,
+      "scenario": "Pick an active MMSI receiving bank account."
+    },
+    {
+      "action": "click",
+      "target": "Save",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 2000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "wait",
+      "selector": "a[data-collection-banking='Record clearing']",
+      "timeoutMs": 10000
+    },
+    {
+      "action": "click",
+      "selector": "a[data-collection-banking='Record clearing']",
+      "waitAfterMs": 1000
+    },
+    {
+      "action": "wait",
+      "selector": "#collectionBankingForm",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "target": "Save",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 2000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "assert",
+      "urlIncludes": "/MSAP/Collection/Preview",
+      "text": "Cleared"
+    }
+  ]
+}

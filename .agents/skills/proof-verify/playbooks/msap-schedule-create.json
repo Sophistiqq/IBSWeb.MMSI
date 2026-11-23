@@ -1,0 +1,127 @@
+{
+  "name": "msap-schedule-create",
+  "description": "Create an MSAP vessel schedule with 1 tugboat and 2 services (Docking + Watering) and verify it saves for review.",
+  "url": "/MSAP/VesselSchedule/Create?date={tomorrow}",
+  "notes": [
+    "PortId triggers AJAX GetTerminalsByPort; wait 1200ms before filling TerminalId.",
+    "PlannedStart and PlannedEnd default to a valid 2-hour window when ?date= is supplied; use onlyEmpty: true.",
+    "Override any field at replay time via --override Key=Value (e.g. --override PortId=SUBIC) or --var tomorrow=2026-11-26."
+  ],
+  "lastPassedAt": "2026-11-23T06:46:08.773Z",
+  "steps": [
+    {
+      "action": "fill_form",
+      "onlyEmpty": true,
+      "overrides": {
+        "PortId": "BATANGAS",
+        "VoyageNumber": "VOY-{tomorrow}-{rand}"
+      },
+      "scenario": "Valid Philippine maritime vessel schedule booking.",
+      "knownFields": {
+        "CustomerId": {
+          "label": "Customer *",
+          "type": "select",
+          "value": "10"
+        },
+        "VesselId": {
+          "label": "Vessel *",
+          "type": "select",
+          "value": "346"
+        },
+        "PortId": {
+          "label": "Port *",
+          "type": "select",
+          "value": "BATANGAS"
+        },
+        "VoyageNumber": {
+          "label": "Voyage number *",
+          "type": "text",
+          "value": "VOY-{tomorrow}-{rand}"
+        },
+        "Notes": {
+          "label": "Add coordination notes or service instructions...",
+          "type": "textarea",
+          "value": "Automated schedule verification run."
+        }
+      }
+    },
+    {
+      "action": "wait",
+      "ms": 1200
+    },
+    {
+      "action": "click",
+      "target": "Add tugboat"
+    },
+    {
+      "action": "click",
+      "target": "Add service"
+    },
+    {
+      "action": "fill_form",
+      "onlyEmpty": true,
+      "overrides": [
+        {
+          "match": "Service",
+          "index": 0,
+          "value": "Docking"
+        },
+        {
+          "match": "Service",
+          "index": 1,
+          "value": "Watering"
+        }
+      ],
+      "scenario": "Pick an active Batangas terminal and an available tugboat.",
+      "knownFields": {
+        "TerminalId": {
+          "label": "Terminal *",
+          "type": "select",
+          "value": "69"
+        },
+        "SelectedTugboatIds": {
+          "label": "Select tugboat",
+          "type": "select",
+          "value": "145"
+        }
+      }
+    },
+    {
+      "action": "click",
+      "target": "Save for reviewing",
+      "waitAfterMs": 2200,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "OK",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 400
+    },
+    {
+      "action": "click",
+      "target": "Continue",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Acknowledge and save",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 2200,
+      "waitForNavigation": true
+    },
+    {
+      "action": "assert",
+      "urlIncludes": "/MSAP/VesselSchedule/Details",
+      "text": "Docking"
+    },
+    {
+      "action": "assert",
+      "text": "Watering"
+    }
+  ]
+}
