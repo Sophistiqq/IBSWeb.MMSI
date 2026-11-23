@@ -265,7 +265,7 @@
                 data-cos-id="@savedTicket!.CustomerOrderSlipId"
                 data-cos-url="@Url.Action("Details", "CustomerOrderSlip", new { area = "MSAP", id = savedTicket!.CustomerOrderSlipId })"
                 data-dispatch-number="@savedTicket!.DispatchNumber"
-                data-finalized="@(savedTicket!.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")"
+                data-finalized="@(savedTicket!.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted ? "true" : "false")"
                 data-url="@Url.Action("VoidTicket", "DispatchTicket")">
                 <span class="material-symbols-outlined" aria-hidden="true">cancel</span> Void ticket
             </button>

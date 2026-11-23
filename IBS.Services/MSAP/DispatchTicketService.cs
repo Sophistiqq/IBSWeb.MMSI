@@ -855,9 +855,22 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Ticket not found.", ServiceResultStatus.NotFound);
                 }
 
-                if (model.PeriodStatus == MsapPeriodStatus.Final && authorizationFile is not { Length: > 0 })
+                if (model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
                 {
-                    return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to void a finalized-period dispatch ticket.", ServiceResultStatus.ValidationError);
+                    if (authorizationFile is not { Length: > 0 })
+                    {
+                        return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to void a finalized-period dispatch ticket.", ServiceResultStatus.ValidationError);
+                    }
+                }
+                else
+                {
+                    var guard = await GuardClosedPeriodAsync(model.Date, cancellationToken)
+                        ?? (model.DateLeft.HasValue ? await GuardClosedPeriodAsync(model.DateLeft.Value, cancellationToken) : null)
+                        ?? (model.DateArrived.HasValue ? await GuardClosedPeriodAsync(model.DateArrived.Value, cancellationToken) : null);
+                    if (guard != null)
+                    {
+                        return guard;
+                    }
                 }
 
                 string? uploadedAttachment = null;
@@ -932,7 +945,7 @@ namespace IBS.Services.MSAP
 
                 if (draftBillingId.HasValue)
                 {
-                    await SyncDraftBillingAmountsAsync(draftBillingId.Value, cancellationToken);
+                    await SyncDraftBillingAmountsAsync(draftBillingId.Value, cancellationToken, username, model.DispatchTicketId);
                 }
 
                 if (model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
@@ -1174,7 +1187,7 @@ namespace IBS.Services.MSAP
             }
         }
 
-        private async Task SyncDraftBillingAmountsAsync(int billingId, CancellationToken ct)
+        private async Task SyncDraftBillingAmountsAsync(int billingId, CancellationToken ct, string? username = null, int? excludingTicketId = null)
         {
             var selected = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == billingId, ct);
             if (selected == null)
@@ -1187,7 +1200,13 @@ namespace IBS.Services.MSAP
                 return;
             }
             var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(
-                t => t.BillingId == basic.MsapBillingId && t.Status != MsapConstants.DispatchTicketStatus.Deleted, ct)).ToList();
+                t => t.BillingId == basic.MsapBillingId
+                    && t.Status != MsapConstants.DispatchTicketStatus.Deleted
+                    && (!excludingTicketId.HasValue || t.DispatchTicketId != excludingTicketId.Value), ct)).ToList();
+            if (tickets.Count == 0 && await TryDiscardEmptyDraftPairAsync(basic, username ?? "System", ct))
+            {
+                return;
+            }
             basic.DispatchAmount = tickets.Sum(t => t.DispatchNetRevenue);
             var baf = tickets.Sum(t => t.BAFNetRevenue);
             basic.BAFAmount = basic.BafBilling != null ? 0m : baf;
@@ -1197,6 +1216,44 @@ namespace IBS.Services.MSAP
                 bafBill.BAFAmount = baf;
                 bafBill.Amount = bafBill.Balance = baf;
             }
+        }
+
+        private async Task<bool> TryDiscardEmptyDraftPairAsync(Billing basic, string username, CancellationToken ct)
+        {
+            var pair = new List<Billing> { basic };
+            if (basic.BafBilling != null)
+            {
+                pair.Add(basic.BafBilling);
+            }
+
+            var canDiscardAll = pair.All(b =>
+                b.Status == MsapConstants.BillingStatus.ForPosting
+                && b.AmountPaid == 0m
+                && !b.IsPaid
+                && !b.CollectionId.HasValue
+                && !b.ApprovedRevision.HasValue
+                && !b.ApprovedAt.HasValue
+                && string.IsNullOrEmpty(b.ApprovedByUserId)
+                && !b.UnpostedDate.HasValue
+                && string.IsNullOrEmpty(b.UnpostedBy)
+                && b.PeriodStatus is null);
+            if (!canDiscardAll)
+            {
+                return false;
+            }
+
+            var salesBookIds = await unitOfWork.Billing.GetBillingIdsWithSalesBookAsync(pair.Select(b => b.MsapBillingId).ToList(), ct);
+            if (salesBookIds.Count > 0)
+            {
+                return false;
+            }
+
+            foreach (var bill in pair.AsEnumerable().Reverse())
+            {
+                await unitOfWork.Billing.RemoveAsync(bill, ct);
+                await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Discarded empty draft billing #{bill.MsapBillingNumber} after all linked tickets were voided.", "Billing", bill.MsapBillingId, bill.MsapBillingNumber), ct);
+            }
+            return true;
         }
 
         private async Task DeleteFilesAsync(IEnumerable<string?> names)
