@@ -327,6 +327,15 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 return RedirectToAction(nameof(Review), new { id });
             }
 
+            var isReopenedOrFinalized = billing.UnpostedDate.HasValue
+                || billing.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+            if (!isReopenedOrFinalized
+                && (await unitOfWork.PostedPeriod.GetByYearMonthAsync(billing.Date.Year, billing.Date.Month, cancellationToken))?.IsClosed == true)
+            {
+                TempData["error"] = $"Cannot modify: {billing.Date:MMMM yyyy} is closed.";
+                return RedirectToAction(nameof(Review), new { id });
+            }
+
             billing = await billingService.PopulateTicketListsAsync(billing, cancellationToken);
             static bool IsSubconTicket(DispatchTicket t)
             {

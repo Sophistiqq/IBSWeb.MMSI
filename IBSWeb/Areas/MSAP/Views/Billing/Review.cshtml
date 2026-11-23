@@ -9,13 +9,15 @@
     string component = bafOnly ? "BAF" : basicOnly ? "Basic" : "Basic and BAF";
     var blocker = ViewData["PostingBlocker"] as string;
     bool canPrint = BillingService.CanPrint(Model);
-    bool isReopenedOrFinalized = Model.UnpostedDate.HasValue || Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
-    bool canReview = ViewData["CanReviewBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && (ViewData["IsPeriodClosed"] is not true || isReopenedOrFinalized);
-    bool canPost = ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.Reviewed && blocker == null && (ViewData["IsPeriodClosed"] is not true || isReopenedOrFinalized);
-    bool canReject = (ViewData["CanReviewBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting)
-        || (ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.Reviewed);
-    bool canAdjust = ViewData["CanCreateBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && (Model.RejectedAt.HasValue || Model.UnpostedDate.HasValue);
-    bool canEditDraft = ViewData["CanCreateBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && Model.CustomerOrderSlipId.HasValue && (ViewData["IsPeriodClosed"] is not true || isReopenedOrFinalized);
+    var isReopenedOrFinalized = Model.UnpostedDate.HasValue || Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+    var isOpenOrReopened = ViewData["IsPeriodClosed"] is not true || isReopenedOrFinalized;
+    var canReview = ViewData["CanReviewBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && isOpenOrReopened;
+    var canPost = ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.Reviewed && blocker == null && isOpenOrReopened;
+    var canReject = isOpenOrReopened
+        && ((ViewData["CanReviewBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting)
+            || (ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.Reviewed));
+    var canAdjust = ViewData["CanCreateBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && (Model.RejectedAt.HasValue || Model.UnpostedDate.HasValue) && isOpenOrReopened;
+    var canEditDraft = ViewData["CanCreateBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && Model.CustomerOrderSlipId.HasValue && isOpenOrReopened;
     bool canReverse = ViewData["CanReverseBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForCollection && Model.AmountPaid == 0;
     bool canDiscard = ViewData["CanDiscardBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && ViewData["IsPeriodClosed"] is not true;
     var statusLabel = Model.Status == MsapConstants.BillingStatus.ForPosting

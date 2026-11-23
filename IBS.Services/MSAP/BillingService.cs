@@ -763,10 +763,27 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Billing not found.", ServiceResultStatus.NotFound);
                 }
 
+                if (!IsReopenedOrFinalized(billing))
+                {
+                    var guard = await GuardClosedPeriodAsync(billing.Date, cancellationToken);
+                    if (guard != null)
+                    {
+                        return guard;
+                    }
+                }
+
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
                     _ = await unitOfWork.Billing.GetForUpdateAsync(billing.MsapBillingId, cancellationToken)
                         ?? throw new InvalidOperationException("This billing preparation no longer exists.");
+
+                    var lockedGuard = IsReopenedOrFinalized(billing)
+                        ? null
+                        : await GuardClosedPeriodAsync(billing.Date, cancellationToken);
+                    if (lockedGuard != null)
+                    {
+                        throw new InvalidOperationException(lockedGuard.Message);
+                    }
 
                     if (string.IsNullOrEmpty(reviewerUserId) || !await accessControl.HasAccessAsync(reviewerUserId, ProcedureEnum.ReviewBilling))
                     {
@@ -825,6 +842,15 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Billing not found.", ServiceResultStatus.NotFound);
                 }
 
+                if (!IsReopenedOrFinalized(billing))
+                {
+                    var guard = await GuardClosedPeriodAsync(billing.Date, cancellationToken);
+                    if (guard != null)
+                    {
+                        return guard;
+                    }
+                }
+
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
                     var related = billing.BasicBilling ?? billing.BafBilling;
@@ -832,6 +858,14 @@ namespace IBS.Services.MSAP
                     {
                         _ = await unitOfWork.Billing.GetForUpdateAsync(billingId, cancellationToken)
                             ?? throw new InvalidOperationException("This billing preparation no longer exists.");
+                    }
+
+                    var lockedGuard = IsReopenedOrFinalized(billing)
+                        ? null
+                        : await GuardClosedPeriodAsync(billing.Date, cancellationToken);
+                    if (lockedGuard != null)
+                    {
+                        throw new InvalidOperationException(lockedGuard.Message);
                     }
 
                     bool canReview = !string.IsNullOrEmpty(actorUserId) && await accessControl.HasAccessAsync(actorUserId, ProcedureEnum.ReviewBilling);
@@ -925,6 +959,14 @@ namespace IBS.Services.MSAP
                 {
                     return ServiceResult.Failure("Adjust Billing is only unlocked after a Reviewer/Approver rejection or Finance Head reopening.", ServiceResultStatus.ValidationError);
                 }
+                if (!IsReopenedOrFinalized(billing))
+                {
+                    var guard = await GuardClosedPeriodAsync(billing.Date, cancellationToken);
+                    if (guard != null)
+                    {
+                        return guard;
+                    }
+                }
                 if (model.CosDiscountPercent is < 0 or > 100)
                 {
                     return ServiceResult.Failure("Discount must be between 0% and 100%.", ServiceResultStatus.ValidationError);
@@ -949,6 +991,14 @@ namespace IBS.Services.MSAP
                     var bafBill = primaryBill.BafBilling != null
                         ? await unitOfWork.Billing.GetForUpdateAsync(primaryBill.BafBilling.MsapBillingId, cancellationToken)
                         : null;
+
+                    var lockedGuard = IsReopenedOrFinalized(primaryBill)
+                        ? null
+                        : await GuardClosedPeriodAsync(primaryBill.Date, cancellationToken);
+                    if (lockedGuard != null)
+                    {
+                        throw new InvalidOperationException(lockedGuard.Message);
+                    }
 
                     var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.BillingId == sourceId, cancellationToken)).ToList();
                     var schedule = primaryBill.CustomerOrderSlipId.HasValue
@@ -1826,6 +1876,12 @@ namespace IBS.Services.MSAP
                 && !bill.CollectionId.HasValue && !bill.ApprovedRevision.HasValue
                 && !bill.ApprovedAt.HasValue && string.IsNullOrEmpty(bill.ApprovedByUserId)
                 && !bill.UnpostedDate.HasValue && string.IsNullOrEmpty(bill.UnpostedBy);
+        }
+
+        private static bool IsReopenedOrFinalized(Billing billing)
+        {
+            return billing.UnpostedDate.HasValue
+                || billing.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
         }
 
         private async Task<ServiceResult?> GuardClosedPeriodAsync(DateOnly date, CancellationToken ct)
