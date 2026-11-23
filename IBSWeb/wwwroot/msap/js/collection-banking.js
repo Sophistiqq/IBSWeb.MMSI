@@ -27,8 +27,18 @@
                 preConfirm: () => {
                     const form = Swal.getPopup().querySelector('#collectionBankingForm');
                     if (!form || !form.reportValidity()) return false;
+                    const reasonInput = form.querySelector('#bankingReason');
+                    if (reasonInput && (reasonInput.value.trim().length < 5 || reasonInput.value.trim().length > 500)) {
+                        Swal.showValidationMessage('Please provide a valid reason (5 to 500 characters).');
+                        return false;
+                    }
+                    const fileInput = form.querySelector('#bankingAuthFile');
+                    if (fileInput && (!fileInput.files || fileInput.files.length === 0)) {
+                        Swal.showValidationMessage('Upload an approved authorization document (PDF, PNG, or JPEG).');
+                        return false;
+                    }
                     postUrl = form.action;
-                    return new URLSearchParams(new FormData(form));
+                    return new FormData(form);
                 }
             });
             if (!review.isConfirmed) return;

@@ -39,20 +39,44 @@ namespace IBS.Services.MSAP
         }
 
         public async Task<ServiceResult> UpdateBankingAsync(int id, CollectionBankingAction action, DateOnly date,
-            int? bankId, string username, CancellationToken ct)
+            int? bankId, string username, CancellationToken ct, string? reason = null, IFormFile? authorizationFile = null)
         {
             try
             {
+                if (authorizationFile is { Length: > 0 })
+                {
+                    if (!await OtherTugChargeService.IsSupportedDocumentAsync(authorizationFile, ct))
+                    {
+                        return ServiceResult.Failure("Upload a valid PDF, PNG, or JPEG authorization document of up to 10 MB.");
+                    }
+                    if (cloudStorageService == null)
+                    {
+                        return ServiceResult.Failure("Storage service is not configured for authorization documents.");
+                    }
+                }
+
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
                     var collection = await unitOfWork.Collection.GetForUpdateAsync(id, ct)
                         ?? throw new InvalidOperationException("Collection not found.");
-                    if (collection.PeriodStatus is not (MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted))
+                    var isAdjustedAction = collection.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+                    if (!isAdjustedAction)
                     {
                         var guard = await GuardClosedPeriodAsync(collection.Date, ct) ?? await GuardClosedPeriodAsync(date, ct);
                         if (guard != null)
                         {
                             throw new InvalidOperationException(guard.Message);
+                        }
+                    }
+                    else
+                    {
+                        if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length is < 5 or > 500)
+                        {
+                            throw new InvalidOperationException("Please provide a valid reason for updating a finalized-period collection (5 to 500 characters).");
+                        }
+                        if (authorizationFile is not { Length: > 0 })
+                        {
+                            throw new InvalidOperationException("An approved authorization document (PDF, PNG, or JPEG) is required to update banking on a finalized-period collection.");
                         }
                     }
                     if (date == default)
@@ -65,7 +89,6 @@ namespace IBS.Services.MSAP
                     }
 
                     string description;
-                    var isAdjustedAction = collection.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
                     var changes = new List<MsapFieldChange>();
                     switch (action)
                     {
@@ -136,6 +159,13 @@ namespace IBS.Services.MSAP
 
                     if (isAdjustedAction)
                     {
+                        string? uploadedAttachment = null;
+                        if (authorizationFile is { Length: > 0 })
+                        {
+                            var extension = Path.GetExtension(authorizationFile.FileName).ToLowerInvariant();
+                            uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
+                            await cloudStorageService!.UploadFileAsync(authorizationFile, uploadedAttachment);
+                        }
                         if (collection.PeriodStatus == MsapPeriodStatus.Final)
                         {
                             collection.PeriodStatus = MsapPeriodStatus.Adjusted;
@@ -148,7 +178,8 @@ namespace IBS.Services.MSAP
                                 DocumentType = "Collection",
                                 RecordId = collection.MsapCollectionId,
                                 ReferenceNumber = collection.MsapCollectionNumber,
-                                Reason = $"{description} recorded on collection #{collection.MsapCollectionNumber}",
+                                Reason = reason!.Trim(),
+                                AttachmentUrl = uploadedAttachment,
                                 ChangesJson = System.Text.Json.JsonSerializer.Serialize(changes),
                                 EditedBy = username,
                                 EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
@@ -185,7 +216,7 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Collection not found.");
                 }
 
-                if (existing.PeriodStatus == MsapPeriodStatus.Final && authorizationFile is not { Length: > 0 })
+                if (existing.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted && authorizationFile is not { Length: > 0 })
                 {
                     return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to revert a finalized-period collection.");
                 }
@@ -201,7 +232,7 @@ namespace IBS.Services.MSAP
                     {
                         return ServiceResult.Failure("Storage service is not configured for authorization documents.");
                     }
-                    string extension = Path.GetExtension(authorizationFile.FileName).ToLowerInvariant();
+                    var extension = Path.GetExtension(authorizationFile.FileName).ToLowerInvariant();
                     uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
                     await cloudStorageService.UploadFileAsync(authorizationFile, uploadedAttachment);
                 }
@@ -211,7 +242,14 @@ namespace IBS.Services.MSAP
                     var collection = await unitOfWork.Collection.GetForUpdateAsync(id, ct)
                         ?? throw new InvalidOperationException("Collection not found.");
 
-                    if (collection.PeriodStatus is not (MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted))
+                    if (collection.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
+                    {
+                        if (string.IsNullOrWhiteSpace(uploadedAttachment))
+                        {
+                            throw new InvalidOperationException("An approved authorization document (PDF, PNG, or JPEG) is required to revert a finalized-period collection.");
+                        }
+                    }
+                    else
                     {
                         var guard = await GuardClosedPeriodAsync(collection.Date, ct);
                         if (guard != null)

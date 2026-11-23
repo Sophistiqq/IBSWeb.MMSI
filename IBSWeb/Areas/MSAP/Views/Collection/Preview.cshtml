@@ -156,7 +156,7 @@
                                     data-id="@Model.MsapCollectionId"
                                     data-step="@(Model.ClearedDate.HasValue ? "Cleared" : "Deposited")"
                                     data-cleared="@(Model.ClearedDate.HasValue ? "true" : "false")"
-                                    data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
+                                    data-finalized="@(isFinalOrAdjusted ? "true" : "false")">
                                     <span class="material-symbols-outlined" aria-hidden="true">undo</span> Revert banking step
                                 </button>
                             }

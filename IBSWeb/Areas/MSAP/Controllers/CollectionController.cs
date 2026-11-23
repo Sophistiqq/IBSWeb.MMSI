@@ -222,10 +222,10 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.AccessTreasury, "Access denied. You don't have permission to record banking updates.")]
-        public async Task<IActionResult> Banking(int id, CollectionBankingAction bankingAction, DateOnly date, int? bankId, CancellationToken ct)
+        public async Task<IActionResult> Banking(int id, CollectionBankingAction bankingAction, DateOnly date, int? bankId, string? reason, IFormFile? authorizationFile, CancellationToken ct)
         {
             var result = ModelState.IsValid
-                ? await collectionService.UpdateBankingAsync(id, bankingAction, date, bankId, User.Identity?.Name ?? "System", ct)
+                ? await collectionService.UpdateBankingAsync(id, bankingAction, date, bankId, User.Identity?.Name ?? "System", ct, reason, authorizationFile)
                 : ServiceResult.Failure("Enter a valid transaction date and bank account.");
             if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
             {
