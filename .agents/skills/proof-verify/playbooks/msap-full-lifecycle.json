@@ -3,6 +3,10 @@
   "description": "Complete 9-stage MSAP lifecycle: Create Schedule -> Approve Missing Rates -> Approve Schedule -> COS -> Record Docking & Watering Tickets -> Prepare Billing -> Commercial Review -> Final Approval -> Record Collection -> Deposit -> Clearing (Cleared).",
   "url": "/MSAP/VesselSchedule/Create?date={today}",
   "vars": {
+    "opsAccount": "OPERATIONS",
+    "approverAccount": "rml1",
+    "encoderAccount": "ENCODER",
+    "financeAccount": "FINANCE",
     "customer": "9",
     "vessel": "346",
     "port": "BATANGAS",
@@ -16,11 +20,20 @@
     "wateringRate": "500"
   },
   "notes": [
-    "All booking, tugboat, service, captain, and rate defaults live in vars and can be overridden via --var key=value.",
+    "Multi-account separation of duties: OPERATIONS -> rml1 -> OPERATIONS -> ENCODER -> rml1 -> FINANCE.",
+    "All role accounts, booking, tugboat, service, captain, and rate defaults live in vars and can be overridden via --var key=value.",
     "Captures {scheduleId}, {cosId}, {billingId}, and {collectionId} dynamically without hardcoded record IDs."
   ],
-  "lastPassedAt": "2026-11-24T02:12:34.208Z",
+  "lastPassedAt": "2026-11-24T02:30:51.787Z",
   "steps": [
+    {
+      "action": "login",
+      "account": "{opsAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/VesselSchedule/Create?date={today}"
+    },
     {
       "action": "fill_form",
       "onlyEmpty": true,
@@ -134,6 +147,10 @@
       "var": "scheduleId"
     },
     {
+      "action": "login",
+      "account": "{approverAccount}"
+    },
+    {
       "action": "navigate",
       "url": "/MSAP/RateUpload/Editor?mode=combined&asOfDate={weekStart}&scheduleId={scheduleId}"
     },
@@ -217,6 +234,14 @@
       "var": "cosId"
     },
     {
+      "action": "login",
+      "account": "{opsAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/COS/Details/{cosId}"
+    },
+    {
       "action": "click",
       "selector": "tr.ui-attention .dropdown-trigger",
       "waitAfterMs": 350
@@ -232,6 +257,14 @@
       "selector": "button[data-skip-photo]",
       "optional": true,
       "waitAfterMs": 450
+    },
+    {
+      "action": "upload",
+      "selector": "#cosTicketImage",
+      "fixture": "png",
+      "scope": "#actualTicketEntry form",
+      "optional": true,
+      "waitAfterMs": 300
     },
     {
       "action": "fill_and_submit",
@@ -310,6 +343,14 @@
       "waitAfterMs": 450
     },
     {
+      "action": "upload",
+      "selector": "#cosTicketImage",
+      "fixture": "png",
+      "scope": "#actualTicketEntry form",
+      "optional": true,
+      "waitAfterMs": 300
+    },
+    {
       "action": "fill_and_submit",
       "scope": "#actualTicketEntry form",
       "submitSelector": "button.cos-ticket-save-btn",
@@ -355,7 +396,7 @@
         "TimeLeft": {
           "label": "Actual start time",
           "type": "time",
-          "value": "07:43"
+          "value": "08:01"
         },
         "DateArrived": {
           "label": "Actual end * · Philippine time",
@@ -365,7 +406,7 @@
         "TimeArrived": {
           "label": "Actual end time",
           "type": "time",
-          "value": "09:13"
+          "value": "09:31"
         },
         "Tons": {
           "label": "Tons *",
@@ -379,6 +420,14 @@
         }
       },
       "scenario": "Actual Watering dispatch ticket."
+    },
+    {
+      "action": "login",
+      "account": "{encoderAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/COS/Details/{cosId}"
     },
     {
       "action": "wait",
@@ -444,6 +493,14 @@
       "var": "billingId"
     },
     {
+      "action": "login",
+      "account": "{approverAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/Billing/Review/{billingId}"
+    },
+    {
       "action": "wait",
       "selector": "#endorseReviewedBilling button[type='submit']",
       "timeoutMs": 8000
@@ -468,6 +525,14 @@
       "optional": true,
       "waitForPopupMs": 1500,
       "waitAfterMs": 500
+    },
+    {
+      "action": "login",
+      "account": "{financeAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/Billing/Review/{billingId}"
     },
     {
       "action": "wait",

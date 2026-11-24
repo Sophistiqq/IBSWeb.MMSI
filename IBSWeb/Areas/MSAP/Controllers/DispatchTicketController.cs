@@ -95,8 +95,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 await dispatchTicketService.PopulateDispatchTicketViewModelAsync(viewModel, viewModel.CustomerOrderSlipId, cancellationToken);
                 return View(viewModel);
             }
-            var canEditWateringRate = await CanViewRatesAsync(userId);
-            var result = await dispatchTicketService.CreateDispatchTicketAsync(viewModel, imageFile, videoFile, User.Identity?.Name ?? "System", cancellationToken, canEditWateringRate);
+            var result = await dispatchTicketService.CreateDispatchTicketAsync(viewModel, imageFile, videoFile, User.Identity?.Name ?? "System", cancellationToken);
 
             if (result.IsSuccess)
             {
@@ -236,9 +235,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 return Json(new { success = false, message = "Review the ticket number, dates and required fields before saving." });
             }
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var canEditWateringRate = await CanViewRatesAsync(userId);
-            var result = await dispatchTicketService.UpdateDispatchTicketAsync(viewModel, imageFile, videoFile, User.Identity?.Name ?? "System", cancellationToken, canEditWateringRate);
+            var result = await dispatchTicketService.UpdateDispatchTicketAsync(viewModel, imageFile, videoFile, User.Identity?.Name ?? "System", cancellationToken);
 
             if (result.IsSuccess)
             {

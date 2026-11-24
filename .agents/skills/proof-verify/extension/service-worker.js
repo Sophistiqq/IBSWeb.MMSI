@@ -630,6 +630,13 @@ function pageAutoLogin(username, password) {
     return true;
 }
 
+function pageAutoLogout() {
+    const form = document.querySelector("form#mnav-logout-form, form#logoutForm, form[action*='Logout']");
+    if (!form) return false;
+    form.submit();
+    return true;
+}
+
 function pageSelectOption(selectorOrTarget, valueOrText, scopeSelector) {
     const root = scopeSelector
         ? document.querySelector(scopeSelector)
@@ -925,6 +932,15 @@ async function handleBridgeCommand(msg) {
 
     if (action === "auto_login") {
         const submitted = await execInMain(tabId, pageAutoLogin, [params.username || "", params.password || ""]);
+        if (submitted) {
+            await waitForTabComplete(tabId, 15000);
+            await execInMain(tabId, pageInstallTelemetry).catch(() => {});
+        }
+        return { submitted, url: (await chrome.tabs.get(tabId)).url };
+    }
+
+    if (action === "auto_logout") {
+        const submitted = await execInMain(tabId, pageAutoLogout);
         if (submitted) {
             await waitForTabComplete(tabId, 15000);
             await execInMain(tabId, pageInstallTelemetry).catch(() => {});

@@ -311,7 +311,11 @@ function loadAccountFromRegistry(repoRoot, accountName) {
 }
 
 function ensureFixturePayload(runDir, step) {
-    const fixture = String(step.fixture || "").trim().toLowerCase();
+    let fixture = String(step.fixture || "").trim().toLowerCase();
+    if (!fixture && !step.file) {
+        const hint = `${step.selector || ""} ${step.fileName || ""}`.toLowerCase();
+        fixture = /pdf|doc|memo/.test(hint) ? "pdf" : "png";
+    }
     if (fixture === "pdf") {
         const pdfText = [
             "%PDF-1.4",
@@ -1982,6 +1986,11 @@ class ExtensionDriver {
         return Boolean(res?.submitted);
     }
 
+    async autoLogout() {
+        const res = await this.rpc("auto_logout");
+        return Boolean(res?.submitted);
+    }
+
     async setIndicator(text, mode = "active", highlight = "") {
         await this.rpc("set_indicator", { text, mode, highlight }).catch(() => {});
     }
@@ -2465,6 +2474,19 @@ async function main() {
             if (!username || !password) return false;
             return ext ? ext.autoLogin(username, password) : attemptAutoLogin(cdp, username, password);
         };
+        const doLogout = async () => {
+            if (ext) return ext.autoLogout();
+            const submitted = await cdp.evaluate(`(() => {
+                const form = document.querySelector("form#mnav-logout-form, form#logoutForm, form[action*='Logout']");
+                if (!form) return false;
+                form.submit();
+                return true;
+            })()`);
+            if (submitted) {
+                await new Promise((r) => setTimeout(r, 700));
+            }
+            return Boolean(submitted);
+        };
         const SWAL_CONFIRM_SEL = ".swal2-popup:not([style*='display: none']):not(.swal2-hide):not(.animate__fadeOutDown) .swal2-confirm";
         const waitForSwalClose = async (urlBefore = "", maxMs = 1500) => {
             const deadline = Date.now() + maxMs;
@@ -2575,7 +2597,8 @@ async function main() {
 
         const initFb = await getFeedback();
         const curPath = initFb.pathname || new URL(initFb.url).pathname;
-        if (!opts.url.toLowerCase().includes("/identity/account/login") && String(curPath).toLowerCase().includes("/identity/account/login")) {
+        const firstStepIsLogin = opts.steps[0]?.action === "login";
+        if (!firstStepIsLogin && !opts.url.toLowerCase().includes("/identity/account/login") && String(curPath).toLowerCase().includes("/identity/account/login")) {
             const loggedIn = await doLogin(activeAuth.user, activeAuth.pass);
             if (!loggedIn) {
                 throw new Error("AUTH_REQUIRED: redirected to Login. Pass --account <name> (from test-accounts.local.json) or set IBS_VERIFY_USER & IBS_VERIFY_PASS.");
@@ -2633,20 +2656,33 @@ async function main() {
             }
 
             if (step.action === "login") {
-                let loginUser = step.username || activeAuth.user;
-                let loginPass = step.password || activeAuth.pass;
+                let loginUser = expandTemplate(step.username || activeAuth.user || "", vars);
+                let loginPass = expandTemplate(step.password || activeAuth.pass || "", vars);
                 if (step.account) {
-                    const creds = loadAccountFromRegistry(repoRoot, step.account);
+                    const accountName = expandTemplate(step.account, vars);
+                    const creds = loadAccountFromRegistry(repoRoot, accountName);
                     loginUser = creds.username;
                     loginPass = creds.password;
-                    activeAuth.account = step.account;
+                    activeAuth.account = accountName;
                 }
                 if (!loginUser || !loginPass) {
                     throw new Error("Login step requires account/username/password.");
                 }
                 const fbBefore = await getFeedback();
                 if (!String(fbBefore.pathname || "").toLowerCase().includes("/identity/account/login")) {
-                    await doNavigate(`${opts.baseUrl}/Identity/Account/Login`);
+                    const loggedOut = await doLogout().catch(() => false);
+                    if (loggedOut) {
+                        const outDeadline = Date.now() + 4000;
+                        while (Date.now() < outDeadline) {
+                            const fbOut = await getFeedback().catch(() => null);
+                            if (String(fbOut?.pathname || "").toLowerCase().includes("/identity/account/login")) break;
+                            await new Promise((r) => setTimeout(r, 150));
+                        }
+                    }
+                    const fbAfterLogout = await getFeedback().catch(() => null);
+                    if (!String(fbAfterLogout?.pathname || "").toLowerCase().includes("/identity/account/login")) {
+                        await doNavigate(`${opts.baseUrl}/Identity/Account/Login`);
+                    }
                 }
                 const ok = await doLogin(loginUser, loginPass);
                 if (!ok) throw new Error(`Login step failed for "${loginUser}": login form not found or authentication did not redirect.`);

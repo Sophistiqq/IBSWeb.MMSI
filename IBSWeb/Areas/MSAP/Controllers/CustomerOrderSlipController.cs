@@ -203,8 +203,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 ViewData["ViewedTicket"] = ticket;
                 var ticketDetails = new DispatchTicketViewModel();
                 ticketDetails.FromEntity(ticket);
-                if (ViewData["CanViewRates"] is not true
-                    || (MsapConstants.IsWateringService(ticket.Service?.ServiceNumber) && ticket.DispatchRate <= 0m))
+                var isWateringTicket = MsapConstants.IsWateringService(ticket.Service?.ServiceNumber);
+                if ((!isWateringTicket && ViewData["CanViewRates"] is not true)
+                    || (isWateringTicket && ticket.DispatchRate <= 0m))
                 {
                     ticketDetails.DispatchRate = null;
                 }
