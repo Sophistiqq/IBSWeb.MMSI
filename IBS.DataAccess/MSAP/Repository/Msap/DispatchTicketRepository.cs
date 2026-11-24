@@ -39,6 +39,16 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .OrderBy(t => t.DispatchTicketId).ToListAsync(ct);
         }
 
+        public async Task<List<int>> GetOtherTugChargeIdsByCosAsync(int cosId, CancellationToken ct = default)
+        {
+            return await _db.MsapOtherTugChargeLines
+                .AsNoTracking()
+                .Where(l => l.Ticket.CustomerOrderSlipId == cosId)
+                .Select(l => l.OtherTugChargeId)
+                .Distinct()
+                .ToListAsync(ct);
+        }
+
         public async Task SaveAsync(CancellationToken cancellationToken)
         {
             await _db.SaveChangesAsync(cancellationToken);

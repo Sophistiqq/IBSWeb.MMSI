@@ -33,7 +33,13 @@ else
                             reason = parts[1].Trim();
                         }
 
-                        var normDocType = item.DocumentType == "Dispatch Ticket" ? "DispatchTicket" : item.DocumentType;
+                        var normDocType = item.DocumentType switch
+                        {
+                            "Dispatch Ticket" => "DispatchTicket",
+                            "Vessel Schedule" => "VesselSchedule",
+                            "Other Tug Charges" => "OtherTugCharge",
+                            _ => item.DocumentType
+                        };
                         var matchedLog = adjustmentLogs
                             .Where(l => !usedLogIds.Contains(l.Id)
                                 && l.DocumentType == normDocType
@@ -57,7 +63,9 @@ else
                         {
                             try
                             {
-                                fieldChanges = System.Text.Json.JsonSerializer.Deserialize<List<IBS.Models.MSAP.MsapFieldChange>>(matchedLog.ChangesJson) ?? new();
+                                fieldChanges = (System.Text.Json.JsonSerializer.Deserialize<List<IBS.Models.MSAP.MsapFieldChange>>(matchedLog.ChangesJson) ?? [])
+                                    .Where(c => !string.IsNullOrEmpty(c.Field) && !c.Field.StartsWith("_", StringComparison.Ordinal))
+                                    .ToList();
                             }
                             catch
                             {
@@ -121,8 +129,10 @@ else
 
     DocClasses getDocClass(string docType) => docType switch {
         "COS" => new DocClasses { Marker = "marker-jo", Badge = "badge-jo" },
+        "Vessel Schedule" => new DocClasses { Marker = "marker-jo", Badge = "badge-jo" },
         "Dispatch Ticket" => new DocClasses { Marker = "marker-dt", Badge = "badge-dt" },
         "Tariff" => new DocClasses { Marker = "marker-tariff", Badge = "badge-tariff" },
+        "Other Tug Charges" => new DocClasses { Marker = "marker-tariff", Badge = "badge-tariff" },
         "Billing" => new DocClasses { Marker = "marker-billing", Badge = "badge-billing" },
         "Collection" => new DocClasses { Marker = "marker-collection", Badge = "badge-collection" },
         _ => new DocClasses { Marker = "", Badge = "" }
@@ -140,8 +150,10 @@ else
 
         return item.DocumentType switch {
             "COS" => "assignment",
+            "Vessel Schedule" => "calendar_month",
             "Dispatch Ticket" => "local_shipping",
             "Tariff" => "payments",
+            "Other Tug Charges" => "directions_boat",
             "Billing" => "receipt_long",
             "Collection" => "account_balance_wallet",
             _ => "history"

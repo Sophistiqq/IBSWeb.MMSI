@@ -77,6 +77,16 @@ namespace IBS.Services.MSAP
                     cancellationToken));
             }
 
+            // Other Tug Charge Audits
+            var otherTugChargeIds = await unitOfWork.DispatchTicket.GetOtherTugChargeIdsByCosAsync(customerOrderSlipId, cancellationToken);
+            if (otherTugChargeIds.Count > 0)
+            {
+                allAudits.AddRange(await unitOfWork.AuditTrail.GetAllAsync(a =>
+                    a.DocumentType == "Other Tug Charges" &&
+                    a.RecordId.HasValue && otherTugChargeIds.Contains(a.RecordId.Value),
+                    cancellationToken));
+            }
+
             // 3. Final grouping and sorting in-memory
             return allAudits
                 .GroupBy(a => a.Id)
@@ -87,14 +97,23 @@ namespace IBS.Services.MSAP
 
         public async Task<IEnumerable<MsapAdjustmentLog>> GetCustomerOrderSlipAdjustmentLogsAsync(int customerOrderSlipId, CancellationToken cancellationToken)
         {
+            var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
             var dispatchTickets = await unitOfWork.DispatchTicket.GetAllAsync(dt => dt.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
             var dtIds = dispatchTickets.Select(dt => dt.DispatchTicketId).ToList();
 
             var billings = await unitOfWork.Billing.GetAllAsync(b => b.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
             var billingIds = billings.Select(b => b.MsapBillingId).ToList();
             var collectionIds = billings.Where(b => b.CollectionId.HasValue).Select(b => b.CollectionId!.Value).Distinct().ToList();
+            var otherTugChargeIds = await unitOfWork.DispatchTicket.GetOtherTugChargeIdsByCosAsync(customerOrderSlipId, cancellationToken);
 
             var logs = new List<MsapAdjustmentLog>();
+            if (schedule != null)
+            {
+                logs.AddRange(await unitOfWork.MsapAdjustmentLog.GetAllAsync(
+                    l => l.DocumentType == "VesselSchedule" && l.RecordId == schedule.VesselScheduleId,
+                    cancellationToken));
+            }
+
             if (dtIds.Count > 0)
             {
                 logs.AddRange(await unitOfWork.MsapAdjustmentLog.GetAllAsync(
@@ -113,6 +132,13 @@ namespace IBS.Services.MSAP
             {
                 logs.AddRange(await unitOfWork.MsapAdjustmentLog.GetAllAsync(
                     l => l.DocumentType == "Collection" && collectionIds.Contains(l.RecordId),
+                    cancellationToken));
+            }
+
+            if (otherTugChargeIds.Count > 0)
+            {
+                logs.AddRange(await unitOfWork.MsapAdjustmentLog.GetAllAsync(
+                    l => l.DocumentType == "OtherTugCharge" && otherTugChargeIds.Contains(l.RecordId),
                     cancellationToken));
             }
 

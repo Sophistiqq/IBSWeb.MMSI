@@ -8,6 +8,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
     {
         Task<List<DispatchTicket>> GetOtherTugChargeTicketsAsync(int cosId, CancellationToken ct);
 
+        Task<List<int>> GetOtherTugChargeIdsByCosAsync(int cosId, CancellationToken ct = default);
+
         Task SaveAsync(CancellationToken cancellationToken);
 
         Task<DispatchTicket?> GetDispatchTicketWithDetailsAsync(int id, CancellationToken cancellationToken = default);
