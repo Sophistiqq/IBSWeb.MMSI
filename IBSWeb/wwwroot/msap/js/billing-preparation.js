@@ -452,11 +452,6 @@ $(function () {
             ModernAlert.error('Select the principal to receive the billing.');
             return;
         }
-        if ($recipient.val() === 'PRINCIPAL' && !$principal.val()) {
-            event.preventDefault();
-            ModernAlert.error('Select the principal to receive the billing.');
-            return;
-        }
         if (saving || !tickets.length || !form.reportValidity()) {
             event.preventDefault();
             return;
