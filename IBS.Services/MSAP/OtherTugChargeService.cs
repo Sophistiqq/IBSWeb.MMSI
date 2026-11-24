@@ -178,6 +178,15 @@ namespace IBS.Services.MSAP
                 {
                     return ServiceResult<int>.Failure("The charge was confirmed or changed. Reload it before saving.");
                 }
+                if (charge.PeriodStatus is not (MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted))
+                {
+                    var periodError = await GuardClosedPeriodAsync(model.DocumentDate, ct)
+                        ?? (model.Id.HasValue ? await GuardClosedPeriodAsync(charge.DocumentDate, ct) : null);
+                    if (periodError != null)
+                    {
+                        return ServiceResult<int>.Failure(periodError);
+                    }
+                }
                 string before = Snapshot(charge);
                 List<int> ids = model.Allocations.Select(l => l.DispatchTicketId).Order().ToList();
                 foreach (var id in ids)
@@ -339,6 +348,14 @@ namespace IBS.Services.MSAP
             {
                 return ServiceResult.Failure("The provider charge changed. Review it again before confirming.");
             }
+            if (charge.PeriodStatus is not (MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted))
+            {
+                var periodError = await GuardClosedPeriodAsync(charge.DocumentDate, ct);
+                if (periodError != null)
+                {
+                    return ServiceResult.Failure(periodError);
+                }
+            }
             List<int> ids = charge.Lines.Select(l => l.DispatchTicketId).ToList();
             List<int> cosIds = await _db.MsapDispatchTickets.Where(t => ids.Contains(t.DispatchTicketId))
                 .Select(t => t.CustomerOrderSlipId!.Value).Distinct().Order().ToListAsync(ct);
@@ -387,8 +404,19 @@ namespace IBS.Services.MSAP
             charge.ConfirmedAt = DateTimeHelper.GetCurrentPhilippineTime();
             charge.ConfirmedByUserId = userId;
             charge.ConfirmedByName = actor.Name.Trim();
-            var recognized = totalAmount > 0m
-                && await RecognizeLiabilityAsync(owner, charge, tickets, actor.Name.Trim(), ct);
+            var recognized = false;
+            if (totalAmount > 0m)
+            {
+                try
+                {
+                    recognized = await RecognizeLiabilityAsync(owner, charge, tickets, actor.Name.Trim(), ct);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    _logger.LogWarning(ex, "Could not recognize AP Other Tugs liability for provider charge {ChargeId}: {Message}", id, ex.Message);
+                    return ServiceResult.Failure(ex.Message);
+                }
+            }
             _db.AuditTrails.Add(new AuditTrail(actor.UserName ?? userId, $"Confirmed provider charge {charge.ProviderReference}: {Snapshot(charge)}.{(recognized ? $" Recognized AP Other Tugs in GL for {charge.ProviderReference}." : "")}",
                 "Other Tug Charges", id, charge.ProviderReference) { UserId = userId, ActorName = actor.Name.Trim() });
             await _db.SaveChangesAsync(ct);
@@ -425,7 +453,7 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("This provider charge is not confirmed.");
                 }
 
-                if (charge.PeriodStatus == MsapPeriodStatus.Final && authorizationFile is not { Length: > 0 })
+                if (charge.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted && authorizationFile is not { Length: > 0 })
                 {
                     return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to reopen a finalized-period provider charge.");
                 }
@@ -485,9 +513,17 @@ namespace IBS.Services.MSAP
                     ticket.ApOtherTugsIncludesVat = false;
                 }
 
-                if (charge.PeriodStatus == MsapPeriodStatus.Final)
+                if (charge.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
                 {
-                    charge.PeriodStatus = MsapPeriodStatus.Adjusted;
+                    var changes = new List<MsapFieldChange>();
+                    if (charge.PeriodStatus == MsapPeriodStatus.Final)
+                    {
+                        charge.PeriodStatus = MsapPeriodStatus.Adjusted;
+                        changes.Add(new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted });
+                    }
+                    changes.Add(new MsapFieldChange { Field = "Revision", Label = "Revision", Before = priorRevision.ToString(), After = charge.Revision.ToString() });
+                    changes.Add(new MsapFieldChange { Field = "ConfirmedAt", Label = "Confirmed Date", Before = "Confirmed", After = "Reopened" });
+
                     var log = new MsapAdjustmentLog
                     {
                         DocumentType = "OtherTugCharge",
@@ -495,12 +531,7 @@ namespace IBS.Services.MSAP
                         ReferenceNumber = charge.ProviderReference,
                         Reason = reason.Trim(),
                         AttachmentUrl = uploadedAttachment,
-                        ChangesJson = JsonSerializer.Serialize(new[]
-                        {
-                            new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted },
-                            new MsapFieldChange { Field = "Revision", Label = "Revision", Before = priorRevision.ToString(), After = charge.Revision.ToString() },
-                            new MsapFieldChange { Field = "ConfirmedAt", Label = "Confirmed Date", Before = "Confirmed", After = "Reopened" }
-                        }),
+                        ChangesJson = JsonSerializer.Serialize(changes),
                         EditedBy = actor.Name.Trim(),
                         EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
                     };
@@ -642,6 +673,19 @@ namespace IBS.Services.MSAP
                 $"Posted AP Other Tugs direct GL entries for {charge.ProviderReference}", "Other Tug Charges"), ct);
             await accounting.SaveChangesAsync(ct);
             return true;
+        }
+
+        private async Task<string?> GuardClosedPeriodAsync(DateOnly date, CancellationToken ct)
+        {
+            if (!MsapConstants.EnforceClosedPeriods)
+            {
+                return null;
+            }
+
+            var isClosed = await _db.MsapPostedPeriods
+                .AsNoTracking()
+                .AnyAsync(p => p.Year == date.Year && p.Month == date.Month && p.IsClosed, ct);
+            return isClosed ? $"Cannot modify: {date:MMMM yyyy} is closed." : null;
         }
 
         private async Task<OtherTugCharge?> LockAsync(int id, CancellationToken ct)

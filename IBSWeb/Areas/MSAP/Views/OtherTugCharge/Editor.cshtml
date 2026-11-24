@@ -88,7 +88,7 @@
                                 data-id="@Model.Id"
                                 data-cos-id="@Model.CustomerOrderSlipId"
                                 data-reference="@Model.Charge?.ProviderReference"
-                                data-finalized="@(Model.Charge?.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
+                                data-finalized="@(Model.Charge?.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted ? "true" : "false")">
                                 <span class="material-symbols-outlined" aria-hidden="true">history</span> Reopen to revise
                             </button>
                         }

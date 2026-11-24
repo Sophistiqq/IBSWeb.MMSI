@@ -70,6 +70,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 var result = await _charges.ConfirmAsync(id, reviewedRevision, UserId, ct);
                 return Json(new { success = result.IsSuccess, message = result.Message });
             }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Could not confirm provider charge {ChargeId}: {Message}", id, ex.Message);
+                return Json(new { success = false, message = ex.Message });
+            }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex, "Could not confirm provider charge {ChargeId}", id);
