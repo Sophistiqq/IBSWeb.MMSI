@@ -131,13 +131,14 @@ namespace IBSWeb.MSAP
                 });
             }
 
+            using var scope = app.Services.CreateScope();
             if (app.Configuration.GetValue<bool>("MSAP:ApplyMigrations"))
             {
-                using var scope = app.Services.CreateScope();
                 var context = scope.ServiceProvider.GetRequiredService<MsapDbContext>();
                 await context.Database.MigrateAsync();
-                await DbSeeder.SeedAsync(scope.ServiceProvider);
             }
+
+            await DbSeeder.SeedAsync(scope.ServiceProvider);
         }
     }
 
