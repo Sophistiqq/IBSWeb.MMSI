@@ -28,7 +28,7 @@ Use this skill after making backend, `.cshtml`, `.js`, `.css`, or MSAP UI change
    - Traps ASP.NET 500/error pages, uncaught JS exceptions (`pageerror`), `console.error`, failed local network/AJAX calls, broken `<img>` elements, and DOM horizontal overflow (`scrollWidth > innerWidth`).
 
 3. **Stage 3 — Delegated Free-Model Proof Judge (`opencode`)**
-   - **Code/Diff Judge:** Runs `opencode run -m opencode/glm-5.3-flash-free` (falling back to `opencode/deepseek-v4.1-flash-free`, then `opencode/mimo-v2.6-flash-free`) on the filtered diff + Stage 1/2 context.
+   - **Code/Diff Judge:** Runs `opencode run -m opencode/deepseek-v4.1-flash-free` (falling back to `opencode/nemotron-3.5-lightning-free`, `opencode/mimo-v2.6-flash-free`, `opencode/flint-40b-free`) on the filtered diff + Stage 1/2 context.
    - **Visual Layout Judge:** Runs `opencode run -m opencode/nemotron-3.5-super-vl-free` on the captured Desktop and Mobile PNG screenshots to verify visual alignment, mobile responsiveness, and styling.
 
 4. **Stage 4 — Logging Detected Issues & Proofs to Linear (`linear_linear` MCP)**
@@ -66,37 +66,43 @@ node .agents/skills/proof-verify/scripts/proof-verify.mjs --skip-ai
 # 5. Interactive one-time sign-in to cache auth cookies for protected routes
 node .agents/skills/proof-verify/scripts/proof-verify.mjs --interactive-login --urls /MSAP/Billing/Index
 
-# 6. Interactive form filling & multi-step clicks via local Ollama ("Guided Hands")
+# 6. Interactive 3-tier self-healing automation ("Guided Hands")
 node .agents/skills/proof-verify/scripts/guided-hands.mjs --url /MSAP/VesselSchedule/Create --inspect
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --steps-file plan.json --no-autostart
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --steps-file plan.json --account rml1 --no-autostart
 node .agents/skills/proof-verify/scripts/guided-hands-bridge.mjs   # start once for zero-prompt Chrome extension mode
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --steps-file plan.json              # live cyan tab group
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --background --steps-file plan.json # quiet background tab
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --account rml1 --steps-file plan.json
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --background --account rml1 --steps-file plan.json
 node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-schedule-create     # instant cached replay (0ms for unchanged fields)
 node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-full-to-billing     # end-to-end Schedule -> Rates -> COS -> Tickets -> Billing
 node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-billing-to-cleared --var cosId=9  # Billing -> Review -> Approval -> Collection -> Deposit -> Cleared
 node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-full-lifecycle      # complete 9-stage Schedule -> Cleared chain
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-schedule-create --override PortId=SUBIC --var tomorrow=2026-11-26
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --resume                            # resume from last checkpoint (restores URL & captured vars)
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --account rml1 --url /MSAP/AuditTrail --goal "Select COS #14 in Job Order and verify Schedule Revision Diff appears" --save-playbook verify-def05
 ```
 
-For unattended login against protected routes without `--interactive-login`, set `IBS_VERIFY_USER` and `IBS_VERIFY_PASS` in your shell environment (or pass `--user` and `--pass`).
+For unattended login against protected routes without `--interactive-login`, pass `--account <name>` (reads gitignored `artifacts/proof-verify/test-accounts.local.json`), or set `IBS_VERIFY_USER` and `IBS_VERIFY_PASS` (or `--user` and `--pass`).
 
-## Interactive Form Automation ("Guided Hands" — Local Ollama + CDP / Extension)
+## Interactive Form Automation ("Guided Hands" — 3-Tier Self-Healing + CDP / Extension)
 
-When a change requires multi-step UI interactions (opening modals, clicking dynamic row buttons, triggering cascading AJAX dropdowns like `Port -> Terminal`, filling `ModernSelect` / Select2 controls with realistic mock data, and asserting the saved result), use `.agents/skills/proof-verify/scripts/guided-hands.mjs` before escalating to paid/heavy browser agents:
+When a change requires multi-step UI interactions (opening modals, clicking dynamic row buttons, selecting `ModernSelect` / Select2 / cascading AJAX dropdowns, uploading memo files, filling forms, and asserting saved results), use `.agents/skills/proof-verify/scripts/guided-hands.mjs` before escalating to paid/heavy browser agents:
 
-- **Orchestrator–Executor Split:** The primary coding agent (Brain) supplies a concise step plan (`--steps`, `--steps-file`, or repeatable `--step` flags) and pins exact business requirements via `overrides` (matched by field key/label and option display text). The local worker executes clicks deterministically and calls local Ollama (`qwen2.5:1.5b` by default, schema-locked via JSON `format`, `keep_alive: "2m"`) only for realistic mock field generation or fuzzy button matching.
-- **Self-Updating Playbooks (`--playbook` / `--save-playbook`):** Playbooks saved under `.agents/skills/proof-verify/playbooks/*.json` store each step's `knownFields` fingerprint + last known-good values + dynamic URL captures (`capture_url` → `{scheduleId}`, `{cosId}`, `{billingId}`, `{collectionId}`) + template variables (`{today}`, `{tomorrow}`, `{rand}`, `--var`). Replays reuse unchanged fields in **0ms (0 Ollama calls)**, invoke Ollama **only on newly added or drifted fields**, enforce deterministic Philippine date/time guards, run `fill_and_submit` self-healing retries on validation errors, and auto-update the playbook file on PASS (disable with `--no-update-playbook`).
-- **Zero-Prompt Chrome Extension Mode (`--extension`):** Load `.agents/skills/proof-verify/extension` once via `chrome://extensions` (*Load unpacked*). `guided-hands.mjs --extension` auto-starts `guided-hands-bridge.mjs` if needed, opens/reuses a cyan **`Guided Hands`** tab group with a pulsing border + live HUD pill (recovering cleanly from dirty `beforeunload` pages), and never triggers Chrome's *"Allow remote debugging?"* prompt. Add `--background` to run quietly without stealing focus.
-- **Per-User Auth Profiles (Headless CDP):** Passing `--user <name>` (or `IBS_VERIFY_USER`) isolates cookies under `artifacts/proof-verify/.browser-profile-<user>` (verified gitignored) so test accounts like `OPERATIONS` never overwrite the default profile.
-- **Standalone Checks:** `--inspect` dumps visible buttons & editable fields as JSON (`0` LLM calls); `--benchmark` tests local Ollama latency and JSON schema accuracy without starting the app.
+- **3-Tier Zero-Main-Token Self-Healing (`--heal-engine auto|ollama|opencode|off`):**
+  - **Tier 0 (Deterministic, 0 tokens, <300ms):** Auto-waits for DOM/AJAX readiness, fast-fails immediately on `/Login`, `/AccessDenied`, HTTP 500, or error SweetAlerts, auto-reauthenticates mid-run when `--account` / credentials are provided, auto-dismisses blocking info/confirm modals, and provides first-class `select` (native + `ModernSelect` + Select2, inside or outside `<form>`) and `upload` (`fixture: "pdf"|"png"` or real file) actions.
+  - **Tier 1 (Local Ollama `qwen2.5:1.5b`, `keep_alive: "15m"`, 0 cloud tokens):** Performs **diff-only form repair** (locking already-valid & overridden fields) and bounded step-level micro-recovery (`click_alternative`, `select_option`, `fill_missing_fields`, `dismiss_modal`, `wait_and_retry`).
+  - **Tier 2 (Free OpenCode Escalation, 0 paid main-model tokens):** Invoked only when Tier 0 + Tier 1 escalate or fail (or directly in `--goal` mode) using `opencode/deepseek-v4.1-flash-free` -> `nemotron-3.5-lightning-free` -> `mimo-v2.6-flash-free` -> `flint-40b-free` to execute 1–3 whitelisted recovery steps (guarded against unrequested destructive clicks).
+  - **Tier 3 (1-Turn Failure Dossier + Checkpoint `--resume`):** Real app bugs fail fast with `failureSnapshot` (URL, title, active Swal, validation errors, visible clickables/fields, PNG screenshot) in `latest-guided-hands.json` and persist step state to `artifacts/proof-verify/last-checkpoint.json` so `--resume` / `--from-step N` continues from the exact failing step.
+- **Goal-Driven Playbook Authoring (`--goal "..." --save-playbook <name>`):** Pass a 1-sentence plain-English verification goal so free OpenCode explores the live DOM and compiles the successful trace into a deterministic Tier 0 playbook (0 paid main-model tokens on Run 1; 0 LLM calls of any kind on Run 2+).
+- **Self-Updating & Auto-Patching Playbooks (`--playbook` / `--save-playbook`):** Playbooks under `.agents/skills/proof-verify/playbooks/*.json` store `knownFields` + dynamic URL captures (`capture_url` → `{scheduleId}`, `{cosId}`, `{billingId}`, `{collectionId}`) + template variables (`{today}`, `{tomorrow}`, `{rand}`, `--var`). Recovered step patches and drifted fields auto-update on PASS (disable with `--no-update-playbook`) and are always logged in `report.recoveries[]`.
+- **Zero-Prompt Chrome Extension Mode (`--extension`):** Load `.agents/skills/proof-verify/extension` once via `chrome://extensions` (*Load unpacked*). `guided-hands.mjs --extension` auto-starts `guided-hands-bridge.mjs` if needed, opens/reuses a cyan **`Guided Hands`** tab group with a pulsing border + live HUD pill, and never triggers Chrome's *"Allow remote debugging?"* prompt. Add `--background` to run quietly without stealing focus.
+- **Account Registry & Multi-Role SoD (`--account` / `{ "action": "login", "account": "FINANCE" }`):** Reads gitignored `artifacts/proof-verify/test-accounts.local.json` cleanly without echoing credentials.
+- **Standalone Checks:** `--inspect` dumps a live page snapshot as JSON (`0` LLM calls); `--benchmark` tests local Ollama latency and JSON schema accuracy without starting the app.
 
 ## Model Escalation Ladder
 
-1. **Tier 1 (0 tokens):** Stage 1 static checks + Stage 2 headless Desktop/Mobile DOM & telemetry proof.
-2. **Tier 2 (Free OpenCode models):** `opencode/glm-5.3-flash-free` (fallback: `opencode/deepseek-v4.1-flash-free`, `opencode/mimo-v2.6-flash-free`) for diff review; `opencode/nemotron-3.5-super-vl-free` for Desktop & Mobile screenshots.
-3. **Tier 2.5 (Local Ollama — 0 cloud tokens):** `.agents/skills/proof-verify/scripts/guided-hands.mjs` (`qwen2.5:1.5b` + native CDP) for multi-step form filling, realistic mock test data, modal flows, and cascading dropdown verification.
-4. **Tier 3 (Lightweight subagent):** Invoke an Antigravity `flash_lite` / `flash` subagent if deeper multi-file codebase tracing is needed after a Stage 1–3 failure.
+1. **Tier 0 (0 tokens):** Stage 1 static checks + Stage 2 headless Desktop/Mobile DOM proof + Guided Hands deterministic playbooks (`select`, `upload`, `knownFields`, `--resume`).
+2. **Tier 1 (Local Ollama — 0 cloud tokens):** `qwen2.5:1.5b` diff-only form generation/repair and fast bounded step micro-recovery.
+3. **Tier 2 (Free OpenCode models — 0 paid tokens):** `opencode/deepseek-v4.1-flash-free` (fallback: `nemotron-3.5-lightning-free`, `mimo-v2.6-flash-free`, `flint-40b-free`) for diff review, Tier 2 step recovery, and `--goal` playbook authoring; `opencode/nemotron-3.5-super-vl-free` for Desktop & Mobile screenshots.
+4. **Tier 3 (Lightweight subagent):** Invoke an Antigravity `flash_lite` / `flash` subagent if deeper multi-file codebase tracing is needed after a Stage 1–3 failure or Failure Dossier.
 5. **Tier 4 (Paid / Computer-use, e.g. `jev` or Chrome DevTools MCP):** Escalate only when a bug requires open-ended visual exploration, deep CSS/network/performance profiling, or complex drag/canvas interactions that guided step plans cannot prove.
 
 ## Proof Artifacts

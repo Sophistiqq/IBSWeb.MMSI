@@ -9,6 +9,13 @@ import { spawn, execFileSync } from "node:child_process";
 const DEFAULT_PORT = 5073;
 const DEFAULT_OLLAMA_URL = process.env.OLLAMA_HOST || "http://localhost:11434";
 const DEFAULT_MODEL = process.env.GUIDED_HANDS_MODEL || "qwen2.5:1.5b";
+const DEFAULT_OPENCODE_MODELS = [
+    "opencode/deepseek-v4.1-flash-free",
+    "opencode/nemotron-3.5-lightning-free",
+    "opencode/mimo-v2.6-flash-free",
+    "opencode/flint-40b-free"
+];
+const DESTRUCTIVE_TARGET_RE = /\b(delete|void|reverse|finalize|cancel\s+service|remove|destroy|purge|drop|reset\s+all)\b/i;
 
 const BROWSER_CANDIDATES = [
     "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -20,19 +27,28 @@ const BROWSER_CANDIDATES = [
 function printUsage() {
     console.log(`Usage: node .agents/skills/proof-verify/scripts/guided-hands.mjs [options]
 
-Option 1 ("Guided Hands"): Brain provides a step plan; local CDP + Ollama executes clicks & realistic form fills.
+Guided Hands: 3-tier self-healing browser runner (Tier 0 deterministic + Tier 1 local Ollama + Tier 2 free OpenCode).
 
 Options:
   --url <route|url>        Starting route or URL (e.g. /MSAP/Billing/Index)
   --steps <json>           Inline JSON array of step objects
   --steps-file <path>      Path to JSON file containing step objects (or { url, steps })
-  --playbook <name|path>   Replay a saved golden playbook (0ms for unchanged fields, diff-only Ollama for changes)
+  --playbook <name|path>   Replay a saved golden playbook (0ms for unchanged fields, auto-patches recoveries on PASS)
   --save-playbook <name>   Save/update a golden playbook under .agents/skills/proof-verify/playbooks/ on PASS
-  --no-update-playbook     When using --playbook, do not auto-update the playbook file on PASS
+  --no-update-playbook     When using --playbook, do not auto-update or auto-patch the playbook file on PASS
+  --resume                 Resume the last run from artifacts/proof-verify/last-checkpoint.json (restoring vars & URL)
+  --from-step <number>     Start execution at 1-based step N (reuses matching checkpoint vars if available)
+  --heal-engine <mode>     Self-healing mode: auto | ollama | opencode | off (default: auto)
+  --opencode-model <id>    Primary free OpenCode model for Tier 2 recovery / --goal mode
+  --goal <text>            Autonomous Observe->Think->Act mode driven by free OpenCode (compiles to --save-playbook)
+  --max-turns <number>     Max turns for --goal mode (default: 12)
   --override <Key=Value>   Repeatable field override for replay (e.g. --override PortId=SUBIC)
   --var <name=value>       Repeatable template variable (built-in: {today}, {tomorrow}, {rand})
   --step <shorthand>       Repeatable step shorthand:
                              "click: Add Billing"
+                             "select: Job Order=14"
+                             "upload: pdf" or "upload: path/to/file.pdf"
+                             "login: FINANCE"
                              "fill: valid PH shipping billing record"
                              "wait: 800" or "wait: .modal.show"
                              "assert: Saved successfully"
@@ -54,6 +70,7 @@ Options:
   --base-url <url>         Base URL override (default: http://localhost:<port>)
   --model <name>           Ollama model name (default: qwen2.5:1.5b)
   --ollama-url <url>       Ollama base URL (default: http://localhost:11434)
+  --account <name>         Load login credentials from gitignored artifacts/proof-verify/test-accounts.local.json
   --user <username>        Login username (or IBS_VERIFY_USER env var)
   --pass <password>        Login password (or IBS_VERIFY_PASS env var)
   -h, --help               Show this help message
@@ -68,6 +85,17 @@ function parseShorthandStep(raw) {
     const kind = raw.slice(0, idx).trim().toLowerCase();
     const rest = raw.slice(idx + 1).trim();
     if (kind === "click") return { action: "click", target: rest };
+    if (kind === "select") {
+        const eq = rest.indexOf("=");
+        if (eq <= 0) throw new Error(`Invalid select shorthand "${raw}" (expected "select: Target=Value")`);
+        return { action: "select", target: rest.slice(0, eq).trim(), value: rest.slice(eq + 1).trim() };
+    }
+    if (kind === "upload") {
+        const lower = rest.toLowerCase();
+        if (lower === "pdf" || lower === "png") return { action: "upload", fixture: lower };
+        return { action: "upload", file: rest };
+    }
+    if (kind === "login") return { action: "login", account: rest };
     if (kind === "fill" || kind === "fill_form") return { action: "fill_form", scenario: rest };
     if (kind === "wait") {
         const ms = Number.parseInt(rest, 10);
@@ -89,6 +117,12 @@ function parseArgs(argv) {
         playbook: "",
         savePlaybook: "",
         noUpdatePlaybook: false,
+        resume: false,
+        fromStep: 1,
+        healEngine: "auto",
+        opencodeModel: DEFAULT_OPENCODE_MODELS[0],
+        goal: "",
+        maxTurns: 12,
         cliOverrides: {},
         vars: {},
         inspect: false,
@@ -107,6 +141,7 @@ function parseArgs(argv) {
         baseUrl: null,
         model: DEFAULT_MODEL,
         ollamaUrl: DEFAULT_OLLAMA_URL.replace(/\/+$/, ""),
+        account: "",
         user: process.env.IBS_VERIFY_USER || "",
         pass: process.env.IBS_VERIFY_PASS || "",
         help: false
@@ -139,6 +174,28 @@ function parseArgs(argv) {
             opts.savePlaybook = next();
         } else if (arg === "--no-update-playbook") {
             opts.noUpdatePlaybook = true;
+        } else if (arg === "--resume") {
+            opts.resume = true;
+        } else if (arg === "--from-step") {
+            opts.fromStep = Math.max(1, Number.parseInt(next(), 10) || 1);
+        } else if (arg.startsWith("--from-step=")) {
+            opts.fromStep = Math.max(1, Number.parseInt(arg.slice("--from-step=".length), 10) || 1);
+        } else if (arg === "--heal-engine") {
+            opts.healEngine = next().trim().toLowerCase();
+        } else if (arg.startsWith("--heal-engine=")) {
+            opts.healEngine = arg.slice("--heal-engine=".length).trim().toLowerCase();
+        } else if (arg === "--opencode-model") {
+            opts.opencodeModel = next().trim();
+        } else if (arg.startsWith("--opencode-model=")) {
+            opts.opencodeModel = arg.slice("--opencode-model=".length).trim();
+        } else if (arg === "--goal") {
+            opts.goal = next().trim();
+        } else if (arg.startsWith("--goal=")) {
+            opts.goal = arg.slice("--goal=".length).trim();
+        } else if (arg === "--max-turns") {
+            opts.maxTurns = Math.max(1, Number.parseInt(next(), 10) || 12);
+        } else if (arg.startsWith("--max-turns=")) {
+            opts.maxTurns = Math.max(1, Number.parseInt(arg.slice("--max-turns=".length), 10) || 12);
         } else if (arg === "--override") {
             const raw = next();
             const eq = raw.indexOf("=");
@@ -188,6 +245,10 @@ function parseArgs(argv) {
             opts.model = next();
         } else if (arg === "--ollama-url") {
             opts.ollamaUrl = next().replace(/\/+$/, "");
+        } else if (arg === "--account") {
+            opts.account = next().trim();
+        } else if (arg.startsWith("--account=")) {
+            opts.account = arg.slice("--account=".length).trim();
         } else if (arg === "--user") {
             opts.user = next();
         } else if (arg === "--pass") {
@@ -197,12 +258,17 @@ function parseArgs(argv) {
         }
     }
 
+    if (!["auto", "ollama", "opencode", "off"].includes(opts.healEngine)) {
+        throw new Error(`Invalid --heal-engine "${opts.healEngine}" (expected auto | ollama | opencode | off).`);
+    }
+
     if (opts.stepsFile) {
-        const loaded = JSON.parse(fs.readFileSync(opts.stepsFile, "utf8"));
+        const loaded = readJsonFile(opts.stepsFile);
         if (Array.isArray(loaded)) {
             opts.steps.push(...loaded);
         } else if (loaded && typeof loaded === "object") {
             if (!opts.url && loaded.url) opts.url = loaded.url;
+            if (!opts.account && loaded.account) opts.account = loaded.account;
             if (Array.isArray(loaded.steps)) opts.steps.push(...loaded.steps);
         } else {
             throw new Error("--steps-file must contain a JSON array or { url, steps } object.");
@@ -213,6 +279,85 @@ function parseArgs(argv) {
         opts.baseUrl = `http://localhost:${opts.port}`;
     }
     return opts;
+}
+
+function readJsonFile(filePath) {
+    return JSON.parse(fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
+}
+
+function loadAccountFromRegistry(repoRoot, accountName) {
+    if (!accountName) return null;
+    const regPath = path.join(repoRoot, "artifacts", "proof-verify", "test-accounts.local.json");
+    if (!fs.existsSync(regPath)) {
+        throw new Error(`Account registry not found: ${regPath}`);
+    }
+    const reg = readJsonFile(regPath);
+    const needle = String(accountName).trim().toLowerCase();
+    const accounts = Array.isArray(reg.accounts) ? reg.accounts : [];
+    const entry = accounts.find(
+        (a) => String(a.username || "").toLowerCase() === needle
+            || String(a.role || "").toLowerCase() === needle
+            || String(a.displayName || "").toLowerCase() === needle
+    );
+    if (!entry) {
+        const known = accounts.map((a) => a.username).filter(Boolean).join(", ");
+        throw new Error(`Account "${accountName}" not found in ${regPath}. Known accounts: ${known || "(none)"}`);
+    }
+    const password = entry.password || reg.passwordAllCoreAccounts || "";
+    if (!password) {
+        throw new Error(`Account "${entry.username}" has no password configured in ${regPath}.`);
+    }
+    return { username: entry.username, password };
+}
+
+function ensureFixturePayload(runDir, step) {
+    const fixture = String(step.fixture || "").trim().toLowerCase();
+    if (fixture === "pdf") {
+        const pdfText = [
+            "%PDF-1.4",
+            "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
+            "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
+            "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >> endobj",
+            "xref",
+            "0 4",
+            "0000000000 65535 f ",
+            "0000000009 00000 n ",
+            "0000000058 00000 n ",
+            "0000000115 00000 n ",
+            "trailer << /Size 4 /Root 1 0 R >>",
+            "startxref",
+            "190",
+            "%%EOF"
+        ].join("\n") + "\n";
+        const buf = Buffer.from(pdfText, "utf8");
+        const fileName = step.fileName || "guided-hands-memo.pdf";
+        const filePath = path.join(runDir, fileName);
+        fs.writeFileSync(filePath, buf);
+        return { fileName, mimeType: "application/pdf", filePath, base64Content: buf.toString("base64") };
+    }
+    if (fixture === "png") {
+        const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+        const buf = Buffer.from(pngBase64, "base64");
+        const fileName = step.fileName || "guided-hands-proof.png";
+        const filePath = path.join(runDir, fileName);
+        fs.writeFileSync(filePath, buf);
+        return { fileName, mimeType: "image/png", filePath, base64Content: pngBase64 };
+    }
+    if (step.file) {
+        const filePath = path.resolve(step.file);
+        if (!fs.existsSync(filePath)) {
+            throw new Error(`Upload file not found: ${filePath}`);
+        }
+        const buf = fs.readFileSync(filePath);
+        const extName = path.extname(filePath).toLowerCase();
+        const mimeType = step.mimeType
+            || (extName === ".pdf" ? "application/pdf"
+                : extName === ".png" ? "image/png"
+                    : extName === ".jpg" || extName === ".jpeg" ? "image/jpeg"
+                        : "application/octet-stream");
+        return { fileName: path.basename(filePath), mimeType, filePath, base64Content: buf.toString("base64") };
+    }
+    throw new Error("Upload step requires either \"fixture\": \"pdf\"|\"png\" or \"file\": \"<path>\".");
 }
 
 function getRepoRoot() {
@@ -616,9 +761,9 @@ async function navigateAndWait(cdp, url, timeoutMs = 20000) {
         await cdp.send("Page.navigate", { url });
         const start = Date.now();
         while (!loaded && Date.now() - start < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 100));
+            await new Promise((r) => setTimeout(r, 80));
         }
-        await new Promise((r) => setTimeout(r, 600));
+        await new Promise((r) => setTimeout(r, 150));
     } finally {
         cdp.off("Page.loadEventFired", onLoad);
     }
@@ -652,16 +797,17 @@ async function attemptAutoLogin(cdp, username, password) {
 // Ollama Structured Output Client (local worker brain-let)
 // ============================================================================
 
-async function callOllamaJson({ ollamaUrl, model, system, prompt, schema, temperature = 0.2, numCtx = 2048 }) {
+async function callOllamaJson({ ollamaUrl, model, system, prompt, schema, temperature = 0.2, numCtx = 2048, numPredict = 256 }) {
     const start = Date.now();
     const body = {
         model,
         stream: false,
         format: schema,
-        keep_alive: "2m",
+        keep_alive: "15m",
         options: {
             temperature,
-            num_ctx: numCtx
+            num_ctx: numCtx,
+            num_predict: numPredict
         },
         messages: [
             { role: "system", content: system },
@@ -693,6 +839,123 @@ async function callOllamaJson({ ollamaUrl, model, system, prompt, schema, temper
             outputTokens: data.eval_count || 0
         }
     };
+}
+
+// ============================================================================
+// Free OpenCode Reasoning Client (Tier 2 Recovery + --goal Planner)
+// ============================================================================
+
+function resolveOpencodeBinary() {
+    if (process.platform === "win32") {
+        try {
+            const whereOut = execFileSync("where.exe", ["opencode"], { encoding: "utf8" });
+            for (const line of whereOut.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)) {
+                const exeCandidate = path.join(path.dirname(line), "node_modules", "@opencode", "cli", "bin", "opencode.exe");
+                if (fs.existsSync(exeCandidate)) {
+                    return { cmd: exeCandidate, prefixArgs: [] };
+                }
+            }
+        } catch {
+            // Fall through to cmd.exe wrapper
+        }
+        return { cmd: "cmd.exe", prefixArgs: ["/c", "opencode"] };
+    }
+    return { cmd: "opencode", prefixArgs: [] };
+}
+
+function extractJsonObject(rawText) {
+    if (!rawText) return null;
+    const trimmed = String(rawText).trim();
+    try {
+        return JSON.parse(trimmed);
+    } catch {
+        // Try fenced ```json block or outermost {...}
+    }
+    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced && fenced[1]) {
+        try {
+            return JSON.parse(fenced[1].trim());
+        } catch {
+            // Fall through
+        }
+    }
+    const first = trimmed.indexOf("{");
+    const last = trimmed.lastIndexOf("}");
+    if (first >= 0 && last > first) {
+        try {
+            return JSON.parse(trimmed.slice(first, last + 1));
+        } catch {
+            return null;
+        }
+    }
+    return null;
+}
+
+function runOpencodeSingle(repoRoot, model, prompt, fileAttachments = [], timeoutMs = 45000) {
+    const { cmd, prefixArgs } = resolveOpencodeBinary();
+    const args = [...prefixArgs, "run", "-m", model];
+    for (const filePath of fileAttachments) {
+        args.push("-f", filePath);
+    }
+    args.push(prompt);
+
+    return new Promise((resolve) => {
+        const start = Date.now();
+        const proc = spawn(cmd, args, {
+            cwd: repoRoot,
+            stdio: ["ignore", "pipe", "pipe"]
+        });
+
+        let stdout = "";
+        let stderr = "";
+        let timedOut = false;
+
+        const timer = setTimeout(() => {
+            timedOut = true;
+            killProcessTree(proc);
+        }, timeoutMs);
+
+        proc.stdout.on("data", (d) => { stdout += String(d); });
+        proc.stderr.on("data", (d) => { stderr += String(d); });
+
+        proc.on("close", (code) => {
+            clearTimeout(timer);
+            resolve({
+                ok: !timedOut && code === 0 && stdout.trim().length > 0,
+                timedOut,
+                code,
+                durationMs: Date.now() - start,
+                output: stdout.trim() || stderr.trim()
+            });
+        });
+
+        proc.on("error", (err) => {
+            clearTimeout(timer);
+            resolve({ ok: false, timedOut: false, code: 1, durationMs: Date.now() - start, output: err.message });
+        });
+    });
+}
+
+async function callOpencodeJson({ repoRoot, primaryModel, prompt, fileAttachments = [], timeoutMs = 45000 }) {
+    const modelChain = [primaryModel, ...DEFAULT_OPENCODE_MODELS.filter((m) => m !== primaryModel)].filter(Boolean);
+    let lastError = "No OpenCode models available";
+    for (const model of modelChain) {
+        const res = await runOpencodeSingle(repoRoot, model, prompt, fileAttachments, timeoutMs);
+        if (res.ok) {
+            const parsed = extractJsonObject(res.output);
+            if (parsed && typeof parsed === "object") {
+                return {
+                    ok: true,
+                    data: parsed,
+                    stats: { model, durationMs: res.durationMs }
+                };
+            }
+            lastError = `Invalid JSON returned by ${model}`;
+        } else {
+            lastError = `${model}: ${res.timedOut ? "timeout" : `code ${res.code}`}`;
+        }
+    }
+    return { ok: false, error: lastError, data: null, stats: null };
 }
 
 // ============================================================================
@@ -751,17 +1014,6 @@ async function extractClickables(cdp, scopeSelector = "") {
 
 async function extractFormFields(cdp, scopeSelector = "", onlyEmpty = false) {
     return cdp.evaluate(`(() => {
-        const root = ${JSON.stringify(scopeSelector)}
-            ? document.querySelector(${JSON.stringify(scopeSelector)})
-            : (document.querySelector(".modal.show form")
-                || document.querySelector(".modal.show")
-                || document.querySelector("main form")
-                || document.querySelector("form")
-                || document.body);
-        if (!root) return { inModal: false, fields: [] };
-
-        const onlyEmptyFlag = ${Boolean(onlyEmpty)};
-
         const isVisible = (el) => {
             const st = window.getComputedStyle(el);
             if (st.display === "none" || st.visibility === "hidden") return false;
@@ -779,6 +1031,29 @@ async function extractFormFields(cdp, scopeSelector = "", onlyEmpty = false) {
             return wrapped ? isVisible(wrapped) : false;
         };
 
+        const isLogoutForm = (form) => /logout|signout/i.test(form.getAttribute("action") || form.id || "");
+        const pickNonLogoutForm = (container) => {
+            for (const f of container.querySelectorAll("form")) {
+                if (!isLogoutForm(f) && isVisible(f)) return f;
+            }
+            return null;
+        };
+
+        const explicitScope = ${JSON.stringify(scopeSelector)};
+        const modalEl = document.querySelector(".modal.show");
+        const mainArea = document.querySelector("main, .main-content, #content") || document.body;
+        const root = explicitScope
+            ? document.querySelector(explicitScope)
+            : (document.querySelector(".modal.show form")
+                || modalEl
+                || document.querySelector("#actualTicketEntry form")
+                || pickNonLogoutForm(mainArea)
+                || pickNonLogoutForm(document)
+                || mainArea);
+        if (!root) return { inModal: false, fields: [] };
+
+        const onlyEmptyFlag = ${Boolean(onlyEmpty)};
+
         const getLabel = (el) => {
             if (el.id) {
                 const lbl = document.querySelector(\`label[for="\${CSS.escape(el.id)}"]\`);
@@ -790,72 +1065,84 @@ async function extractFormFields(cdp, scopeSelector = "", onlyEmpty = false) {
             return el.getAttribute("aria-label") || el.getAttribute("data-placeholder") || el.getAttribute("placeholder") || el.name || el.id || "";
         };
 
-        for (const old of document.querySelectorAll("[data-gh-field-key]")) {
-            old.removeAttribute("data-gh-field-key");
-        }
-
-        const controls = root.querySelectorAll("input, select, textarea");
-        const fields = [];
-        const usedKeys = new Set();
-
-        for (const el of controls) {
-            const tag = el.tagName.toLowerCase();
-            const type = tag === "input" ? (el.getAttribute("type") || "text").toLowerCase() : tag;
-            if (["hidden", "submit", "button", "reset", "file", "image"].includes(type)) continue;
-            if (el.disabled || el.readOnly) continue;
-            if ((el.name || "").includes("__RequestVerificationToken")) continue;
-            if (el.closest(".modern-select-search, .select2-search")) continue;
-
-            const visible = isVisible(el) || isEnhancedSelectVisible(el);
-            if (!visible) continue;
-
-            const currentValue = (type === "checkbox" || type === "radio") ? el.checked : (el.value || "");
-            if (onlyEmptyFlag && typeof currentValue === "string" && currentValue.trim() !== "") {
-                continue;
+        const collectFromRoot = (targetRoot) => {
+            for (const old of document.querySelectorAll("[data-gh-field-key]")) {
+                old.removeAttribute("data-gh-field-key");
             }
 
-            let baseKey = (el.id || el.name || getLabel(el) || \`field_\${fields.length + 1}\`)
-                .replace(/[^a-zA-Z0-9_.-]/g, "_")
-                .replace(/^_+|_+$/g, "")
-                .slice(0, 48) || \`field_\${fields.length + 1}\`;
-            let key = baseKey;
-            let suffix = 2;
-            while (usedKeys.has(key)) key = \`\${baseKey}_\${suffix++}\`;
-            usedKeys.add(key);
+            const controls = targetRoot.querySelectorAll("input, select, textarea");
+            const fields = [];
+            const usedKeys = new Set();
 
-            el.setAttribute("data-gh-field-key", key);
+            for (const el of controls) {
+                const tag = el.tagName.toLowerCase();
+                const type = tag === "input" ? (el.getAttribute("type") || "text").toLowerCase() : tag;
+                if (["hidden", "submit", "button", "reset", "file", "image"].includes(type)) continue;
+                if (el.disabled || el.readOnly) continue;
+                if ((el.name || "").includes("__RequestVerificationToken")) continue;
+                if (el.closest(".modern-select-search, .select2-search")) continue;
+                if (el.closest("form") && isLogoutForm(el.closest("form"))) continue;
 
-            const field = {
-                key,
-                tag,
-                type,
-                inputMode: (el.inputMode || el.getAttribute("inputmode") || "").toLowerCase(),
-                label: getLabel(el).slice(0, 80),
-                placeholder: (el.getAttribute("placeholder") || el.getAttribute("data-placeholder") || "").slice(0, 60),
-                required: Boolean(el.required || el.getAttribute("data-val-required")),
-                currentValue,
-                maxLength: el.maxLength > 0 && el.maxLength < 10000 ? el.maxLength : null,
-                min: el.getAttribute("min") || null,
-                max: el.getAttribute("max") || null
-            };
+                const visible = isVisible(el) || isEnhancedSelectVisible(el);
+                if (!visible) continue;
 
-            if (tag === "select") {
-                const opts = [];
-                for (const opt of el.options) {
-                    const val = opt.value;
-                    const txt = (opt.textContent || "").replace(/\\s+/g, " ").trim();
-                    if (val === "" && /select|choose|--/i.test(txt)) continue;
-                    if (opt.disabled) continue;
-                    opts.push({ value: val, text: txt.slice(0, 60) });
+                const currentValue = (type === "checkbox" || type === "radio") ? el.checked : (el.value || "");
+                if (onlyEmptyFlag && typeof currentValue === "string" && currentValue.trim() !== "") {
+                    continue;
                 }
-                field.options = opts;
-                if (opts.length === 0) continue; // Skip unloaded cascading selects until options populate
+
+                let baseKey = (el.id || el.name || getLabel(el) || \`field_\${fields.length + 1}\`)
+                    .replace(/[^a-zA-Z0-9_.-]/g, "_")
+                    .replace(/^_+|_+$/g, "")
+                    .slice(0, 48) || \`field_\${fields.length + 1}\`;
+                let key = baseKey;
+                let suffix = 2;
+                while (usedKeys.has(key)) key = \`\${baseKey}_\${suffix++}\`;
+                usedKeys.add(key);
+
+                el.setAttribute("data-gh-field-key", key);
+
+                const field = {
+                    key,
+                    tag,
+                    type,
+                    inputMode: (el.inputMode || el.getAttribute("inputmode") || "").toLowerCase(),
+                    label: getLabel(el).slice(0, 80),
+                    placeholder: (el.getAttribute("placeholder") || el.getAttribute("data-placeholder") || "").slice(0, 60),
+                    required: Boolean(el.required || el.getAttribute("data-val-required")),
+                    currentValue,
+                    maxLength: el.maxLength > 0 && el.maxLength < 10000 ? el.maxLength : null,
+                    min: el.getAttribute("min") || null,
+                    max: el.getAttribute("max") || null
+                };
+
+                if (tag === "select") {
+                    const opts = [];
+                    for (const opt of el.options) {
+                        const val = opt.value;
+                        const txt = (opt.textContent || "").replace(/\\s+/g, " ").trim();
+                        if (val === "" && /select|choose|--/i.test(txt)) continue;
+                        if (opt.disabled) continue;
+                        opts.push({ value: val, text: txt.slice(0, 60) });
+                    }
+                    field.options = opts;
+                    if (opts.length === 0) continue;
+                }
+                fields.push(field);
+                if (fields.length >= 30) break;
             }
-            fields.push(field);
-            if (fields.length >= 30) break;
+            return fields;
+        };
+
+        let fields = collectFromRoot(root);
+        if (fields.length === 0 && !explicitScope && !modalEl && root !== mainArea) {
+            fields = collectFromRoot(mainArea);
+        }
+        if (fields.length === 0 && !explicitScope && !modalEl && mainArea !== document.body) {
+            fields = collectFromRoot(document.body);
         }
 
-        return { inModal: Boolean(document.querySelector(".modal.show")), fields };
+        return { inModal: Boolean(modalEl), fields };
     })()`);
 }
 
@@ -980,10 +1267,14 @@ function buildTemplateVars(userVars = {}) {
     const now = new Date();
     const phToday = new Date(now.getTime() + 8 * 60 * 60 * 1000);
     const phTomorrow = new Date(phToday.getTime() + 24 * 60 * 60 * 1000);
+    // Match MSAP BafCycleStart: Tuesday-through-Monday weekly cycle in UTC+8
+    const daysSinceTuesday = (phToday.getUTCDay() - 2 + 7) % 7;
+    const phWeekStart = new Date(phToday.getTime() - daysSinceTuesday * 24 * 60 * 60 * 1000);
     const rand = String(Math.floor(1000 + Math.random() * 9000));
     return {
         today: phToday.toISOString().slice(0, 10),
         tomorrow: phTomorrow.toISOString().slice(0, 10),
+        weekStart: phWeekStart.toISOString().slice(0, 10),
         rand,
         ...userVars
     };
@@ -1117,14 +1408,52 @@ function enforceDateTimeGuards(fields, values) {
     return out;
 }
 
+function selectSuspectRepairFields(fields, errorMessage, previousValues = {}) {
+    const errLower = String(errorMessage || "").toLowerCase();
+    const errTokens = errLower.split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
+    const mentionsDate = /\b(date|time|future|past|before|after|start|end|window|arrival|depart|schedule|closed|period)\b/i.test(errLower);
+    const mentionsNumber = /\b(amount|rate|hours|qty|quantity|number|positive|zero|greater|decimal|price|fee|charge)\b/i.test(errLower);
+
+    const suspects = [];
+    for (const f of fields) {
+        const keyLower = f.key.toLowerCase();
+        const labelLower = (f.label || "").toLowerCase();
+        const prev = previousValues?.[f.key];
+        const isBlankRequired = f.required && (prev === undefined || prev === null || String(prev).trim() === "");
+        const matchesName = errLower.includes(keyLower)
+            || (labelLower.length >= 3 && errLower.includes(labelLower.replace(/\*/g, "").trim()))
+            || errTokens.some((tok) => keyLower.includes(tok) || labelLower.includes(tok));
+        const matchesDate = mentionsDate && (f.type === "date" || f.type === "time" || f.type === "datetime-local" || /date|time|start|end/i.test(`${f.key} ${f.label}`));
+        const matchesNumber = mentionsNumber && (f.type === "number" || f.inputMode === "decimal" || f.inputMode === "numeric" || /amount|rate|hour|qty|fee|charge/i.test(`${f.key} ${f.label}`));
+
+        if (isBlankRequired || matchesName || matchesDate || matchesNumber) {
+            suspects.push(f);
+        }
+    }
+    return suspects;
+}
+
 async function generateFormValues(fields, scenario, overrides, ollamaOpts, repairContext = null, knownFields = null, vars = {}) {
     const expandedOverrides = expandTemplatesDeep(overrides, vars);
-    const resolvedOverrides = repairContext ? {} : resolveOverrides(fields, expandedOverrides);
+    const resolvedOverrides = repairContext?.unlockOverrides ? {} : resolveOverrides(fields, expandedOverrides);
     const afterOverrides = fields.filter((f) => !(f.key in resolvedOverrides));
 
     let reusedKnown = {};
     let remainingFields = afterOverrides;
-    if (!repairContext && knownFields) {
+    if (repairContext) {
+        const prev = repairContext.previousValues || {};
+        const suspects = selectSuspectRepairFields(afterOverrides, repairContext.errorMessage, prev);
+        if (suspects.length > 0 && suspects.length < afterOverrides.length) {
+            const suspectKeys = new Set(suspects.map((s) => s.key));
+            for (const f of afterOverrides) {
+                if (!suspectKeys.has(f.key) && f.key in prev) {
+                    reusedKnown[f.key] = prev[f.key];
+                }
+            }
+            remainingFields = suspects;
+            console.log(`  [self-heal] Diff-only form repair: regenerating ${suspects.length}/${afterOverrides.length} suspect field(s): ${suspects.map((s) => s.key).join(", ")}`);
+        }
+    } else if (knownFields) {
         const matched = matchKnownFields(afterOverrides, knownFields, vars);
         reusedKnown = matched.reused;
         remainingFields = matched.drifted;
@@ -1157,7 +1486,7 @@ async function generateFormValues(fields, scenario, overrides, ollamaOpts, repai
 
     const phNow = getPhilippineNowText();
     const promptBody = repairContext
-        ? `Scenario: ${scenario || "valid realistic business test data"}\n\nPrevious values you submitted:\n${JSON.stringify(repairContext.previousValues, null, 2)}\n\nVALIDATION ERROR FROM THE APP:\n${repairContext.errorMessage}\n\nFix the invalid field(s) to satisfy the error above while keeping valid fields intact.\n\nFields:\n${fieldLines.join("\n")}`
+        ? `Scenario: ${scenario || "valid realistic business test data"}\n\nPrevious values submitted for the failing field(s):\n${JSON.stringify(Object.fromEntries(remainingFields.map((f) => [f.key, repairContext.previousValues?.[f.key] ?? ""])), null, 2)}\n\nVALIDATION ERROR FROM THE APP:\n${repairContext.errorMessage}\n\nOutput corrected values ONLY for the fields listed below so the validation error is resolved.\n\nFields to repair:\n${fieldLines.join("\n")}`
         : `Scenario: ${scenario || "valid realistic business test data (Philippines)"}\n\nFields:\n${fieldLines.join("\n")}`;
 
     const res = await callOllamaJson({
@@ -1168,7 +1497,12 @@ async function generateFormValues(fields, scenario, overrides, ollamaOpts, repai
         schema
     });
 
-    const combined = enforceDateTimeGuards(fields, { ...reusedKnown, ...res.data, ...resolvedOverrides });
+    const combined = enforceDateTimeGuards(fields, {
+        ...(repairContext?.previousValues || {}),
+        ...reusedKnown,
+        ...res.data,
+        ...resolvedOverrides
+    });
     return {
         values: combined,
         reusedCount: Object.keys(reusedKnown).length,
@@ -1232,27 +1566,216 @@ async function applyFormValues(cdp, values) {
 
 async function readPageFeedback(cdp) {
     return cdp.evaluate(`(() => {
-        const validationErrors = [...document.querySelectorAll(".field-validation-error, .validation-summary-errors li, .invalid-feedback")]
+        const isVisible = (el) => {
+            if (!el) return false;
+            const st = window.getComputedStyle(el);
+            if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
+            const r = el.getBoundingClientRect();
+            return r.width > 1 && r.height > 1;
+        };
+        const validationErrors = [...document.querySelectorAll(".field-validation-error, .validation-summary-errors li, .invalid-feedback, span.text-error, div.text-error")]
+            .filter((el) => !el.closest("button, a"))
             .map((el) => (el.innerText || "").trim())
             .filter(Boolean)
             .slice(0, 10);
-        const swalTitle = document.querySelector(".swal2-popup .swal2-title")?.innerText?.trim() || "";
-        const swalText = document.querySelector(".swal2-popup .swal2-html-container")?.innerText?.trim() || "";
+        const swalCandidate = document.querySelector(".swal2-popup:not([style*='display: none']):not(.swal2-hide):not(.animate__fadeOutDown)");
+        const swalPopup = isVisible(swalCandidate) ? swalCandidate : null;
+        const swalTitle = swalPopup?.querySelector(".swal2-title")?.innerText?.trim() || "";
+        const swalText = swalPopup?.querySelector(".swal2-html-container")?.innerText?.trim() || "";
+        const swalConfirmBtn = swalPopup?.querySelector(".swal2-confirm") || null;
+        const swalCancelBtn = swalPopup?.querySelector(".swal2-cancel") || null;
+        const swalConfirmVisible = Boolean(swalConfirmBtn && !swalConfirmBtn.disabled && isVisible(swalConfirmBtn));
+        const swalCancelVisible = Boolean(swalCancelBtn && !swalCancelBtn.disabled && isVisible(swalCancelBtn));
+        const swalIsLoading = Boolean(
+            swalPopup && (swalPopup.classList.contains("swal2-loading")
+                || swalPopup.querySelector(".swal2-loading, .modern-loader-inline")
+                || (!swalConfirmVisible && /processing|saving|loading|please wait/i.test(\`\${swalTitle} \${swalText}\`)))
+        );
+        const swalIsError = Boolean(swalPopup?.querySelector(".swal2-error, .swal2-warning, .modern-alert-icon--error, .modern-alert-icon--warning")
+            || /error|invalid|required|failed|could not|cannot|future|must be/i.test(\`\${swalTitle} \${swalText}\`));
         const toastText = [...document.querySelectorAll(".toast-body, .toast-message, .alert")]
             .map((el) => (el.innerText || "").replace(/\\s+/g, " ").trim())
             .filter(Boolean)
             .slice(0, 5);
-        const bodySample = (document.body?.innerText || "").slice(0, 1200);
-        const hasServerError = /An unhandled exception occurred|HTTP ERROR 500|Server Error in/i.test(bodySample);
+        const bodyText = (document.body?.innerText || "");
+        const hasServerError = /An unhandled exception occurred|HTTP ERROR 500|Server Error in/i.test(bodyText.slice(0, 1500));
         return {
             url: location.href,
+            pathname: location.pathname + location.search,
             title: document.title || "",
             hasServerError,
             validationErrors,
-            swal: (swalTitle || swalText) ? { title: swalTitle, text: swalText } : null,
-            alerts: toastText
+            swal: (swalPopup && (swalTitle || swalText || swalIsLoading || swalConfirmVisible))
+                ? {
+                    title: swalTitle,
+                    text: swalText,
+                    isError: swalIsError,
+                    isLoading: swalIsLoading,
+                    confirmVisible: swalConfirmVisible,
+                    confirmText: (swalConfirmBtn?.innerText || "").trim(),
+                    cancelVisible: swalCancelVisible
+                }
+                : null,
+            alerts: toastText,
+            bodySample: bodyText.slice(0, 6000)
         };
     })()`);
+}
+
+async function selectOptionCdp(cdp, selectorOrTarget, valueOrText, scopeSelector = "") {
+    return cdp.evaluate(`((rawTarget, rawWanted, scopeSel) => {
+        const root = scopeSel
+            ? document.querySelector(scopeSel)
+            : (document.querySelector(".modal.show") || document);
+        if (!root) return { ok: false, reason: \`Scope not found: \${scopeSel}\` };
+
+        const getLabel = (el) => {
+            if (el.id) {
+                const lbl = document.querySelector(\`label[for="\${CSS.escape(el.id)}"]\`);
+                if (lbl && lbl.innerText.trim()) return lbl.innerText.replace(/\\s+/g, " ").trim();
+            }
+            const wrap = el.closest(".ui-field, .schedule-field, .mb-3, .form-group, .form-floating, .col, [class*='col-'], td, div");
+            const nearLabel = wrap?.querySelector("label");
+            if (nearLabel && nearLabel.innerText.trim()) return nearLabel.innerText.replace(/\\s+/g, " ").trim();
+            return el.getAttribute("aria-label") || el.getAttribute("data-placeholder") || el.getAttribute("placeholder") || el.name || el.id || "";
+        };
+
+        let selectEl = null;
+        const target = String(rawTarget || "").trim();
+        if (target) {
+            if (/^[#.\\[]|^select\\b/i.test(target)) {
+                try {
+                    const candidate = root.querySelector(target);
+                    if (candidate && candidate.tagName === "SELECT") selectEl = candidate;
+                    else if (candidate) selectEl = candidate.querySelector("select") || candidate.parentElement?.querySelector("select");
+                } catch {}
+            }
+            if (!selectEl) {
+                const needle = target.toLowerCase();
+                const selects = [...root.querySelectorAll("select")].filter((s) => !s.disabled);
+                selectEl = selects.find((s) => (s.id || "").toLowerCase() === needle || (s.name || "").toLowerCase() === needle)
+                    || selects.find((s) => getLabel(s).toLowerCase().replace(/\\*/g, "").trim() === needle)
+                    || selects.find((s) => getLabel(s).toLowerCase().includes(needle) || (s.id || "").toLowerCase().includes(needle) || (s.name || "").toLowerCase().includes(needle));
+            }
+        } else {
+            selectEl = [...root.querySelectorAll("select")].find((s) => !s.disabled) || null;
+        }
+
+        if (!selectEl) return { ok: false, reason: \`Select element not found for "\${target}"\` };
+
+        const opts = [...selectEl.options].filter((o) => !o.disabled);
+        const nonPlaceholder = opts.filter((o) => !(o.value === "" && /select|choose|--/i.test((o.textContent || "").trim())));
+        if (nonPlaceholder.length === 0) {
+            return { ok: false, waitingForOptions: true, reason: \`Select "\${selectEl.id || selectEl.name || target}" has no populated options yet\` };
+        }
+
+        const wanted = String(rawWanted ?? "").trim();
+        const wantedLower = wanted.toLowerCase();
+        const matchedOpt = opts.find((o) => o.value === wanted)
+            || opts.find((o) => (o.textContent || "").replace(/\\s+/g, " ").trim().toLowerCase() === wantedLower)
+            || opts.find((o) => (o.textContent || "").replace(/\\s+/g, " ").trim().toLowerCase().includes(wantedLower));
+
+        if (!matchedOpt) {
+            return {
+                ok: false,
+                waitingForOptions: true,
+                reason: \`Option "\${wanted}" not found in "\${selectEl.id || selectEl.name || target}" (\${nonPlaceholder.length} options)\`,
+                availableSample: nonPlaceholder.slice(0, 8).map((o) => \`\${o.value}=\${(o.textContent || "").trim()}\`)
+            };
+        }
+
+        const modernContainer = selectEl.nextElementSibling?.classList.contains("modern-select-container")
+            ? selectEl.nextElementSibling
+            : selectEl.parentElement?.querySelector(".modern-select-container");
+        let usedModernClick = false;
+        if (modernContainer) {
+            const trigger = modernContainer.querySelector(".modern-select-trigger");
+            if (trigger) {
+                trigger.scrollIntoView({ block: "center" });
+                trigger.click();
+                const optNode = document.querySelector(\`.modern-select-dropdown.show .modern-select-option[data-value="\${CSS.escape(matchedOpt.value)}"]\`)
+                    || modernContainer.querySelector(\`.modern-select-option[data-value="\${CSS.escape(matchedOpt.value)}"]\`);
+                if (optNode) {
+                    optNode.click();
+                    usedModernClick = true;
+                }
+            }
+        }
+
+        if (!usedModernClick || selectEl.value !== matchedOpt.value) {
+            selectEl.value = matchedOpt.value;
+            selectEl.dispatchEvent(new Event("input", { bubbles: true }));
+            selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+            if (window.jQuery) {
+                try {
+                    const $el = window.jQuery(selectEl);
+                    $el.val(matchedOpt.value).trigger("change");
+                    if (typeof window.refreshModernSelect === "function") {
+                        window.refreshModernSelect($el);
+                    }
+                } catch {}
+            }
+        }
+
+        return {
+            ok: true,
+            matchedKey: selectEl.id || selectEl.name || getLabel(selectEl),
+            selectedValue: selectEl.value,
+            selectedText: (matchedOpt.textContent || "").replace(/\\s+/g, " ").trim(),
+            usedModernClick
+        };
+    })(${JSON.stringify(selectorOrTarget)}, ${JSON.stringify(valueOrText)}, ${JSON.stringify(scopeSelector)})`);
+}
+
+async function uploadFileCdp(cdp, selector, payload, scopeSelector = "") {
+    return cdp.evaluate(`((sel, fileName, mimeType, base64Content, scopeSel) => {
+        const root = scopeSel ? document.querySelector(scopeSel) : (document.querySelector(".modal.show") || document);
+        if (!root) return { ok: false, reason: \`Scope not found: \${scopeSel}\` };
+        const inputEl = sel
+            ? (root.querySelector(sel) || document.querySelector(sel))
+            : (root.querySelector("input[type='file']:not([disabled])") || document.querySelector("input[type='file']:not([disabled])"));
+        if (!inputEl) return { ok: false, reason: \`File input not found: \${sel || "input[type='file']"}\` };
+
+        const bin = atob(base64Content);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const file = new File([bytes], fileName, { type: mimeType || "application/octet-stream" });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        inputEl.files = dt.files;
+        inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+        inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+        return {
+            ok: true,
+            selectorUsed: inputEl.id ? \`#\${inputEl.id}\` : (inputEl.name ? \`input[name='\${inputEl.name}']\` : "input[type='file']"),
+            fileName,
+            size: bytes.length
+        };
+    })(${JSON.stringify(selector || "")}, ${JSON.stringify(payload.fileName)}, ${JSON.stringify(payload.mimeType)}, ${JSON.stringify(payload.base64Content)}, ${JSON.stringify(scopeSelector)})`);
+}
+
+async function captureSnapshotCdp(cdp, scopeSelector = "") {
+    const fb = await readPageFeedback(cdp);
+    const clickRes = await extractClickables(cdp, scopeSelector);
+    const fieldRes = await extractFormFields(cdp, scopeSelector, false);
+    const pathLower = String(fb.pathname || "").toLowerCase();
+    return {
+        ...fb,
+        isLoginPage: pathLower.includes("/identity/account/login"),
+        isAccessDenied: pathLower.includes("/identity/account/accessdenied"),
+        inModal: clickRes.inModal || fieldRes.inModal,
+        clickables: (clickRes.items || []).slice(0, 25),
+        fields: (fieldRes.fields || []).slice(0, 25).map((f) => ({
+            key: f.key,
+            tag: f.tag,
+            type: f.type,
+            label: f.label,
+            required: f.required,
+            currentValue: f.currentValue,
+            options: Array.isArray(f.options) ? f.options.slice(0, 10) : undefined
+        })),
+        bodyExcerpt: (fb.bodySample || "").slice(0, 1800)
+    };
 }
 
 // ============================================================================
@@ -1387,6 +1910,11 @@ class ExtensionDriver {
         this.tabId = res.tabId;
     }
 
+    async closeTab() {
+        await this.rpc("close_tab", { tabId: this.tabId }).catch(() => {});
+        this.tabId = null;
+    }
+
     async navigate(url) {
         const res = await this.rpc("navigate", { url });
         if (res.tabId) this.tabId = res.tabId;
@@ -1427,6 +1955,28 @@ class ExtensionDriver {
         return Boolean(res?.found);
     }
 
+    async selectOption(target, value, scopeSelector = "") {
+        return this.rpc("select_option", { target, value, scopeSelector });
+    }
+
+    async uploadFile(selector, payload, scopeSelector = "") {
+        return this.rpc("upload_file", {
+            selector,
+            fileName: payload.fileName,
+            mimeType: payload.mimeType,
+            base64Content: payload.base64Content,
+            scopeSelector
+        });
+    }
+
+    async captureSnapshot(scopeSelector = "") {
+        return this.rpc("capture_snapshot", { scopeSelector });
+    }
+
+    async stepPreflight(params = {}) {
+        return this.rpc("step_preflight", params);
+    }
+
     async autoLogin(username, password) {
         const res = await this.rpc("auto_login", { username, password });
         return Boolean(res?.submitted);
@@ -1447,6 +1997,252 @@ class ExtensionDriver {
 }
 
 // ============================================================================
+// Autonomous Recovery Helpers (Tier 0 / Tier 1 Ollama / Tier 2 OpenCode)
+// ============================================================================
+
+function detectPageBlocker(fb, allowLoginPage = false) {
+    if (!fb) return null;
+    if (fb.hasServerError) {
+        return { type: "server_error", fatal: true, message: `ASP.NET server error on ${fb.url || "current page"}` };
+    }
+    const pathLower = String(fb.pathname || "").toLowerCase();
+    if (pathLower.includes("/identity/account/accessdenied")) {
+        return { type: "access_denied", fatal: true, message: `Access denied at ${fb.url}` };
+    }
+    if (!allowLoginPage && pathLower.includes("/identity/account/login")) {
+        return { type: "login_redirect", fatal: false, message: `Redirected to Login (${fb.url})` };
+    }
+    if (fb.swal && fb.swal.isError) {
+        return {
+            type: "error_swal",
+            fatal: false,
+            message: `Error popup: ${fb.swal.title || ""} ${fb.swal.text || ""}`.trim()
+        };
+    }
+    return null;
+}
+
+function stepAllowsDestructive(step, goalText = "") {
+    const raw = [
+        step?.target,
+        step?.selector,
+        step?.scenario,
+        step?.text,
+        goalText
+    ].filter(Boolean).join(" ");
+    return DESTRUCTIVE_TARGET_RE.test(raw);
+}
+
+function isDestructiveCandidate(labelText) {
+    return DESTRUCTIVE_TARGET_RE.test(String(labelText || ""));
+}
+
+function formatCompactSnapshotForLlm(snapshot) {
+    return {
+        url: snapshot.url,
+        pathname: snapshot.pathname,
+        title: snapshot.title,
+        inModal: snapshot.inModal,
+        isLoginPage: snapshot.isLoginPage,
+        isAccessDenied: snapshot.isAccessDenied,
+        hasServerError: snapshot.hasServerError,
+        swal: snapshot.swal,
+        validationErrors: snapshot.validationErrors || [],
+        alerts: snapshot.alerts || [],
+        clickables: (snapshot.clickables || []).slice(0, 20).map((c) => ({
+            id: c.id,
+            tag: c.tag,
+            text: c.text,
+            domId: c.domId || undefined
+        })),
+        fields: (snapshot.fields || []).slice(0, 20).map((f) => ({
+            key: f.key,
+            tag: f.tag,
+            type: f.type,
+            label: f.label,
+            required: f.required || undefined,
+            currentValue: f.currentValue,
+            options: Array.isArray(f.options) ? f.options.slice(0, 8) : undefined
+        })),
+        bodyExcerpt: (snapshot.bodyExcerpt || "").slice(0, 1200)
+    };
+}
+
+async function askOllamaStepRecovery({ failedStep, errorMessage, snapshot, ollamaOpts }) {
+    const clickMenu = (snapshot.clickables || [])
+        .slice(0, 20)
+        .map((c) => `[${c.id}] <${c.tag}> "${c.text}"${c.domId ? ` (#${c.domId})` : ""}`)
+        .join("\n");
+    const fieldMenu = (snapshot.fields || [])
+        .slice(0, 15)
+        .map((f) => {
+            const optsStr = Array.isArray(f.options) && f.options.length
+                ? ` options=[${f.options.slice(0, 6).map((o) => `${o.value}:${o.text}`).join(", ")}]`
+                : "";
+            return `- ${f.key} (${f.label}, ${f.type}${f.required ? ", required" : ""}, cur="${f.currentValue ?? ""}")${optsStr}`;
+        })
+        .join("\n");
+
+    const schema = {
+        type: "object",
+        properties: {
+            recoveryAction: {
+                type: "string",
+                enum: ["click_alternative", "select_option", "fill_missing_fields", "dismiss_modal", "wait_and_retry", "escalate", "abort"]
+            },
+            reason: { type: "string" },
+            clickableId: { type: "integer" },
+            selectTarget: { type: "string" },
+            selectValue: { type: "string" },
+            fieldPatches: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        key: { type: "string" },
+                        value: { type: "string" }
+                    },
+                    required: ["key", "value"],
+                    additionalProperties: false
+                }
+            }
+        },
+        required: ["recoveryAction", "reason"],
+        additionalProperties: false
+    };
+
+    const prompt = [
+        `Failed step: ${JSON.stringify(failedStep)}`,
+        `Error: ${errorMessage}`,
+        `Current URL: ${snapshot.url}`,
+        snapshot.swal ? `Active popup: ${JSON.stringify(snapshot.swal)}` : "",
+        snapshot.validationErrors?.length ? `Validation errors: ${snapshot.validationErrors.join(" | ")}` : "",
+        clickMenu ? `Visible clickables:\n${clickMenu}` : "Visible clickables: (none)",
+        fieldMenu ? `Visible fields:\n${fieldMenu}` : "Visible fields: (none)",
+        "",
+        "Choose ONE safe recovery action. Use \"escalate\" if unsure or if multiple steps are needed. Use \"abort\" if the app shows a genuine server/business error."
+    ].filter(Boolean).join("\n");
+
+    const res = await callOllamaJson({
+        ...ollamaOpts,
+        temperature: 0.1,
+        numCtx: 3072,
+        numPredict: 96,
+        system: "You are a fast browser recovery advisor. Keep reason under 10 words. If a failed click step matches a visible clickable by intent (e.g. 'new-schedule' -> 'New Schedule'), pick click_alternative with its clickableId. Pick escalate only when no single element matches. Never pick destructive buttons (Delete, Void, Reverse, Finalize) unless requested. Return ONLY JSON.",
+        prompt,
+        schema
+    });
+    return res;
+}
+
+const SAFE_RECOVERY_ACTIONS = new Set([
+    "navigate",
+    "click",
+    "select",
+    "fill_form",
+    "fill_and_submit",
+    "upload",
+    "wait",
+    "assert"
+]);
+
+async function askOpencodeStepRecovery({ repoRoot, runDir, primaryModel, failedStep, errorMessage, snapshot, stepNum }) {
+    const contextPath = path.join(runDir, `tier2-recovery-step-${stepNum}.json`);
+    fs.writeFileSync(
+        contextPath,
+        JSON.stringify(
+            {
+                failedStep,
+                errorMessage,
+                snapshot: formatCompactSnapshotForLlm(snapshot)
+            },
+            null,
+            2
+        ),
+        "utf8"
+    );
+    const prompt = [
+        "Do NOT run shell commands or inspect repo files. Read ONLY the attached JSON snapshot of a failed browser step.",
+        "Decide whether this is a recoverable UI/selector/modal/missing-input hiccup or a genuine application bug.",
+        "Reply with ONLY valid JSON matching this schema:",
+        "{",
+        "  \"abort\": false,",
+        "  \"reason\": \"short explanation\",",
+        "  \"recoverySteps\": [",
+        "    { \"action\": \"click|select|fill_form|fill_and_submit|upload|wait|navigate\", \"target\": \"...\", \"selector\": \"...\", \"value\": \"...\", \"overrides\": {}, \"ms\": 500 }",
+        "  ],",
+        "  \"replaceStep\": { \"action\": \"...\" }",
+        "}",
+        "Rules:",
+        "- Keep recoverySteps to 1-3 safe steps using ONLY actions: navigate, click, select, fill_form, fill_and_submit, upload, wait.",
+        "- Prefer semantic select ({ \"action\": \"select\", \"target\": \"label or #id\", \"value\": \"option value or text\" }) for dropdowns.",
+        "- For clicks, prefer target text (e.g. { \"action\": \"click\", \"target\": \"+ New schedule\" }) WITHOUT selector. NEVER use Playwright/jQuery pseudo-selectors like :has-text() or :contains().",
+        "- NEVER click destructive actions (Delete, Void, Reverse, Finalize) unless failedStep explicitly targeted them.",
+        "- Set replaceStep to a clean single replacement step for the playbook if appropriate, or omit it.",
+        "- Set abort=true and recoverySteps=[] if the page shows a real server error, access denied, or unrecoverable business failure."
+    ].join("\n");
+
+    return callOpencodeJson({
+        repoRoot,
+        primaryModel,
+        prompt,
+        fileAttachments: [contextPath],
+        timeoutMs: 45000
+    });
+}
+
+async function askOpencodeGoalNextAction({ repoRoot, runDir, primaryModel, goal, turn, maxTurns, history, snapshot }) {
+    const contextPath = path.join(runDir, `goal-turn-${turn}.json`);
+    fs.writeFileSync(
+        contextPath,
+        JSON.stringify(
+            {
+                goal,
+                turn,
+                maxTurns,
+                recentHistory: history.slice(-8),
+                page: formatCompactSnapshotForLlm(snapshot)
+            },
+            null,
+            2
+        ),
+        "utf8"
+    );
+    const prompt = [
+        "Do NOT run shell commands or read repo files. Read ONLY the attached live browser state JSON.",
+        "You are driving a browser step-by-step to achieve the user's verification goal.",
+        "Return ONLY valid JSON for the single next action:",
+        "{",
+        "  \"action\": \"navigate|click|select|fill_form|fill_and_submit|upload|wait|assert|done|fail\",",
+        "  \"reason\": \"concise explanation\",",
+        "  \"url\": \"/route (for navigate)\",",
+        "  \"target\": \"visible button text or dropdown label (for click/select)\",",
+        "  \"selector\": \"optional CSS selector\",",
+        "  \"value\": \"option value or text (for select)\",",
+        "  \"scenario\": \"short description (for fill_form/fill_and_submit)\",",
+        "  \"overrides\": { \"FieldKey\": \"Value\" },",
+        "  \"fixture\": \"pdf or png (for upload)\",",
+        "  \"text\": \"expected text (for assert)\",",
+        "  \"urlIncludes\": \"expected url fragment (for assert)\",",
+        "  \"summary\": \"final verification summary (for done/fail)\"",
+        "}",
+        "Rules:",
+        "- Prefer semantic target/label over brittle CSS selectors.",
+        "- Use action=\"select\" for dropdowns (including ModernSelect).",
+        "- Before returning action=\"done\", make sure the goal's expected outcome is actually visible on the page (or verified via assert).",
+        "- Return action=\"fail\" immediately if a genuine application bug / 500 error / missing expected data prevents achieving the goal."
+    ].join("\n");
+
+    return callOpencodeJson({
+        repoRoot,
+        primaryModel,
+        prompt,
+        fileAttachments: [contextPath],
+        timeoutMs: 45000
+    });
+}
+
+// ============================================================================
 // Main Runner
 // ============================================================================
 
@@ -1463,7 +2259,38 @@ async function main() {
     }
 
     const repoRoot = getRepoRoot();
-    const vars = buildTemplateVars(opts.vars);
+    const checkpointPath = path.join(repoRoot, "artifacts", "proof-verify", "last-checkpoint.json");
+    let loadedCheckpoint = null;
+    if (opts.resume) {
+        if (!fs.existsSync(checkpointPath)) {
+            throw new Error(`Cannot --resume: checkpoint not found at ${checkpointPath}`);
+        }
+        loadedCheckpoint = readJsonFile(checkpointPath);
+        if (!opts.playbook && loadedCheckpoint.playbook) opts.playbook = loadedCheckpoint.playbook;
+        if (!opts.stepsFile && !opts.playbook && loadedCheckpoint.stepsFile) {
+            opts.stepsFile = loadedCheckpoint.stepsFile;
+            const loaded = readJsonFile(opts.stepsFile);
+            if (Array.isArray(loaded)) opts.steps.push(...loaded);
+            else if (loaded && typeof loaded === "object") {
+                if (!opts.url && loaded.url) opts.url = loaded.url;
+                if (!opts.account && loaded.account) opts.account = loaded.account;
+                if (Array.isArray(loaded.steps)) opts.steps.push(...loaded.steps);
+            }
+        }
+        if (!opts.url && loadedCheckpoint.url) opts.url = loadedCheckpoint.url;
+        if (!opts.account && loadedCheckpoint.account) opts.account = loadedCheckpoint.account;
+        if (opts.fromStep <= 1 && Number.isInteger(loadedCheckpoint.nextStep) && loadedCheckpoint.nextStep > 1) {
+            opts.fromStep = loadedCheckpoint.nextStep;
+        }
+        console.log(`[guided-hands] Resuming from checkpoint at step ${opts.fromStep} (vars: ${Object.keys(loadedCheckpoint.vars || {}).join(", ") || "none"})`);
+    } else if (opts.fromStep > 1 && fs.existsSync(checkpointPath)) {
+        try {
+            loadedCheckpoint = readJsonFile(checkpointPath);
+        } catch {
+            loadedCheckpoint = null;
+        }
+    }
+
     let loadedPlaybook = null;
     const playbookPath = opts.playbook ? resolvePlaybookPath(repoRoot, opts.playbook) : "";
     const savePlaybookPath = opts.savePlaybook
@@ -1474,16 +2301,30 @@ async function main() {
         if (!fs.existsSync(playbookPath)) {
             throw new Error(`Playbook not found: ${playbookPath}`);
         }
-        loadedPlaybook = JSON.parse(fs.readFileSync(playbookPath, "utf8"));
+        loadedPlaybook = readJsonFile(playbookPath);
         if (!opts.url && loadedPlaybook.url) opts.url = loadedPlaybook.url;
+        if (!opts.account && loadedPlaybook.account) opts.account = loadedPlaybook.account;
         if (opts.steps.length === 0 && Array.isArray(loadedPlaybook.steps)) {
             opts.steps = JSON.parse(JSON.stringify(loadedPlaybook.steps));
         }
         console.log(`[guided-hands] Loaded playbook: ${path.basename(playbookPath)} (${opts.steps.length} step(s))`);
     }
 
+    const vars = buildTemplateVars({
+        ...(loadedPlaybook?.vars || {}),
+        ...(loadedCheckpoint?.vars || {}),
+        ...opts.vars
+    });
+
+    if (opts.account && (!opts.user || !opts.pass)) {
+        const creds = loadAccountFromRegistry(repoRoot, opts.account);
+        opts.user = creds.username;
+        opts.pass = creds.password;
+        console.log(`[guided-hands] Loaded credentials for account "${creds.username}" from test-accounts.local.json`);
+    }
+
     if (!opts.url) {
-        throw new Error("Missing --url (or use --playbook / --benchmark).");
+        throw new Error("Missing --url (or use --playbook / --resume / --benchmark).");
     }
 
     const ignoreCheck = runGit(repoRoot, ["check-ignore", "-q", "artifacts/proof-verify"]);
@@ -1503,7 +2344,10 @@ async function main() {
     );
 
     const ollamaOpts = { ollamaUrl: opts.ollamaUrl, model: opts.model };
-    const expandedStartUrl = expandTemplate(opts.url, vars);
+    const expandedStartUrl = expandTemplate(
+        (opts.resume && loadedCheckpoint?.currentUrl) ? loadedCheckpoint.currentUrl : opts.url,
+        vars
+    );
     const startUrl = expandedStartUrl.startsWith("http")
         ? expandedStartUrl
         : `${opts.baseUrl}${expandedStartUrl.startsWith("/") ? "" : "/"}${expandedStartUrl}`;
@@ -1516,13 +2360,22 @@ async function main() {
     const report = {
         timestamp: new Date().toISOString(),
         model: opts.model,
+        healEngine: opts.healEngine,
         transport: opts.extension ? "chrome-extension" : "cdp",
         startUrl,
+        fromStep: opts.fromStep,
+        goal: opts.goal || null,
         passed: true,
         steps: [],
+        recoveries: [],
+        patchedSteps: [],
+        failureSnapshot: null,
         screenshots: [],
         errors: []
     };
+
+    let currentStepIndex = -1;
+    let currentStepObj = null;
 
     try {
         const srv = await ensureAppRunning(repoRoot, opts.baseUrl, opts.port, opts.noAutostart);
@@ -1570,13 +2423,23 @@ async function main() {
         const doExtractClickables = (scope) => (ext ? ext.extractClickables(scope) : extractClickables(cdp, scope));
         const doExtractFields = (scope, onlyEmpty) => (ext ? ext.extractFields(scope, onlyEmpty) : extractFormFields(cdp, scope, onlyEmpty));
         const doApplyValues = (vals) => (ext ? ext.applyValues(vals) : applyFormValues(cdp, vals));
+        const doSelectOption = (target, value, scope) => (ext
+            ? ext.selectOption(target, value, scope)
+            : selectOptionCdp(cdp, target, value, scope));
+        const doUploadFile = (selector, payload, scope) => (ext
+            ? ext.uploadFile(selector, payload, scope)
+            : uploadFileCdp(cdp, selector, payload, scope));
+        const doCaptureSnapshot = (scope = "") => (ext
+            ? ext.captureSnapshot(scope)
+            : captureSnapshotCdp(cdp, scope));
         const doCheckSelector = (sel) => (ext
             ? ext.checkSelector(sel)
-            : cdp.evaluate(`Boolean(document.querySelector(${JSON.stringify(sel)}))`));
+            : cdp.evaluate(`(() => { try { return Boolean(document.querySelector(${JSON.stringify(sel)})); } catch { return false; } })()`));
         const doClickSelector = (sel) => (ext
             ? ext.clickSelector(sel)
             : cdp.evaluate(`(() => {
-                const el = document.querySelector(${JSON.stringify(sel)});
+                let el = null;
+                try { el = document.querySelector(${JSON.stringify(sel)}); } catch { return false; }
                 if (!el) return false;
                 el.scrollIntoView({ block: "center" });
                 el.click();
@@ -1598,142 +2461,396 @@ async function main() {
             report.screenshots.push(shotPath);
             return shotPath;
         };
-        const dismissInfoSwalIfBlocking = async () => {
-            const fb = await getFeedback();
-            if (!fb.swal || fb.swal.isError) return false;
-            const { items } = await doExtractClickables(".swal2-popup:not([style*='display: none'])");
-            if (items.length === 1 && /^ok$/i.test(items[0].text.trim())) {
-                await doClickSelector(".swal2-confirm").catch(() => {});
-                await new Promise((r) => setTimeout(r, 250));
-                return true;
+        const doLogin = async (username, password) => {
+            if (!username || !password) return false;
+            return ext ? ext.autoLogin(username, password) : attemptAutoLogin(cdp, username, password);
+        };
+        const SWAL_CONFIRM_SEL = ".swal2-popup:not([style*='display: none']):not(.swal2-hide):not(.animate__fadeOutDown) .swal2-confirm";
+        const waitForSwalClose = async (urlBefore = "", maxMs = 1500) => {
+            const deadline = Date.now() + maxMs;
+            while (Date.now() < deadline) {
+                await new Promise((r) => setTimeout(r, 120));
+                const fb = await getFeedback().catch(() => null);
+                if (!fb) continue;
+                if (urlBefore && fb.url !== urlBefore) {
+                    if (ext) await ext.waitLoad().catch(() => {});
+                    return true;
+                }
+                if (!fb.swal) return true;
             }
             return false;
         };
+        const dismissInfoSwalIfBlocking = async (allowConfirm = false) => {
+            const fb = await getFeedback().catch(() => null);
+            if (!fb?.swal || fb.swal.isError || fb.swal.isLoading) return false;
+            const confirmText = (fb.swal.confirmText || "").trim();
+            if (fb.swal.confirmVisible && !fb.swal.cancelVisible && (!confirmText || /^ok$/i.test(confirmText))) {
+                const clicked = await doClickSelector(SWAL_CONFIRM_SEL).catch(() => false);
+                if (clicked) {
+                    await waitForSwalClose(fb.url, 1200);
+                    return true;
+                }
+            }
+            const { items } = await doExtractClickables(".swal2-popup:not([style*='display: none']):not(.swal2-hide):not(.animate__fadeOutDown)").catch(() => ({ items: [] }));
+            if (items.length === 1 && /^ok$/i.test(items[0].text.trim())) {
+                const clicked = await doClickSelector(`[data-gh-click-id="${items[0].id}"]`).catch(() => false);
+                if (clicked) {
+                    await waitForSwalClose(fb.url, 1200);
+                    return true;
+                }
+            }
+            if (allowConfirm && items.length > 0) {
+                const confirmBtn = items.find((it) => /^(ok|yes|proceed|continue|confirm)\b/i.test(it.text.trim()) && !isDestructiveCandidate(it.text));
+                if (confirmBtn) {
+                    const clicked = await doClickSelector(`[data-gh-click-id="${confirmBtn.id}"]`).catch(() => false);
+                    if (clicked) {
+                        await waitForSwalClose(fb.url, 1200);
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        const settlePostSubmitSwal = async ({ urlBefore, waitAfterMs, waitForNavigation, extractErrs }) => {
+            const initialDeadline = Date.now() + Math.max(waitAfterMs || 0, 3500);
+            const loadingDeadline = Date.now() + 12000;
+            await new Promise((r) => setTimeout(r, 220));
+            let fb = await getFeedback().catch(() => ({ url: urlBefore, validationErrors: [], swal: null, hasServerError: false }));
+            while (Date.now() < loadingDeadline) {
+                if (fb.url !== urlBefore || fb.hasServerError || extractErrs(fb).length > 0) break;
+                if (fb.swal && !fb.swal.isLoading) break;
+                if (!fb.swal?.isLoading && Date.now() >= initialDeadline) break;
+                await new Promise((r) => setTimeout(r, 150));
+                fb = await getFeedback().catch(() => fb);
+            }
+
+            const errParts = extractErrs(fb);
+            if (errParts.length > 0 || !fb.swal) {
+                return { fb, errParts };
+            }
+
+            // Handle confirm -> loading -> Success [OK] chains cleanly without clicking hidden buttons
+            const chainDeadline = Date.now() + 10000;
+            let noSwalTicks = 0;
+            let clickedConfirm = false;
+            while (Date.now() < chainDeadline) {
+                const fbNow = await getFeedback().catch(() => null);
+                if (!fbNow) {
+                    await new Promise((r) => setTimeout(r, 150));
+                    continue;
+                }
+                fb = fbNow;
+                if (fb.url !== urlBefore && !fb.swal) break;
+                const errsNow = extractErrs(fb);
+                if (errsNow.length > 0) {
+                    errParts.push(...errsNow);
+                    break;
+                }
+                if (!fb.swal) {
+                    noSwalTicks++;
+                    // If we just dismissed a modal and expect navigation, give location.href a moment to start
+                    const neededIdleTicks = (clickedConfirm && waitForNavigation) ? 6 : 2;
+                    if (noSwalTicks >= neededIdleTicks) break;
+                    await new Promise((r) => setTimeout(r, 150));
+                    continue;
+                }
+                noSwalTicks = 0;
+                if (fb.swal.isLoading) {
+                    await new Promise((r) => setTimeout(r, 180));
+                    continue;
+                }
+                if (fb.swal.confirmVisible) {
+                    const clicked = await doClickSelector(SWAL_CONFIRM_SEL).catch(() => false);
+                    if (clicked) clickedConfirm = true;
+                    await new Promise((r) => setTimeout(r, 220));
+                    continue;
+                }
+                await new Promise((r) => setTimeout(r, 150));
+            }
+            return { fb, errParts };
+        };
+
+        const activeAuth = { user: opts.user, pass: opts.pass, account: opts.account };
+        let lastIntendedUrl = startUrl;
 
         const initFb = await getFeedback();
         const curPath = initFb.pathname || new URL(initFb.url).pathname;
         if (!opts.url.toLowerCase().includes("/identity/account/login") && String(curPath).toLowerCase().includes("/identity/account/login")) {
-            const loggedIn = ext
-                ? await ext.autoLogin(opts.user, opts.pass)
-                : await attemptAutoLogin(cdp, opts.user, opts.pass);
+            const loggedIn = await doLogin(activeAuth.user, activeAuth.pass);
             if (!loggedIn) {
-                throw new Error("AUTH_REQUIRED: redirected to Login. Run proof-verify --interactive-login first or set IBS_VERIFY_USER & IBS_VERIFY_PASS.");
+                throw new Error("AUTH_REQUIRED: redirected to Login. Pass --account <name> (from test-accounts.local.json) or set IBS_VERIFY_USER & IBS_VERIFY_PASS.");
             }
             await doNavigate(startUrl);
         }
 
         if (opts.inspect) {
-            const clickables = await doExtractClickables("");
-            const form = await doExtractFields("", false);
-            const fb = await getFeedback();
-            console.log(JSON.stringify({ url: fb.url, clickables, form }, null, 2));
+            const snap = await doCaptureSnapshot("");
+            console.log(JSON.stringify(snap, null, 2));
             await doHud("Guided Hands inspect complete", "done");
             return;
         }
 
-        const runStartMs = Date.now();
-        for (let i = 0; i < opts.steps.length; i++) {
-            const step = opts.steps[i];
-            const stepNum = i + 1;
-            const errStart = { page: pageErrors.length, console: consoleErrors.length, net: failedRequests.length };
-            const stepResult = { step: stepNum, action: step.action, ok: true, detail: {} };
+        const saveCheckpoint = (stepNum, currentUrl) => {
+            const doc = {
+                timestamp: new Date().toISOString(),
+                playbook: opts.playbook || "",
+                stepsFile: opts.stepsFile || "",
+                url: opts.url,
+                account: activeAuth.account || "",
+                lastCompletedStep: stepNum,
+                nextStep: stepNum + 1,
+                currentUrl: currentUrl || lastIntendedUrl,
+                vars
+            };
+            fs.writeFileSync(checkpointPath, JSON.stringify(doc, null, 2) + "\n", "utf8");
+        };
 
-            const stepLabel = `[Step ${stepNum}/${opts.steps.length}] ${step.action} ${step.target || step.scenario || step.url || step.text || ""}`;
-            console.log(stepLabel);
+        const runStartMs = Date.now();
+        const preClickDelay = () => (opts.slowMo > 0 ? opts.slowMo : 60);
+
+        const executeStepAction = async (step, stepNum) => {
+            const detail = {};
             const elapsed = ((Date.now() - runStartMs) / 1000).toFixed(1);
-            await doHud(`Guided Hands (${elapsed}s) · ${stepLabel.slice(0, 88)}`, "active");
 
             if (step.action === "navigate") {
+                if (!step.url) {
+                    throw new Error("Navigate step is missing required \"url\".");
+                }
                 const rawUrl = expandTemplate(step.url, vars);
                 const dest = rawUrl.startsWith("http") ? rawUrl : `${opts.baseUrl}${rawUrl.startsWith("/") ? "" : "/"}${rawUrl}`;
+                lastIntendedUrl = dest;
                 await doNavigate(dest);
-                stepResult.detail.url = (await getFeedback()).url;
-            } else if (step.action === "login") {
-                const loginUser = step.username || opts.user;
-                const loginPass = step.password || opts.pass;
-                const ok = ext
-                    ? await ext.autoLogin(loginUser, loginPass)
-                    : await attemptAutoLogin(cdp, loginUser, loginPass);
-                if (!ok) throw new Error("Login step failed: login form not found or authentication did not redirect.");
-                stepResult.detail = { username: loginUser, url: (await getFeedback()).url };
-            } else if (step.action === "wait") {
+                const fb = await getFeedback();
+                const blocker = detectPageBlocker(fb, dest.toLowerCase().includes("/identity/account/login"));
+                if (blocker && blocker.type === "login_redirect" && activeAuth.user && activeAuth.pass) {
+                    const ok = await doLogin(activeAuth.user, activeAuth.pass);
+                    if (ok) {
+                        await doNavigate(dest);
+                    }
+                }
+                detail.url = (await getFeedback()).url;
+                return detail;
+            }
+
+            if (step.action === "login") {
+                let loginUser = step.username || activeAuth.user;
+                let loginPass = step.password || activeAuth.pass;
+                if (step.account) {
+                    const creds = loadAccountFromRegistry(repoRoot, step.account);
+                    loginUser = creds.username;
+                    loginPass = creds.password;
+                    activeAuth.account = step.account;
+                }
+                if (!loginUser || !loginPass) {
+                    throw new Error("Login step requires account/username/password.");
+                }
+                const fbBefore = await getFeedback();
+                if (!String(fbBefore.pathname || "").toLowerCase().includes("/identity/account/login")) {
+                    await doNavigate(`${opts.baseUrl}/Identity/Account/Login`);
+                }
+                const ok = await doLogin(loginUser, loginPass);
+                if (!ok) throw new Error(`Login step failed for "${loginUser}": login form not found or authentication did not redirect.`);
+                activeAuth.user = loginUser;
+                activeAuth.pass = loginPass;
+                return { username: loginUser, url: (await getFeedback()).url };
+            }
+
+            if (step.action === "wait") {
                 if (step.selector) {
                     const deadline = Date.now() + (step.timeoutMs || 10000);
                     let found = false;
+                    let tick = 0;
                     while (Date.now() < deadline) {
                         found = await doCheckSelector(step.selector);
                         if (found) break;
-                        await new Promise((r) => setTimeout(r, 200));
+                        tick++;
+                        if (tick % 2 === 0) {
+                            await dismissInfoSwalIfBlocking(false);
+                            const fb = await getFeedback().catch(() => null);
+                            const blocker = detectPageBlocker(fb, false);
+                            if (blocker) {
+                                const err = new Error(`Fast-fail while waiting for "${step.selector}": ${blocker.message}`);
+                                err.blocker = blocker;
+                                throw err;
+                            }
+                        }
+                        await new Promise((r) => setTimeout(r, 150));
                     }
                     if (!found) throw new Error(`Timed out waiting for selector: ${step.selector}`);
-                    stepResult.detail.selector = step.selector;
-                } else {
-                    await new Promise((r) => setTimeout(r, step.ms || 800));
-                    stepResult.detail.ms = step.ms || 800;
+                    return { selector: step.selector };
                 }
-            } else if (step.action === "click") {
+                await new Promise((r) => setTimeout(r, step.ms || 500));
+                return { ms: step.ms || 500 };
+            }
+
+            if (step.action === "select") {
+                const target = expandTemplate(step.selector || step.target || "", vars);
+                const value = expandTemplate(String(step.value ?? step.text ?? ""), vars);
+                const timeoutMs = step.timeoutMs || 4000;
+                const deadline = Date.now() + timeoutMs;
+                let lastRes = null;
+                let tick = 0;
+                while (Date.now() < deadline) {
+                    lastRes = await doSelectOption(target, value, step.scope || "");
+                    if (lastRes?.ok) {
+                        if (step.waitAfterMs) {
+                            await new Promise((r) => setTimeout(r, step.waitAfterMs));
+                        } else {
+                            await new Promise((r) => setTimeout(r, 200));
+                        }
+                        return lastRes;
+                    }
+                    tick++;
+                    if (tick % 3 === 0) {
+                        const fb = await getFeedback().catch(() => null);
+                        const blocker = detectPageBlocker(fb, false);
+                        if (blocker) {
+                            const err = new Error(`Fast-fail during select "${target}": ${blocker.message}`);
+                            err.blocker = blocker;
+                            throw err;
+                        }
+                    }
+                    await new Promise((r) => setTimeout(r, 180));
+                }
+                if (step.optional) {
+                    return { target, value, skipped: true, reason: lastRes?.reason };
+                }
+                throw new Error(lastRes?.reason || `Select failed for "${target}" = "${value}"`);
+            }
+
+            if (step.action === "upload") {
+                const payload = ensureFixturePayload(runDir, step);
+                const res = await doUploadFile(step.selector || "", payload, step.scope || "");
+                if (!res?.ok) {
+                    if (step.optional) return { skipped: true, reason: res?.reason };
+                    throw new Error(res?.reason || "File upload failed.");
+                }
+                await new Promise((r) => setTimeout(r, step.waitAfterMs || 200));
+                return res;
+            }
+
+            if (step.action === "click") {
                 const targetingSwal = Boolean(step.scope && step.scope.includes("swal2"));
                 if (!targetingSwal) {
-                    await dismissInfoSwalIfBlocking();
+                    await dismissInfoSwalIfBlocking(false);
                 }
-                if (step.selector) {
-                    if (opts.headed) {
-                        await doHud(`Guided Hands (${elapsed}s) · Clicking ${step.selector}`, "active", step.selector);
-                        await new Promise((r) => setTimeout(r, Math.max(200, opts.slowMo)));
-                    }
-                    const clicked = await doClickSelector(step.selector);
-                    if (!clicked && !step.optional) throw new Error(`Selector not found: ${step.selector}`);
-                    stepResult.detail = { selector: step.selector, via: "selector", skipped: !clicked };
-                } else {
-                    let { inModal, items } = await doExtractClickables(step.scope || "");
-                    // Briefly wait for late-rendering SweetAlert2 fade-in when explicitly targeting a popup
-                    if (targetingSwal && items.length === 0) {
-                        const waitDeadline = Date.now() + (step.waitForPopupMs ?? 700);
-                        while (items.length === 0 && Date.now() < waitDeadline) {
-                            await new Promise((r) => setTimeout(r, 175));
-                            ({ inModal, items } = await doExtractClickables(step.scope || ""));
-                        }
-                    }
-                    if (items.length === 0) {
-                        if (step.optional) {
-                            stepResult.detail = { target: step.target, skipped: true };
-                        } else {
-                            throw new Error(`No visible clickable elements found for "${step.target}".`);
-                        }
-                    } else {
-                        const pick = await resolveClickTarget(items, step.target, ollamaOpts, Boolean(step.optional));
-                        if (!pick.matched) {
-                            if (step.optional) {
-                                stepResult.detail = { target: step.target, skipped: true };
-                            } else {
-                                throw new Error(`Could not match click target "${step.target}" among ${items.length} elements (${pick.reason || "no match"}).`);
-                            }
-                        } else {
-                            const clickSel = `[data-gh-click-id="${pick.matched.id}"]`;
+                const timeoutMs = step.timeoutMs || (step.optional ? 600 : 2500);
+                const hasNonCssPseudo = Boolean(step.selector && /:(?:has-text|contains|text)\s*\(/i.test(step.selector));
+                const effectiveSelector = hasNonCssPseudo ? "" : (step.selector || "");
+                const effectiveTarget = step.target || (hasNonCssPseudo
+                    ? (step.selector.match(/:(?:has-text|contains|text)\s*\(\s*["']([^"']+)["']\s*\)/i)?.[1] || "")
+                    : "");
+                if (effectiveSelector) {
+                    const deadline = Date.now() + timeoutMs;
+                    let clicked = false;
+                    let tick = 0;
+                    while (Date.now() < deadline) {
+                        const exists = await doCheckSelector(effectiveSelector);
+                        if (exists) {
                             if (opts.headed) {
-                                const nowSec = ((Date.now() - runStartMs) / 1000).toFixed(1);
-                                await doHud(`Guided Hands (${nowSec}s) · Clicking "${pick.matched.text}" (${pick.via})`, "active", clickSel);
-                                await new Promise((r) => setTimeout(r, Math.max(250, opts.slowMo)));
+                                await doHud(`Guided Hands (${elapsed}s) · Clicking ${effectiveSelector}`, "active", effectiveSelector);
+                                await new Promise((r) => setTimeout(r, preClickDelay()));
                             }
-                            const clicked = await doClickSelector(clickSel);
-                            if (!clicked) throw new Error("Matched element disappeared before click.");
-                            stepResult.detail = {
-                                inModal,
-                                target: step.target,
-                                matched: pick.matched,
-                                via: pick.via,
-                                llmStats: pick.llmStats
-                            };
+                            clicked = await doClickSelector(effectiveSelector);
+                            if (clicked) break;
                         }
+                        tick++;
+                        if (tick % 3 === 0) {
+                            if (!targetingSwal) {
+                                await dismissInfoSwalIfBlocking(false);
+                            }
+                            const fb = await getFeedback().catch(() => null);
+                            const blocker = detectPageBlocker(fb, false);
+                            if (blocker && !targetingSwal) {
+                                const err = new Error(`Fast-fail before clicking "${effectiveSelector}": ${blocker.message}`);
+                                err.blocker = blocker;
+                                throw err;
+                            }
+                        }
+                        await new Promise((r) => setTimeout(r, 150));
                     }
-                }
-                if (!stepResult.detail.skipped) {
-                    await new Promise((r) => setTimeout(r, step.waitAfterMs || 700));
+                    if (!clicked) {
+                        if (effectiveTarget) {
+                            // Tier 0 fallback: selector missed, try semantic target matching
+                            const { inModal, items } = await doExtractClickables(step.scope || "");
+                            const pick = items.length > 0
+                                ? await resolveClickTarget(items, effectiveTarget, ollamaOpts, Boolean(step.optional))
+                                : { matched: null };
+                            if (pick.matched) {
+                                const clickSel = `[data-gh-click-id="${pick.matched.id}"]`;
+                                const okFallback = await doClickSelector(clickSel);
+                                if (okFallback) {
+                                    await new Promise((r) => setTimeout(r, step.waitAfterMs ?? 250));
+                                    if (ext && step.waitForNavigation) await ext.waitLoad();
+                                    return { inModal, target: effectiveTarget, matched: pick.matched, via: `selector-fallback:${pick.via}` };
+                                }
+                            }
+                        }
+                        if (step.optional) return { selector: effectiveSelector, via: "selector", skipped: true };
+                        throw new Error(`Selector not found: ${effectiveSelector}`);
+                    }
+                    await new Promise((r) => setTimeout(r, step.waitAfterMs ?? 250));
                     if (ext && step.waitForNavigation) {
                         await ext.waitLoad();
                     }
+                    return { selector: effectiveSelector, via: "selector", skipped: false };
                 }
-            } else if (step.action === "fill_form" || step.action === "fill_and_submit") {
+
+                const clickTargetText = effectiveTarget || step.target || "";
+                const deadline = Date.now() + (targetingSwal ? (step.waitForPopupMs ?? 1200) : timeoutMs);
+                let inModal = false;
+                let items = [];
+                let pick = { matched: null };
+                let tick = 0;
+
+                while (Date.now() < deadline) {
+                    ({ inModal, items } = await doExtractClickables(step.scope || ""));
+                    if (items.length > 0) {
+                        pick = await resolveClickTarget(items, clickTargetText, ollamaOpts, Boolean(step.optional));
+                        if (pick.matched) break;
+                        // If Ollama already ran and failed, don't keep looping Ollama
+                        if (pick.via === "ollama") break;
+                    }
+                    tick++;
+                    if (tick % 3 === 0 && !targetingSwal) {
+                        await dismissInfoSwalIfBlocking(false);
+                        const fb = await getFeedback().catch(() => null);
+                        const blocker = detectPageBlocker(fb, false);
+                        if (blocker) {
+                            const err = new Error(`Fast-fail before clicking "${clickTargetText}": ${blocker.message}`);
+                            err.blocker = blocker;
+                            throw err;
+                        }
+                    }
+                    if (step.optional && tick >= 2) break;
+                    await new Promise((r) => setTimeout(r, 175));
+                }
+
+                if (items.length === 0) {
+                    if (step.optional) return { target: clickTargetText, skipped: true };
+                    throw new Error(`No visible clickable elements found for "${clickTargetText}".`);
+                }
+                if (!pick.matched) {
+                    if (step.optional) return { target: clickTargetText, skipped: true };
+                    throw new Error(`Could not match click target "${clickTargetText}" among ${items.length} elements (${pick.reason || "no match"}).`);
+                }
+
+                const clickSel = `[data-gh-click-id="${pick.matched.id}"]`;
+                if (opts.headed) {
+                    const nowSec = ((Date.now() - runStartMs) / 1000).toFixed(1);
+                    await doHud(`Guided Hands (${nowSec}s) · Clicking "${pick.matched.text}" (${pick.via})`, "active", clickSel);
+                    await new Promise((r) => setTimeout(r, preClickDelay()));
+                }
+                const clicked = await doClickSelector(clickSel);
+                if (!clicked) throw new Error("Matched element disappeared before click.");
+                await new Promise((r) => setTimeout(r, step.waitAfterMs ?? 250));
+                if (ext && step.waitForNavigation) {
+                    await ext.waitLoad();
+                }
+                return { inModal, target: clickTargetText, matched: pick.matched, via: pick.via, llmStats: pick.llmStats };
+            }
+
+            if (step.action === "fill_form" || step.action === "fill_and_submit") {
                 const maxRetries = step.action === "fill_and_submit" ? (step.maxRetries ?? 2) : 0;
                 const attempts = [];
                 let repairContext = null;
@@ -1747,12 +2864,16 @@ async function main() {
                             succeeded = true;
                             break;
                         }
-                        throw new Error("No visible editable form fields found.");
+                        const fbCheck = await getFeedback().catch(() => null);
+                        const blocker = detectPageBlocker(fbCheck, false);
+                        const err = new Error(blocker ? `No visible editable form fields found (${blocker.message}).` : "No visible editable form fields found.");
+                        if (blocker) err.blocker = blocker;
+                        throw err;
                     }
                     if (attempt > 0) {
                         const nowSec = ((Date.now() - runStartMs) / 1000).toFixed(1);
                         await doHud(
-                            `Guided Hands (${nowSec}s) · Self-healing retry ${attempt}/${maxRetries}: ${repairContext.errorMessage.slice(0, 55)}`,
+                            `Guided Hands (${nowSec}s) · Diff-repair ${attempt}/${maxRetries}: ${repairContext.errorMessage.slice(0, 55)}`,
                             "active"
                         );
                     }
@@ -1789,64 +2910,46 @@ async function main() {
                     if (step.action === "fill_form") {
                         attempts.push(attemptRecord);
                         succeeded = true;
-                        await new Promise((r) => setTimeout(r, step.waitAfterMs || 600));
+                        await new Promise((r) => setTimeout(r, step.waitAfterMs ?? 250));
                         break;
                     }
 
-                    // Submit the form and check for real-time validation / SweetAlert errors
+                    // Submit with reactive condition-based settlement instead of blind 1800ms + 1200ms sleeps
+                    const urlBeforeSubmit = (await getFeedback()).url;
                     const submitSel = step.submitSelector || "button[type='submit']";
                     await doHud(`Guided Hands · Submitting (${attempt + 1}/${maxRetries + 1})`, "active", submitSel);
-                    await new Promise((r) => setTimeout(r, Math.max(200, opts.slowMo)));
+                    await new Promise((r) => setTimeout(r, preClickDelay()));
                     const clicked = await doClickSelector(submitSel);
                     if (!clicked) throw new Error(`Submit button not found: ${submitSel}`);
-                    await new Promise((r) => setTimeout(r, step.waitAfterMs || 1800));
 
-                    const fb = await getFeedback();
-                    const errParts = [];
-                    if (fb.swal && fb.swal.isError !== false && /error|invalid|required|failed|could not|cannot|future|must be/i.test(`${fb.swal.title} ${fb.swal.text}`)) {
-                        errParts.push(`${fb.swal.title}: ${fb.swal.text}`.trim());
-                    }
-                    const realValidationErrors = (fb.validationErrors || []).filter(
-                        (msg) => !/^(cancel\s+cancel\s+service|delete_forever\s+void\s+ticket)$/i.test(msg.trim())
-                    );
-                    if (realValidationErrors.length) {
-                        errParts.push(...realValidationErrors);
-                    }
+                    const extractErrs = (feedbackObj) => {
+                        const out = [];
+                        if (feedbackObj?.swal && feedbackObj.swal.isError !== false && !feedbackObj.swal.isLoading
+                            && /error|invalid|required|failed|could not|cannot|future|must be/i.test(`${feedbackObj.swal.title} ${feedbackObj.swal.text}`)) {
+                            out.push(`${feedbackObj.swal.title}: ${feedbackObj.swal.text}`.trim());
+                        }
+                        const realValErrs = (feedbackObj?.validationErrors || []).filter(
+                            (msg) => !/^(cancel\s+cancel\s+service|delete_forever\s+void\s+ticket)$/i.test(msg.trim())
+                        );
+                        if (realValErrs.length) out.push(...realValErrs);
+                        return out;
+                    };
+
+                    const { fb, errParts } = await settlePostSubmitSwal({
+                        urlBefore: urlBeforeSubmit,
+                        waitAfterMs: step.waitAfterMs,
+                        waitForNavigation: Boolean(step.waitForNavigation),
+                        extractErrs
+                    });
 
                     if (errParts.length === 0) {
-                        // Confirm initial dialog (if any) and handle async loading -> success/error follow-up popup
-                        if (fb.swal) {
-                            await doClickSelector(".swal2-confirm").catch(() => {});
-                            const pollStart = Date.now();
-                            while (Date.now() - pollStart < 6000) {
-                                await new Promise((r) => setTimeout(r, 250));
-                                const fb2 = await getFeedback().catch(() => null);
-                                if (!fb2?.swal) {
-                                    if (Date.now() - pollStart >= 1200) break;
-                                    continue;
-                                }
-                                const { items: swalButtons } = await doExtractClickables(".swal2-popup:not([style*='display: none'])").catch(() => ({ items: [] }));
-                                if (swalButtons.length === 0) {
-                                    continue; // Loading spinner popup (ModernAlert.showLoading)
-                                }
-                                if (fb2.swal.isError !== false && /error|invalid|required|failed|could not|cannot|future|must be/i.test(`${fb2.swal.title} ${fb2.swal.text}`)) {
-                                    errParts.push(`${fb2.swal.title}: ${fb2.swal.text}`.trim());
-                                    break;
-                                }
-                                await doClickSelector(".swal2-confirm").catch(() => {});
-                                await new Promise((r) => setTimeout(r, 600));
-                                break;
-                            }
+                        if (ext && step.waitForNavigation) {
+                            await ext.waitLoad();
                         }
-                        if (errParts.length === 0) {
-                            if (ext && step.waitForNavigation) {
-                                await ext.waitLoad();
-                            }
-                            attemptRecord.submitted = true;
-                            attempts.push(attemptRecord);
-                            succeeded = true;
-                            break;
-                        }
+                        attemptRecord.submitted = true;
+                        attempts.push(attemptRecord);
+                        succeeded = true;
+                        break;
                     }
 
                     const errorMessage = errParts.join(" | ");
@@ -1854,93 +2957,536 @@ async function main() {
                     attemptRecord.rejectedWith = errorMessage;
                     attempts.push(attemptRecord);
 
-                    // Dismiss error SweetAlert so the form can be corrected
-                    if (fb.swal) {
-                        await doClickSelector(".swal2-confirm").catch(() => {});
-                        await new Promise((r) => setTimeout(r, 400));
+                    if (fb.swal?.confirmVisible) {
+                        await doClickSelector(SWAL_CONFIRM_SEL).catch(() => {});
+                        await waitForSwalClose(urlBeforeSubmit, 1000);
                     }
-                    repairContext = { previousValues: gen.values, errorMessage };
+                    repairContext = {
+                        previousValues: gen.values,
+                        errorMessage,
+                        unlockOverrides: attempt >= 1
+                    };
                 }
 
-                stepResult.detail = step.action === "fill_form" ? attempts[0] : { attempts, retries: attempts.length - 1 };
                 if (!succeeded) {
-                    stepResult.ok = false;
-                    report.steps.push(stepResult);
                     const lastErr = attempts[attempts.length - 1]?.rejectedWith || "Form submission rejected";
-                    throw new Error(`Form failed after ${attempts.length} attempt(s): ${lastErr}`);
+                    const err = new Error(`Form failed after ${attempts.length} attempt(s): ${lastErr}`);
+                    err.attempts = attempts;
+                    throw err;
                 }
-            } else if (step.action === "capture_url") {
-                const feedback = await getFeedback();
+                return step.action === "fill_form" ? attempts[0] : { attempts, retries: attempts.length - 1 };
+            }
+
+            if (step.action === "capture_url") {
                 const regex = new RegExp(step.pattern, "i");
-                const match = feedback.url.match(regex);
+                let feedback = await getFeedback();
+                let match = feedback.url.match(regex);
+                if (!match || !match[1]) {
+                    const capDeadline = Date.now() + (step.timeoutMs || 3000);
+                    while (Date.now() < capDeadline) {
+                        await dismissInfoSwalIfBlocking(false);
+                        await new Promise((r) => setTimeout(r, 180));
+                        feedback = await getFeedback().catch(() => feedback);
+                        match = feedback.url.match(regex);
+                        if (match && match[1]) break;
+                    }
+                }
                 if (!match || !match[1]) {
                     if (step.optional) {
-                        stepResult.detail = { url: feedback.url, var: step.var, captured: null, skipped: true };
-                    } else {
-                        throw new Error(`Step ${stepNum} capture_url failed: URL "${feedback.url}" did not match /${step.pattern}/i.`);
+                        return { url: feedback.url, var: step.var, captured: null, skipped: true };
                     }
-                } else {
-                    vars[step.var] = match[1];
-                    console.log(`  [capture] {${step.var}} = "${match[1]}" (from ${feedback.url})`);
-                    stepResult.detail = { url: feedback.url, var: step.var, captured: match[1] };
+                    throw new Error(`Step ${stepNum} capture_url failed: URL "${feedback.url}" did not match /${step.pattern}/i.`);
                 }
-            } else if (step.action === "assert") {
-                const feedback = await getFeedback();
-                const bodyText = ext ? (feedback.bodySample || "") : await cdp.evaluate("(document.body?.innerText || '')");
-                const expectedUrl = expandTemplate(step.urlIncludes || "", vars);
-                const expectedText = expandTemplate(step.text || "", vars);
-                if (expectedUrl && !feedback.url.toLowerCase().includes(expectedUrl.toLowerCase())) {
-                    stepResult.ok = false;
-                    report.errors.push(`Step ${stepNum} assert failed: URL "${feedback.url}" does not include "${expectedUrl}".`);
-                }
-                if (expectedText && !bodyText.toLowerCase().includes(expectedText.toLowerCase())) {
-                    stepResult.ok = false;
-                    report.errors.push(`Step ${stepNum} assert failed: text "${expectedText}" not found on page.`);
-                }
-                if (step.noValidationErrors && feedback.validationErrors.length > 0) {
-                    stepResult.ok = false;
-                    report.errors.push(`Step ${stepNum} assert failed: validation errors present: ${feedback.validationErrors.join("; ")}`);
-                }
-                stepResult.detail = feedback;
-            } else if (step.action === "screenshot") {
-                const safeName = (step.name || `step-${stepNum}`).replace(/[^a-zA-Z0-9_-]+/g, "-").toLowerCase();
-                stepResult.detail.screenshot = await doScreenshot(path.join(runDir, `${safeName}.png`));
-            } else {
-                throw new Error(`Unknown step action: ${step.action}`);
+                vars[step.var] = match[1];
+                console.log(`  [capture] {${step.var}} = "${match[1]}" (from ${feedback.url})`);
+                return { url: feedback.url, var: step.var, captured: match[1] };
             }
 
-            let newPageErrs;
-            let newConsoleErrs;
-            let newNetErrs;
-            if (ext) {
-                const tel = await ext.consumeTelemetry().catch(() => ({ pageErrors: [], consoleErrors: [], failedRequests: [] }));
-                newPageErrs = tel.pageErrors || [];
-                newConsoleErrs = tel.consoleErrors || [];
-                newNetErrs = tel.failedRequests || [];
-            } else {
-                newPageErrs = pageErrors.slice(errStart.page);
-                newConsoleErrs = consoleErrors.slice(errStart.console);
-                newNetErrs = failedRequests.slice(errStart.net);
+            if (step.action === "assert") {
+                const expectedUrl = expandTemplate(step.urlIncludes || "", vars);
+                const expectedText = expandTemplate(step.text || "", vars);
+                const timeoutMs = step.timeoutMs ?? 3500;
+                const deadline = Date.now() + timeoutMs;
+                let feedback = null;
+                let failures = [];
+
+                while (true) {
+                    feedback = await getFeedback();
+                    const bodyText = ext ? (feedback.bodySample || "") : await cdp.evaluate("(document.body?.innerText || '')");
+                    failures = [];
+                    if (expectedUrl && !feedback.url.toLowerCase().includes(expectedUrl.toLowerCase())) {
+                        failures.push(`URL "${feedback.url}" does not include "${expectedUrl}"`);
+                    }
+                    if (expectedText && !bodyText.toLowerCase().includes(expectedText.toLowerCase())) {
+                        failures.push(`text "${expectedText}" not found on page`);
+                    }
+                    if (step.noValidationErrors && feedback.validationErrors.length > 0) {
+                        failures.push(`validation errors present: ${feedback.validationErrors.join("; ")}`);
+                    }
+                    if (failures.length === 0) break;
+
+                    await dismissInfoSwalIfBlocking(false);
+                    const blocker = detectPageBlocker(feedback, expectedUrl.toLowerCase().includes("login"));
+                    if (blocker && blocker.type === "server_error") {
+                        const err = new Error(`Step ${stepNum} assert fast-failed: ${blocker.message}`);
+                        err.blocker = blocker;
+                        throw err;
+                    }
+                    if (Date.now() >= deadline) break;
+                    await new Promise((r) => setTimeout(r, 200));
+                }
+
+                if (failures.length > 0) {
+                    throw new Error(`Step ${stepNum} assert failed: ${failures.join(" | ")}`);
+                }
+                return feedback;
             }
-            if (newPageErrs.length || newNetErrs.length) {
-                stepResult.ok = false;
-                if (newPageErrs.length) report.errors.push(`Step ${stepNum} page error: ${newPageErrs[0]}`);
-                if (newNetErrs.length) report.errors.push(`Step ${stepNum} failed HTTP: ${newNetErrs[0].status} ${newNetErrs[0].url}`);
+
+            if (step.action === "screenshot") {
+                const safeName = (step.name || `step-${stepNum}`).replace(/[^a-zA-Z0-9_-]+/g, "-").toLowerCase();
+                return { screenshot: await doScreenshot(path.join(runDir, `${safeName}.png`)) };
             }
-            stepResult.telemetry = {
-                pageErrors: newPageErrs,
-                consoleErrors: newConsoleErrs,
-                failedRequests: newNetErrs
-            };
-            report.steps.push(stepResult);
-            if (opts.slowMo > 0) {
-                await new Promise((r) => setTimeout(r, opts.slowMo));
+
+            throw new Error(`Unknown step action: ${step.action}`);
+        };
+
+        const runStepWithRecovery = async (step, stepNum) => {
+            try {
+                return await executeStepAction(step, stepNum);
+            } catch (initialErr) {
+                if (opts.healEngine === "off" || step.noHeal) {
+                    throw initialErr;
+                }
+
+                const allowsDestructive = stepAllowsDestructive(step, opts.goal);
+                let lastErr = initialErr;
+
+                // ---- Tier 0: Deterministic Guardrails (0 tokens, <300ms) ----
+                let snap0 = await doCaptureSnapshot(step.scope || "").catch(() => null);
+                if (step.scope && snap0 && (snap0.clickables?.length || 0) === 0 && (snap0.fields?.length || 0) === 0) {
+                    snap0 = await doCaptureSnapshot("").catch(() => snap0);
+                }
+                const blocker0 = lastErr.blocker || detectPageBlocker(snap0, false);
+
+                if (blocker0?.type === "server_error" || blocker0?.type === "access_denied") {
+                    throw lastErr; // Genuine app/auth defect: fail fast to Tier 3 dossier
+                }
+
+                // Tier 0a: Mid-run Login redirect recovery
+                if (blocker0?.type === "login_redirect" && activeAuth.user && activeAuth.pass) {
+                    console.log(`  [tier0-heal] Session redirected to Login; auto-logging in as "${activeAuth.user}" and retrying step ${stepNum}...`);
+                    await doHud(`Tier 0 Heal · Auto-login (${activeAuth.user})`, "active");
+                    const ok = await doLogin(activeAuth.user, activeAuth.pass);
+                    if (ok) {
+                        if (lastIntendedUrl) await doNavigate(lastIntendedUrl);
+                        const retryDetail = await executeStepAction(step, stepNum);
+                        report.recoveries.push({
+                            step: stepNum,
+                            tier: "tier0-deterministic",
+                            originalError: lastErr.message,
+                            reason: "Mid-run login redirect recovered via auto-login",
+                            actionTaken: { action: "auto_login", user: activeAuth.user }
+                        });
+                        return retryDetail;
+                    }
+                }
+
+                // Tier 0b: Unexpected non-error SweetAlert blocking step
+                if (snap0?.swal && !snap0.swal.isError && !(step.scope || "").includes("swal2")) {
+                    const dismissed = await dismissInfoSwalIfBlocking(true);
+                    if (dismissed) {
+                        console.log(`  [tier0-heal] Dismissed blocking modal "${snap0.swal.title || snap0.swal.text}"; retrying step ${stepNum}...`);
+                        try {
+                            const retryDetail = await executeStepAction(step, stepNum);
+                            report.recoveries.push({
+                                step: stepNum,
+                                tier: "tier0-deterministic",
+                                originalError: lastErr.message,
+                                reason: `Dismissed blocking modal "${snap0.swal.title || snap0.swal.text}"`,
+                                actionTaken: { action: "dismiss_modal" }
+                            });
+                            return retryDetail;
+                        } catch (e) {
+                            lastErr = e;
+                        }
+                    }
+                }
+
+                // Tier 0c: fill_form on single select outside <form> (e.g. ModernSelect filter dropdown)
+                if (step.action === "fill_form" && step.overrides && !Array.isArray(step.overrides)) {
+                    const entries = Object.entries(step.overrides);
+                    if (entries.length === 1) {
+                        const [k, v] = entries[0];
+                        const val = expandTemplate(String(v), vars);
+                        let selRes = await doSelectOption(k, val, step.scope || "");
+                        if (!selRes?.ok && step.scope) {
+                            selRes = await doSelectOption(k, val, "");
+                        }
+                        if (selRes?.ok) {
+                            const replacement = { action: "select", target: k, value: String(v) };
+                            step._patchedStep = replacement;
+                            console.log(`  [tier0-heal] Converted fill_form -> select("${k}", "${val}") and queued playbook patch.`);
+                            report.recoveries.push({
+                                step: stepNum,
+                                tier: "tier0-deterministic",
+                                originalError: lastErr.message,
+                                reason: "Standalone select/ModernSelect outside form handled via semantic select",
+                                actionTaken: replacement,
+                                suggestedStepPatch: { replaceStep: stepNum, step: replacement }
+                            });
+                            return selRes;
+                        }
+                    }
+                }
+
+                // If unauthenticated Login redirect with no configured credentials, fail fast cleanly
+                if (blocker0?.type === "login_redirect" && (!activeAuth.user || !activeAuth.pass)) {
+                    throw new Error(`AUTH_REQUIRED at step ${stepNum}: redirected to Login. Pass --account <name> or set IBS_VERIFY_USER & IBS_VERIFY_PASS.`);
+                }
+
+                // ---- Tier 1: Local Ollama qwen2.5:1.5b Micro-Recovery (~1-2s, 0 cloud tokens) ----
+                let shouldEscalateToTier2 = opts.healEngine === "opencode";
+                if (opts.healEngine === "auto" || opts.healEngine === "ollama") {
+                    let snap1 = await doCaptureSnapshot(step.scope || "").catch(() => snap0);
+                    if (step.scope && snap1 && (snap1.clickables?.length || 0) === 0 && (snap1.fields?.length || 0) === 0) {
+                        snap1 = await doCaptureSnapshot("").catch(() => snap0);
+                    }
+                    if (snap1) {
+                        console.log(`  [tier1-ollama] Diagnosing step ${stepNum} failure with local ${opts.model}...`);
+                        await doHud(`Tier 1 Heal (${opts.model}) · Step ${stepNum}`, "active");
+                        try {
+                            const advice = await askOllamaStepRecovery({
+                                failedStep: step,
+                                errorMessage: lastErr.message,
+                                snapshot: snap1,
+                                ollamaOpts
+                            });
+                            const act = advice.data?.recoveryAction || "escalate";
+                            console.log(`  [tier1-ollama] Decision: ${act} (${advice.data?.reason || ""}) [${advice.stats.durationMs}ms]`);
+
+                            if (act === "abort") {
+                                throw lastErr;
+                            }
+                            if (act === "escalate") {
+                                shouldEscalateToTier2 = true;
+                            } else if (act === "dismiss_modal") {
+                                await dismissInfoSwalIfBlocking(true);
+                                const retryDetail = await executeStepAction(step, stepNum);
+                                report.recoveries.push({
+                                    step: stepNum,
+                                    tier: "tier1-ollama",
+                                    originalError: lastErr.message,
+                                    reason: advice.data.reason,
+                                    actionTaken: { action: "dismiss_modal" },
+                                    llmStats: advice.stats
+                                });
+                                return retryDetail;
+                            } else if (act === "wait_and_retry") {
+                                await new Promise((r) => setTimeout(r, 1200));
+                                const retryDetail = await executeStepAction(step, stepNum);
+                                report.recoveries.push({
+                                    step: stepNum,
+                                    tier: "tier1-ollama",
+                                    originalError: lastErr.message,
+                                    reason: advice.data.reason,
+                                    actionTaken: { action: "wait_and_retry", ms: 1200 },
+                                    llmStats: advice.stats
+                                });
+                                return retryDetail;
+                            } else if (act === "click_alternative") {
+                                let chosen = (Number.isInteger(advice.data.clickableId) && advice.data.clickableId > 0)
+                                    ? (snap1.clickables || []).find((c) => c.id === advice.data.clickableId)
+                                    : null;
+                                if (!chosen && advice.data.reason) {
+                                    const qMatch = advice.data.reason.match(/['"]([^'"]{2,40})['"]/);
+                                    if (qMatch) {
+                                        const needle = qMatch[1].trim().toLowerCase();
+                                        chosen = (snap1.clickables || []).find((c) => c.text.toLowerCase().includes(needle)) || null;
+                                    }
+                                }
+                                if (chosen && (allowsDestructive || !isDestructiveCandidate(chosen.text))) {
+                                    const clicked = await doClickSelector(`[data-gh-click-id="${chosen.id}"]`);
+                                    if (clicked) {
+                                        await new Promise((r) => setTimeout(r, 300));
+                                        const replacement = step.action === "click"
+                                            ? { ...step, selector: undefined, target: chosen.text }
+                                            : null;
+                                        if (replacement) {
+                                            delete replacement.selector;
+                                            step._patchedStep = replacement;
+                                        }
+                                        const finalDetail = step.action === "click"
+                                            ? { matched: chosen, via: "tier1-ollama-recovery" }
+                                            : await executeStepAction(step, stepNum);
+                                        report.recoveries.push({
+                                            step: stepNum,
+                                            tier: "tier1-ollama",
+                                            originalError: lastErr.message,
+                                            reason: advice.data.reason,
+                                            actionTaken: { action: "click", target: chosen.text },
+                                            suggestedStepPatch: replacement ? { replaceStep: stepNum, step: replacement } : undefined,
+                                            llmStats: advice.stats
+                                        });
+                                        return finalDetail;
+                                    }
+                                }
+                                shouldEscalateToTier2 = true;
+                            } else if (act === "select_option" && advice.data.selectTarget) {
+                                const selRes = await doSelectOption(advice.data.selectTarget, advice.data.selectValue ?? "", step.scope || "");
+                                if (selRes?.ok) {
+                                    const replacement = (step.action === "select" || step.action === "fill_form")
+                                        ? { action: "select", target: advice.data.selectTarget, value: String(advice.data.selectValue ?? "") }
+                                        : null;
+                                    if (replacement) step._patchedStep = replacement;
+                                    const finalDetail = (step.action === "select" || step.action === "fill_form")
+                                        ? selRes
+                                        : await executeStepAction(step, stepNum);
+                                    report.recoveries.push({
+                                        step: stepNum,
+                                        tier: "tier1-ollama",
+                                        originalError: lastErr.message,
+                                        reason: advice.data.reason,
+                                        actionTaken: { action: "select", target: advice.data.selectTarget, value: advice.data.selectValue },
+                                        suggestedStepPatch: replacement ? { replaceStep: stepNum, step: replacement } : undefined,
+                                        llmStats: advice.stats
+                                    });
+                                    return finalDetail;
+                                }
+                                shouldEscalateToTier2 = true;
+                            } else if (act === "fill_missing_fields" && Array.isArray(advice.data.fieldPatches) && advice.data.fieldPatches.length > 0) {
+                                const patchObj = Object.fromEntries(advice.data.fieldPatches.map((p) => [p.key, p.value]));
+                                await doApplyValues(patchObj);
+                                await new Promise((r) => setTimeout(r, 200));
+                                const retryDetail = await executeStepAction(step, stepNum);
+                                report.recoveries.push({
+                                    step: stepNum,
+                                    tier: "tier1-ollama",
+                                    originalError: lastErr.message,
+                                    reason: advice.data.reason,
+                                    actionTaken: { action: "fill_missing_fields", patchObj },
+                                    llmStats: advice.stats
+                                });
+                                return retryDetail;
+                            } else {
+                                shouldEscalateToTier2 = true;
+                            }
+                        } catch (tier1Err) {
+                            console.warn(`  [tier1-ollama] Recovery attempt failed: ${tier1Err.message}`);
+                            shouldEscalateToTier2 = true;
+                        }
+                    }
+                }
+
+                // ---- Tier 2: Free OpenCode Escalation (0 paid main-model tokens) ----
+                if (shouldEscalateToTier2 && (opts.healEngine === "auto" || opts.healEngine === "opencode")) {
+                    let snap2 = await doCaptureSnapshot(step.scope || "").catch(() => snap0);
+                    if (step.scope && snap2 && (snap2.clickables?.length || 0) === 0 && (snap2.fields?.length || 0) === 0) {
+                        snap2 = await doCaptureSnapshot("").catch(() => snap0);
+                    }
+                    if (snap2 && !snap2.hasServerError && !snap2.isAccessDenied) {
+                        console.log(`  [tier2-opencode] Escalating step ${stepNum} recovery to free OpenCode (${opts.opencodeModel})...`);
+                        await doHud(`Tier 2 Heal (OpenCode free) · Step ${stepNum}`, "active");
+                        const oc = await askOpencodeStepRecovery({
+                            repoRoot,
+                            runDir,
+                            primaryModel: opts.opencodeModel,
+                            failedStep: step,
+                            errorMessage: lastErr.message,
+                            snapshot: snap2,
+                            stepNum
+                        });
+                        if (oc.ok && oc.data && !oc.data.abort && Array.isArray(oc.data.recoverySteps) && oc.data.recoverySteps.length > 0) {
+                            const planned = oc.data.recoverySteps.slice(0, 3);
+                            let safeAll = true;
+                            for (const rs of planned) {
+                                if (!SAFE_RECOVERY_ACTIONS.has(rs?.action)) {
+                                    safeAll = false;
+                                    break;
+                                }
+                                if (rs.action === "navigate" && !rs.url) {
+                                    safeAll = false;
+                                    break;
+                                }
+                                if (!allowsDestructive && isDestructiveCandidate(`${rs.target || ""} ${rs.selector || ""}`)) {
+                                    safeAll = false;
+                                    break;
+                                }
+                            }
+                            if (safeAll) {
+                                console.log(`  [tier2-opencode] Executing ${planned.length} recovery step(s): ${oc.data.reason || ""} [${oc.stats.durationMs}ms]`);
+                                try {
+                                    const executedDetails = [];
+                                    for (const rs of planned) {
+                                        executedDetails.push(await executeStepAction(rs, stepNum));
+                                    }
+                                    // If replaceStep replaced the failed step directly, don't duplicate the broken original step
+                                    let finalDetail = { recoveredBy: planned, details: executedDetails };
+                                    if (oc.data.replaceStep && SAFE_RECOVERY_ACTIONS.has(oc.data.replaceStep.action)) {
+                                        step._patchedStep = oc.data.replaceStep;
+                                    } else {
+                                        finalDetail = await executeStepAction(step, stepNum);
+                                    }
+                                    report.recoveries.push({
+                                        step: stepNum,
+                                        tier: "tier2-opencode",
+                                        originalError: lastErr.message,
+                                        reason: oc.data.reason || "",
+                                        actionTaken: planned,
+                                        suggestedStepPatch: oc.data.replaceStep ? { replaceStep: stepNum, step: oc.data.replaceStep } : undefined,
+                                        llmStats: oc.stats
+                                    });
+                                    return finalDetail;
+                                } catch (tier2Err) {
+                                    console.warn(`  [tier2-opencode] Recovery execution failed: ${tier2Err.message}`);
+                                }
+                            }
+                        } else if (!oc.ok) {
+                            console.warn(`  [tier2-opencode] Unavailable: ${oc.error}`);
+                        }
+                    }
+                }
+
+                throw lastErr;
+            }
+        };
+
+        // ---- Mode 1: Autonomous Goal-Driven Execution (--goal) ----
+        if (opts.goal) {
+            console.log(`[guided-hands] Goal mode (max ${opts.maxTurns} turns, model=${opts.opencodeModel}): "${opts.goal}"`);
+            const history = [];
+            const recordedSteps = [];
+            let goalCompleted = false;
+
+            for (let turn = 1; turn <= opts.maxTurns; turn++) {
+                currentStepIndex = turn - 1;
+                const snap = await doCaptureSnapshot("");
+                const blocker = detectPageBlocker(snap, false);
+                if (blocker?.type === "login_redirect" && activeAuth.user && activeAuth.pass) {
+                    console.log(`  [goal turn ${turn}] Auto-logging in as "${activeAuth.user}"...`);
+                    await doLogin(activeAuth.user, activeAuth.pass);
+                    await doNavigate(lastIntendedUrl);
+                    continue;
+                }
+                if (blocker?.fatal) {
+                    throw new Error(`Goal mode aborted: ${blocker.message}`);
+                }
+
+                await doHud(`Guided Hands Goal (${turn}/${opts.maxTurns}) · Thinking...`, "active");
+                const plan = await askOpencodeGoalNextAction({
+                    repoRoot,
+                    runDir,
+                    primaryModel: opts.opencodeModel,
+                    goal: opts.goal,
+                    turn,
+                    maxTurns: opts.maxTurns,
+                    history,
+                    snapshot: snap
+                });
+                if (!plan.ok || !plan.data?.action) {
+                    throw new Error(`Goal planner failed at turn ${turn}: ${plan.error || "missing action"}`);
+                }
+
+                const nextStep = plan.data;
+                currentStepObj = nextStep;
+                console.log(`[Goal ${turn}/${opts.maxTurns}] ${nextStep.action} — ${nextStep.reason || ""} (${plan.stats.model}, ${plan.stats.durationMs}ms)`);
+
+                if (nextStep.action === "done") {
+                    report.steps.push({ step: turn, action: "done", ok: true, detail: { summary: nextStep.summary || nextStep.reason } });
+                    goalCompleted = true;
+                    break;
+                }
+                if (nextStep.action === "fail") {
+                    throw new Error(`Goal mode reported failure: ${nextStep.summary || nextStep.reason || "Goal could not be completed"}`);
+                }
+                if (!SAFE_RECOVERY_ACTIONS.has(nextStep.action)) {
+                    throw new Error(`Goal planner returned disallowed action: ${nextStep.action}`);
+                }
+                if (!stepAllowsDestructive(nextStep, opts.goal) && isDestructiveCandidate(`${nextStep.target || ""} ${nextStep.selector || ""}`)) {
+                    throw new Error(`Goal planner attempted destructive action not requested by goal: ${nextStep.target || nextStep.selector}`);
+                }
+
+                const cleanStep = { action: nextStep.action };
+                for (const k of ["url", "target", "selector", "value", "text", "urlIncludes", "scenario", "overrides", "fixture", "file", "ms", "scope", "noValidationErrors"]) {
+                    if (nextStep[k] !== undefined && nextStep[k] !== null && nextStep[k] !== "") {
+                        cleanStep[k] = nextStep[k];
+                    }
+                }
+
+                try {
+                    const detail = await executeStepAction(cleanStep, turn);
+                    recordedSteps.push(cleanStep);
+                    history.push({ turn, step: cleanStep, ok: true });
+                    report.steps.push({ step: turn, action: cleanStep.action, ok: true, detail, llmStats: plan.stats });
+                } catch (stepErr) {
+                    history.push({ turn, step: cleanStep, ok: false, error: stepErr.message });
+                    report.steps.push({ step: turn, action: cleanStep.action, ok: false, detail: { error: stepErr.message } });
+                    console.log(`  [goal turn ${turn}] Action failed (${stepErr.message}); planner will adapt on next turn.`);
+                }
+            }
+
+            if (!goalCompleted) {
+                throw new Error(`Goal mode reached max turns (${opts.maxTurns}) without completing goal.`);
+            }
+            opts.steps = recordedSteps;
+        } else {
+            // ---- Mode 2: Deterministic / Self-Healing Step Runner ----
+            const startIdx = Math.max(0, opts.fromStep - 1);
+            if (startIdx >= opts.steps.length && opts.steps.length > 0) {
+                throw new Error(`--from-step ${opts.fromStep} exceeds total step count (${opts.steps.length}).`);
+            }
+
+            for (let i = startIdx; i < opts.steps.length; i++) {
+                const step = opts.steps[i];
+                const stepNum = i + 1;
+                currentStepIndex = i;
+                currentStepObj = step;
+                const errStart = { page: pageErrors.length, console: consoleErrors.length, net: failedRequests.length };
+                const stepResult = { step: stepNum, action: step.action, ok: true, detail: {} };
+
+                const stepLabel = `[Step ${stepNum}/${opts.steps.length}] ${step.action} ${step.target || step.selector || step.scenario || step.url || step.text || step.account || ""}`;
+                console.log(stepLabel);
+                const elapsed = ((Date.now() - runStartMs) / 1000).toFixed(1);
+                await doHud(`Guided Hands (${elapsed}s) · ${stepLabel.slice(0, 88)}`, "active");
+
+                stepResult.detail = await runStepWithRecovery(step, stepNum);
+
+                let newPageErrs;
+                let newConsoleErrs;
+                let newNetErrs;
+                if (ext) {
+                    const tel = await ext.consumeTelemetry().catch(() => ({ pageErrors: [], consoleErrors: [], failedRequests: [] }));
+                    newPageErrs = tel.pageErrors || [];
+                    newConsoleErrs = tel.consoleErrors || [];
+                    newNetErrs = tel.failedRequests || [];
+                } else {
+                    newPageErrs = pageErrors.slice(errStart.page);
+                    newConsoleErrs = consoleErrors.slice(errStart.console);
+                    newNetErrs = failedRequests.slice(errStart.net);
+                }
+                if (newPageErrs.length || newNetErrs.length) {
+                    stepResult.ok = false;
+                    if (newPageErrs.length) report.errors.push(`Step ${stepNum} page error: ${newPageErrs[0]}`);
+                    if (newNetErrs.length) report.errors.push(`Step ${stepNum} failed HTTP: ${newNetErrs[0].status} ${newNetErrs[0].url}`);
+                }
+                stepResult.telemetry = {
+                    pageErrors: newPageErrs,
+                    consoleErrors: newConsoleErrs,
+                    failedRequests: newNetErrs
+                };
+                report.steps.push(stepResult);
+
+                const postFb = await getFeedback().catch(() => null);
+                saveCheckpoint(stepNum, postFb?.url || lastIntendedUrl);
+
+                if (opts.slowMo > 0) {
+                    await new Promise((r) => setTimeout(r, opts.slowMo));
+                }
             }
         }
 
         const totalSec = ((Date.now() - runStartMs) / 1000).toFixed(1);
         await doHud(
-            `Guided Hands DONE in ${totalSec}s · ${report.steps.length} steps, ${report.errors.length} errors`,
+            `Guided Hands DONE in ${totalSec}s · ${report.steps.length} steps, ${report.recoveries.length} healed, ${report.errors.length} errors`,
             report.errors.length === 0 ? "done" : "error"
         );
 
@@ -1951,10 +3497,30 @@ async function main() {
         }
     } catch (err) {
         report.errors.push(err.message);
+        // Tier 3: Rich 1-turn Failure Dossier (URL, DOM snapshot, visible controls, screenshot)
+        try {
+            const failShotPath = path.join(runDir, `failure-step-${Math.max(1, currentStepIndex + 1)}.png`);
+            const shot = await (ext ? ext.captureScreenshot(failShotPath).then((ok) => (ok ? failShotPath : null)) : (cdp ? cdp.send("Page.captureScreenshot", { format: "png" }).then((img) => { fs.writeFileSync(failShotPath, Buffer.from(img.data, "base64")); return failShotPath; }) : Promise.resolve(null))).catch(() => null);
+            if (shot) report.screenshots.push(shot);
+            const snap = await (ext ? ext.captureSnapshot("") : (cdp ? captureSnapshotCdp(cdp, "") : Promise.resolve(null))).catch(() => null);
+            report.failureSnapshot = {
+                failedStep: currentStepIndex >= 0 ? currentStepIndex + 1 : null,
+                stepConfig: currentStepObj || null,
+                error: err.message,
+                screenshot: shot,
+                page: snap ? formatCompactSnapshotForLlm(snap) : null
+            };
+        } catch {
+            // Best-effort failure snapshot
+        }
         if (ext) {
             await ext.setIndicator(`Guided Hands ERROR · ${err.message.slice(0, 70)}`, "error").catch(() => {});
         }
     } finally {
+        const runFailed = report.errors.length > 0;
+        if (runFailed && !opts.keepOpen && ext) {
+            await ext.closeTab();
+        }
         cdp?.close();
         if (!opts.keepOpen) {
             killProcessTree(browserProc);
@@ -1970,24 +3536,30 @@ async function main() {
 
     if (report.passed && savePlaybookPath) {
         fs.mkdirSync(path.dirname(savePlaybookPath), { recursive: true });
-        const updatedSteps = opts.steps.map((s) => {
-            const clean = { ...s };
-            if (clean._capturedKnownFields) {
-                clean.knownFields = clean._capturedKnownFields;
+        const updatedSteps = opts.steps.map((s, idx) => {
+            const base = s._patchedStep ? { ...s._patchedStep } : { ...s };
+            if (s._patchedStep) {
+                report.patchedSteps.push({ step: idx + 1, patchedTo: base });
             }
-            delete clean._capturedKnownFields;
-            return clean;
+            if (s._capturedKnownFields) {
+                base.knownFields = s._capturedKnownFields;
+            }
+            delete base._capturedKnownFields;
+            delete base._patchedStep;
+            return base;
         });
         const playbookDoc = {
             name: loadedPlaybook?.name || path.basename(savePlaybookPath, ".json"),
-            description: loadedPlaybook?.description || `Auto-recorded Guided Hands playbook for ${opts.url}`,
+            description: loadedPlaybook?.description || (opts.goal ? `Goal playbook: ${opts.goal}` : `Auto-recorded Guided Hands playbook for ${opts.url}`),
             url: loadedPlaybook?.url || opts.url,
+            ...(opts.account || loadedPlaybook?.account ? { account: opts.account || loadedPlaybook?.account } : {}),
+            ...(loadedPlaybook?.vars ? { vars: loadedPlaybook.vars } : {}),
             notes: loadedPlaybook?.notes || [],
             lastPassedAt: report.timestamp,
             steps: updatedSteps
         };
         fs.writeFileSync(savePlaybookPath, JSON.stringify(playbookDoc, null, 2) + "\n", "utf8");
-        console.log(`[guided-hands] Playbook saved/updated: ${savePlaybookPath}`);
+        console.log(`[guided-hands] Playbook saved/updated: ${savePlaybookPath}${report.patchedSteps.length ? ` (${report.patchedSteps.length} step(s) auto-patched)` : ""}`);
     }
 
     const latestPath = path.join(repoRoot, "artifacts", "proof-verify", "latest-guided-hands.json");
@@ -1996,10 +3568,22 @@ async function main() {
     fs.writeFileSync(runPath, jsonOut, "utf8");
     fs.writeFileSync(latestPath, jsonOut, "utf8");
 
-    console.log(`\n[guided-hands] OVERALL: ${report.passed ? "PASS" : "FAIL"} (${report.steps.length} step(s), ${report.errors.length} error(s))`);
+    console.log(`\n[guided-hands] OVERALL: ${report.passed ? "PASS" : "FAIL"} (${report.steps.length} step(s), ${report.recoveries.length} healed, ${report.errors.length} error(s))`);
     console.log(`[guided-hands] Report: ${latestPath}`);
+    if (report.recoveries.length > 0) {
+        console.log("[guided-hands] Autonomous recoveries:");
+        for (const r of report.recoveries) {
+            console.log(`  - Step ${r.step} [${r.tier}]: ${r.originalError} -> ${r.reason || JSON.stringify(r.actionTaken)}`);
+        }
+    }
     if (report.errors.length > 0) {
         for (const e of report.errors) console.error(`  - ERROR: ${e}`);
+        if (report.failureSnapshot?.page) {
+            const p = report.failureSnapshot.page;
+            console.error(`  - SNAPSHOT URL: ${p.url} (title="${p.title}", modal=${p.inModal}, clickables=${p.clickables.length}, fields=${p.fields.length})`);
+            if (p.swal) console.error(`  - SNAPSHOT SWAL: ${p.swal.title} — ${p.swal.text}`);
+            if (report.failureSnapshot.screenshot) console.error(`  - SNAPSHOT PNG: ${report.failureSnapshot.screenshot}`);
+        }
     }
     process.exit(report.passed ? 0 : 1);
 }

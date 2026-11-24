@@ -113,7 +113,7 @@ function waitForTabComplete(tabId, timeoutMs = 20000) {
             settled = true;
             clearTimeout(timer);
             chrome.tabs.onUpdated.removeListener(onUpdated);
-            setTimeout(() => resolve(ok), 450);
+            setTimeout(() => resolve(ok), 100);
         };
         const onUpdated = (updatedId, info) => {
             if (updatedId === tabId && info.status === "complete") {
@@ -304,23 +304,26 @@ function pageConsumeTelemetry() {
 }
 
 function pageExtractClickables(explicitScope) {
+    const isVisible = (el) => {
+        if (!el) return false;
+        const st = window.getComputedStyle(el);
+        if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 1 && r.height > 1;
+    };
+
+    const swalEl = document.querySelector(".swal2-popup:not([style*='display: none']):not(.swal2-hide):not(.animate__fadeOutDown)");
+    const modalEl = document.querySelector(".modal.show");
     const activePopup = explicitScope
         ? document.querySelector(explicitScope)
-        : (document.querySelector(".swal2-popup:not([style*='display: none'])")
-            || document.querySelector(".modal.show")
+        : ((isVisible(swalEl) ? swalEl : null)
+            || (isVisible(modalEl) ? modalEl : null)
             || document.body);
     if (explicitScope && !activePopup) {
         return { inModal: false, items: [] };
     }
     const root = activePopup || document.body;
     const inModal = root !== document.body;
-
-    const isVisible = (el) => {
-        const st = window.getComputedStyle(el);
-        if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
-        const r = el.getBoundingClientRect();
-        return r.width > 1 && r.height > 1;
-    };
 
     for (const old of document.querySelectorAll("[data-gh-click-id]")) {
         old.removeAttribute("data-gh-click-id");
@@ -350,7 +353,12 @@ function pageExtractClickables(explicitScope) {
 }
 
 function pageClickTarget(selector) {
-    const el = document.querySelector(selector);
+    let el = null;
+    try {
+        el = document.querySelector(selector);
+    } catch {
+        return false;
+    }
     if (!el) return false;
     el.scrollIntoView({ block: "center" });
     el.click();
@@ -358,16 +366,6 @@ function pageClickTarget(selector) {
 }
 
 function pageExtractFields(scopeSelector, onlyEmptyFlag) {
-    const root = scopeSelector
-        ? document.querySelector(scopeSelector)
-        : (document.querySelector(".modal.show form")
-            || document.querySelector(".modal.show")
-            || document.querySelector("#actualTicketEntry form")
-            || document.querySelector("main form")
-            || document.querySelector("form")
-            || document.body);
-    if (!root) return { inModal: false, fields: [] };
-
     const isVisible = (el) => {
         const st = window.getComputedStyle(el);
         if (st.display === "none" || st.visibility === "hidden") return false;
@@ -385,6 +383,26 @@ function pageExtractFields(scopeSelector, onlyEmptyFlag) {
         return wrapped ? isVisible(wrapped) : false;
     };
 
+    const isLogoutForm = (form) => /logout|signout/i.test(form.getAttribute("action") || form.id || "");
+    const pickNonLogoutForm = (container) => {
+        for (const f of container.querySelectorAll("form")) {
+            if (!isLogoutForm(f) && isVisible(f)) return f;
+        }
+        return null;
+    };
+
+    const modalEl = document.querySelector(".modal.show");
+    const mainArea = document.querySelector("main, .main-content, #content") || document.body;
+    let root = scopeSelector
+        ? document.querySelector(scopeSelector)
+        : (document.querySelector(".modal.show form")
+            || modalEl
+            || document.querySelector("#actualTicketEntry form")
+            || pickNonLogoutForm(mainArea)
+            || pickNonLogoutForm(document)
+            || mainArea);
+    if (!root) return { inModal: false, fields: [] };
+
     const getLabel = (el) => {
         if (el.id) {
             const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
@@ -396,72 +414,85 @@ function pageExtractFields(scopeSelector, onlyEmptyFlag) {
         return el.getAttribute("aria-label") || el.getAttribute("data-placeholder") || el.getAttribute("placeholder") || el.name || el.id || "";
     };
 
-    for (const old of document.querySelectorAll("[data-gh-field-key]")) {
-        old.removeAttribute("data-gh-field-key");
-    }
-
-    const controls = root.querySelectorAll("input, select, textarea");
-    const fields = [];
-    const usedKeys = new Set();
-
-    for (const el of controls) {
-        const tag = el.tagName.toLowerCase();
-        const type = tag === "input" ? (el.getAttribute("type") || "text").toLowerCase() : tag;
-        if (["hidden", "submit", "button", "reset", "file", "image"].includes(type)) continue;
-        if (el.disabled || el.readOnly) continue;
-        if ((el.name || "").includes("__RequestVerificationToken")) continue;
-        if (el.closest(".modern-select-search, .select2-search")) continue;
-
-        const visible = isVisible(el) || isEnhancedSelectVisible(el);
-        if (!visible) continue;
-
-        const currentValue = (type === "checkbox" || type === "radio") ? el.checked : (el.value || "");
-        if (onlyEmptyFlag && typeof currentValue === "string" && currentValue.trim() !== "") {
-            continue;
+    const collectFromRoot = (targetRoot) => {
+        for (const old of document.querySelectorAll("[data-gh-field-key]")) {
+            old.removeAttribute("data-gh-field-key");
         }
 
-        const baseKey = (el.id || el.name || getLabel(el) || `field_${fields.length + 1}`)
-            .replace(/[^a-zA-Z0-9_.-]/g, "_")
-            .replace(/^_+|_+$/g, "")
-            .slice(0, 48) || `field_${fields.length + 1}`;
-        let key = baseKey;
-        let suffix = 2;
-        while (usedKeys.has(key)) key = `${baseKey}_${suffix++}`;
-        usedKeys.add(key);
+        const controls = targetRoot.querySelectorAll("input, select, textarea");
+        const fields = [];
+        const usedKeys = new Set();
 
-        el.setAttribute("data-gh-field-key", key);
+        for (const el of controls) {
+            const tag = el.tagName.toLowerCase();
+            const type = tag === "input" ? (el.getAttribute("type") || "text").toLowerCase() : tag;
+            if (["hidden", "submit", "button", "reset", "file", "image"].includes(type)) continue;
+            if (el.disabled || el.readOnly) continue;
+            if ((el.name || "").includes("__RequestVerificationToken")) continue;
+            if (el.closest(".modern-select-search, .select2-search")) continue;
+            if (el.closest("form") && isLogoutForm(el.closest("form"))) continue;
 
-        const field = {
-            key,
-            tag,
-            type,
-            inputMode: (el.inputMode || el.getAttribute("inputmode") || "").toLowerCase(),
-            label: getLabel(el).slice(0, 80),
-            placeholder: (el.getAttribute("placeholder") || el.getAttribute("data-placeholder") || "").slice(0, 60),
-            required: Boolean(el.required || el.getAttribute("data-val-required")),
-            currentValue,
-            maxLength: el.maxLength > 0 && el.maxLength < 10000 ? el.maxLength : null,
-            min: el.getAttribute("min") || null,
-            max: el.getAttribute("max") || null
-        };
+            const visible = isVisible(el) || isEnhancedSelectVisible(el);
+            if (!visible) continue;
 
-        if (tag === "select") {
-            const opts = [];
-            for (const opt of el.options) {
-                const val = opt.value;
-                const txt = (opt.textContent || "").replace(/\s+/g, " ").trim();
-                if (val === "" && /select|choose|--/i.test(txt)) continue;
-                if (opt.disabled) continue;
-                opts.push({ value: val, text: txt.slice(0, 60) });
+            const currentValue = (type === "checkbox" || type === "radio") ? el.checked : (el.value || "");
+            if (onlyEmptyFlag && typeof currentValue === "string" && currentValue.trim() !== "") {
+                continue;
             }
-            field.options = opts;
-            if (opts.length === 0) continue;
+
+            const baseKey = (el.id || el.name || getLabel(el) || `field_${fields.length + 1}`)
+                .replace(/[^a-zA-Z0-9_.-]/g, "_")
+                .replace(/^_+|_+$/g, "")
+                .slice(0, 48) || `field_${fields.length + 1}`;
+            let key = baseKey;
+            let suffix = 2;
+            while (usedKeys.has(key)) key = `${baseKey}_${suffix++}`;
+            usedKeys.add(key);
+
+            el.setAttribute("data-gh-field-key", key);
+
+            const field = {
+                key,
+                tag,
+                type,
+                inputMode: (el.inputMode || el.getAttribute("inputmode") || "").toLowerCase(),
+                label: getLabel(el).slice(0, 80),
+                placeholder: (el.getAttribute("placeholder") || el.getAttribute("data-placeholder") || "").slice(0, 60),
+                required: Boolean(el.required || el.getAttribute("data-val-required")),
+                currentValue,
+                maxLength: el.maxLength > 0 && el.maxLength < 10000 ? el.maxLength : null,
+                min: el.getAttribute("min") || null,
+                max: el.getAttribute("max") || null
+            };
+
+            if (tag === "select") {
+                const opts = [];
+                for (const opt of el.options) {
+                    const val = opt.value;
+                    const txt = (opt.textContent || "").replace(/\s+/g, " ").trim();
+                    if (val === "" && /select|choose|--/i.test(txt)) continue;
+                    if (opt.disabled) continue;
+                    opts.push({ value: val, text: txt.slice(0, 60) });
+                }
+                field.options = opts;
+                if (opts.length === 0) continue;
+            }
+            fields.push(field);
+            if (fields.length >= 30) break;
         }
-        fields.push(field);
-        if (fields.length >= 30) break;
+        return fields;
+    };
+
+    let fields = collectFromRoot(root);
+    // Fallback to mainArea / document.body if an auto-picked form had no visible editable fields
+    if (fields.length === 0 && !scopeSelector && !modalEl && root !== mainArea) {
+        fields = collectFromRoot(mainArea);
+    }
+    if (fields.length === 0 && !scopeSelector && !modalEl && mainArea !== document.body) {
+        fields = collectFromRoot(document.body);
     }
 
-    return { inModal: Boolean(document.querySelector(".modal.show")), fields };
+    return { inModal: Boolean(modalEl), fields };
 }
 
 function pageApplyValues(vals) {
@@ -521,14 +552,31 @@ function pageApplyValues(vals) {
 }
 
 function pageReadFeedback() {
+    const isVisible = (el) => {
+        if (!el) return false;
+        const st = window.getComputedStyle(el);
+        if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 1 && r.height > 1;
+    };
     const validationErrors = [...document.querySelectorAll(".field-validation-error, .validation-summary-errors li, .invalid-feedback, span.text-error, div.text-error")]
         .filter((el) => !el.closest("button, a"))
         .map((el) => (el.innerText || "").trim())
         .filter(Boolean)
         .slice(0, 10);
-    const swalPopup = document.querySelector(".swal2-popup:not([style*='display: none'])");
+    const swalCandidate = document.querySelector(".swal2-popup:not([style*='display: none']):not(.swal2-hide):not(.animate__fadeOutDown)");
+    const swalPopup = isVisible(swalCandidate) ? swalCandidate : null;
     const swalTitle = swalPopup?.querySelector(".swal2-title")?.innerText?.trim() || "";
     const swalText = swalPopup?.querySelector(".swal2-html-container")?.innerText?.trim() || "";
+    const swalConfirmBtn = swalPopup?.querySelector(".swal2-confirm") || null;
+    const swalCancelBtn = swalPopup?.querySelector(".swal2-cancel") || null;
+    const swalConfirmVisible = Boolean(swalConfirmBtn && !swalConfirmBtn.disabled && isVisible(swalConfirmBtn));
+    const swalCancelVisible = Boolean(swalCancelBtn && !swalCancelBtn.disabled && isVisible(swalCancelBtn));
+    const swalIsLoading = Boolean(
+        swalPopup && (swalPopup.classList.contains("swal2-loading")
+            || swalPopup.querySelector(".swal2-loading, .modern-loader-inline")
+            || (!swalConfirmVisible && /processing|saving|loading|please wait/i.test(`${swalTitle} ${swalText}`)))
+    );
     const swalIsError = Boolean(swalPopup?.querySelector(".swal2-error, .swal2-warning, .modern-alert-icon--error, .modern-alert-icon--warning")
         || /error|invalid|required|failed|could not|cannot|future|must be/i.test(`${swalTitle} ${swalText}`));
     const toastText = [...document.querySelectorAll(".toast-body, .toast-message, .alert")]
@@ -543,14 +591,28 @@ function pageReadFeedback() {
         title: document.title || "",
         hasServerError,
         validationErrors,
-        swal: (swalTitle || swalText) ? { title: swalTitle, text: swalText, isError: swalIsError } : null,
+        swal: (swalPopup && (swalTitle || swalText || swalIsLoading || swalConfirmVisible))
+            ? {
+                title: swalTitle,
+                text: swalText,
+                isError: swalIsError,
+                isLoading: swalIsLoading,
+                confirmVisible: swalConfirmVisible,
+                confirmText: (swalConfirmBtn?.innerText || "").trim(),
+                cancelVisible: swalCancelVisible
+            }
+            : null,
         alerts: toastText,
         bodySample: bodyText.slice(0, 6000)
     };
 }
 
 function pageCheckSelector(selector) {
-    return Boolean(document.querySelector(selector));
+    try {
+        return Boolean(document.querySelector(selector));
+    } catch {
+        return false;
+    }
 }
 
 function pageAutoLogin(username, password) {
@@ -568,6 +630,148 @@ function pageAutoLogin(username, password) {
     return true;
 }
 
+function pageSelectOption(selectorOrTarget, valueOrText, scopeSelector) {
+    const root = scopeSelector
+        ? document.querySelector(scopeSelector)
+        : (document.querySelector(".modal.show") || document);
+    if (!root) return { ok: false, reason: `Scope not found: ${scopeSelector}` };
+
+    const getLabel = (el) => {
+        if (el.id) {
+            const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+            if (lbl && lbl.innerText.trim()) return lbl.innerText.replace(/\s+/g, " ").trim();
+        }
+        const wrap = el.closest(".ui-field, .schedule-field, .mb-3, .form-group, .form-floating, .col, [class*='col-'], td, div");
+        const nearLabel = wrap?.querySelector("label");
+        if (nearLabel && nearLabel.innerText.trim()) return nearLabel.innerText.replace(/\s+/g, " ").trim();
+        return el.getAttribute("aria-label") || el.getAttribute("data-placeholder") || el.getAttribute("placeholder") || el.name || el.id || "";
+    };
+
+    let selectEl = null;
+    const rawTarget = String(selectorOrTarget || "").trim();
+    if (rawTarget) {
+        if (/^[#.\[]|^select\b/i.test(rawTarget)) {
+            try {
+                const candidate = root.querySelector(rawTarget);
+                if (candidate && candidate.tagName === "SELECT") selectEl = candidate;
+                else if (candidate) selectEl = candidate.querySelector("select") || candidate.parentElement?.querySelector("select");
+            } catch {
+                // Fall back to semantic match
+            }
+        }
+        if (!selectEl) {
+            const needle = rawTarget.toLowerCase();
+            const selects = [...root.querySelectorAll("select")].filter((s) => !s.disabled);
+            selectEl = selects.find((s) => (s.id || "").toLowerCase() === needle || (s.name || "").toLowerCase() === needle)
+                || selects.find((s) => getLabel(s).toLowerCase().replace(/\*/g, "").trim() === needle)
+                || selects.find((s) => getLabel(s).toLowerCase().includes(needle) || (s.id || "").toLowerCase().includes(needle) || (s.name || "").toLowerCase().includes(needle));
+        }
+    } else {
+        selectEl = [...root.querySelectorAll("select")].find((s) => !s.disabled) || null;
+    }
+
+    if (!selectEl) {
+        return { ok: false, reason: `Select element not found for "${rawTarget}"` };
+    }
+
+    const opts = [...selectEl.options].filter((o) => !o.disabled);
+    const nonPlaceholder = opts.filter((o) => !(o.value === "" && /select|choose|--/i.test((o.textContent || "").trim())));
+    if (nonPlaceholder.length === 0) {
+        return { ok: false, waitingForOptions: true, reason: `Select "${selectEl.id || selectEl.name || rawTarget}" has no populated options yet` };
+    }
+
+    const wanted = String(valueOrText ?? "").trim();
+    const wantedLower = wanted.toLowerCase();
+    const matchedOpt = opts.find((o) => o.value === wanted)
+        || opts.find((o) => (o.textContent || "").replace(/\s+/g, " ").trim().toLowerCase() === wantedLower)
+        || opts.find((o) => (o.textContent || "").replace(/\s+/g, " ").trim().toLowerCase().includes(wantedLower));
+
+    if (!matchedOpt) {
+        return {
+            ok: false,
+            waitingForOptions: true,
+            reason: `Option "${wanted}" not found in "${selectEl.id || selectEl.name || rawTarget}" (${nonPlaceholder.length} options)`,
+            availableSample: nonPlaceholder.slice(0, 8).map((o) => `${o.value}=${(o.textContent || "").trim()}`)
+        };
+    }
+
+    // Prefer clicking ModernSelect option when enhanced wrapper is present so custom listeners fire identically
+    const modernContainer = selectEl.nextElementSibling?.classList.contains("modern-select-container")
+        ? selectEl.nextElementSibling
+        : selectEl.parentElement?.querySelector(".modern-select-container");
+    let usedModernClick = false;
+    if (modernContainer) {
+        const trigger = modernContainer.querySelector(".modern-select-trigger");
+        if (trigger) {
+            trigger.scrollIntoView({ block: "center" });
+            trigger.click();
+            const optNode = document.querySelector(`.modern-select-dropdown.show .modern-select-option[data-value="${CSS.escape(matchedOpt.value)}"]`)
+                || modernContainer.querySelector(`.modern-select-option[data-value="${CSS.escape(matchedOpt.value)}"]`);
+            if (optNode) {
+                optNode.click();
+                usedModernClick = true;
+            }
+        }
+    }
+
+    if (!usedModernClick || selectEl.value !== matchedOpt.value) {
+        selectEl.value = matchedOpt.value;
+        selectEl.dispatchEvent(new Event("input", { bubbles: true }));
+        selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+        if (window.jQuery) {
+            try {
+                const $el = window.jQuery(selectEl);
+                $el.val(matchedOpt.value).trigger("change");
+                if (typeof window.refreshModernSelect === "function") {
+                    window.refreshModernSelect($el);
+                }
+            } catch {
+                // Ignore jQuery errors
+            }
+        }
+    }
+
+    return {
+        ok: true,
+        matchedKey: selectEl.id || selectEl.name || getLabel(selectEl),
+        selectedValue: selectEl.value,
+        selectedText: (matchedOpt.textContent || "").replace(/\s+/g, " ").trim(),
+        usedModernClick
+    };
+}
+
+function pageUploadFile(selector, fileName, mimeType, base64Content, scopeSelector) {
+    const root = scopeSelector
+        ? document.querySelector(scopeSelector)
+        : (document.querySelector(".modal.show") || document);
+    if (!root) return { ok: false, reason: `Scope not found: ${scopeSelector}` };
+
+    const inputEl = selector
+        ? (root.querySelector(selector) || document.querySelector(selector))
+        : (root.querySelector("input[type='file']:not([disabled])") || document.querySelector("input[type='file']:not([disabled])"));
+    if (!inputEl) {
+        return { ok: false, reason: `File input not found: ${selector || "input[type='file']"}` };
+    }
+
+    const bin = atob(base64Content);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) {
+        bytes[i] = bin.charCodeAt(i);
+    }
+    const file = new File([bytes], fileName, { type: mimeType || "application/octet-stream" });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    inputEl.files = dt.files;
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+    inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+    return {
+        ok: true,
+        selectorUsed: inputEl.id ? `#${inputEl.id}` : (inputEl.name ? `input[name='${inputEl.name}']` : "input[type='file']"),
+        fileName,
+        size: bytes.length
+    };
+}
+
 // ---- Command Dispatcher ----
 
 async function handleBridgeCommand(msg) {
@@ -580,6 +784,21 @@ async function handleBridgeCommand(msg) {
         await execInMain(tabId, pageSetIndicator, [params.status || "Guided Hands active", "active", ""]);
         await saveState({ lastStatus: `Opened ${params.url}` });
         return { tabId };
+    }
+
+    if (action === "close_tab") {
+        const st = await getState();
+        const targetTabId = params.tabId || st.managedTabId;
+        if (targetTabId) {
+            try {
+                await chrome.tabs.remove(targetTabId);
+            } catch {
+                // Tab may already be closed
+            }
+        }
+        await saveState({ managedTabId: null, managedGroupId: null, lastStatus: "Tab closed" });
+        await setBadge("ON", "#0ea5e9");
+        return { closed: true, tabId: targetTabId || null };
     }
 
     const state = await getState();
@@ -641,6 +860,67 @@ async function handleBridgeCommand(msg) {
     if (action === "check_selector") {
         const found = await execInMain(tabId, pageCheckSelector, [params.selector]);
         return { found };
+    }
+
+    if (action === "select_option") {
+        return execInMain(tabId, pageSelectOption, [
+            params.target || params.selector || "",
+            params.value ?? params.text ?? "",
+            params.scopeSelector || ""
+        ]);
+    }
+
+    if (action === "upload_file") {
+        return execInMain(tabId, pageUploadFile, [
+            params.selector || "",
+            params.fileName || "sample.pdf",
+            params.mimeType || "application/pdf",
+            params.base64Content || "",
+            params.scopeSelector || ""
+        ]);
+    }
+
+    if (action === "capture_snapshot") {
+        const scopeSel = params.scopeSelector || "";
+        const fb = await execInMain(tabId, pageReadFeedback);
+        const clickRes = await execInMain(tabId, pageExtractClickables, [scopeSel]).catch(() => ({ inModal: false, items: [] }));
+        const fieldRes = await execInMain(tabId, pageExtractFields, [scopeSel, false]).catch(() => ({ inModal: false, fields: [] }));
+        const pathLower = String(fb?.pathname || "").toLowerCase();
+        return {
+            ...(fb || {}),
+            isLoginPage: pathLower.includes("/identity/account/login"),
+            isAccessDenied: pathLower.includes("/identity/account/accessdenied"),
+            inModal: Boolean(clickRes?.inModal || fieldRes?.inModal),
+            clickables: (clickRes?.items || []).slice(0, 25),
+            fields: (fieldRes?.fields || []).slice(0, 25).map((f) => ({
+                key: f.key,
+                tag: f.tag,
+                type: f.type,
+                label: f.label,
+                required: f.required,
+                currentValue: f.currentValue,
+                options: Array.isArray(f.options) ? f.options.slice(0, 10) : undefined
+            })),
+            bodyExcerpt: (fb?.bodySample || "").slice(0, 1800)
+        };
+    }
+
+    if (action === "step_preflight") {
+        if (params.statusText) {
+            await setBadge(params.mode === "error" ? "ERR" : (params.mode === "done" ? "ON" : "RUN"),
+                params.mode === "error" ? "#ef4444" : (params.mode === "done" ? "#0ea5e9" : "#f59e0b"));
+            await saveState({ lastStatus: params.statusText });
+            await execInMain(tabId, pageSetIndicator, [params.statusText, params.mode || "active", params.highlight || ""]).catch(() => {});
+        }
+        const feedback = await execInMain(tabId, pageReadFeedback);
+        const out = { feedback };
+        if (params.includeClickables) {
+            out.clickables = await execInMain(tabId, pageExtractClickables, [params.scopeSelector || ""]);
+        }
+        if (params.includeFields) {
+            out.fields = await execInMain(tabId, pageExtractFields, [params.scopeSelector || "", Boolean(params.onlyEmpty)]);
+        }
+        return out;
     }
 
     if (action === "auto_login") {

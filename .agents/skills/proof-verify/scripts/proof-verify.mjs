@@ -8,9 +8,10 @@ import { spawn, execFileSync } from "node:child_process";
 const DEFAULT_PORT = 5073;
 const DEFAULT_LINEAR_TEAM = "IBS-MSAP";
 const DEFAULT_TEXT_MODELS = [
-    "opencode/glm-5.3-flash-free",
     "opencode/deepseek-v4.1-flash-free",
-    "opencode/mimo-v2.6-flash-free"
+    "opencode/nemotron-3.5-lightning-free",
+    "opencode/mimo-v2.6-flash-free",
+    "opencode/flint-40b-free"
 ];
 const DEFAULT_VISION_MODEL = "opencode/nemotron-3.5-super-vl-free";
 
@@ -44,8 +45,9 @@ Options:
   --skip-ai                Skip Stage 3 OpenCode model judges
   --user <username>        Login username (or set IBS_VERIFY_USER env var)
   --pass <password>        Login password (or set IBS_VERIFY_PASS env var)
+  --account <name>         Load login credentials from gitignored artifacts/proof-verify/test-accounts.local.json
   --interactive-login      Launch visible browser to log in and cache cookies in profile
-  --model <id>             Primary OpenCode text/code model (default: opencode/glm-5.3-flash-free)
+  --model <id>             Primary OpenCode text/code model (default: opencode/deepseek-v4.1-flash-free)
   --vision-model <id>      OpenCode vision model for screenshots (default: opencode/nemotron-3.5-super-vl-free)
   --linear-issue <id>      Target Linear issue identifier (e.g. IBS-126)
   --linear-team <name>     Linear team name/key (default: IBS-MSAP)
@@ -66,6 +68,7 @@ function parseArgs(argv) {
         skipAi: false,
         user: process.env.IBS_VERIFY_USER || "",
         pass: process.env.IBS_VERIFY_PASS || "",
+        account: "",
         interactiveLogin: false,
         model: DEFAULT_TEXT_MODELS[0],
         visionModel: DEFAULT_VISION_MODEL,
@@ -117,6 +120,10 @@ function parseArgs(argv) {
             opts.pass = next();
         } else if (arg.startsWith("--pass=")) {
             opts.pass = arg.slice("--pass=".length);
+        } else if (arg === "--account") {
+            opts.account = next().trim();
+        } else if (arg.startsWith("--account=")) {
+            opts.account = arg.slice("--account=".length).trim();
         } else if (arg === "--model") {
             opts.model = next();
         } else if (arg.startsWith("--model=")) {
@@ -1773,6 +1780,23 @@ async function main() {
     }
 
     const repoRoot = getRepoRoot();
+    if (opts.account && (!opts.user || !opts.pass)) {
+        const regPath = path.join(repoRoot, "artifacts", "proof-verify", "test-accounts.local.json");
+        if (!fs.existsSync(regPath)) {
+            throw new Error(`Account registry not found: ${regPath}`);
+        }
+        const reg = JSON.parse(fs.readFileSync(regPath, "utf8").replace(/^\uFEFF/, ""));
+        const needle = opts.account.toLowerCase();
+        const entry = (reg.accounts || []).find(
+            (a) => String(a.username || "").toLowerCase() === needle
+                || String(a.displayName || "").toLowerCase() === needle
+        );
+        if (!entry) {
+            throw new Error(`Account "${opts.account}" not found in ${regPath}`);
+        }
+        opts.user = entry.username;
+        opts.pass = entry.password || reg.passwordAllCoreAccounts || "";
+    }
     const runId = new Date().toISOString().replace(/[:.]/g, "-");
     const runDir = path.join(repoRoot, "artifacts", "proof-verify", runId);
     fs.mkdirSync(runDir, { recursive: true });

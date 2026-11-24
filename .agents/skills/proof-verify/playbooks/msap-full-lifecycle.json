@@ -2,16 +2,32 @@
   "name": "msap-full-lifecycle",
   "description": "Complete 9-stage MSAP lifecycle: Create Schedule -> Approve Missing Rates -> Approve Schedule -> COS -> Record Docking & Watering Tickets -> Prepare Billing -> Commercial Review -> Final Approval -> Record Collection -> Deposit -> Clearing (Cleared).",
   "url": "/MSAP/VesselSchedule/Create?date={today}",
+  "vars": {
+    "customer": "9",
+    "vessel": "346",
+    "port": "BATANGAS",
+    "terminal": "69",
+    "tugboat": "145",
+    "service1": "Docking",
+    "service2": "Watering",
+    "tugMaster1": "16",
+    "tugMaster2": "17",
+    "wateringTons": "15",
+    "wateringRate": "500"
+  },
   "notes": [
-    "Defaults CustomerId=9 (PHILHUA SHIPPING INC) + Batangas Anchorage (#69) with active tariff/BAF rates.",
+    "All booking, tugboat, service, captain, and rate defaults live in vars and can be overridden via --var key=value.",
     "Captures {scheduleId}, {cosId}, {billingId}, and {collectionId} dynamically without hardcoded record IDs."
   ],
+  "lastPassedAt": "2026-11-24T02:12:34.208Z",
   "steps": [
     {
       "action": "fill_form",
       "onlyEmpty": true,
       "overrides": {
-        "PortId": "BATANGAS",
+        "CustomerId": "{customer}",
+        "VesselId": "{vessel}",
+        "PortId": "{port}",
         "VoyageNumber": "VOY-{today}-{rand}"
       },
       "scenario": "Valid Philippine maritime vessel schedule booking.",
@@ -19,17 +35,17 @@
         "CustomerId": {
           "label": "Customer *",
           "type": "select",
-          "value": "9"
+          "value": "{customer}"
         },
         "VesselId": {
           "label": "Vessel *",
           "type": "select",
-          "value": "346"
+          "value": "{vessel}"
         },
         "PortId": {
           "label": "Port *",
           "type": "select",
-          "value": "BATANGAS"
+          "value": "{port}"
         },
         "VoyageNumber": {
           "label": "Voyage number *",
@@ -37,7 +53,7 @@
           "value": "VOY-{today}-{rand}"
         },
         "Notes": {
-          "label": "Planning notes",
+          "label": "Add coordination notes or service instructions...",
           "type": "textarea",
           "value": "Full 9-stage automated lifecycle verification schedule."
         }
@@ -62,25 +78,25 @@
         {
           "match": "Service",
           "index": 0,
-          "value": "Docking"
+          "value": "{service1}"
         },
         {
           "match": "Service",
           "index": 1,
-          "value": "Watering"
+          "value": "{service2}"
         }
       ],
-      "scenario": "Pick an active Batangas terminal and an available tugboat.",
+      "scenario": "Pick an active terminal and an available tugboat.",
       "knownFields": {
         "TerminalId": {
           "label": "Terminal *",
           "type": "select",
-          "value": "69"
+          "value": "{terminal}"
         },
         "SelectedTugboatIds": {
           "label": "Select tugboat",
           "type": "select",
-          "value": "145"
+          "value": "{tugboat}"
         }
       }
     },
@@ -118,18 +134,37 @@
       "var": "scheduleId"
     },
     {
-      "action": "click",
-      "selector": "a.schedule-rate-editor-cta--attention",
-      "optional": true,
-      "waitAfterMs": 1200,
-      "waitForNavigation": true
+      "action": "navigate",
+      "url": "/MSAP/RateUpload/Editor?mode=combined&asOfDate={weekStart}&scheduleId={scheduleId}"
     },
     {
       "action": "fill_form",
       "scope": "#rateEditorRows",
       "onlyEmpty": true,
       "optional": true,
-      "scenario": "Enter positive Philippine Peso maritime tugboat rates as plain numbers ONLY (e.g. 18500 for Basic and 2500 for BAF)."
+      "scenario": "Enter positive Philippine Peso maritime tugboat rates as plain numbers ONLY (e.g. 18500 for Basic and 2500 for BAF).",
+      "knownFields": {
+        "2GO_GROUP_INC__DOCKING_Basic_amount": {
+          "label": "2GO GROUP INC, DOCKING Basic amount",
+          "type": "text",
+          "value": 18500
+        },
+        "2GO_GROUP_INC__DOCKING_BAF_amount": {
+          "label": "2GO GROUP INC, DOCKING BAF amount",
+          "type": "text",
+          "value": 2500
+        },
+        "2GO_GROUP_INC__WATERING_Basic_amount": {
+          "label": "2GO GROUP INC, WATERING Basic amount",
+          "type": "text",
+          "value": 1200
+        },
+        "2GO_GROUP_INC__WATERING_BAF_amount": {
+          "label": "2GO GROUP INC, WATERING BAF amount",
+          "type": "text",
+          "value": 1500
+        }
+      }
     },
     {
       "action": "click",
@@ -217,12 +252,42 @@
         "TugMasterId": {
           "label": "Captain / tug master *",
           "type": "select",
-          "value": "16"
+          "value": "{tugMaster1}"
         },
         "Remarks": {
           "label": "Remarks",
           "type": "textarea",
           "value": "Docking completed cleanly."
+        },
+        "DispatchNumber": {
+          "label": "Actual ticket number *",
+          "type": "text",
+          "value": "DT-{rand}-1"
+        },
+        "Date": {
+          "label": "Ticket date *",
+          "type": "date",
+          "value": "{today}"
+        },
+        "DateLeft": {
+          "label": "Actual start * · Philippine time",
+          "type": "date",
+          "value": "{today}"
+        },
+        "TimeLeft": {
+          "label": "Actual start time",
+          "type": "time",
+          "value": "08:00"
+        },
+        "DateArrived": {
+          "label": "Actual end * · Philippine time",
+          "type": "date",
+          "value": "{today}"
+        },
+        "TimeArrived": {
+          "label": "Actual end time",
+          "type": "time",
+          "value": "10:00"
         }
       },
       "scenario": "Actual Docking dispatch ticket."
@@ -258,19 +323,59 @@
         "TimeLeft": "10:00",
         "DateArrived": "{today}",
         "TimeArrived": "11:30",
-        "Tons": "15",
-        "DispatchRate": "500"
+        "Tons": "{wateringTons}",
+        "DispatchRate": "{wateringRate}"
       },
       "knownFields": {
         "TugMasterId": {
           "label": "Captain / tug master *",
           "type": "select",
-          "value": "17"
+          "value": "{tugMaster2}"
         },
         "Remarks": {
           "label": "Remarks",
           "type": "textarea",
           "value": "Watering delivered as requested."
+        },
+        "DispatchNumber": {
+          "label": "Actual ticket number *",
+          "type": "text",
+          "value": "DT-{rand}-2"
+        },
+        "Date": {
+          "label": "Ticket date *",
+          "type": "date",
+          "value": "{today}"
+        },
+        "DateLeft": {
+          "label": "Actual start * · Philippine time",
+          "type": "date",
+          "value": "{today}"
+        },
+        "TimeLeft": {
+          "label": "Actual start time",
+          "type": "time",
+          "value": "07:43"
+        },
+        "DateArrived": {
+          "label": "Actual end * · Philippine time",
+          "type": "date",
+          "value": "{today}"
+        },
+        "TimeArrived": {
+          "label": "Actual end time",
+          "type": "time",
+          "value": "09:13"
+        },
+        "Tons": {
+          "label": "Tons *",
+          "type": "number",
+          "value": "{wateringTons}"
+        },
+        "DispatchRate": {
+          "label": "Rate (₱ / ton) *",
+          "type": "number",
+          "value": "{wateringRate}"
         }
       },
       "scenario": "Actual Watering dispatch ticket."
@@ -306,7 +411,7 @@
       },
       "knownFields": {
         "Remarks": {
-          "label": "Remarks",
+          "label": "e.g. Rate approved via email; 30D terms granted per customer request...",
           "type": "textarea",
           "value": "Automated billing verification for COS #{cosId}."
         }
