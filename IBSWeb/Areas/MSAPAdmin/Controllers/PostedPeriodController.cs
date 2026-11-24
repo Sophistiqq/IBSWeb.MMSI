@@ -41,11 +41,12 @@ namespace IBSWeb.Areas.MSAPAdmin.Controllers
                 cancellationToken);
 
             var draftBillings = await unitOfWork.Billing.CountAsync(
-                b => b.Date >= start && b.Date <= end && b.Status == MsapConstants.BillingStatus.ForPosting,
+                b => b.Date >= start && b.Date <= end
+                    && (b.Status == MsapConstants.BillingStatus.ForPosting || b.Status == MsapConstants.BillingStatus.Reviewed),
                 cancellationToken);
 
             var collections = await unitOfWork.Collection.CountAsync(
-                c => c.Date >= start && c.Date <= end,
+                c => c.Date >= start && c.Date <= end && c.VoidedDate == null && c.CanceledDate == null,
                 cancellationToken);
 
             return Json(new

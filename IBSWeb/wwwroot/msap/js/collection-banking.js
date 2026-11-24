@@ -19,7 +19,24 @@
                 confirmText: 'Save',
                 didOpen: popup => {
                     ModernSelect.init('#collectionBankingForm .js-modern-select');
-                    popup.querySelector('form')?.addEventListener('submit', event => {
+                    const form = popup.querySelector('#collectionBankingForm');
+                    const syncAuthSection = () => {
+                        const authSection = form?.querySelector('#bankingAuthSection');
+                        if (!authSection) return;
+                        const closedMonths = new Set((authSection.dataset.closedMonths || '').split(',').filter(Boolean));
+                        const dateValue = form.querySelector('#bankingDate')?.value || '';
+                        const ym = dateValue.length >= 7 ? dateValue.slice(0, 7) : '';
+                        const needsAuth = authSection.dataset.finalized === 'true' && closedMonths.has(ym);
+                        authSection.hidden = !needsAuth;
+                        const reasonInput = authSection.querySelector('#bankingReason');
+                        const fileInput = authSection.querySelector('#bankingAuthFile');
+                        if (reasonInput) reasonInput.required = needsAuth;
+                        if (fileInput) fileInput.required = needsAuth;
+                    };
+                    syncAuthSection();
+                    form?.querySelector('#bankingDate')?.addEventListener('change', syncAuthSection);
+                    form?.querySelector('#bankingDate')?.addEventListener('input', syncAuthSection);
+                    form?.addEventListener('submit', event => {
                         event.preventDefault();
                         Swal.clickConfirm();
                     });
@@ -27,15 +44,19 @@
                 preConfirm: () => {
                     const form = Swal.getPopup().querySelector('#collectionBankingForm');
                     if (!form || !form.reportValidity()) return false;
-                    const reasonInput = form.querySelector('#bankingReason');
-                    if (reasonInput && (reasonInput.value.trim().length < 5 || reasonInput.value.trim().length > 500)) {
-                        Swal.showValidationMessage('Please provide a valid reason (5 to 500 characters).');
-                        return false;
-                    }
-                    const fileInput = form.querySelector('#bankingAuthFile');
-                    if (fileInput && (!fileInput.files || fileInput.files.length === 0)) {
-                        Swal.showValidationMessage('Upload an approved authorization document (PDF, PNG, or JPEG).');
-                        return false;
+                    const authSection = form.querySelector('#bankingAuthSection');
+                    const requiresAuth = authSection && !authSection.hidden;
+                    if (requiresAuth) {
+                        const reasonInput = form.querySelector('#bankingReason');
+                        if (reasonInput && (reasonInput.value.trim().length < 5 || reasonInput.value.trim().length > 500)) {
+                            Swal.showValidationMessage('Please provide a valid reason (5 to 500 characters).');
+                            return false;
+                        }
+                        const fileInput = form.querySelector('#bankingAuthFile');
+                        if (fileInput && (!fileInput.files || fileInput.files.length === 0)) {
+                            Swal.showValidationMessage('Upload an approved authorization document (PDF, PNG, or JPEG).');
+                            return false;
+                        }
                     }
                     postUrl = form.action;
                     return new FormData(form);

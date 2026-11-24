@@ -59,24 +59,30 @@ namespace IBS.Services.MSAP
                 {
                     var collection = await unitOfWork.Collection.GetForUpdateAsync(id, ct)
                         ?? throw new InvalidOperationException("Collection not found.");
-                    var isAdjustedAction = collection.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
-                    if (!isAdjustedAction)
+                    if (collection.IsVoided)
                     {
-                        var guard = await GuardClosedPeriodAsync(collection.Date, ct) ?? await GuardClosedPeriodAsync(date, ct);
+                        throw new InvalidOperationException("Cannot update banking on a voided collection.");
+                    }
+                    var isFinalized = collection.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+                    var isBankingDateClosed = await unitOfWork.PostedPeriod.IsMonthClosedAsync(date.Year, date.Month, ct);
+                    var isAdjustedAction = isFinalized && isBankingDateClosed;
+                    if (!isFinalized)
+                    {
+                        var guard = await GuardClosedPeriodAsync(date, ct);
                         if (guard != null)
                         {
                             throw new InvalidOperationException(guard.Message);
                         }
                     }
-                    else
+                    else if (isAdjustedAction)
                     {
                         if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length is < 5 or > 500)
                         {
-                            throw new InvalidOperationException("Please provide a valid reason for updating a finalized-period collection (5 to 500 characters).");
+                            throw new InvalidOperationException("Please provide a valid reason for backdating banking into a closed period (5 to 500 characters).");
                         }
                         if (authorizationFile is not { Length: > 0 })
                         {
-                            throw new InvalidOperationException("An approved authorization document (PDF, PNG, or JPEG) is required to update banking on a finalized-period collection.");
+                            throw new InvalidOperationException("An approved authorization document (PDF, PNG, or JPEG) is required to record a closed-period banking date on a finalized collection.");
                         }
                     }
                     if (date == default)
@@ -215,6 +221,10 @@ namespace IBS.Services.MSAP
                 {
                     return ServiceResult.Failure("Collection not found.");
                 }
+                if (existing.IsVoided)
+                {
+                    return ServiceResult.Failure("Cannot revert banking on a voided collection.");
+                }
 
                 if (existing.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted && authorizationFile is not { Length: > 0 })
                 {
@@ -241,6 +251,10 @@ namespace IBS.Services.MSAP
                 {
                     var collection = await unitOfWork.Collection.GetForUpdateAsync(id, ct)
                         ?? throw new InvalidOperationException("Collection not found.");
+                    if (collection.IsVoided)
+                    {
+                        throw new InvalidOperationException("Cannot revert banking on a voided collection.");
+                    }
 
                     if (collection.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
                     {
@@ -332,6 +346,174 @@ namespace IBS.Services.MSAP
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to revert collection banking step");
+                return ServiceResult.Failure(ExceptionHelper.GetErrorMessage(ex));
+            }
+        }
+
+        public async Task<ServiceResult> VoidCollectionAsync(int id, string reason, string username, CancellationToken ct, IFormFile? authorizationFile = null)
+        {
+            string? uploadedAttachment = null;
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length is < 5 or > 500)
+                {
+                    return ServiceResult.Failure("Please provide a valid reason for voiding this collection (5 to 500 characters).");
+                }
+
+                var existing = await unitOfWork.Collection.GetAsync(c => c.MsapCollectionId == id, ct);
+                if (existing == null)
+                {
+                    return ServiceResult.Failure("Collection not found.", ServiceResultStatus.NotFound);
+                }
+                if (existing.IsVoided)
+                {
+                    return ServiceResult.Failure("This collection is already voided.");
+                }
+                if (existing.DepositDate.HasValue || existing.ClearedDate.HasValue)
+                {
+                    return ServiceResult.Failure("Cannot void a deposited or cleared collection. Revert banking steps first.");
+                }
+
+                var isFinalized = existing.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+                if (isFinalized)
+                {
+                    if (authorizationFile is not { Length: > 0 })
+                    {
+                        return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to void a finalized-period collection.");
+                    }
+                }
+                else
+                {
+                    var guard = await GuardClosedPeriodAsync(existing.Date, ct);
+                    if (guard != null)
+                    {
+                        return guard;
+                    }
+                }
+
+                if (authorizationFile is { Length: > 0 })
+                {
+                    if (!await OtherTugChargeService.IsSupportedDocumentAsync(authorizationFile, ct))
+                    {
+                        return ServiceResult.Failure("Upload a valid PDF, PNG, or JPEG authorization document of up to 10 MB.");
+                    }
+                    if (cloudStorageService == null)
+                    {
+                        return ServiceResult.Failure("Storage service is not configured for authorization documents.");
+                    }
+                    var extension = Path.GetExtension(authorizationFile.FileName).ToLowerInvariant();
+                    uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
+                    await cloudStorageService.UploadFileAsync(authorizationFile, uploadedAttachment);
+                }
+
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
+                {
+                    var collection = await unitOfWork.Collection.GetForUpdateAsync(id, ct)
+                        ?? throw new InvalidOperationException("Collection not found.");
+                    if (collection.IsVoided)
+                    {
+                        throw new InvalidOperationException("This collection is already voided.");
+                    }
+                    if (collection.DepositDate.HasValue || collection.ClearedDate.HasValue)
+                    {
+                        throw new InvalidOperationException("Cannot void a deposited or cleared collection. Revert banking steps first.");
+                    }
+
+                    var lockedFinalized = collection.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+                    if (lockedFinalized)
+                    {
+                        if (string.IsNullOrWhiteSpace(uploadedAttachment))
+                        {
+                            throw new InvalidOperationException("An approved authorization document (PDF, PNG, or JPEG) is required to void a finalized-period collection.");
+                        }
+                    }
+                    else
+                    {
+                        var guard = await GuardClosedPeriodAsync(collection.Date, ct);
+                        if (guard != null)
+                        {
+                            throw new InvalidOperationException(guard.Message);
+                        }
+                    }
+
+                    var linkedBillingIds = (await unitOfWork.Billing.GetAllAsync(b => b.CollectionId == collection.MsapCollectionId, ct))
+                        .Select(b => b.MsapBillingId)
+                        .Order()
+                        .ToList();
+                    var releasedNumbers = new List<string>();
+                    foreach (var billingId in linkedBillingIds)
+                    {
+                        var billing = await unitOfWork.Billing.GetForUpdateAsync(billingId, ct);
+                        if (billing == null)
+                        {
+                            continue;
+                        }
+                        releasedNumbers.Add(billing.MsapBillingNumber);
+                        billing.CollectionId = null;
+                        billing.CollectionNumber = null;
+                        billing.AmountPaid = 0m;
+                        billing.Balance = billing.Amount;
+                        billing.IsPaid = false;
+                        billing.Status = MsapConstants.BillingStatus.ForCollection;
+                    }
+
+                    var now = DateTimeHelper.GetCurrentPhilippineTime();
+                    var priorStatus = collection.PaymentStatus;
+                    var trimmedReason = reason.Trim();
+                    collection.VoidedBy = username;
+                    collection.VoidedDate = now;
+                    collection.CancellationRemarks = trimmedReason.Length > 255 ? trimmedReason[..255] : trimmedReason;
+                    collection.EditedBy = username;
+                    collection.EditedDate = now;
+
+                    if (lockedFinalized)
+                    {
+                        var changes = new List<MsapFieldChange>();
+                        if (collection.PeriodStatus == MsapPeriodStatus.Final)
+                        {
+                            collection.PeriodStatus = MsapPeriodStatus.Adjusted;
+                            changes.Add(new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted });
+                        }
+                        changes.Add(new MsapFieldChange { Field = "Status", Label = "Status", Before = priorStatus, After = "Voided" });
+                        changes.Add(new MsapFieldChange { Field = "Amount", Label = "Net Received", Before = collection.Amount.ToString("N2"), After = "0.00" });
+                        if (releasedNumbers.Count > 0)
+                        {
+                            changes.Add(new MsapFieldChange { Field = "AllocatedBillings", Label = "Allocated Billings", Before = string.Join(", ", releasedNumbers), After = "Released to For Collection" });
+                        }
+
+                        var log = new MsapAdjustmentLog
+                        {
+                            DocumentType = "Collection",
+                            RecordId = collection.MsapCollectionId,
+                            ReferenceNumber = collection.MsapCollectionNumber,
+                            Reason = trimmedReason,
+                            AttachmentUrl = uploadedAttachment,
+                            ChangesJson = System.Text.Json.JsonSerializer.Serialize(changes),
+                            EditedBy = username,
+                            EditedDate = now
+                        };
+                        await unitOfWork.MsapAdjustmentLog.AddAsync(log, ct);
+                    }
+
+                    var releasedSuffix = releasedNumbers.Count > 0 ? $" Released billings: {string.Join(", ", releasedNumbers)}." : string.Empty;
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
+                        $"Voided collection #{collection.MsapCollectionNumber}.{releasedSuffix} Reason: {trimmedReason}",
+                        "Collection", collection.MsapCollectionId, collection.MsapCollectionNumber), ct);
+
+                    await unitOfWork.SaveAsync(ct);
+                }, ct);
+
+                uploadedAttachment = null;
+                return ServiceResult.Success("Collection voided and linked billings released back to For Collection.");
+            }
+            catch (Exception ex)
+            {
+                if (uploadedAttachment != null && cloudStorageService != null)
+                {
+                    try { await cloudStorageService.DeleteFileAsync(uploadedAttachment); }
+                    catch (Exception cleanupEx) { logger.LogWarning(cleanupEx, "Could not remove unused void authorization document {FileName}", uploadedAttachment); }
+                }
+                logger.LogError(ex, "Failed to void collection {CollectionId}", id);
                 return ServiceResult.Failure(ExceptionHelper.GetErrorMessage(ex));
             }
         }
@@ -531,8 +713,45 @@ namespace IBS.Services.MSAP
 
         public async Task<ServiceResult> UpdateCollectionAsync(CreateCollectionViewModel viewModel, string username, CancellationToken cancellationToken)
         {
+            string? uploadedAttachment = null;
             try
             {
+                var previewModel = viewModel.MsapCollectionId.HasValue
+                    ? await unitOfWork.Collection.GetAsync(c => c.MsapCollectionId == viewModel.MsapCollectionId.Value, cancellationToken)
+                    : null;
+                if (previewModel == null)
+                {
+                    return ServiceResult.Failure("Collection not found.", ServiceResultStatus.NotFound);
+                }
+                if (previewModel.IsVoided)
+                {
+                    return ServiceResult.Failure("Cannot edit a voided collection.");
+                }
+
+                var isFinalOrAdjustedPreview = previewModel.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+                if (isFinalOrAdjustedPreview)
+                {
+                    if (string.IsNullOrWhiteSpace(viewModel.AdjustmentReason) || viewModel.AdjustmentReason.Trim().Length is < 5 or > 500)
+                    {
+                        return ServiceResult.Failure("Please provide a valid reason for editing a finalized-period collection (5 to 500 characters).");
+                    }
+                    if (viewModel.AuthorizationFile is not { Length: > 0 })
+                    {
+                        return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to edit a finalized-period collection.");
+                    }
+                    if (!await OtherTugChargeService.IsSupportedDocumentAsync(viewModel.AuthorizationFile, cancellationToken))
+                    {
+                        return ServiceResult.Failure("Upload a valid PDF, PNG, or JPEG authorization document of up to 10 MB.");
+                    }
+                    if (cloudStorageService == null)
+                    {
+                        return ServiceResult.Failure("Storage service is not configured for authorization documents.");
+                    }
+                    var extension = Path.GetExtension(viewModel.AuthorizationFile.FileName).ToLowerInvariant();
+                    uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
+                    await cloudStorageService.UploadFileAsync(viewModel.AuthorizationFile, uploadedAttachment);
+                }
+
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
                     var currentModel = viewModel.MsapCollectionId.HasValue
@@ -541,12 +760,39 @@ namespace IBS.Services.MSAP
                     {
                         throw new InvalidOperationException("Collection not found.");
                     }
-
-                    var guard = await GuardClosedPeriodAsync(currentModel.Date, cancellationToken)
-                        ?? await GuardClosedPeriodAsync(viewModel.Date, cancellationToken);
-                    if (guard != null)
+                    if (currentModel.IsVoided)
                     {
-                        throw new InvalidOperationException(guard.Message);
+                        throw new InvalidOperationException("Cannot edit a voided collection.");
+                    }
+
+                    var isFinalOrAdjusted = currentModel.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+                    if (!isFinalOrAdjusted)
+                    {
+                        var guard = await GuardClosedPeriodAsync(currentModel.Date, cancellationToken)
+                            ?? await GuardClosedPeriodAsync(viewModel.Date, cancellationToken);
+                        if (guard != null)
+                        {
+                            throw new InvalidOperationException(guard.Message);
+                        }
+                    }
+                    else
+                    {
+                        if (string.IsNullOrWhiteSpace(viewModel.AdjustmentReason) || viewModel.AdjustmentReason.Trim().Length is < 5 or > 500)
+                        {
+                            throw new InvalidOperationException("Please provide a valid reason for editing a finalized-period collection (5 to 500 characters).");
+                        }
+                        if (string.IsNullOrWhiteSpace(uploadedAttachment))
+                        {
+                            throw new InvalidOperationException("An approved authorization document (PDF, PNG, or JPEG) is required to edit a finalized-period collection.");
+                        }
+                        if (viewModel.Date != currentModel.Date)
+                        {
+                            var newDateGuard = await GuardClosedPeriodAsync(viewModel.Date, cancellationToken);
+                            if (newDateGuard != null)
+                            {
+                                throw new InvalidOperationException(newDateGuard.Message);
+                            }
+                        }
                     }
 
                     if (currentModel.CustomerId != viewModel.CustomerId)
@@ -560,13 +806,20 @@ namespace IBS.Services.MSAP
                     }
 
                     var allocations = await GetSettlementAllocationsAsync(viewModel, cancellationToken);
+                    var oldBillings = (await unitOfWork.Billing.GetAllAsync(b => b.CollectionId == currentModel.MsapCollectionId, cancellationToken)).ToList();
+                    var oldBillingNumbers = string.Join(", ", oldBillings.Select(b => b.MsapBillingNumber).Order());
+                    var newBillingIds = viewModel.BillingPayments?.Select(p => p.BillingId).Distinct().ToList() ?? [];
+                    var newBillingsMap = (await unitOfWork.Billing.GetAllAsync(b => newBillingIds.Contains(b.MsapBillingId), cancellationToken))
+                        .ToDictionary(b => b.MsapBillingId);
+                    var newBillingNumbers = string.Join(", ", newBillingsMap.Values.Select(b => b.MsapBillingNumber).Order());
+
                     var oldCollectionNumber = currentModel.MsapCollectionNumber;
                     var newCollectionNumber = !viewModel.IsUndocumented
                         ? viewModel.MsapCollectionNumber ?? oldCollectionNumber
                         : oldCollectionNumber;
                     currentModel.MsapCollectionNumber = newCollectionNumber;
 
-                    if (currentModel.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
+                    if (isFinalOrAdjusted)
                     {
                         var changes = new List<MsapFieldChange>();
                         if (currentModel.PeriodStatus == MsapPeriodStatus.Final)
@@ -597,6 +850,10 @@ namespace IBS.Services.MSAP
                         {
                             changes.Add(new MsapFieldChange { Field = "CheckNumber", Label = "Check Number", Before = currentModel.CheckNumber ?? "-", After = viewModel.CheckNumber ?? "-" });
                         }
+                        if (!string.Equals(oldBillingNumbers, newBillingNumbers, StringComparison.Ordinal))
+                        {
+                            changes.Add(new MsapFieldChange { Field = "AllocatedBillings", Label = "Allocated Billings", Before = oldBillingNumbers, After = newBillingNumbers });
+                        }
 
                         currentModel.PeriodStatus = MsapPeriodStatus.Adjusted;
                         if (changes.Count > 0)
@@ -606,7 +863,8 @@ namespace IBS.Services.MSAP
                                 DocumentType = "Collection",
                                 RecordId = currentModel.MsapCollectionId,
                                 ReferenceNumber = currentModel.MsapCollectionNumber,
-                                Reason = "Collection details edited after period finalization",
+                                Reason = viewModel.AdjustmentReason!.Trim(),
+                                AttachmentUrl = uploadedAttachment,
                                 ChangesJson = System.Text.Json.JsonSerializer.Serialize(changes),
                                 EditedBy = username,
                                 EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
@@ -616,7 +874,6 @@ namespace IBS.Services.MSAP
                     }
 
                     // Revert old allocations
-                    var oldBillings = await unitOfWork.Billing.GetAllAsync(b => b.CollectionId == currentModel.MsapCollectionId, cancellationToken);
                     foreach (var billing in oldBillings)
                     {
                         billing.Status = MsapConstants.BillingStatus.ForCollection;
@@ -627,13 +884,9 @@ namespace IBS.Services.MSAP
 
                     if (viewModel.BillingPayments != null)
                     {
-                        var billingIds = viewModel.BillingPayments.Select(p => p.BillingId).Distinct().ToList();
-                        var billings = (await unitOfWork.Billing.GetAllAsync(b => billingIds.Contains(b.MsapBillingId), cancellationToken))
-                            .ToDictionary(b => b.MsapBillingId);
-
                         foreach (var payment in viewModel.BillingPayments)
                         {
-                            if (billings.TryGetValue(payment.BillingId, out var billing))
+                            if (newBillingsMap.TryGetValue(payment.BillingId, out var billing))
                             {
                                 billing.CollectionId = currentModel.MsapCollectionId;
                                 billing.CollectionNumber = newCollectionNumber;
@@ -652,6 +905,10 @@ namespace IBS.Services.MSAP
                     var activity = oldCollectionNumber == newCollectionNumber
                         ? $"Edit collection #{newCollectionNumber}"
                         : $"Edit collection #{oldCollectionNumber} to #{newCollectionNumber}";
+                    if (isFinalOrAdjusted && !string.IsNullOrWhiteSpace(viewModel.AdjustmentReason))
+                    {
+                        activity += $". Reason: {viewModel.AdjustmentReason.Trim()}";
+                    }
                     var audit = new AuditTrail(username, activity, "Collection", currentModel.MsapCollectionId, newCollectionNumber);
                     await unitOfWork.AuditTrail.AddAsync(audit, cancellationToken);
 
@@ -694,10 +951,16 @@ namespace IBS.Services.MSAP
                     await unitOfWork.SaveAsync(cancellationToken);
                 }, cancellationToken);
 
+                uploadedAttachment = null;
                 return ServiceResult.Success("Collection modified successfully");
             }
             catch (Exception ex)
             {
+                if (uploadedAttachment != null && cloudStorageService != null)
+                {
+                    try { await cloudStorageService.DeleteFileAsync(uploadedAttachment); }
+                    catch (Exception cleanupEx) { logger.LogWarning(cleanupEx, "Could not remove unused edit authorization document {FileName}", uploadedAttachment); }
+                }
                 logger.LogError(ex, "Failed to edit collection");
                 return ServiceResult.Failure($"Failed to edit collection: {ExceptionHelper.GetErrorMessage(ex)}");
             }
@@ -847,6 +1110,7 @@ namespace IBS.Services.MSAP
                 CheckBranch = model.CheckBranch,
                 ReferenceNo = model.ReferenceNo,
                 Remarks = model.Remarks,
+                PeriodStatus = model.PeriodStatus,
             };
         }
 

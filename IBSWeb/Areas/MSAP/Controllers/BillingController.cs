@@ -227,7 +227,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 && (baf == null || (BillingService.IsUnapprovedDraft(baf) && !salesBookHistory.Contains(baf.MsapBillingId)));
             var isPeriodClosed = await unitOfWork.PostedPeriod.IsMonthClosedAsync(model.Date.Year, model.Date.Month, cancellationToken);
             var isReopenedRevision = model.UnpostedDate.HasValue || model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
-            ViewData["CanDiscardBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteBilling) && isUnapprovedDraft && !isPeriodClosed;
+            ViewData["IsUnapprovedDraft"] = isUnapprovedDraft && model.PeriodStatus == null;
+            ViewData["CanDiscardBilling"] = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteBilling) && isUnapprovedDraft && model.PeriodStatus == null;
             ViewData["PostingBlocker"] = await JobProgressCalculator.GetBillingBlockerAsync(unitOfWork, model, JobProgressCalculator.PostingStage, cancellationToken);
             ViewData["IsPeriodClosed"] = isPeriodClosed && !isReopenedRevision;
             var adjustmentLogs = await unitOfWork.MsapAdjustmentLog.GetAllAsync(
@@ -330,7 +331,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var isReopenedOrFinalized = billing.UnpostedDate.HasValue
                 || billing.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
             if (!isReopenedOrFinalized
-                && (await unitOfWork.PostedPeriod.GetByYearMonthAsync(billing.Date.Year, billing.Date.Month, cancellationToken))?.IsClosed == true)
+                && await unitOfWork.PostedPeriod.IsMonthClosedAsync(billing.Date.Year, billing.Date.Month, cancellationToken))
             {
                 TempData["error"] = $"Cannot modify: {billing.Date:MMMM yyyy} is closed.";
                 return RedirectToAction(nameof(Review), new { id });
@@ -782,13 +783,13 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 var (data, filtered, total) = await billingService.GetPagedBillingsAsync(parameters, cancellationToken, customerOrderSlipId);
 
                 var closedMonths = (await unitOfWork.PostedPeriod.GetAllAsync(cancellationToken))
-                    .Where(p => p.IsClosed)
+                    .Where(p => MsapConstants.EnforceClosedPeriods && p.IsClosed)
                     .Select(p => (p.Year, p.Month))
                     .ToHashSet();
                 foreach (var item in data)
                 {
                     item.IsMonthClosed = closedMonths.Contains((item.Date.Year, item.Date.Month));
-                    item.CanDiscard &= !item.IsMonthClosed;
+                    item.CanDiscard &= item.PeriodStatus == null;
                 }
 
                 return Json(new

@@ -205,6 +205,16 @@ if (typeof document !== 'undefined') $(function () {
         if (CollectionAllocation.round(Number($('#Amount').val()) - payments.reduce((sum, b) => sum + b.payment, 0)) !== 0) {
             error('Cash plus check must match the allocated net payments.'); return;
         }
+        if (form.dataset.requiresAuth === 'true') {
+            const reason = ($('#AdjustmentReason').val() || '').trim();
+            const fileInput = document.getElementById('AuthorizationFile');
+            if (reason.length < 5 || reason.length > 500) {
+                error('Enter an adjustment reason between 5 and 500 characters.'); return;
+            }
+            if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+                error('Upload an approved authorization document (PDF, PNG, or JPEG).'); return;
+            }
+        }
         saving = true; updateTotals();
         let navigating = false;
         try {

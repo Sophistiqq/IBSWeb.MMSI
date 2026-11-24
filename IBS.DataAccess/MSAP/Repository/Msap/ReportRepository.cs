@@ -78,7 +78,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
                 var collectionIds = billings.Where(b => b.CollectionId.HasValue).Select(b => b.CollectionId!.Value).Distinct().ToList();
                 var collections = collectionIds.Count != 0
-                    ? await db.MsapCollections.AsNoTracking().Where(c => collectionIds.Contains(c.MsapCollectionId)).ToListAsync(cancellationToken)
+                    ? await db.MsapCollections.AsNoTracking().Where(c => collectionIds.Contains(c.MsapCollectionId) && c.VoidedDate == null && c.CanceledDate == null).ToListAsync(cancellationToken)
                     : [];
 
                 foreach (var ticket in tickets.Where(t => t.BillingId.HasValue))

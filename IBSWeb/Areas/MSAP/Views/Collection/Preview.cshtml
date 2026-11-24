@@ -9,11 +9,13 @@
     bool canPrepare = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.CreateCollection);
     bool canBank = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.AccessTreasury);
     bool canRevertBankingPermission = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.RevertCollectionBanking);
+    bool canReverseBillingPermission = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.ReverseBilling);
     ViewData["JobProgressActionStage"] = Model.DepositDate.HasValue ? JobProgressCalculator.ClearingStage : JobProgressCalculator.DepositStage;
     ViewData["JobProgressActionTargetId"] = Model.MsapCollectionId;
     bool isFinalOrAdjusted = Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
-    bool canEdit = canPrepare && !Model.IsMonthClosed && !Model.DepositDate.HasValue && !Model.ReturnedDate.HasValue && !Model.ClearedDate.HasValue;
-    bool canRevertBanking = canRevertBankingPermission && (!Model.IsMonthClosed || isFinalOrAdjusted) && (Model.DepositDate.HasValue || Model.ClearedDate.HasValue);
+    bool canEdit = canPrepare && !Model.IsVoided && (!Model.IsMonthClosed || isFinalOrAdjusted) && !Model.DepositDate.HasValue && !Model.ReturnedDate.HasValue && !Model.ClearedDate.HasValue;
+    bool canRevertBanking = canRevertBankingPermission && !Model.IsVoided && (!Model.IsMonthClosed || isFinalOrAdjusted) && (Model.DepositDate.HasValue || Model.ClearedDate.HasValue);
+    bool canVoid = (canRevertBankingPermission || canReverseBillingPermission) && !Model.IsVoided && (!Model.IsMonthClosed || isFinalOrAdjusted) && !Model.DepositDate.HasValue && !Model.ClearedDate.HasValue;
     var progressItems = (ViewBag.JobProgressItems as IEnumerable<JobProgressViewModel> ?? []).ToList();
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
@@ -37,11 +39,23 @@
                 <h1 class="ui-page-title" data-page-header>Receipt @Model.MsapCollectionNumber</h1>
                 <a asp-action="Index" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
                 <div class="ui-page-description flex items-center gap-2">
-                    <span class="schedule-status-pill ui-status @(Model.PaymentStatus == "Returned" ? "ui-critical" : Model.PaymentStatus == "Cleared" ? "ui-complete" : "ui-attention")">@Model.PaymentStatus</span>
+                    <span class="schedule-status-pill ui-status @(Model.PaymentStatus is "Returned" or "Voided" ? "ui-critical" : Model.PaymentStatus == "Cleared" ? "ui-complete" : "ui-attention")">@Model.PaymentStatus</span>
                     <span class="ui-caption ui-muted">@(Model.IsUndocumented ? "Undocumented" : "Documented") · @Model.Date.ToString(MsapConstants.Date_Format)</span>
                 </div>
             </header>
-            <section class="ui-panel collection-heading @(Model.ClearedDate.HasValue ? "" : Model.ReturnedDate.HasValue && !Model.DepositDate.HasValue ? "ui-critical" : "ui-attention")" aria-label="Receipt actions">
+            @if (Model.IsVoided)
+            {
+                <div class="ui-panel ui-critical" role="alert">
+                    <p class="ui-body mb-1">
+                        <strong>Voided receipt</strong> by @(Model.VoidedBy ?? Model.CanceledBy ?? "System") on @((Model.VoidedDate ?? Model.CanceledDate)?.ToString("dd MMM yyyy HH:mm") ?? "—")
+                    </p>
+                    @if (!string.IsNullOrWhiteSpace(Model.CancellationRemarks))
+                    {
+                        <p class="ui-caption mb-0">@Model.CancellationRemarks</p>
+                    }
+                </div>
+            }
+            <section class="ui-panel collection-heading @(Model.IsVoided ? "ui-critical" : Model.ClearedDate.HasValue ? "" : Model.ReturnedDate.HasValue && !Model.DepositDate.HasValue ? "ui-critical" : "ui-attention")" aria-label="Receipt actions">
                 <div>
                     <h2 class="ui-section-title">Receipt banking</h2>
                     <p class="ui-caption ui-muted">
@@ -61,7 +75,17 @@
                     {
                         <a asp-action="Edit" asp-route-id="@Model.MsapCollectionId" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">edit</span> Edit receipt</a>
                     }
-                    @if (canBank && (!Model.IsMonthClosed || isFinalOrAdjusted) && !Model.ClearedDate.HasValue)
+                    @if (canVoid)
+                    {
+                        <button type="button" class="modern-btn-error" id="btnVoidCollection"
+                            data-action="@Url.Action("Void", "Collection")"
+                            data-id="@Model.MsapCollectionId"
+                            data-number="@Model.MsapCollectionNumber"
+                            data-finalized="@(isFinalOrAdjusted ? "true" : "false")">
+                            <span class="material-symbols-outlined" aria-hidden="true">block</span> Void receipt
+                        </button>
+                    }
+                    @if (canBank && !Model.IsVoided && (!Model.IsMonthClosed || isFinalOrAdjusted) && !Model.ClearedDate.HasValue)
                     {
                         @if (!Model.DepositDate.HasValue)
                         {
@@ -77,9 +101,13 @@
                         }
                     }
                 </div>
-                @if (Model.IsMonthClosed)
+                @if (Model.IsVoided)
                 {
-                    <p class="ui-caption ui-muted">This receipt belongs to a closed period.</p>
+                    <p class="ui-caption ui-muted">This receipt has been voided. Any previously linked billings were released back to For Collection.</p>
+                }
+                else if (Model.IsMonthClosed)
+                {
+                    <p class="ui-caption ui-muted">This receipt belongs to a closed period. Forward banking in an open month is allowed; reverting, editing, or voiding requires an authorized adjustment reason and memo.</p>
                 }
                 else if (Model.ClearedDate.HasValue)
                 {
@@ -233,6 +261,53 @@
             if (!confirmResult.isConfirmed) return;
 
             ModernAlert.showLoading('Reverting banking step...');
+            const token = document.querySelector('#collectionTokenForm input[name="__RequestVerificationToken"]')?.value || '';
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.enctype = 'multipart/form-data';
+            form.action = btn.dataset.action;
+            const addField = (name, value) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = value;
+                form.appendChild(input);
+            };
+            addField('__RequestVerificationToken', token);
+            addField('id', btn.dataset.id);
+            addField('reason', confirmResult.value.reason || '');
+            if (confirmResult.value.file) {
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.name = 'authorizationFile';
+                const dt = new DataTransfer();
+                dt.items.add(confirmResult.value.file);
+                fileInput.files = dt.files;
+                form.appendChild(fileInput);
+            }
+            document.body.appendChild(form);
+            form.submit();
+        });
+        $('#btnVoidCollection').on('click', async function () {
+            const btn = this;
+            const isFinal = btn.dataset.finalized === 'true';
+            const receiptNo = btn.dataset.number || '';
+            const baseText = `Voiding receipt #${receiptNo} releases all linked billings back to For Collection so they can be re-collected or reopened for revision. This action cannot be undone.`;
+            const text = isFinal
+                ? `${baseText} Because this receipt belongs to a finalized period, an approved authorization document is required and the reversal will appear in Posted Month Adjustments.`
+                : baseText;
+            const confirmResult = await ModernAlert.promptAdjustment({
+                title: 'Void collection receipt?',
+                text,
+                placeholder: 'Reason for voiding this collection receipt',
+                confirmText: 'Void receipt',
+                cancelText: 'Keep receipt',
+                requireAttachment: isFinal
+            });
+
+            if (!confirmResult.isConfirmed) return;
+
+            ModernAlert.showLoading('Voiding collection receipt...');
             const token = document.querySelector('#collectionTokenForm input[name="__RequestVerificationToken"]')?.value || '';
             const form = document.createElement('form');
             form.method = 'POST';

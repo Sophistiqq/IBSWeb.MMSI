@@ -116,6 +116,12 @@ namespace IBS.Services.MSAP
                 var error = await ValidateAsync(model, allowConflicts, ct);
                 if (error != null) return ServiceResult<int>.Failure(error, ServiceResultStatus.ValidationError);
 
+                var plannedDate = DateOnly.FromDateTime(model.PlannedStart);
+                if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(plannedDate.Year, plannedDate.Month, ct))
+                {
+                    return ServiceResult<int>.Failure($"Cannot create schedule: {plannedDate:MMMM yyyy} is closed.", ServiceResultStatus.ValidationError);
+                }
+
                 if (model.ServiceEntries.Any(e => e.VesselScheduleServiceEntryId != 0))
                 {
                     return ServiceResult<int>.Failure("New expected services must not contain saved row identifiers.", ServiceResultStatus.ValidationError);
@@ -164,6 +170,13 @@ namespace IBS.Services.MSAP
                         return;
                     }
 
+                    var newDate = DateOnly.FromDateTime(model.PlannedStart);
+                    if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(newDate.Year, newDate.Month, ct))
+                    {
+                        result = ServiceResult.Failure($"Cannot revise a booking into a closed period ({newDate:MMMM yyyy}).", ServiceResultStatus.ValidationError);
+                        return;
+                    }
+
                     CustomerOrderSlip? job = null;
                     if (existing.CustomerOrderSlipId.HasValue)
                     {
@@ -178,9 +191,7 @@ namespace IBS.Services.MSAP
                             result = ServiceResult.Failure("This booking already has service records or billing, or its COS is no longer open. Schedule revision is only available before Dispatch Tickets or billing exist.", ServiceResultStatus.ValidationError);
                             return;
                         }
-                        var oldPeriodClosed = await unitOfWork.PostedPeriod.IsMonthClosedAsync(job.Date.Year, job.Date.Month, ct);
-                        var newDate = DateOnly.FromDateTime(model.PlannedStart);
-                        if (oldPeriodClosed || await unitOfWork.PostedPeriod.IsMonthClosedAsync(newDate.Year, newDate.Month, ct))
+                        if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(job.Date.Year, job.Date.Month, ct))
                         {
                             result = ServiceResult.Failure("Cannot revise a booking in a closed period.", ServiceResultStatus.ValidationError);
                             return;
@@ -641,9 +652,9 @@ namespace IBS.Services.MSAP
                     foreach (var ticket in tickets.Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted))
                     {
                         if (ticket.Status == MsapConstants.DispatchTicketStatus.Billed
-                            || (await unitOfWork.PostedPeriod.GetByYearMonthAsync(ticket.Date.Year, ticket.Date.Month, ct))?.IsClosed == true
-                            || ticket.DateLeft.HasValue && (await unitOfWork.PostedPeriod.GetByYearMonthAsync(ticket.DateLeft.Value.Year, ticket.DateLeft.Value.Month, ct))?.IsClosed == true
-                            || ticket.DateArrived.HasValue && (await unitOfWork.PostedPeriod.GetByYearMonthAsync(ticket.DateArrived.Value.Year, ticket.DateArrived.Value.Month, ct))?.IsClosed == true)
+                            || await unitOfWork.PostedPeriod.IsMonthClosedAsync(ticket.Date.Year, ticket.Date.Month, ct)
+                            || (ticket.DateLeft.HasValue && await unitOfWork.PostedPeriod.IsMonthClosedAsync(ticket.DateLeft.Value.Year, ticket.DateLeft.Value.Month, ct))
+                            || (ticket.DateArrived.HasValue && await unitOfWork.PostedPeriod.IsMonthClosedAsync(ticket.DateArrived.Value.Year, ticket.DateArrived.Value.Month, ct)))
                         {
                             throw new InvalidOperationException("A ticket is billed or belongs to a closed period. Approval cannot change its charges.");
                         }

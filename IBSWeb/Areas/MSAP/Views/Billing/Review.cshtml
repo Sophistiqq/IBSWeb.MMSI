@@ -13,13 +13,15 @@
     var isOpenOrReopened = ViewData["IsPeriodClosed"] is not true || isReopenedOrFinalized;
     var canReview = ViewData["CanReviewBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && blocker == null && isOpenOrReopened;
     var canPost = ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.Reviewed && blocker == null && isOpenOrReopened;
-    var canReject = isOpenOrReopened
-        && ((ViewData["CanReviewBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting)
-            || (ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.Reviewed));
+    var isUnapprovedClosedReviewed = Model.Status == MsapConstants.BillingStatus.Reviewed && !Model.ApprovedAt.HasValue;
+    var canReject = (isOpenOrReopened && ((ViewData["CanReviewBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting)
+            || (ViewData["CanApproveFinalBilling"] is true && Model.Status == MsapConstants.BillingStatus.Reviewed)))
+        || (isUnapprovedClosedReviewed && (ViewData["CanApproveFinalBilling"] is true || ViewData["CanReviewBilling"] is true));
+    var isUnapprovedDraft = ViewData["IsUnapprovedDraft"] is true;
     var canAdjust = ViewData["CanCreateBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && (Model.RejectedAt.HasValue || Model.UnpostedDate.HasValue) && isOpenOrReopened;
-    var canEditDraft = ViewData["CanCreateBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && Model.CustomerOrderSlipId.HasValue && isOpenOrReopened;
+    var canEditDraft = ViewData["CanCreateBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && Model.CustomerOrderSlipId.HasValue && (isOpenOrReopened || isUnapprovedDraft);
     bool canReverse = ViewData["CanReverseBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForCollection && Model.AmountPaid == 0;
-    bool canDiscard = ViewData["CanDiscardBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting && ViewData["IsPeriodClosed"] is not true;
+    bool canDiscard = ViewData["CanDiscardBilling"] is true && Model.Status == MsapConstants.BillingStatus.ForPosting;
     var statusLabel = Model.Status == MsapConstants.BillingStatus.ForPosting
         ? "For commercial review"
         : Model.Status == MsapConstants.BillingStatus.Reviewed
@@ -493,7 +495,7 @@
                             }
                             else
                             {
-                                <span class="@(blocker != null || (ViewData["IsPeriodClosed"] is true && !isReopenedOrFinalized) ? "ui-notice ui-critical" : "ui-caption ui-muted")">@(blocker ?? (ViewData["IsPeriodClosed"] is true && !isReopenedOrFinalized ? "This accounting period is closed." : "Waiting for an authorized commercial reviewer."))</span>
+                                <span class="@(blocker != null || (ViewData["IsPeriodClosed"] is true && !isReopenedOrFinalized) ? "ui-notice ui-critical" : "ui-caption ui-muted")">@(blocker ?? (ViewData["IsPeriodClosed"] is true && !isReopenedOrFinalized ? "This accounting period is closed. Edit billing to move its date to an open month, or discard this draft." : "Waiting for an authorized commercial reviewer."))</span>
                             }
                         </div>
                     </div>
@@ -539,7 +541,7 @@
                             data-action="@Url.Action("ReopenForRevision", "Billing")"
                             data-id="@Model.MsapBillingId"
                             data-billing-number="@Model.MsapBillingNumber"
-                            data-finalized="@(Model.PeriodStatus == MsapPeriodStatus.Final ? "true" : "false")">
+                            data-finalized="@(Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted ? "true" : "false")">
                             <span class="material-symbols-outlined" aria-hidden="true">history</span> Reopen for revision
                         </button>
                     </div>

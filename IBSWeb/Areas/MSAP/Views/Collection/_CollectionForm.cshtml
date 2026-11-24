@@ -1,6 +1,7 @@
 @model CreateCollectionViewModel
 @{
     bool editing = Model.MsapCollectionId.HasValue;
+    bool requiresFinalizedAuth = editing && Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
     string title = editing ? "Edit collection" : "Record collection";
     string initialMode = Model.CashAmount > 0 && Model.CheckAmount > 0
         ? "split"
@@ -9,10 +10,11 @@
             : "check";
 }
 <div class="modern-layout app-ui collection-form collection-entry">
-    <form id="collectionForm" method="post" asp-action="@(editing ? "Edit" : "Create")"
+    <form id="collectionForm" method="post" enctype="multipart/form-data" asp-action="@(editing ? "Edit" : "Create")"
           data-billings-url="@Url.Action("GetUncollectedBillingsForTable")"
           data-initial-cos="@Model.CustomerOrderSlipId"
-          data-initial-mode="@initialMode">
+          data-initial-mode="@initialMode"
+          data-requires-auth="@(requiresFinalizedAuth ? "true" : "false")">
         @Html.AntiForgeryToken()
         <input asp-for="MsapCollectionId" type="hidden" />
         <input asp-for="Amount" type="hidden" />
@@ -112,6 +114,27 @@
                     </section>
                 </div>
                 <section class="ui-panel ui-field"><label asp-for="Remarks" class="ui-label">Remarks</label><textarea asp-for="Remarks" class="modern-input" rows="2" placeholder="Add payment reference notes..."></textarea></section>
+                @if (requiresFinalizedAuth)
+                {
+                    <section class="ui-panel ui-stack ui-attention" aria-labelledby="collectionAuthHeading">
+                        <div>
+                            <h2 id="collectionAuthHeading" class="ui-section-title">Post-finalization adjustment authorization</h2>
+                            <p class="ui-caption ui-muted">This receipt belongs to a finalized period. Saving changes requires an adjustment reason and an approved authorization document, and will be logged in Posted Month Adjustments.</p>
+                        </div>
+                        <div class="collection-fields collection-fields--two">
+                            <div class="ui-field">
+                                <label asp-for="AdjustmentReason" class="ui-label">Adjustment reason *</label>
+                                <textarea asp-for="AdjustmentReason" class="modern-input" rows="2" minlength="5" maxlength="500" placeholder="Enter reason for editing this finalized-period receipt..." required></textarea>
+                                <span asp-validation-for="AdjustmentReason" class="text-error"></span>
+                            </div>
+                            <div class="ui-field">
+                                <label asp-for="AuthorizationFile" class="ui-label">Approved authorization document (PDF, PNG, or JPEG) *</label>
+                                <input asp-for="AuthorizationFile" type="file" class="modern-input" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" required />
+                                <span asp-validation-for="AuthorizationFile" class="text-error"></span>
+                            </div>
+                        </div>
+                    </section>
+                }
                 <footer class="collection-heading"><p class="ui-caption ui-muted">One receipt covers the selected bills. Each billing keeps its own allocation and balance.</p><div class="collection-actions"><a class="modern-btn-secondary" asp-action="Index">Cancel</a><button type="submit" class="modern-btn-primary" id="saveCollection"><span class="material-symbols-outlined" aria-hidden="true">save</span> @(editing ? "Save changes" : "Save collection")</button></div></footer>
             </div>
         </main>

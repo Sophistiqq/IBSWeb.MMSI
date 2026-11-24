@@ -1324,7 +1324,7 @@ namespace IBS.Services.MSAP
 
         private async Task<ServiceResult?> GuardClosedPeriodAsync(DateOnly date, CancellationToken ct)
         {
-            if ((await unitOfWork.PostedPeriod.GetByYearMonthAsync(date.Year, date.Month, ct))?.IsClosed == true)
+            if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(date.Year, date.Month, ct))
             {
                 return ServiceResult.Failure($"Cannot modify: {date:MMMM yyyy} is closed.");
             }

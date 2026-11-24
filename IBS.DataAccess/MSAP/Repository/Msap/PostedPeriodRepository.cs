@@ -73,7 +73,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
             // 4. Collections recorded in this period
             await _db.MsapCollections
-                .Where(c => c.PeriodStatus == null && c.Date >= start && c.Date <= end)
+                .Where(c => c.PeriodStatus == null && c.VoidedDate == null && c.CanceledDate == null && c.Date >= start && c.Date <= end)
                 .ExecuteUpdateAsync(s => s.SetProperty(c => c.PeriodStatus, MsapPeriodStatus.Final), cancellationToken);
         }
     }

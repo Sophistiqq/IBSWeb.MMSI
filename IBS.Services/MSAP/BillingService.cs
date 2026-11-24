@@ -67,6 +67,7 @@ namespace IBS.Services.MSAP
                     var sbmaSuffix = model.SbmaEnabled.HasValue ? $"; SBMA: {model.SbmaEnabled.Value}" : string.Empty;
                     if (existingDraft != null)
                     {
+                        var oldDraftDate = existingDraft.Date;
                         var fieldDiffs = new List<MsapFieldChange>();
                         void TrackDiff(string field, string label, object? beforeVal, object? afterVal)
                         {
@@ -263,8 +264,11 @@ namespace IBS.Services.MSAP
                             }
                         }
 
+                        var redateNote = oldDraftDate != model.Date
+                            ? $" Re-dated from {oldDraftDate:yyyy-MM-dd} to {model.Date:yyyy-MM-dd}."
+                            : string.Empty;
                         await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username,
-                            $"Updated Billing #{existingDraft.MsapBillingNumber} (rev {existingDraft.Revision}). COS discount: {model.CosDiscountPercent}; skipped: {model.SkipCosDiscount}{sbmaSuffix}.",
+                            $"Updated Billing #{existingDraft.MsapBillingNumber} (rev {existingDraft.Revision}).{redateNote} COS discount: {model.CosDiscountPercent}; skipped: {model.SkipCosDiscount}{sbmaSuffix}.",
                             "Billing", existingDraft.MsapBillingId, existingDraft.MsapBillingNumber), cancellationToken);
                         await unitOfWork.SaveAsync(cancellationToken);
                         model.MsapBillingId = existingDraft.MsapBillingId;
@@ -842,7 +846,8 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Billing not found.", ServiceResultStatus.NotFound);
                 }
 
-                if (!IsReopenedOrFinalized(billing))
+                var isUnapprovedClosedReviewed = billing.Status == MsapConstants.BillingStatus.Reviewed && !billing.ApprovedAt.HasValue;
+                if (!IsReopenedOrFinalized(billing) && !isUnapprovedClosedReviewed)
                 {
                     var guard = await GuardClosedPeriodAsync(billing.Date, cancellationToken);
                     if (guard != null)
@@ -860,7 +865,7 @@ namespace IBS.Services.MSAP
                             ?? throw new InvalidOperationException("This billing preparation no longer exists.");
                     }
 
-                    var lockedGuard = IsReopenedOrFinalized(billing)
+                    var lockedGuard = IsReopenedOrFinalized(billing) || (billing.Status == MsapConstants.BillingStatus.Reviewed && !billing.ApprovedAt.HasValue)
                         ? null
                         : await GuardClosedPeriodAsync(billing.Date, cancellationToken);
                     if (lockedGuard != null)
@@ -1482,7 +1487,7 @@ namespace IBS.Services.MSAP
                         return ServiceResult.Failure($"Cannot reopen billing #{previewBill.MsapBillingNumber}: active Check Voucher {activeCv} exists in IBS AP. Void or cancel the check voucher first.", ServiceResultStatus.ValidationError);
                     }
                 }
-                bool requiresAuthorizationDoc = targetBillsPreview.Any(b => b!.PeriodStatus == MsapPeriodStatus.Final);
+                var requiresAuthorizationDoc = targetBillsPreview.Any(b => b!.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted);
 
                 if (requiresAuthorizationDoc && authorizationFile is not { Length: > 0 })
                 {
@@ -1540,9 +1545,17 @@ namespace IBS.Services.MSAP
                         await unitOfWork.Billing.VoidSalesBookAsync(bill.MsapBillingId, priorRevision, username, reason.Trim(), cancellationToken);
                         await unitOfWork.Billing.ReverseCommissionLiabilityAsync(bill, cancellationToken);
 
-                        if (bill.PeriodStatus == MsapPeriodStatus.Final)
+                        if (bill.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
                         {
-                            bill.PeriodStatus = MsapPeriodStatus.Adjusted;
+                            var priorPeriodStatus = bill.PeriodStatus;
+                            var reopenChanges = new List<MsapFieldChange>();
+                            if (bill.PeriodStatus == MsapPeriodStatus.Final)
+                            {
+                                bill.PeriodStatus = MsapPeriodStatus.Adjusted;
+                                reopenChanges.Add(new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = priorPeriodStatus, After = MsapPeriodStatus.Adjusted });
+                            }
+                            reopenChanges.Add(new MsapFieldChange { Field = "Status", Label = "Status", Before = priorStatus, After = MsapConstants.BillingStatus.ForPosting });
+                            reopenChanges.Add(new MsapFieldChange { Field = "Revision", Label = "Revision", Before = priorRevision.ToString(), After = bill.Revision.ToString() });
                             var log = new MsapAdjustmentLog
                             {
                                 DocumentType = "Billing",
@@ -1550,12 +1563,7 @@ namespace IBS.Services.MSAP
                                 ReferenceNumber = bill.MsapBillingNumber,
                                 Reason = reason.Trim(),
                                 AttachmentUrl = uploadedAttachment,
-                                ChangesJson = System.Text.Json.JsonSerializer.Serialize(new[]
-                                {
-                                    new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = MsapPeriodStatus.Final, After = MsapPeriodStatus.Adjusted },
-                                    new MsapFieldChange { Field = "Status", Label = "Status", Before = priorStatus, After = MsapConstants.BillingStatus.ForPosting },
-                                    new MsapFieldChange { Field = "Revision", Label = "Revision", Before = priorRevision.ToString(), After = bill.Revision.ToString() }
-                                }),
+                                ChangesJson = System.Text.Json.JsonSerializer.Serialize(reopenChanges),
                                 EditedBy = username,
                                 EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
                             };
@@ -1628,10 +1636,9 @@ namespace IBS.Services.MSAP
                         {
                             throw new InvalidOperationException("Only unapproved, unpaid drafts can be discarded. Both Basic and BAF bills must qualify.");
                         }
-                        var guard = await GuardClosedPeriodAsync(bill.Date, cancellationToken);
-                        if (guard != null)
+                        if (bill.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
                         {
-                            throw new InvalidOperationException(guard.Message);
+                            throw new InvalidOperationException("Finalized-period bills cannot be discarded.");
                         }
                     }
                     if ((await unitOfWork.Billing.GetBillingIdsWithSalesBookAsync(pair.Select(b => b.MsapBillingId).ToList(), cancellationToken)).Count > 0)
@@ -1886,7 +1893,7 @@ namespace IBS.Services.MSAP
 
         private async Task<ServiceResult?> GuardClosedPeriodAsync(DateOnly date, CancellationToken ct)
         {
-            if ((await unitOfWork.PostedPeriod.GetByYearMonthAsync(date.Year, date.Month, ct))?.IsClosed == true)
+            if (await unitOfWork.PostedPeriod.IsMonthClosedAsync(date.Year, date.Month, ct))
             {
                 return ServiceResult.Failure($"Cannot modify: {date:MMMM yyyy} is closed.");
             }

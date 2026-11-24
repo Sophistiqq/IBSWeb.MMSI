@@ -16,7 +16,11 @@
     if (Model.CheckDate.HasValue) { checkSummaryParts.Add(Model.CheckDate.Value.ToString(MsapConstants.Date_Format)); }
     if (!string.IsNullOrWhiteSpace(Model.CheckBank)) { checkSummaryParts.Add(Model.CheckBank); }
     if (!string.IsNullOrWhiteSpace(Model.CheckBranch)) { checkSummaryParts.Add(Model.CheckBranch); }
-    var requiresAuthorization = Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+    var isFinalized = Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+    var closedMonths = ViewBag.ClosedMonths as IEnumerable<string> ?? [];
+    var closedMonthsCsv = string.Join(",", closedMonths);
+    var defaultYearMonth = defaultDate.Length >= 7 ? defaultDate[..7] : string.Empty;
+    var initialRequiresAuthorization = isFinalized && closedMonths.Contains(defaultYearMonth);
 }
 <form asp-action="Banking" asp-controller="Collection" asp-area="MSAP" method="post" enctype="multipart/form-data" id="collectionBankingForm" class="app-ui ui-stack text-left">
     <input type="hidden" name="id" value="@Model.MsapCollectionId" />
@@ -64,16 +68,18 @@
         <label class="ui-label" for="bankingDate">@label *</label>
         <input name="date" id="bankingDate" type="date" class="modern-input" min="@minimumDate?.ToString("yyyy-MM-dd")" value="@defaultDate" required />
     </div>
-    @if (requiresAuthorization)
+    @if (isFinalized)
     {
-        <p class="ui-caption ui-muted">This receipt belongs to a finalized period. Updating banking requires a reason and an approved authorization document and records an Adjusted audit entry.</p>
-        <div class="ui-field">
-            <label class="ui-label" for="bankingReason">Reason *</label>
-            <textarea name="reason" id="bankingReason" class="modern-input" rows="2" minlength="5" maxlength="500" placeholder="Enter reason for this finalized-period banking update..." required></textarea>
-        </div>
-        <div class="ui-field">
-            <label class="ui-label" for="bankingAuthFile">Approved Authorization Document (PDF, PNG, or JPEG) *</label>
-            <input name="authorizationFile" id="bankingAuthFile" type="file" class="modern-input" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" required />
+        <div id="bankingAuthSection" class="ui-stack" data-finalized="true" data-closed-months="@closedMonthsCsv" hidden="@(!initialRequiresAuthorization)">
+            <p class="ui-caption ui-muted">The selected banking date falls in a closed period. Recording it requires a reason and an approved authorization document and logs an Adjusted entry.</p>
+            <div class="ui-field">
+                <label class="ui-label" for="bankingReason">Reason *</label>
+                <textarea name="reason" id="bankingReason" class="modern-input" rows="2" minlength="5" maxlength="500" placeholder="Enter reason for this closed-period banking date..." required="@(initialRequiresAuthorization ? "required" : null)"></textarea>
+            </div>
+            <div class="ui-field">
+                <label class="ui-label" for="bankingAuthFile">Approved Authorization Document (PDF, PNG, or JPEG) *</label>
+                <input name="authorizationFile" id="bankingAuthFile" type="file" class="modern-input" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" required="@(initialRequiresAuthorization ? "required" : null)" />
+            </div>
         </div>
     }
     <p class="ui-caption ui-muted">@(depositing ? "Use the actual deposit date. Deposit does not mark the receipt as cleared." : action == CollectionBankingAction.ReturnCheck ? "The returned check must be redeposited before clearing." : "Clearing applies to this receipt and all billing payments it covers.")</p>

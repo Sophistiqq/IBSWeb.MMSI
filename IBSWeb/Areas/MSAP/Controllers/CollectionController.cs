@@ -90,18 +90,36 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [RequireAccess(ProcedureEnum.CreateCollection, "Access denied. You don't have permission to edit Collections.")]
         public async Task<IActionResult> Edit(int id, CancellationToken cancellationToken = default)
         {
-            var viewModel = await collectionService.PopulateEditViewModelAsync(id, cancellationToken);
-
-            if (viewModel == null)
+            var existing = await collectionService.GetCollectionByIdAsync(id, cancellationToken);
+            if (existing == null)
             {
                 return NotFound();
             }
 
-            var isMonthClosed = await unitOfWork.PostedPeriod.IsMonthClosedAsync(viewModel.Date.Year, viewModel.Date.Month, cancellationToken);
-            if (isMonthClosed)
+            if (existing.IsVoided)
             {
-                TempData["error"] = "Collections in a locked or finalized month cannot be edited.";
+                TempData["error"] = "Voided collections cannot be edited.";
                 return RedirectToAction(nameof(Preview), new { id });
+            }
+
+            if (existing.DepositDate.HasValue || existing.ReturnedDate.HasValue || existing.ClearedDate.HasValue)
+            {
+                TempData["error"] = "Cannot edit a collection after recording a deposit or clearing. Revert the banking step first.";
+                return RedirectToAction(nameof(Preview), new { id });
+            }
+
+            var isFinalOrAdjusted = existing.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
+            var isMonthClosed = await unitOfWork.PostedPeriod.IsMonthClosedAsync(existing.Date.Year, existing.Date.Month, cancellationToken);
+            if (isMonthClosed && !isFinalOrAdjusted)
+            {
+                TempData["error"] = "Collections in a closed month cannot be edited.";
+                return RedirectToAction(nameof(Preview), new { id });
+            }
+
+            var viewModel = await collectionService.PopulateEditViewModelAsync(id, cancellationToken);
+            if (viewModel == null)
+            {
+                return NotFound();
             }
 
             return View(viewModel);
@@ -131,6 +149,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             TempData["error"] = result.Message;
+            if (viewModel.MsapCollectionId.HasValue)
+            {
+                var existing = await collectionService.GetCollectionByIdAsync(viewModel.MsapCollectionId.Value, cancellationToken);
+                viewModel.PeriodStatus = existing?.PeriodStatus;
+            }
             viewModel.Customers = await collectionService.GetCustomerSelectListAsync(viewModel.MsapCollectionId ?? 0, viewModel.CustomerId, cancellationToken);
             return View(viewModel);
         }
@@ -214,8 +237,13 @@ namespace IBSWeb.Areas.MSAP.Controllers
             {
                 return NotFound();
             }
+            var closedMonths = (await unitOfWork.PostedPeriod.GetAllAsync(ct))
+                .Where(p => MsapConstants.EnforceClosedPeriods && p.IsClosed)
+                .Select(p => $"{p.Year:D4}-{p.Month:D2}")
+                .ToList();
             ViewBag.BankAccounts = await collectionService.GetBankAccountsAsync(ct);
             ViewBag.BankingAction = bankingAction;
+            ViewBag.ClosedMonths = closedMonths;
             return PartialView("_Banking", collection);
         }
 
@@ -245,6 +273,16 @@ namespace IBSWeb.Areas.MSAP.Controllers
         public async Task<IActionResult> RevertBankingStep(int id, string reason, IFormFile? authorizationFile, CancellationToken ct)
         {
             var result = await collectionService.RevertCollectionBankingStepAsync(id, reason, User.Identity?.Name ?? "System", ct, authorizationFile);
+            TempData[result.IsSuccess ? "success" : "error"] = result.Message;
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequireAnyAccess("Access denied. You don't have permission to void collections.", ProcedureEnum.RevertCollectionBanking, ProcedureEnum.ReverseBilling)]
+        public async Task<IActionResult> Void(int id, string reason, IFormFile? authorizationFile, CancellationToken ct)
+        {
+            var result = await collectionService.VoidCollectionAsync(id, reason, User.Identity?.Name ?? "System", ct, authorizationFile);
             TempData[result.IsSuccess ? "success" : "error"] = result.Message;
             return RedirectToAction(nameof(Preview), new { id });
         }

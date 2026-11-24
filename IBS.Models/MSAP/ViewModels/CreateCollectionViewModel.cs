@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace IBS.Models.MSAP.ViewModels
@@ -53,5 +54,15 @@ namespace IBS.Models.MSAP.ViewModels
 
         [NotMapped]
         public List<SelectListItem>? Billings { get; set; }
+
+        [NotMapped]
+        public string? PeriodStatus { get; set; }
+
+        [NotMapped]
+        [StringLength(500)]
+        public string? AdjustmentReason { get; set; }
+
+        [NotMapped]
+        public IFormFile? AuthorizationFile { get; set; }
     }
 }

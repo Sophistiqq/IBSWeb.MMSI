@@ -97,7 +97,11 @@ namespace IBS.Models.MSAP
         public DateOnly? ReturnedDate { get; set; }
 
         [NotMapped]
-        public string PaymentStatus => ClearedDate.HasValue ? "Cleared"
+        public bool IsVoided => VoidedDate.HasValue || CanceledDate.HasValue;
+
+        [NotMapped]
+        public string PaymentStatus => IsVoided ? "Voided"
+            : ClearedDate.HasValue ? "Cleared"
             : DepositDate.HasValue ? (ReturnedDate.HasValue ? "Redeposited" : "Deposited")
             : ReturnedDate.HasValue ? "Returned" : "For Deposit";
 

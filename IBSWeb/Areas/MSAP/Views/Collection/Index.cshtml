@@ -51,8 +51,8 @@
             let table = $('#paginatedTable').DataTable(ModernTable.config({
                 order: [[0, 'desc']],
                 rowCallback: function (row, data) {
-                    $(row).toggleClass('ui-critical', data.paymentStatus === 'Returned')
-                        .toggleClass('ui-attention', data.paymentStatus !== 'Returned' && data.paymentStatus !== 'Cleared');
+                    $(row).toggleClass('ui-critical', data.paymentStatus === 'Returned' || data.paymentStatus === 'Voided')
+                        .toggleClass('ui-attention', data.paymentStatus !== 'Returned' && data.paymentStatus !== 'Cleared' && data.paymentStatus !== 'Voided');
                 },
                 columnDefs: [{ orderable: false, targets: [6, 7] }],
                 ajax: $.extend(ModernTable.ajax("@Url.Action("GetCollectionList", "Collection", new { area = "MSAP" })"), {
@@ -97,7 +97,7 @@
                         orderable: false,
                         defaultContent: "For Deposit",
                         render: (data, type) => type !== 'display' ? data : ModernTable.render.badge(data || 'For Deposit',
-                            data === 'Returned' ? 'ui-status ui-critical' : data === 'Cleared' ? 'ui-status ui-complete' : 'ui-status ui-attention')
+                            data === 'Returned' || data === 'Voided' ? 'ui-status ui-critical' : data === 'Cleared' ? 'ui-status ui-complete' : 'ui-status ui-attention')
                     },
                     {
                         data: null,
@@ -105,7 +105,7 @@
                         className: "text-center",
                         render: (data, type, row) => ModernTable.render.dropdown([
                             { label: 'View Details', icon: 'visibility', url: `${previewUrl}?id=${row.msapCollectionId}` },
-                            { label: 'Edit Record', icon: 'edit', url: `${editUrl}?id=${row.msapCollectionId}`, condition: canPrepare && !row.isMonthClosed && !row.depositDate && !row.returnedDate && !row.clearedDate }
+                            { label: 'Edit Record', icon: 'edit', url: `${editUrl}?id=${row.msapCollectionId}`, condition: canPrepare && !row.isVoided && (!row.isMonthClosed || row.periodStatus === 'Final' || row.periodStatus === 'Adjusted') && !row.depositDate && !row.returnedDate && !row.clearedDate }
                         ])
                     }
                 ]
