@@ -24,7 +24,7 @@
     "All role accounts, booking, tugboat, service, captain, and rate defaults live in vars and can be overridden via --var key=value.",
     "Captures {scheduleId}, {cosId}, {billingId}, and {collectionId} dynamically without hardcoded record IDs."
   ],
-  "lastPassedAt": "2026-11-24T02:30:51.787Z",
+  "lastPassedAt": "2026-11-24T02:59:56.084Z",
   "steps": [
     {
       "action": "login",
@@ -121,7 +121,7 @@
     },
     {
       "action": "click",
-      "target": "OK",
+      "target": "Done",
       "scope": ".swal2-popup",
       "optional": true,
       "waitAfterMs": 400
@@ -396,7 +396,7 @@
         "TimeLeft": {
           "label": "Actual start time",
           "type": "time",
-          "value": "08:01"
+          "value": "08:30"
         },
         "DateArrived": {
           "label": "Actual end * · Philippine time",
@@ -406,7 +406,7 @@
         "TimeArrived": {
           "label": "Actual end time",
           "type": "time",
-          "value": "09:31"
+          "value": "10:00"
         },
         "Tons": {
           "label": "Tons *",
@@ -481,7 +481,7 @@
     },
     {
       "action": "click",
-      "target": "OK",
+      "target": "Done",
       "scope": ".swal2-popup",
       "waitForPopupMs": 8000,
       "waitAfterMs": 2000,
@@ -520,7 +520,7 @@
     },
     {
       "action": "click",
-      "target": "OK",
+      "target": "Done",
       "scope": ".swal2-popup",
       "optional": true,
       "waitForPopupMs": 1500,
@@ -554,7 +554,7 @@
     },
     {
       "action": "click",
-      "target": "OK",
+      "target": "Done",
       "scope": ".swal2-popup",
       "optional": true,
       "waitForPopupMs": 1500,
@@ -656,7 +656,7 @@
     },
     {
       "action": "click",
-      "target": "OK",
+      "target": "Done",
       "scope": ".swal2-popup",
       "optional": true,
       "waitForPopupMs": 1500,
@@ -694,7 +694,7 @@
     },
     {
       "action": "click",
-      "target": "OK",
+      "target": "Done",
       "scope": ".swal2-popup",
       "optional": true,
       "waitForPopupMs": 1500,
@@ -725,7 +725,7 @@
     },
     {
       "action": "click",
-      "target": "OK",
+      "target": "Done",
       "scope": ".swal2-popup",
       "optional": true,
       "waitForPopupMs": 1500,

@@ -255,15 +255,6 @@
     gap: var(--ui-space-2);
 }
 
-.modern-swal-popup:has(.schedule-batch-preview) {
-    width: min(720px, calc(100vw - 2rem)) !important;
-}
-
-.modern-swal-popup:has(.schedule-batch-preview) .modern-value-md {
-    max-width: none;
-    text-align: left;
-}
-
 .schedule-batch-preview {
     display: grid;
     gap: var(--ui-space-3);

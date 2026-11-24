@@ -670,18 +670,11 @@ a.schedule-revision-link:focus-visible {
     cursor: wait;
 }
 
-.modern-swal-popup:has(.schedule-conflict-details) {
-    width: min(520px, calc(100vw - 2rem)) !important;
-}
-
-.modern-swal-popup:has(.schedule-conflict-details) .modern-value-md {
-    max-width: none;
-}
-
 .schedule-conflict-details {
     display: block;
     text-align: left;
     white-space: pre-line;
+    font-size: 0.9375rem;
     font-weight: var(--ui-weight-regular);
     line-height: 1.6;
 }

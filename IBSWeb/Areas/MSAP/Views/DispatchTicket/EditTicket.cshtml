@@ -443,7 +443,9 @@
                     ModernAlert.confirm({
                         title: 'Replace existing files?',
                         text: 'This will overwrite your current attachments.',
-                        icon: 'question'
+                        icon: 'question',
+                        confirmText: 'Replace files',
+                        cancelText: 'Keep existing'
                     }).then(r => { if (r.isConfirmed) { ModernAlert.showLoading("Saving changes..."); this.submit(); } });
                 }
             });
