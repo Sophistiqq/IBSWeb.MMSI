@@ -1,0 +1,119 @@
+{
+  "name": "collection/create",
+  "description": "ENCODER records a documented check collection receipt from Billing {billingId} and captures {collectionId}.",
+  "url": "/MSAP/Billing/Review/{billingId}",
+  "vars": {
+    "encoderAccount": "ENCODER"
+  },
+  "steps": [
+    {
+      "action": "login",
+      "account": "{encoderAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/Billing/Review/{billingId}"
+    },
+    {
+      "action": "wait",
+      "selector": ".job-progress-next a[href*='/Collection/Create']",
+      "timeoutMs": 10000
+    },
+    {
+      "action": "click",
+      "selector": ".job-progress-next a[href*='/Collection/Create']",
+      "waitAfterMs": 2000,
+      "waitForNavigation": true
+    },
+    {
+      "action": "wait",
+      "selector": "#collectionBillings input[type='checkbox']:not([disabled])",
+      "timeoutMs": 10000
+    },
+    {
+      "action": "click",
+      "selector": "#collectionBillings input[type='checkbox']:not(:checked):not([disabled])",
+      "waitAfterMs": 600
+    },
+    {
+      "action": "fill_form",
+      "scope": "section[aria-labelledby='collectionDetailsHeading']",
+      "onlyEmpty": true,
+      "overrides": {
+        "IsUndocumented": false,
+        "MsapCollectionNumber": "CR-{rand}",
+        "ReferenceNo": "REF-{rand}"
+      },
+      "knownFields": {
+        "IsUndocumented": {
+          "label": "Undocumented",
+          "type": "checkbox",
+          "value": false
+        },
+        "MsapCollectionNumber": {
+          "label": "Collection / receipt number *",
+          "type": "text",
+          "value": "CR-{rand}"
+        },
+        "ReferenceNo": {
+          "label": "Reference number",
+          "type": "text",
+          "value": "REF-{rand}"
+        }
+      }
+    },
+    {
+      "action": "fill_form",
+      "scope": "#checkDetailsSection",
+      "onlyEmpty": true,
+      "overrides": {
+        "CheckNumber": "CHK-{rand}",
+        "CheckDate": "{today}"
+      },
+      "knownFields": {
+        "CheckNumber": {
+          "label": "Check number *",
+          "type": "text",
+          "value": "CHK-{rand}"
+        },
+        "CheckDate": {
+          "label": "Check date *",
+          "type": "date",
+          "value": "{today}"
+        }
+      }
+    },
+    {
+      "action": "wait",
+      "selector": "#saveCollection:not([disabled])",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "selector": "#saveCollection",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Save collection",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "capture_url",
+      "pattern": "/Collection/Preview/(\\d+)",
+      "var": "collectionId"
+    },
+    {
+      "action": "click",
+      "target": "Done",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    }
+  ],
+  "lastPassedAt": "2026-11-24T08:28:13.093Z"
+}

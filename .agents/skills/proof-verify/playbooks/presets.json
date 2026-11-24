@@ -1,0 +1,52 @@
+{
+  "description": "Named playbook chains composed from atomic per-module playbooks. Override any parameter via --var key=value.",
+  "presets": {
+    "to-cos": {
+      "description": "Create Schedule -> Approve Rates -> Approve Schedule (COS created)",
+      "chain": ["schedule/create", "rates/approve", "schedule/approve"]
+    },
+    "to-tickets": {
+      "description": "Create Schedule -> Approve Rates -> Approve Schedule -> Record Dispatch Tickets",
+      "chain": ["schedule/create", "rates/approve", "schedule/approve", "cos/record-tickets"]
+    },
+    "to-billing": {
+      "description": "Create Schedule -> Approve Rates -> Approve Schedule -> Record Tickets -> Prepare Billing",
+      "chain": ["schedule/create", "rates/approve", "schedule/approve", "cos/record-tickets", "billing/create"]
+    },
+    "to-billing-approved": {
+      "description": "Schedule -> Rates -> COS -> Tickets -> Billing -> Commercial Review -> Final Approval",
+      "chain": ["schedule/create", "rates/approve", "schedule/approve", "cos/record-tickets", "billing/create", "billing/endorse", "billing/approve"]
+    },
+    "full-cleared": {
+      "description": "Complete 9-stage Schedule -> Cleared lifecycle",
+      "chain": [
+        "schedule/create",
+        "rates/approve",
+        "schedule/approve",
+        "cos/record-tickets",
+        "billing/create",
+        "billing/endorse",
+        "billing/approve",
+        "collection/create",
+        "collection/deposit",
+        "collection/clear"
+      ]
+    },
+    "schedule-revise-flow": {
+      "description": "Create Schedule -> Approve Rates & Schedule -> Revise Approved Schedule -> Re-approve Schedule",
+      "chain": ["schedule/create", "rates/approve", "schedule/approve", "schedule/revise", "schedule/approve"]
+    },
+    "billing-reject-flow": {
+      "description": "Reviewer rejects Billing {billingId} -> Encoder adjusts with PDF -> Reviewer endorses -> Finance approves",
+      "chain": ["billing/reject", "billing/adjust", "billing/endorse", "billing/approve"]
+    },
+    "billing-reopen-flow": {
+      "description": "Finance reopens Approved Billing {billingId} -> Encoder adjusts with PDF -> Reviewer endorses -> Finance re-approves",
+      "chain": ["billing/reopen", "billing/adjust", "billing/endorse", "billing/approve"]
+    },
+    "collection-returned-flow": {
+      "description": "Create Check Collection for {billingId} -> Deposit -> Return Check -> Redeposit -> Cleared",
+      "chain": ["collection/create", "collection/deposit", "collection/return-check", "collection/redeposit", "collection/clear"]
+    }
+  }
+}

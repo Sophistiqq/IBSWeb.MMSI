@@ -1,0 +1,82 @@
+{
+  "name": "cos/record-tickets",
+  "description": "OPERATIONS records actual Docking and Watering dispatch tickets for COS {cosId}.",
+  "url": "/MSAP/COS/Details/{cosId}",
+  "vars": {
+    "opsAccount": "OPERATIONS",
+    "tugMaster1": "16",
+    "tugMaster2": "17",
+    "wateringTons": "15",
+    "wateringRate": "500"
+  },
+  "steps": [
+    { "action": "login", "account": "{opsAccount}" },
+    { "action": "navigate", "url": "/MSAP/COS/Details/{cosId}" },
+    { "action": "click", "selector": "tr.ui-attention .dropdown-trigger", "waitAfterMs": 350 },
+    { "action": "click", "selector": "tr.ui-attention a[href*='expectedServiceEntryId']", "waitAfterMs": 1000, "waitForNavigation": true },
+    { "action": "click", "selector": "button[data-skip-photo]", "optional": true, "waitAfterMs": 450 },
+    { "action": "upload", "selector": "#cosTicketImage", "fixture": "png", "scope": "#actualTicketEntry form", "optional": true, "waitAfterMs": 300 },
+    {
+      "action": "fill_and_submit",
+      "scope": "#actualTicketEntry form",
+      "submitSelector": "button.cos-ticket-save-btn",
+      "maxRetries": 2,
+      "waitAfterMs": 1800,
+      "waitForNavigation": true,
+      "overrides": {
+        "DispatchNumber": "DT-{rand}-1",
+        "Date": "{today}",
+        "DateLeft": "{today}",
+        "TimeLeft": "08:00",
+        "DateArrived": "{today}",
+        "TimeArrived": "10:00"
+      },
+      "knownFields": {
+        "TugMasterId": { "label": "Captain / tug master *", "type": "select", "value": "{tugMaster1}" },
+        "Remarks": { "label": "Remarks", "type": "textarea", "value": "Docking completed cleanly." },
+        "DispatchNumber": { "label": "Actual ticket number *", "type": "text", "value": "DT-{rand}-1" },
+        "Date": { "label": "Ticket date *", "type": "date", "value": "{today}" },
+        "DateLeft": { "label": "Actual start * · Philippine time", "type": "date", "value": "{today}" },
+        "TimeLeft": { "label": "Actual start time", "type": "time", "value": "08:00" },
+        "DateArrived": { "label": "Actual end * · Philippine time", "type": "date", "value": "{today}" },
+        "TimeArrived": { "label": "Actual end time", "type": "time", "value": "10:00" }
+      },
+      "scenario": "Actual Docking dispatch ticket."
+    },
+    { "action": "click", "selector": "tr.ui-attention .dropdown-trigger", "waitAfterMs": 350 },
+    { "action": "click", "selector": "tr.ui-attention a[href*='expectedServiceEntryId']", "waitAfterMs": 1000, "waitForNavigation": true },
+    { "action": "click", "selector": "button[data-skip-photo]", "optional": true, "waitAfterMs": 450 },
+    { "action": "upload", "selector": "#cosTicketImage", "fixture": "png", "scope": "#actualTicketEntry form", "optional": true, "waitAfterMs": 300 },
+    {
+      "action": "fill_and_submit",
+      "scope": "#actualTicketEntry form",
+      "submitSelector": "button.cos-ticket-save-btn",
+      "maxRetries": 2,
+      "waitAfterMs": 1800,
+      "waitForNavigation": true,
+      "overrides": {
+        "DispatchNumber": "DT-{rand}-2",
+        "Date": "{today}",
+        "DateLeft": "{today}",
+        "TimeLeft": "10:00",
+        "DateArrived": "{today}",
+        "TimeArrived": "11:30",
+        "Tons": "{wateringTons}",
+        "DispatchRate": "{wateringRate}"
+      },
+      "knownFields": {
+        "TugMasterId": { "label": "Captain / tug master *", "type": "select", "value": "{tugMaster2}" },
+        "Remarks": { "label": "Remarks", "type": "textarea", "value": "Watering delivered as requested." },
+        "DispatchNumber": { "label": "Actual ticket number *", "type": "text", "value": "DT-{rand}-2" },
+        "Date": { "label": "Ticket date *", "type": "date", "value": "{today}" },
+        "DateLeft": { "label": "Actual start * · Philippine time", "type": "date", "value": "{today}" },
+        "TimeLeft": { "label": "Actual start time", "type": "time", "value": "10:00" },
+        "DateArrived": { "label": "Actual end * · Philippine time", "type": "date", "value": "{today}" },
+        "TimeArrived": { "label": "Actual end time", "type": "time", "value": "11:30" },
+        "Tons": { "label": "Tons *", "type": "number", "value": "{wateringTons}" },
+        "DispatchRate": { "label": "Rate (₱ / ton) *", "type": "number", "value": "{wateringRate}" }
+      },
+      "scenario": "Actual Watering dispatch ticket."
+    }
+  ]
+}

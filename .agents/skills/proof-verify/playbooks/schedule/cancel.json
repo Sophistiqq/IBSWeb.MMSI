@@ -1,0 +1,64 @@
+{
+  "name": "schedule/cancel",
+  "description": "OPERATIONS cancels Schedule {scheduleId} with a reason and asserts Cancelled.",
+  "url": "/MSAP/VesselSchedule/Details/{scheduleId}",
+  "vars": {
+    "opsAccount": "OPERATIONS",
+    "cancelReason": "Automated schedule cancellation test ({today}-{rand})."
+  },
+  "notes": [],
+  "lastPassedAt": "2026-11-24T08:19:56.120Z",
+  "steps": [
+    {
+      "action": "login",
+      "account": "{opsAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/VesselSchedule/Details/{scheduleId}"
+    },
+    {
+      "action": "click",
+      "selector": "form[data-schedule-action='Cancel'] button[type='submit']",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "fill_form",
+      "scope": ".swal2-popup",
+      "onlyEmpty": true,
+      "optional": true,
+      "overrides": {
+        "swal2-input": "{cancelReason}"
+      },
+      "scenario": "Enter a concise reason for cancelling the schedule.",
+      "knownFields": {
+        "swal2-input": {
+          "label": "Reason for cancellation (optional)",
+          "type": "text",
+          "value": "{cancelReason}"
+        }
+      }
+    },
+    {
+      "action": "click",
+      "target": "Cancel booking",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2200,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "Done",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "assert",
+      "urlIncludes": "/MSAP/VesselSchedule/Details/{scheduleId}",
+      "text": "Cancelled"
+    }
+  ]
+}

@@ -72,11 +72,11 @@ node .agents/skills/proof-verify/scripts/guided-hands.mjs --steps-file plan.json
 node .agents/skills/proof-verify/scripts/guided-hands-bridge.mjs   # start once for zero-prompt Chrome extension mode
 node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --account rml1 --steps-file plan.json
 node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --background --account rml1 --steps-file plan.json
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-schedule-create     # instant cached replay (0ms for unchanged fields)
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-full-to-billing     # end-to-end Schedule -> Rates -> COS -> Tickets -> Billing
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-billing-to-cleared --var cosId=9  # Billing -> Review -> Approval -> Collection -> Deposit -> Cleared
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook msap-full-lifecycle      # complete 9-stage Schedule -> Cleared chain
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --resume                            # resume from last checkpoint (restores URL & captured vars)
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook schedule/create                                    # single atomic module playbook
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook schedule/create,rates/approve,schedule/approve     # mix-and-match module chain (shared vars pipe)
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --preset full-cleared                                         # named preset from playbooks/presets.json
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --preset billing-reopen-flow --var billingId=2                # parameterized edge-case preset
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --resume                                                      # resume from last checkpoint (restores URL & captured vars)
 node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --account rml1 --url /MSAP/AuditTrail --goal "Select COS #14 in Job Order and verify Schedule Revision Diff appears" --save-playbook verify-def05
 ```
 
@@ -88,8 +88,8 @@ When a change requires multi-step UI interactions (opening modals, clicking dyna
 
 - **3-Tier Zero-Main-Token Self-Healing (`--heal-engine auto|ollama|opencode|off`):**
   - **Tier 0 (Deterministic, 0 tokens, <300ms):** Auto-waits for DOM/AJAX readiness, fast-fails immediately on `/Login`, `/AccessDenied`, HTTP 500, or error SweetAlerts, auto-reauthenticates mid-run when `--account` / credentials are provided, auto-dismisses blocking info/confirm modals, and provides first-class `select` (native + `ModernSelect` + Select2, inside or outside `<form>`) and `upload` (`fixture: "pdf"|"png"` or real file) actions.
-  - **Tier 1 (Local Ollama `qwen2.5:1.5b`, `keep_alive: "15m"`, 0 cloud tokens):** Performs **diff-only form repair** (locking already-valid & overridden fields) and bounded step-level micro-recovery (`click_alternative`, `select_option`, `fill_missing_fields`, `dismiss_modal`, `wait_and_retry`).
-  - **Tier 2 (Free OpenCode Escalation, 0 paid main-model tokens):** Invoked only when Tier 0 + Tier 1 escalate or fail (or directly in `--goal` mode) using `opencode/deepseek-v4.1-flash-free` -> `nemotron-3.5-lightning-free` -> `mimo-v2.6-flash-free` -> `flint-40b-free` to execute 1–3 whitelisted recovery steps (guarded against unrequested destructive clicks).
+  - **Tier 1 (Local Ollama `qwen2.5-coder:3b`, `keep_alive: "15m"`, `num_thread` tuned to physical CPU cores, 0 cloud tokens):** Performs **diff-only form repair** (locking already-valid & overridden fields), compact-schema fuzzy click matching, and bounded step-level micro-recovery (`click_alternative`, `select_option`, `fill_missing_fields`, `dismiss_modal`, `wait_and_retry`).
+  - **Tier 2 (Free OpenCode Escalation + Circuit Breaker -> Local Multi-Step Fallback, 0 paid main-model tokens):** Invoked only when Tier 0 + Tier 1 escalate or fail (or in `--goal` mode) using `opencode/deepseek-v4.1-flash-free` -> `nemotron-3.5-lightning-free` -> `mimo-v2.6-flash-free` -> `flint-40b-free`. If OpenCode hits a rate limit or fails once, an in-run circuit breaker trips immediately and routes all remaining multi-step recoveries and `--goal` turns to local Ollama (`qwen2.5-coder:3b`).
   - **Tier 3 (1-Turn Failure Dossier + Checkpoint `--resume`):** Real app bugs fail fast with `failureSnapshot` (URL, title, active Swal, validation errors, visible clickables/fields, PNG screenshot) in `latest-guided-hands.json` and persist step state to `artifacts/proof-verify/last-checkpoint.json` so `--resume` / `--from-step N` continues from the exact failing step.
 - **Goal-Driven Playbook Authoring (`--goal "..." --save-playbook <name>`):** Pass a 1-sentence plain-English verification goal so free OpenCode explores the live DOM and compiles the successful trace into a deterministic Tier 0 playbook (0 paid main-model tokens on Run 1; 0 LLM calls of any kind on Run 2+).
 - **Self-Updating & Auto-Patching Playbooks (`--playbook` / `--save-playbook`):** Playbooks under `.agents/skills/proof-verify/playbooks/*.json` store `knownFields` + dynamic URL captures (`capture_url` → `{scheduleId}`, `{cosId}`, `{billingId}`, `{collectionId}`) + template variables (`{today}`, `{tomorrow}`, `{rand}`, `--var`). Recovered step patches and drifted fields auto-update on PASS (disable with `--no-update-playbook`) and are always logged in `report.recoveries[]`.
@@ -100,7 +100,7 @@ When a change requires multi-step UI interactions (opening modals, clicking dyna
 ## Model Escalation Ladder
 
 1. **Tier 0 (0 tokens):** Stage 1 static checks + Stage 2 headless Desktop/Mobile DOM proof + Guided Hands deterministic playbooks (`select`, `upload`, `knownFields`, `--resume`).
-2. **Tier 1 (Local Ollama — 0 cloud tokens):** `qwen2.5:1.5b` diff-only form generation/repair and fast bounded step micro-recovery.
+2. **Tier 1 (Local Ollama — 0 cloud tokens):** `qwen2.5-coder:3b` diff-only form generation/repair, fast bounded step micro-recovery, and circuit-breaker fallback for multi-step recovery & `--goal` mode.
 3. **Tier 2 (Free OpenCode models — 0 paid tokens):** `opencode/deepseek-v4.1-flash-free` (fallback: `nemotron-3.5-lightning-free`, `mimo-v2.6-flash-free`, `flint-40b-free`) for diff review, Tier 2 step recovery, and `--goal` playbook authoring; `opencode/nemotron-3.5-super-vl-free` for Desktop & Mobile screenshots.
 4. **Tier 3 (Lightweight subagent):** Invoke an Antigravity `flash_lite` / `flash` subagent if deeper multi-file codebase tracing is needed after a Stage 1–3 failure or Failure Dossier.
 5. **Tier 4 (Paid / Computer-use, e.g. `jev` or Chrome DevTools MCP):** Escalate only when a bug requires open-ended visual exploration, deep CSS/network/performance profiling, or complex drag/canvas interactions that guided step plans cannot prove.

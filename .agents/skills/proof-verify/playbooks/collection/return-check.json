@@ -1,0 +1,62 @@
+{
+  "name": "collection/return-check",
+  "description": "Treasury user marks deposited check Collection {collectionId} as Returned.",
+  "url": "/MSAP/Collection/Preview/{collectionId}",
+  "vars": {
+    "treasuryAccount": "ENCODER"
+  },
+  "steps": [
+    {
+      "action": "login",
+      "account": "{treasuryAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/Collection/Preview/{collectionId}"
+    },
+    {
+      "action": "wait",
+      "selector": "a[data-collection-banking='Record returned check']",
+      "timeoutMs": 10000
+    },
+    {
+      "action": "click",
+      "selector": "a[data-collection-banking='Record returned check']",
+      "waitAfterMs": 1000
+    },
+    {
+      "action": "wait",
+      "selector": "#collectionBankingForm",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "fill_form",
+      "scope": "#collectionBankingForm",
+      "onlyEmpty": true,
+      "optional": true,
+      "scenario": "Provide returned check reason (e.g. DAIF - Drawn Against Insufficient Funds)."
+    },
+    {
+      "action": "click",
+      "target": "Save",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 2000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "Done",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "assert",
+      "urlIncludes": "/MSAP/Collection/Preview/{collectionId}",
+      "text": "Returned"
+    }
+  ],
+  "lastPassedAt": "2026-11-24T08:28:13.093Z"
+}

@@ -1,0 +1,45 @@
+{
+  "name": "billing/endorse",
+  "description": "Reviewer (rml1) endorses Billing {billingId} for final approval.",
+  "url": "/MSAP/Billing/Review/{billingId}",
+  "vars": {
+    "approverAccount": "rml1"
+  },
+  "steps": [
+    {
+      "action": "login",
+      "account": "{approverAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/Billing/Review/{billingId}"
+    },
+    {
+      "action": "wait",
+      "selector": "#endorseReviewedBilling button[type='submit']",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "selector": "#endorseReviewedBilling button[type='submit']",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Endorse for approval",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "Done",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    }
+  ],
+  "lastPassedAt": "2026-11-24T08:28:13.093Z"
+}

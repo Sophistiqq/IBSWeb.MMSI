@@ -1,0 +1,57 @@
+{
+  "name": "schedule/approve",
+  "description": "Approver (rml1) approves Schedule {scheduleId} and captures {cosId}.",
+  "url": "/MSAP/VesselSchedule/Details/{scheduleId}",
+  "vars": {
+    "approverAccount": "rml1"
+  },
+  "steps": [
+    {
+      "action": "login",
+      "account": "{approverAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/VesselSchedule/Details/{scheduleId}"
+    },
+    {
+      "action": "click",
+      "selector": "#confirmSchedule button[type='submit']",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Approve schedule",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2200,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "Continue",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Acknowledge and approve",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 2200,
+      "waitForNavigation": true
+    },
+    {
+      "action": "capture_url",
+      "pattern": "/COS/Details/(\\d+)",
+      "var": "cosId"
+    },
+    {
+      "action": "assert",
+      "urlIncludes": "/MSAP/COS/Details",
+      "text": "COS-"
+    }
+  ],
+  "lastPassedAt": "2026-11-24T08:19:03.484Z"
+}

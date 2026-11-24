@@ -1,0 +1,68 @@
+{
+  "name": "billing/adjust",
+  "description": "ENCODER adjusts rejected/reopened Billing {billingId} with authorization PDF and resubmits.",
+  "url": "/MSAP/Billing/Review/{billingId}",
+  "vars": {
+    "encoderAccount": "ENCODER",
+    "adjustReason": "Adjusted billing per authorization ({today}-{rand})."
+  },
+  "steps": [
+    {
+      "action": "login",
+      "account": "{encoderAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/Billing/Review/{billingId}"
+    },
+    {
+      "action": "click",
+      "target": "Adjust billing",
+      "waitAfterMs": 1500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "upload",
+      "selector": "#adjustAuthFile",
+      "fixture": "pdf"
+    },
+    {
+      "action": "fill_form",
+      "scope": "section[aria-labelledby='adjustAuthHeading']",
+      "onlyEmpty": false,
+      "overrides": {
+        "adjustReason": "{adjustReason}"
+      },
+      "knownFields": {
+        "adjustReason": {
+          "label": "Authorized reason for adjustment *",
+          "type": "textarea",
+          "value": "{adjustReason}"
+        }
+      }
+    },
+    {
+      "action": "click",
+      "target": "Save adjustment & resubmit",
+      "waitAfterMs": 1200
+    },
+    {
+      "action": "click",
+      "target": "Save adjustment",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 2000,
+      "waitAfterMs": 2200,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "Done",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 2000,
+      "waitAfterMs": 500
+    }
+  ],
+  "lastPassedAt": "2026-11-24T08:28:13.093Z"
+}

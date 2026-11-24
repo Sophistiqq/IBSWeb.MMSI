@@ -8,7 +8,7 @@ import { spawn, execFileSync } from "node:child_process";
 
 const DEFAULT_PORT = 5073;
 const DEFAULT_OLLAMA_URL = process.env.OLLAMA_HOST || "http://localhost:11434";
-const DEFAULT_MODEL = process.env.GUIDED_HANDS_MODEL || "qwen2.5:1.5b";
+const DEFAULT_MODEL = process.env.GUIDED_HANDS_MODEL || "qwen2.5-coder:3b";
 const DEFAULT_OPENCODE_MODELS = [
     "opencode/deepseek-v4.1-flash-free",
     "opencode/nemotron-3.5-lightning-free",
@@ -33,7 +33,9 @@ Options:
   --url <route|url>        Starting route or URL (e.g. /MSAP/Billing/Index)
   --steps <json>           Inline JSON array of step objects
   --steps-file <path>      Path to JSON file containing step objects (or { url, steps })
-  --playbook <name|path>   Replay a saved golden playbook (0ms for unchanged fields, auto-patches recoveries on PASS)
+  --playbook <a,b,c>       Replay one or more comma-separated module playbooks (e.g. schedule/create,rates/approve,schedule/approve) or a preset name
+  --chain <a,b,c>          Alias for --playbook (comma-separated module chain)
+  --preset <name>          Expand a named flow preset from .agents/skills/proof-verify/playbooks/presets.json
   --save-playbook <name>   Save/update a golden playbook under .agents/skills/proof-verify/playbooks/ on PASS
   --no-update-playbook     When using --playbook, do not auto-update or auto-patch the playbook file on PASS
   --resume                 Resume the last run from artifacts/proof-verify/last-checkpoint.json (restoring vars & URL)
@@ -68,7 +70,7 @@ Options:
   --no-autostart           Fail instead of auto-starting IBSWeb on --port when server is down
   --port <number>          Local IBSWeb port (default: 5073)
   --base-url <url>         Base URL override (default: http://localhost:<port>)
-  --model <name>           Ollama model name (default: qwen2.5:1.5b)
+  --model <name>           Ollama model name (default: qwen2.5-coder:3b)
   --ollama-url <url>       Ollama base URL (default: http://localhost:11434)
   --account <name>         Load login credentials from gitignored artifacts/proof-verify/test-accounts.local.json
   --user <username>        Login username (or IBS_VERIFY_USER env var)
@@ -115,6 +117,8 @@ function parseArgs(argv) {
         steps: [],
         stepsFile: "",
         playbook: "",
+        playbooks: [],
+        preset: "",
         savePlaybook: "",
         noUpdatePlaybook: false,
         resume: false,
@@ -168,8 +172,19 @@ function parseArgs(argv) {
             opts.steps.push(...parsed);
         } else if (arg === "--steps-file") {
             opts.stepsFile = next();
-        } else if (arg === "--playbook") {
-            opts.playbook = next();
+        } else if (arg === "--playbook" || arg === "--chain") {
+            const items = next().split(",").map((s) => s.trim()).filter(Boolean);
+            opts.playbooks.push(...items);
+            opts.playbook = opts.playbooks.join(",");
+        } else if (arg.startsWith("--playbook=") || arg.startsWith("--chain=")) {
+            const raw = arg.slice(arg.indexOf("=") + 1);
+            const items = raw.split(",").map((s) => s.trim()).filter(Boolean);
+            opts.playbooks.push(...items);
+            opts.playbook = opts.playbooks.join(",");
+        } else if (arg === "--preset") {
+            opts.preset = next().trim();
+        } else if (arg.startsWith("--preset=")) {
+            opts.preset = arg.slice("--preset=".length).trim();
         } else if (arg === "--save-playbook") {
             opts.savePlaybook = next();
         } else if (arg === "--no-update-playbook") {
@@ -801,7 +816,7 @@ async function attemptAutoLogin(cdp, username, password) {
 // Ollama Structured Output Client (local worker brain-let)
 // ============================================================================
 
-async function callOllamaJson({ ollamaUrl, model, system, prompt, schema, temperature = 0.2, numCtx = 2048, numPredict = 256 }) {
+async function callOllamaJson({ ollamaUrl, model, system, prompt, schema, temperature = 0.2, numCtx = 2048, numPredict = 192 }) {
     const start = Date.now();
     const body = {
         model,
@@ -846,8 +861,11 @@ async function callOllamaJson({ ollamaUrl, model, system, prompt, schema, temper
 }
 
 // ============================================================================
-// Free OpenCode Reasoning Client (Tier 2 Recovery + --goal Planner)
+// Free OpenCode Reasoning Client (Tier 2 Recovery + --goal Planner + Circuit Breaker)
 // ============================================================================
+
+let opencodeCircuitBroken = false;
+let opencodeCircuitReason = "";
 
 function resolveOpencodeBinary() {
     if (process.platform === "win32") {
@@ -940,12 +958,17 @@ function runOpencodeSingle(repoRoot, model, prompt, fileAttachments = [], timeou
     });
 }
 
-async function callOpencodeJson({ repoRoot, primaryModel, prompt, fileAttachments = [], timeoutMs = 45000 }) {
+async function callOpencodeJson({ repoRoot, primaryModel, prompt, fileAttachments = [], timeoutMs = 20000 }) {
+    if (opencodeCircuitBroken) {
+        return { ok: false, circuitBroken: true, error: `Circuit open (${opencodeCircuitReason})`, data: null, stats: null };
+    }
     const modelChain = [primaryModel, ...DEFAULT_OPENCODE_MODELS.filter((m) => m !== primaryModel)].filter(Boolean);
     let lastError = "No OpenCode models available";
     for (const model of modelChain) {
         const res = await runOpencodeSingle(repoRoot, model, prompt, fileAttachments, timeoutMs);
-        if (res.ok) {
+        const outLower = String(res.output || "").toLowerCase();
+        const isQuotaError = /rate.?limit|quota|429|too many requests|exhausted|exceeded|insufficient/i.test(outLower);
+        if (res.ok && !isQuotaError) {
             const parsed = extractJsonObject(res.output);
             if (parsed && typeof parsed === "object") {
                 return {
@@ -956,10 +979,21 @@ async function callOpencodeJson({ repoRoot, primaryModel, prompt, fileAttachment
             }
             lastError = `Invalid JSON returned by ${model}`;
         } else {
-            lastError = `${model}: ${res.timedOut ? "timeout" : `code ${res.code}`}`;
+            lastError = `${model}: ${isQuotaError ? "rate-limited/quota" : (res.timedOut ? "timeout" : `code ${res.code}`)}`;
+            if (isQuotaError) {
+                opencodeCircuitBroken = true;
+                opencodeCircuitReason = lastError;
+                console.warn(`  [opencode] Circuit breaker tripped (${lastError}) — falling back to local Ollama for remaining steps.`);
+                break;
+            }
         }
     }
-    return { ok: false, error: lastError, data: null, stats: null };
+    if (!opencodeCircuitBroken) {
+        opencodeCircuitBroken = true;
+        opencodeCircuitReason = lastError;
+        console.warn(`  [opencode] All OpenCode models failed (${lastError}) — tripping circuit breaker for remaining steps.`);
+    }
+    return { ok: false, circuitBroken: opencodeCircuitBroken, error: lastError, data: null, stats: null };
 }
 
 // ============================================================================
@@ -1198,7 +1232,7 @@ async function resolveClickTarget(clickables, targetText, ollamaOpts, optional =
         return { matched: null, via: "optional-skip", reason: "No exact/substring match for optional target", llmStats: null };
     }
 
-    // 3. Small local Ollama model picks from the tiny numbered list
+    // 3. Small local Ollama model picks from the tiny numbered list (compact schema: integer only for ~3x faster CPU output)
     const menu = clickables
         .map((c) => `[${c.id}] <${c.tag}> "${c.text}"${c.domId ? ` (#${c.domId})` : ""}`)
         .join("\n");
@@ -1206,23 +1240,23 @@ async function resolveClickTarget(clickables, targetText, ollamaOpts, optional =
     const schema = {
         type: "object",
         properties: {
-            elementId: { type: "integer" },
-            reason: { type: "string" }
+            elementId: { type: "integer" }
         },
-        required: ["elementId", "reason"],
+        required: ["elementId"],
         additionalProperties: false
     };
 
     const res = await callOllamaJson({
         ...ollamaOpts,
         temperature: 0,
-        system: "You match a requested UI action target to ONE numbered element from the provided list. Return elementId=0 if no element matches.",
+        numPredict: 24,
+        system: "You match a requested UI action target to ONE numbered element from the provided list. Return elementId=0 if no element matches. Return ONLY JSON.",
         prompt: `Target to click: "${targetText}"\n\nVisible elements:\n${menu}\n\nReturn JSON with the single best matching elementId.`,
         schema
     });
 
     const chosen = clickables.find((c) => c.id === res.data.elementId) || null;
-    return { matched: chosen, via: "ollama", reason: res.data.reason, llmStats: res.stats };
+    return { matched: chosen, via: "ollama", reason: chosen ? `matched [${chosen.id}]` : "no match", llmStats: res.stats };
 }
 
 function resolveOverrides(fields, overrides) {
@@ -1304,11 +1338,31 @@ function expandTemplatesDeep(obj, vars) {
 
 function resolvePlaybookPath(repoRoot, nameOrPath) {
     if (!nameOrPath) return "";
-    if (nameOrPath.includes("/") || nameOrPath.includes("\\") || nameOrPath.endsWith(".json")) {
-        return path.resolve(nameOrPath);
+    const playbooksRoot = path.join(repoRoot, ".agents", "skills", "proof-verify", "playbooks");
+    const directCandidate = path.resolve(nameOrPath);
+    if (nameOrPath.endsWith(".json") && fs.existsSync(directCandidate)) {
+        return directCandidate;
     }
-    const safe = nameOrPath.replace(/[^a-zA-Z0-9_-]+/g, "-").toLowerCase();
-    return path.join(repoRoot, ".agents", "skills", "proof-verify", "playbooks", `${safe}.json`);
+    const cleanRel = nameOrPath
+        .replace(/\\/g, "/")
+        .replace(/^\/+|\/+$/g, "")
+        .replace(/\.json$/i, "")
+        .split("/")
+        .map((seg) => seg.replace(/[^a-zA-Z0-9_-]+/g, "-").toLowerCase())
+        .filter(Boolean)
+        .join(path.sep);
+    return path.join(playbooksRoot, `${cleanRel}.json`);
+}
+
+function loadPlaybookPresets(repoRoot) {
+    const presetsPath = path.join(repoRoot, ".agents", "skills", "proof-verify", "playbooks", "presets.json");
+    if (!fs.existsSync(presetsPath)) return {};
+    try {
+        const parsed = readJsonFile(presetsPath);
+        return parsed?.presets && typeof parsed.presets === "object" ? parsed.presets : parsed;
+    } catch {
+        return {};
+    }
 }
 
 function isDynamicFieldKey(key) {
@@ -2135,13 +2189,133 @@ async function askOllamaStepRecovery({ failedStep, errorMessage, snapshot, ollam
     const res = await callOllamaJson({
         ...ollamaOpts,
         temperature: 0.1,
-        numCtx: 3072,
-        numPredict: 96,
-        system: "You are a fast browser recovery advisor. Keep reason under 10 words. If a failed click step matches a visible clickable by intent (e.g. 'new-schedule' -> 'New Schedule'), pick click_alternative with its clickableId. Pick escalate only when no single element matches. Never pick destructive buttons (Delete, Void, Reverse, Finalize) unless requested. Return ONLY JSON.",
+        numPredict: 80,
+        system: "You are a fast browser recovery advisor. Keep reason under 8 words. If a failed click step matches a visible clickable by intent (e.g. 'new-schedule' -> 'New Schedule' or 'OK' -> 'Done'), pick click_alternative with its clickableId. Pick escalate only when no single element matches. Never pick destructive buttons (Delete, Void, Reverse, Finalize) unless requested. Return ONLY JSON.",
         prompt,
         schema
     });
     return res;
+}
+
+async function askOllamaMultiStepRecovery({ failedStep, errorMessage, snapshot, ollamaOpts }) {
+    const clickMenu = (snapshot.clickables || [])
+        .slice(0, 18)
+        .map((c) => `[${c.id}] <${c.tag}> "${c.text}"${c.domId ? ` (#${c.domId})` : ""}`)
+        .join("\n");
+    const fieldMenu = (snapshot.fields || [])
+        .slice(0, 12)
+        .map((f) => `- ${f.key} (${f.label}, ${f.type}, cur="${f.currentValue ?? ""}")`)
+        .join("\n");
+
+    const schema = {
+        type: "object",
+        properties: {
+            abort: { type: "boolean" },
+            reason: { type: "string" },
+            recoverySteps: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        action: {
+                            type: "string",
+                            enum: ["click", "select", "fill_form", "wait", "navigate"]
+                        },
+                        target: { type: "string" },
+                        selector: { type: "string" },
+                        value: { type: "string" },
+                        url: { type: "string" },
+                        ms: { type: "integer" }
+                    },
+                    required: ["action"],
+                    additionalProperties: false
+                }
+            }
+        },
+        required: ["abort", "reason", "recoverySteps"],
+        additionalProperties: false
+    };
+
+    const prompt = [
+        `Failed step: ${JSON.stringify(failedStep)}`,
+        `Error: ${errorMessage}`,
+        `URL: ${snapshot.url}`,
+        snapshot.swal ? `Active popup: ${JSON.stringify(snapshot.swal)}` : "",
+        snapshot.validationErrors?.length ? `Validation errors: ${snapshot.validationErrors.join(" | ")}` : "",
+        clickMenu ? `Visible clickables:\n${clickMenu}` : "",
+        fieldMenu ? `Visible fields:\n${fieldMenu}` : "",
+        `Page text excerpt:\n${(snapshot.bodyExcerpt || "").slice(0, 450)}`,
+        "",
+        "Propose 1 to 2 safe recoverySteps to overcome this UI blocker, or set abort=true if this is a real app error."
+    ].filter(Boolean).join("\n");
+
+    const res = await callOllamaJson({
+        ...ollamaOpts,
+        temperature: 0.1,
+        numPredict: 140,
+        system: "You are a local browser recovery planner. Output 1-2 safe recoverySteps (prefer action='click' with exact visible button text as target, or action='select' with target and value). Set abort=true and recoverySteps=[] if the page shows a genuine server/permission error. Return ONLY JSON.",
+        prompt,
+        schema
+    });
+    return { ok: true, data: res.data, stats: res.stats };
+}
+
+async function askOllamaGoalNextAction({ goal, turn, maxTurns, history, snapshot, ollamaOpts }) {
+    const clickMenu = (snapshot.clickables || [])
+        .slice(0, 20)
+        .map((c) => `[${c.id}] <${c.tag}> "${c.text}"${c.domId ? ` (#${c.domId})` : ""}`)
+        .join("\n");
+    const fieldMenu = (snapshot.fields || [])
+        .slice(0, 12)
+        .map((f) => {
+            const optsStr = Array.isArray(f.options) && f.options.length
+                ? ` options=[${f.options.slice(0, 5).map((o) => `${o.value}:${o.text}`).join(", ")}]`
+                : "";
+            return `- ${f.key} (${f.label}, ${f.type}, cur="${f.currentValue ?? ""}")${optsStr}`;
+        })
+        .join("\n");
+
+    const schema = {
+        type: "object",
+        properties: {
+            action: {
+                type: "string",
+                enum: ["navigate", "click", "select", "fill_form", "fill_and_submit", "upload", "wait", "assert", "done", "fail"]
+            },
+            reason: { type: "string" },
+            url: { type: "string" },
+            target: { type: "string" },
+            selector: { type: "string" },
+            value: { type: "string" },
+            text: { type: "string" },
+            summary: { type: "string" }
+        },
+        required: ["action", "reason"],
+        additionalProperties: false
+    };
+
+    const prompt = [
+        `Goal: ${goal}`,
+        `Turn: ${turn}/${maxTurns}`,
+        `Recent history: ${JSON.stringify(history.slice(-5))}`,
+        `Current URL: ${snapshot.url} (title: ${snapshot.title})`,
+        snapshot.swal ? `Active popup: ${JSON.stringify(snapshot.swal)}` : "",
+        clickMenu ? `Visible clickables:\n${clickMenu}` : "",
+        fieldMenu ? `Visible fields:\n${fieldMenu}` : "",
+        `Page excerpt:\n${(snapshot.bodyExcerpt || "").slice(0, 500)}`,
+        "",
+        "Choose the single next browser action to achieve the Goal. Return action='done' only when the goal is verified on the page."
+    ].filter(Boolean).join("\n");
+
+    const res = await callOllamaJson({
+        ...ollamaOpts,
+        temperature: 0.1,
+        numPredict: 120,
+        system: "You drive a browser step-by-step to achieve a verification goal. Keep reason under 10 words. Prefer semantic target text for click/select. Return ONLY JSON.",
+        prompt,
+        schema
+    });
+    return { ok: true, data: res.data, stats: res.stats };
 }
 
 const SAFE_RECOVERY_ACTIONS = new Set([
@@ -2300,27 +2474,83 @@ async function main() {
         }
     }
 
-    let loadedPlaybook = null;
-    const playbookPath = opts.playbook ? resolvePlaybookPath(repoRoot, opts.playbook) : "";
+    if (opts.resume && loadedCheckpoint?.playbook && opts.playbooks.length === 0) {
+        opts.playbooks = String(loadedCheckpoint.playbook).split(",").map((s) => s.trim()).filter(Boolean);
+        opts.playbook = opts.playbooks.join(",");
+    }
+
+    const presets = loadPlaybookPresets(repoRoot);
+    let presetVars = {};
+    const expandedPlaybookNames = [];
+    if (opts.preset) {
+        const entry = presets[opts.preset];
+        if (!entry) {
+            throw new Error(`Unknown preset "${opts.preset}". Available presets: ${Object.keys(presets).join(", ") || "(none)"}`);
+        }
+        const chainList = Array.isArray(entry) ? entry : (Array.isArray(entry.chain) ? entry.chain : []);
+        if (entry.vars && typeof entry.vars === "object") {
+            presetVars = { ...presetVars, ...entry.vars };
+        }
+        expandedPlaybookNames.push(...chainList);
+        console.log(`[guided-hands] Expanded preset "${opts.preset}" -> ${chainList.join(" -> ")}`);
+    }
+    for (const rawName of opts.playbooks) {
+        const directPath = resolvePlaybookPath(repoRoot, rawName);
+        if (!fs.existsSync(directPath) && presets[rawName]) {
+            const entry = presets[rawName];
+            const chainList = Array.isArray(entry) ? entry : (Array.isArray(entry.chain) ? entry.chain : []);
+            if (entry.vars && typeof entry.vars === "object") {
+                presetVars = { ...presetVars, ...entry.vars };
+            }
+            expandedPlaybookNames.push(...chainList);
+            console.log(`[guided-hands] Expanded preset "${rawName}" -> ${chainList.join(" -> ")}`);
+        } else {
+            expandedPlaybookNames.push(rawName);
+        }
+    }
+    if (expandedPlaybookNames.length > 0) {
+        opts.playbooks = expandedPlaybookNames;
+        opts.playbook = expandedPlaybookNames.join(",");
+    }
+
+    const loadedPlaybooks = [];
+    let mergedPlaybookVars = { ...presetVars };
+    const collectedSteps = [];
+    for (const pbName of opts.playbooks) {
+        const pbPath = resolvePlaybookPath(repoRoot, pbName);
+        if (!fs.existsSync(pbPath)) {
+            throw new Error(`Playbook not found: ${pbPath}`);
+        }
+        const doc = readJsonFile(pbPath);
+        loadedPlaybooks.push({ name: pbName, path: pbPath, doc });
+        if (!opts.url && doc.url) opts.url = doc.url;
+        if (!opts.account && doc.account) opts.account = doc.account;
+        if (doc.vars && typeof doc.vars === "object") {
+            mergedPlaybookVars = { ...mergedPlaybookVars, ...doc.vars };
+        }
+        if (Array.isArray(doc.steps)) {
+            const cloned = JSON.parse(JSON.stringify(doc.steps));
+            cloned.forEach((s, idx) => {
+                s._sourcePlaybookPath = pbPath;
+                s._sourceStepIndex = idx;
+            });
+            collectedSteps.push(...cloned);
+        }
+    }
+    if (loadedPlaybooks.length > 0 && opts.steps.length === 0) {
+        opts.steps = collectedSteps;
+        const summaryNames = loadedPlaybooks.map((p) => p.name).join(" -> ");
+        console.log(`[guided-hands] Loaded ${loadedPlaybooks.length} playbook(s): ${summaryNames} (${opts.steps.length} total step(s))`);
+    }
+
+    const loadedPlaybook = loadedPlaybooks.length === 1 ? loadedPlaybooks[0].doc : null;
+    const playbookPath = loadedPlaybooks.length === 1 ? loadedPlaybooks[0].path : "";
     const savePlaybookPath = opts.savePlaybook
         ? resolvePlaybookPath(repoRoot, opts.savePlaybook)
         : (playbookPath && !opts.noUpdatePlaybook ? playbookPath : "");
 
-    if (playbookPath) {
-        if (!fs.existsSync(playbookPath)) {
-            throw new Error(`Playbook not found: ${playbookPath}`);
-        }
-        loadedPlaybook = readJsonFile(playbookPath);
-        if (!opts.url && loadedPlaybook.url) opts.url = loadedPlaybook.url;
-        if (!opts.account && loadedPlaybook.account) opts.account = loadedPlaybook.account;
-        if (opts.steps.length === 0 && Array.isArray(loadedPlaybook.steps)) {
-            opts.steps = JSON.parse(JSON.stringify(loadedPlaybook.steps));
-        }
-        console.log(`[guided-hands] Loaded playbook: ${path.basename(playbookPath)} (${opts.steps.length} step(s))`);
-    }
-
     const vars = buildTemplateVars({
-        ...(loadedPlaybook?.vars || {}),
+        ...mergedPlaybookVars,
         ...(loadedCheckpoint?.vars || {}),
         ...opts.vars
     });
@@ -2472,7 +2702,18 @@ async function main() {
         };
         const doLogin = async (username, password) => {
             if (!username || !password) return false;
-            return ext ? ext.autoLogin(username, password) : attemptAutoLogin(cdp, username, password);
+            if (!ext) return attemptAutoLogin(cdp, username, password);
+            const ok = await ext.autoLogin(username, password);
+            if (!ok) return false;
+            const deadline = Date.now() + 15000;
+            while (Date.now() < deadline) {
+                await new Promise((r) => setTimeout(r, 300));
+                const fb = await ext.readFeedback().catch(() => null);
+                if (fb?.pathname && !fb.pathname.toLowerCase().includes("/identity/account/login")) {
+                    return true;
+                }
+            }
+            return false;
         };
         const doLogout = async () => {
             if (ext) return ext.autoLogout();
@@ -2669,7 +2910,12 @@ async function main() {
                     throw new Error("Login step requires account/username/password.");
                 }
                 const fbBefore = await getFeedback();
-                if (!String(fbBefore.pathname || "").toLowerCase().includes("/identity/account/login")) {
+                const onLoginPage = String(fbBefore.pathname || "").toLowerCase().includes("/identity/account/login");
+                if (!step.force && !onLoginPage && activeAuth.loggedInUser && activeAuth.loggedInUser.toLowerCase() === loginUser.toLowerCase()) {
+                    console.log(`  [login] Already signed in as "${loginUser}"; skipping redundant re-login.`);
+                    return { username: loginUser, reusedSession: true, url: fbBefore.url };
+                }
+                if (!onLoginPage) {
                     const loggedOut = await doLogout().catch(() => false);
                     if (loggedOut) {
                         const outDeadline = Date.now() + 4000;
@@ -2688,6 +2934,7 @@ async function main() {
                 if (!ok) throw new Error(`Login step failed for "${loginUser}": login form not found or authentication did not redirect.`);
                 activeAuth.user = loginUser;
                 activeAuth.pass = loginPass;
+                activeAuth.loggedInUser = loginUser;
                 return { username: loginUser, url: (await getFeedback()).url };
             }
 
@@ -3230,10 +3477,12 @@ async function main() {
                                 });
                                 return retryDetail;
                             } else if (act === "click_alternative") {
-                                let chosen = (Number.isInteger(advice.data.clickableId) && advice.data.clickableId > 0)
+                                const reasonLower = String(advice.data.reason || "").toLowerCase();
+                                const explicitNoMatch = /\bno\s+match(ing)?\b|\bnot\s+found\b|\bnone\b/i.test(reasonLower);
+                                let chosen = (!explicitNoMatch && Number.isInteger(advice.data.clickableId) && advice.data.clickableId > 0)
                                     ? (snap1.clickables || []).find((c) => c.id === advice.data.clickableId)
                                     : null;
-                                if (!chosen && advice.data.reason) {
+                                if (!chosen && !explicitNoMatch && advice.data.reason) {
                                     const qMatch = advice.data.reason.match(/['"]([^'"]{2,40})['"]/);
                                     if (qMatch) {
                                         const needle = qMatch[1].trim().toLowerCase();
@@ -3313,24 +3562,43 @@ async function main() {
                     }
                 }
 
-                // ---- Tier 2: Free OpenCode Escalation (0 paid main-model tokens) ----
-                if (shouldEscalateToTier2 && (opts.healEngine === "auto" || opts.healEngine === "opencode")) {
+                // ---- Tier 2: Multi-Step Escalation (Free OpenCode -> Local Ollama Fallback via Circuit Breaker) ----
+                if (shouldEscalateToTier2 && opts.healEngine !== "off") {
                     let snap2 = await doCaptureSnapshot(step.scope || "").catch(() => snap0);
                     if (step.scope && snap2 && (snap2.clickables?.length || 0) === 0 && (snap2.fields?.length || 0) === 0) {
                         snap2 = await doCaptureSnapshot("").catch(() => snap0);
                     }
                     if (snap2 && !snap2.hasServerError && !snap2.isAccessDenied) {
-                        console.log(`  [tier2-opencode] Escalating step ${stepNum} recovery to free OpenCode (${opts.opencodeModel})...`);
-                        await doHud(`Tier 2 Heal (OpenCode free) · Step ${stepNum}`, "active");
-                        const oc = await askOpencodeStepRecovery({
-                            repoRoot,
-                            runDir,
-                            primaryModel: opts.opencodeModel,
-                            failedStep: step,
-                            errorMessage: lastErr.message,
-                            snapshot: snap2,
-                            stepNum
-                        });
+                        let oc = { ok: false, error: "Skipped (ollama-only mode)" };
+                        let usedTierLabel = "tier2-opencode";
+                        if ((opts.healEngine === "auto" || opts.healEngine === "opencode") && !opencodeCircuitBroken) {
+                            console.log(`  [tier2-opencode] Escalating step ${stepNum} recovery to free OpenCode (${opts.opencodeModel})...`);
+                            await doHud(`Tier 2 Heal (OpenCode free) · Step ${stepNum}`, "active");
+                            oc = await askOpencodeStepRecovery({
+                                repoRoot,
+                                runDir,
+                                primaryModel: opts.opencodeModel,
+                                failedStep: step,
+                                errorMessage: lastErr.message,
+                                snapshot: snap2,
+                                stepNum
+                            });
+                        }
+                        if (!oc.ok && (opts.healEngine === "auto" || opts.healEngine === "ollama")) {
+                            usedTierLabel = "tier2-ollama-multistep";
+                            console.log(`  [tier2-ollama] Running local multi-step recovery with ${opts.model}...`);
+                            await doHud(`Tier 2 Local Heal (${opts.model}) · Step ${stepNum}`, "active");
+                            try {
+                                oc = await askOllamaMultiStepRecovery({
+                                    failedStep: step,
+                                    errorMessage: lastErr.message,
+                                    snapshot: snap2,
+                                    ollamaOpts
+                                });
+                            } catch (localMultiErr) {
+                                oc = { ok: false, error: localMultiErr.message };
+                            }
+                        }
                         if (oc.ok && oc.data && !oc.data.abort && Array.isArray(oc.data.recoverySteps) && oc.data.recoverySteps.length > 0) {
                             const planned = oc.data.recoverySteps.slice(0, 3);
                             let safeAll = true;
@@ -3349,7 +3617,7 @@ async function main() {
                                 }
                             }
                             if (safeAll) {
-                                console.log(`  [tier2-opencode] Executing ${planned.length} recovery step(s): ${oc.data.reason || ""} [${oc.stats.durationMs}ms]`);
+                                console.log(`  [${usedTierLabel}] Executing ${planned.length} recovery step(s): ${oc.data.reason || ""} [${oc.stats.durationMs}ms]`);
                                 try {
                                     const executedDetails = [];
                                     for (const rs of planned) {
@@ -3364,7 +3632,7 @@ async function main() {
                                     }
                                     report.recoveries.push({
                                         step: stepNum,
-                                        tier: "tier2-opencode",
+                                        tier: usedTierLabel,
                                         originalError: lastErr.message,
                                         reason: oc.data.reason || "",
                                         actionTaken: planned,
@@ -3373,11 +3641,11 @@ async function main() {
                                     });
                                     return finalDetail;
                                 } catch (tier2Err) {
-                                    console.warn(`  [tier2-opencode] Recovery execution failed: ${tier2Err.message}`);
+                                    console.warn(`  [${usedTierLabel}] Recovery execution failed: ${tier2Err.message}`);
                                 }
                             }
                         } else if (!oc.ok) {
-                            console.warn(`  [tier2-opencode] Unavailable: ${oc.error}`);
+                            console.warn(`  [${usedTierLabel}] Unavailable: ${oc.error}`);
                         }
                     }
                 }
@@ -3388,7 +3656,8 @@ async function main() {
 
         // ---- Mode 1: Autonomous Goal-Driven Execution (--goal) ----
         if (opts.goal) {
-            console.log(`[guided-hands] Goal mode (max ${opts.maxTurns} turns, model=${opts.opencodeModel}): "${opts.goal}"`);
+            const goalEngineDesc = opts.healEngine === "ollama" ? `local ${opts.model}` : `${opts.opencodeModel} (fallback: local ${opts.model})`;
+            console.log(`[guided-hands] Goal mode (max ${opts.maxTurns} turns, planner=${goalEngineDesc}): "${opts.goal}"`);
             const history = [];
             const recordedSteps = [];
             let goalCompleted = false;
@@ -3408,16 +3677,29 @@ async function main() {
                 }
 
                 await doHud(`Guided Hands Goal (${turn}/${opts.maxTurns}) · Thinking...`, "active");
-                const plan = await askOpencodeGoalNextAction({
-                    repoRoot,
-                    runDir,
-                    primaryModel: opts.opencodeModel,
-                    goal: opts.goal,
-                    turn,
-                    maxTurns: opts.maxTurns,
-                    history,
-                    snapshot: snap
-                });
+                let plan = { ok: false, error: "Skipped OpenCode" };
+                if (opts.healEngine !== "ollama" && !opencodeCircuitBroken) {
+                    plan = await askOpencodeGoalNextAction({
+                        repoRoot,
+                        runDir,
+                        primaryModel: opts.opencodeModel,
+                        goal: opts.goal,
+                        turn,
+                        maxTurns: opts.maxTurns,
+                        history,
+                        snapshot: snap
+                    });
+                }
+                if (!plan.ok && opts.healEngine !== "opencode") {
+                    plan = await askOllamaGoalNextAction({
+                        goal: opts.goal,
+                        turn,
+                        maxTurns: opts.maxTurns,
+                        history,
+                        snapshot: snap,
+                        ollamaOpts
+                    }).catch((err) => ({ ok: false, error: err.message }));
+                }
                 if (!plan.ok || !plan.data?.action) {
                     throw new Error(`Goal planner failed at turn ${turn}: ${plan.error || "missing action"}`);
                 }
@@ -3570,7 +3852,37 @@ async function main() {
 
     report.passed = report.errors.length === 0;
 
-    if (report.passed && savePlaybookPath) {
+    if (report.passed && !opts.noUpdatePlaybook && loadedPlaybooks.length > 1 && !opts.savePlaybook) {
+        const byPath = new Map();
+        for (const pb of loadedPlaybooks) {
+            if (!byPath.has(pb.path)) {
+                byPath.set(pb.path, { doc: pb.doc, steps: JSON.parse(JSON.stringify(pb.doc.steps || [])), patched: 0 });
+            }
+        }
+        opts.steps.forEach((s, idx) => {
+            const entry = s._sourcePlaybookPath ? byPath.get(s._sourcePlaybookPath) : null;
+            if (!entry || !Number.isInteger(s._sourceStepIndex)) return;
+            const targetIdx = s._sourceStepIndex;
+            const base = s._patchedStep ? { ...s._patchedStep } : { ...(entry.steps[targetIdx] || s) };
+            if (s._patchedStep) {
+                report.patchedSteps.push({ step: idx + 1, playbook: path.basename(s._sourcePlaybookPath), patchedTo: base });
+                entry.patched++;
+            }
+            if (s._capturedKnownFields) {
+                base.knownFields = s._capturedKnownFields;
+            }
+            delete base._capturedKnownFields;
+            delete base._patchedStep;
+            delete base._sourcePlaybookPath;
+            delete base._sourceStepIndex;
+            entry.steps[targetIdx] = base;
+        });
+        for (const [pbPath, entry] of byPath.entries()) {
+            const updatedDoc = { ...entry.doc, lastPassedAt: report.timestamp, steps: entry.steps };
+            fs.writeFileSync(pbPath, JSON.stringify(updatedDoc, null, 2) + "\n", "utf8");
+        }
+        console.log(`[guided-hands] Updated ${byPath.size} chained module playbook(s)${report.patchedSteps.length ? ` (${report.patchedSteps.length} step(s) auto-patched)` : ""}`);
+    } else if (report.passed && savePlaybookPath) {
         fs.mkdirSync(path.dirname(savePlaybookPath), { recursive: true });
         const updatedSteps = opts.steps.map((s, idx) => {
             const base = s._patchedStep ? { ...s._patchedStep } : { ...s };
@@ -3582,6 +3894,8 @@ async function main() {
             }
             delete base._capturedKnownFields;
             delete base._patchedStep;
+            delete base._sourcePlaybookPath;
+            delete base._sourceStepIndex;
             return base;
         });
         const playbookDoc = {

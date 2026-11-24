@@ -1,0 +1,68 @@
+{
+  "name": "schedule/revise",
+  "description": "OPERATIONS revises an approved Schedule {scheduleId}, returning it to Tentative for re-approval.",
+  "url": "/MSAP/VesselSchedule/Details/{scheduleId}",
+  "vars": {
+    "opsAccount": "OPERATIONS"
+  },
+  "steps": [
+    {
+      "action": "login",
+      "account": "{opsAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/VesselSchedule/Details/{scheduleId}"
+    },
+    {
+      "action": "click",
+      "target": "Revise Schedule",
+      "waitAfterMs": 1500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "fill_form",
+      "scope": "div:has(> #Notes)",
+      "onlyEmpty": false,
+      "overrides": {
+        "Notes": "Revised schedule #{scheduleId} ({today}-{rand})."
+      },
+      "knownFields": {
+        "Notes": {
+          "label": "Add coordination notes or service instructions...",
+          "type": "textarea",
+          "value": "Revised schedule #{scheduleId} ({today}-{rand})."
+        }
+      }
+    },
+    {
+      "action": "click",
+      "target": "Save for reviewing",
+      "waitAfterMs": 2200,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "Done",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 400
+    },
+    {
+      "action": "click",
+      "target": "Continue",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Acknowledge and save",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitAfterMs": 2200,
+      "waitForNavigation": true
+    }
+  ],
+  "lastPassedAt": "2026-11-24T08:19:03.484Z"
+}

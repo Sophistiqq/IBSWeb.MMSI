@@ -1,0 +1,57 @@
+{
+  "name": "collection/redeposit",
+  "description": "Treasury user records redeposit on returned check Collection {collectionId}.",
+  "url": "/MSAP/Collection/Preview/{collectionId}",
+  "vars": {
+    "treasuryAccount": "ENCODER"
+  },
+  "steps": [
+    {
+      "action": "login",
+      "account": "{treasuryAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/Collection/Preview/{collectionId}"
+    },
+    {
+      "action": "wait",
+      "selector": "a[data-collection-banking='Record redeposit']",
+      "timeoutMs": 10000
+    },
+    {
+      "action": "click",
+      "selector": "a[data-collection-banking='Record redeposit']",
+      "waitAfterMs": 1000
+    },
+    {
+      "action": "wait",
+      "selector": "#collectionBankingForm",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "fill_form",
+      "scope": "#collectionBankingForm",
+      "onlyEmpty": true,
+      "optional": true,
+      "scenario": "Pick an active MMSI receiving bank account for redeposit."
+    },
+    {
+      "action": "click",
+      "target": "Save",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 2000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "Done",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    }
+  ],
+  "lastPassedAt": "2026-11-24T08:28:13.093Z"
+}

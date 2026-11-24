@@ -1,0 +1,26 @@
+{
+  "name": "billing/reject",
+  "description": "Reviewer (rml1) requests revision on Billing {billingId} and returns it to encoder.",
+  "url": "/MSAP/Billing/Review/{billingId}",
+  "vars": {
+    "approverAccount": "rml1",
+    "rejectReason": "Automated revision test: verify rate & discount adjustment."
+  },
+  "steps": [
+    { "action": "login", "account": "{approverAccount}" },
+    { "action": "navigate", "url": "/MSAP/Billing/Review/{billingId}" },
+    { "action": "wait", "selector": "#btnRejectBilling", "timeoutMs": 8000 },
+    { "action": "click", "selector": "#btnRejectBilling", "waitAfterMs": 800 },
+    {
+      "action": "fill_form",
+      "scope": ".swal2-popup",
+      "onlyEmpty": true,
+      "overrides": {
+        "swal2-input": "{rejectReason}"
+      },
+      "scenario": "Enter a concise reason (min 5 chars) for returning billing to encoder."
+    },
+    { "action": "click", "target": "Return to encoder", "scope": ".swal2-popup", "waitForPopupMs": 3000, "waitAfterMs": 2500, "waitForNavigation": true },
+    { "action": "assert", "text": "Revision requested" }
+  ]
+}

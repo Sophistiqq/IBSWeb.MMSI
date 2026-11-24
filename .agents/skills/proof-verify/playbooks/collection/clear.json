@@ -1,0 +1,55 @@
+{
+  "name": "collection/clear",
+  "description": "Treasury user records clearing on Collection {collectionId} and asserts Cleared.",
+  "url": "/MSAP/Collection/Preview/{collectionId}",
+  "vars": {
+    "treasuryAccount": "ENCODER"
+  },
+  "steps": [
+    {
+      "action": "login",
+      "account": "{treasuryAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/Collection/Preview/{collectionId}"
+    },
+    {
+      "action": "wait",
+      "selector": "a[data-collection-banking='Record clearing']",
+      "timeoutMs": 10000
+    },
+    {
+      "action": "click",
+      "selector": "a[data-collection-banking='Record clearing']",
+      "waitAfterMs": 1000
+    },
+    {
+      "action": "wait",
+      "selector": "#collectionBankingForm",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "target": "Save",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 2000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "Done",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "assert",
+      "urlIncludes": "/MSAP/Collection/Preview/{collectionId}",
+      "text": "Cleared"
+    }
+  ],
+  "lastPassedAt": "2026-11-24T08:28:13.093Z"
+}

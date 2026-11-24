@@ -1,0 +1,60 @@
+{
+  "name": "billing/reopen",
+  "description": "FINANCE reopens an approved unpaid Billing {billingId} for revision.",
+  "url": "/MSAP/Billing/Review/{billingId}",
+  "vars": {
+    "financeAccount": "FINANCE"
+  },
+  "steps": [
+    {
+      "action": "login",
+      "account": "{financeAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/Billing/Review/{billingId}"
+    },
+    {
+      "action": "wait",
+      "selector": "#btnReopenBilling",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "selector": "#btnReopenBilling",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "upload",
+      "selector": "#swalAdjustmentFile",
+      "fixture": "pdf",
+      "optional": true
+    },
+    {
+      "action": "fill_form",
+      "scope": ".swal2-popup",
+      "onlyEmpty": true,
+      "scenario": "Enter a concise reason (min 5 chars) for reopening an approved billing.",
+      "knownFields": {
+        "swalAdjustmentReason": {
+          "label": "Reason *",
+          "type": "textarea",
+          "value": "Billing issue resolved"
+        }
+      }
+    },
+    {
+      "action": "click",
+      "target": "Reopen for revision",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "assert",
+      "text": "For commercial review"
+    }
+  ],
+  "lastPassedAt": "2026-11-24T08:28:13.093Z"
+}

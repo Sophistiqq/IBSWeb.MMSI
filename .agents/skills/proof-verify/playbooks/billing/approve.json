@@ -1,0 +1,50 @@
+{
+  "name": "billing/approve",
+  "description": "FINANCE approves final bill {billingId} and asserts Approved.",
+  "url": "/MSAP/Billing/Review/{billingId}",
+  "vars": {
+    "financeAccount": "FINANCE"
+  },
+  "steps": [
+    {
+      "action": "login",
+      "account": "{financeAccount}"
+    },
+    {
+      "action": "navigate",
+      "url": "/MSAP/Billing/Review/{billingId}"
+    },
+    {
+      "action": "wait",
+      "selector": "#postReviewedBilling button[type='submit']",
+      "timeoutMs": 8000
+    },
+    {
+      "action": "click",
+      "selector": "#postReviewedBilling button[type='submit']",
+      "waitAfterMs": 800
+    },
+    {
+      "action": "click",
+      "target": "Approve final bill",
+      "scope": ".swal2-popup",
+      "waitForPopupMs": 3000,
+      "waitAfterMs": 2500,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "Done",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1500,
+      "waitAfterMs": 500
+    },
+    {
+      "action": "assert",
+      "urlIncludes": "/MSAP/Billing/Review/{billingId}",
+      "text": "Approved"
+    }
+  ],
+  "lastPassedAt": "2026-11-24T08:28:13.093Z"
+}

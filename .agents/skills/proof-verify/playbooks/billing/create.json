@@ -1,0 +1,32 @@
+{
+  "name": "billing/create",
+  "description": "ENCODER prepares billing for COS {cosId} and captures {billingId}.",
+  "url": "/MSAP/COS/Details/{cosId}",
+  "vars": {
+    "encoderAccount": "ENCODER"
+  },
+  "steps": [
+    { "action": "login", "account": "{encoderAccount}" },
+    { "action": "navigate", "url": "/MSAP/COS/Details/{cosId}" },
+    { "action": "wait", "selector": ".job-progress-next a[href*='/Billing/Create']", "timeoutMs": 10000 },
+    { "action": "click", "selector": ".job-progress-next a[href*='/Billing/Create']", "waitAfterMs": 2000, "waitForNavigation": true },
+    { "action": "assert", "urlIncludes": "/MSAP/Billing/Create", "text": "Prepare billing" },
+    { "action": "wait", "selector": "#saveBilling:not([disabled])", "timeoutMs": 12000 },
+    {
+      "action": "fill_form",
+      "scope": "section[aria-labelledby='remarksHeading']",
+      "onlyEmpty": true,
+      "optional": true,
+      "overrides": {
+        "Remarks": "Automated billing preparation for COS #{cosId}."
+      },
+      "knownFields": {
+        "Remarks": { "label": "e.g. Rate approved via email; 30D terms granted per customer request...", "type": "textarea", "value": "Automated billing preparation for COS #{cosId}." }
+      }
+    },
+    { "action": "click", "selector": "#saveBilling", "waitAfterMs": 1000 },
+    { "action": "click", "target": "Save billing", "scope": ".swal2-popup", "waitForPopupMs": 3000, "waitAfterMs": 2500 },
+    { "action": "click", "target": "Done", "scope": ".swal2-popup", "waitForPopupMs": 8000, "waitAfterMs": 2000, "waitForNavigation": true },
+    { "action": "capture_url", "pattern": "/Billing/Review/(\\d+)", "var": "billingId" }
+  ]
+}
