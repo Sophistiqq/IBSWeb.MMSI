@@ -162,6 +162,7 @@ namespace IBSWeb.Areas.Identity.Pages.Account
 
                     var isAdmin = await _signInManager.UserManager.IsInRoleAsync(user, MsapRoles.Admin);
                     var isMsapUser = await _signInManager.UserManager.IsInRoleAsync(user, MsapRoles.IdentityUserRole);
+                    var isIbsAndMsapUser = await _signInManager.UserManager.IsInRoleAsync(user, MsapRoles.IbsAndMsapUserRole);
 
                     if (isMsapUser && !isAdmin)
                     {
@@ -170,7 +171,7 @@ namespace IBSWeb.Areas.Identity.Pages.Account
                             return RedirectToAction("Index", "Home", new { area = "MSAP" });
                         }
                     }
-                    else if (!isAdmin && IsMsapUrl(returnUrl))
+                    else if (!isAdmin && !isIbsAndMsapUser && IsMsapUrl(returnUrl))
                     {
                         return LocalRedirect(Url.Content("~/"));
                     }

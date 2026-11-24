@@ -73,7 +73,7 @@
         <!-- ── Desktop navigation ── -->
         <nav class="mnav-nav-area" aria-label="Main menu">
             <ul class="mnav-list" role="menubar">
-                @if (User.IsInRole(MsapRoles.Admin))
+                @if (User.IsInRole(MsapRoles.Admin) || User.IsInRole(MsapRoles.IbsAndMsapUserRole))
                 {
                     <li class="mnav-item" role="none">
                         <a class="mnav-trigger" asp-area="User" asp-controller="Home" asp-action="Index" role="menuitem">IBSWeb</a>

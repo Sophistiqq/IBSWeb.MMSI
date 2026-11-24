@@ -78,9 +78,12 @@ namespace IBSWeb.MSAP
             using (var roleScope = app.Services.CreateScope())
             {
                 var roleManager = roleScope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-                if (!await roleManager.RoleExistsAsync(MsapRoles.IdentityUserRole))
+                foreach (var roleName in new[] { MsapRoles.IdentityUserRole, MsapRoles.IbsAndMsapUserRole })
                 {
-                    await roleManager.CreateAsync(new IdentityRole(MsapRoles.IdentityUserRole));
+                    if (!await roleManager.RoleExistsAsync(roleName))
+                    {
+                        await roleManager.CreateAsync(new IdentityRole(roleName));
+                    }
                 }
             }
 

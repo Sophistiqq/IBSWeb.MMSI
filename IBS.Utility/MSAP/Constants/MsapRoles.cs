@@ -9,6 +9,7 @@ namespace IBS.Utility.MSAP.Constants
         public const string Admin = "Admin";
         public const string User = "User";
         public const string IdentityUserRole = "MSAP - User";
+        public const string IbsAndMsapUserRole = "IBS & MSAP - User";
         public const string AccessPolicy = "MSAP.Access";
         public const string EntryPolicy = "MSAP.Entry";
         public const string AdminPolicy = "MSAP.Admin";

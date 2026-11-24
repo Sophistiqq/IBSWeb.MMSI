@@ -81,7 +81,9 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Where(role => role.Name == MsapRoles.Admin).Select(role => role.UserId).ToListAsync(cancellationToken)).ToHashSet();
             var msapUsers = (await _db.UserRoles
                 .Join(_db.Roles, userRole => userRole.RoleId, role => role.Id, (userRole, role) => new { userRole.UserId, role.Name })
-                .Where(role => role.Name == MsapRoles.IdentityUserRole).Select(role => role.UserId).ToListAsync(cancellationToken)).ToHashSet();
+                .Where(role => role.Name == MsapRoles.IdentityUserRole || role.Name == MsapRoles.IbsAndMsapUserRole)
+                .Select(role => role.UserId)
+                .ToListAsync(cancellationToken)).ToHashSet();
 
             if (procedure is ProcedureEnum.ApproveSchedule or ProcedureEnum.ApproveRateUpload or ProcedureEnum.ApproveFinalBilling)
             {

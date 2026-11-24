@@ -14,7 +14,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Where(u => u.IsActive
                     && !db.MsapUserAccesses.Any(ua => ua.UserId == u.Id)
                     && db.UserRoles.Any(ur => ur.UserId == u.Id
-                        && db.Roles.Any(r => r.Id == ur.RoleId && r.Name == MsapRoles.IdentityUserRole)))
+                        && db.Roles.Any(r => r.Id == ur.RoleId && (r.Name == MsapRoles.IdentityUserRole || r.Name == MsapRoles.IbsAndMsapUserRole))))
                 .OrderBy(dt => dt.Name)
                 .Select(s => new SelectListItem
                 {
