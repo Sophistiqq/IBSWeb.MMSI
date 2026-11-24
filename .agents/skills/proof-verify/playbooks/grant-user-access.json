@@ -1,0 +1,43 @@
+{
+  "name": "grant-user-access",
+  "description": "Toggle a UserAccess permission checkbox for a given user (--var userName=\"KIMBERLY MAE HERNANDEZ\" --var permissionId=\"CanRevertCollectionBanking\")",
+  "url": "/MSAP/UserAccess/Index",
+  "notes": [
+    "Override defaults via --var userName=... --var permissionId=..."
+  ],
+  "vars": {
+    "userName": "KIMBERLY MAE HERNANDEZ",
+    "permissionId": "CanRevertCollectionBanking"
+  },
+  "steps": [
+    {
+      "action": "wait"
+    },
+    {
+      "action": "type",
+      "selector": ".dt-search input",
+      "value": "{userName}"
+    },
+    {
+      "action": "wait",
+      "ms": 500
+    },
+    {
+      "action": "click",
+      "target": "ACTIONS",
+      "selector": "#userAccessTable tbody tr:first-child button"
+    },
+    {
+      "action": "click",
+      "target": "edit Edit Access"
+    },
+    {
+      "action": "click",
+      "selector": "#{permissionId}"
+    },
+    {
+      "action": "click",
+      "target": "Save permissions"
+    }
+  ]
+}

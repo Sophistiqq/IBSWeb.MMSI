@@ -53,6 +53,18 @@
 }
 @media (max-width: 767px) {
     .collection-workspace { grid-template-columns: minmax(0, 1fr); padding: var(--ui-space-2); }
+    .collection-page { padding: var(--ui-space-2); }
+    .collection-page .modern-table :is(th, td) { padding: 10px 8px !important; }
+    .collection-table-scroll .modern-table-container {
+        scrollbar-width: thin;
+        scrollbar-color: var(--outline-variant) transparent;
+        padding-bottom: 4px;
+    }
+    .collection-table-scroll .modern-table-container::-webkit-scrollbar { height: 6px; }
+    .collection-table-scroll .modern-table-container::-webkit-scrollbar-thumb {
+        background: var(--outline-variant);
+        border-radius: 999px;
+    }
     .collection-content { order: 1; }
     .collection-workspace > .schedule-details-progress { order: 2; }
     .collection-fields { grid-template-columns: minmax(0, 1fr); }

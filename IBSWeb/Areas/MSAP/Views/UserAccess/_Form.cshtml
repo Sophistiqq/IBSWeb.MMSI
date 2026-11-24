@@ -51,9 +51,10 @@
         </fieldset>
         <fieldset class="ui-panel ui-stack">
             <legend class="ui-section-title">Collections and banking</legend>
-            <p class="ui-caption ui-muted">Receipt preparation and banking are independent. Grant both only when the user handles both responsibilities.</p>
+            <p class="ui-caption ui-muted">Receipt preparation, banking, and reverting banking steps are independent. Grant revert authority only to authorized reviewers.</p>
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanCreateCollection" class="form-check-input" /> <span>Prepare / edit collection receipts</span></label>
             <label class="flex items-start gap-2 ui-body"><input asp-for="CanAccessTreasury" class="form-check-input" /> <span>Record deposits, clearing and returned checks</span></label>
+            <label class="flex items-start gap-2 ui-body"><input asp-for="CanRevertCollectionBanking" class="form-check-input" /> <span>Revert collection banking steps (deposit / clearing)</span></label>
         </fieldset>
         <fieldset class="ui-panel ui-stack">
             <legend class="ui-section-title">Other Tug Charges</legend>

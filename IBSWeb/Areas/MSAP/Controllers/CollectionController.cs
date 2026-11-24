@@ -241,7 +241,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequireAccess(ProcedureEnum.AccessTreasury, "Access denied. You don't have permission to record banking updates.")]
+        [RequireAccess(ProcedureEnum.RevertCollectionBanking, "Access denied. You don't have permission to revert collection banking steps.")]
         public async Task<IActionResult> RevertBankingStep(int id, string reason, IFormFile? authorizationFile, CancellationToken ct)
         {
             var result = await collectionService.RevertCollectionBankingStepAsync(id, reason, User.Identity?.Name ?? "System", ct, authorizationFile);

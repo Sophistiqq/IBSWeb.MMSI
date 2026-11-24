@@ -81,5 +81,6 @@ namespace IBS.Models.MSAP.Enums
         ViewBillings = 30,
         ViewCollections = 31,
         AccessMsap = 32,
+        RevertCollectionBanking = 50,
     }
 }

@@ -56,6 +56,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 ProcedureEnum.ApproveRateUpload => query.Where(u => u.CanApproveRateUpload),
                 ProcedureEnum.ApproveFinalBilling => query.Where(u => u.CanApproveFinalBilling),
                 ProcedureEnum.AccessTreasury => query.Where(u => u.CanAccessTreasury),
+                ProcedureEnum.RevertCollectionBanking => query.Where(u => u.CanRevertCollectionBanking),
                 ProcedureEnum.ManageMsapImport => query.Where(u => u.CanManageMsapImport),
                 ProcedureEnum.ManageCustomerMasterFile => query.Where(u => u.CanManageCustomerMasterFile),
                 ProcedureEnum.ManageServiceMasterFile => query.Where(u => u.CanManageServiceMasterFile),

@@ -71,6 +71,8 @@ namespace IBS.Models.MSAP.MasterFile
 
         public bool CanAccessTreasury { get; set; }
 
+        public bool CanRevertCollectionBanking { get; set; }
+
         public bool CanCreateDisbursement { get; set; }
 
         #endregion -- Treasury --

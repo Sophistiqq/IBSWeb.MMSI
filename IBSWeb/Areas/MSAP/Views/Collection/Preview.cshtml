@@ -8,11 +8,12 @@
     var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
     bool canPrepare = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.CreateCollection);
     bool canBank = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.AccessTreasury);
+    bool canRevertBankingPermission = userId != null && await AccessControl.HasAccessAsync(userId, ProcedureEnum.RevertCollectionBanking);
     ViewData["JobProgressActionStage"] = Model.DepositDate.HasValue ? JobProgressCalculator.ClearingStage : JobProgressCalculator.DepositStage;
     ViewData["JobProgressActionTargetId"] = Model.MsapCollectionId;
     bool isFinalOrAdjusted = Model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted;
     bool canEdit = canPrepare && !Model.IsMonthClosed && !Model.DepositDate.HasValue && !Model.ReturnedDate.HasValue && !Model.ClearedDate.HasValue;
-    bool canRevertBanking = canBank && (Model.DepositDate.HasValue || Model.ClearedDate.HasValue);
+    bool canRevertBanking = canRevertBankingPermission && (!Model.IsMonthClosed || isFinalOrAdjusted) && (Model.DepositDate.HasValue || Model.ClearedDate.HasValue);
     var progressItems = (ViewBag.JobProgressItems as IEnumerable<JobProgressViewModel> ?? []).ToList();
 }
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
@@ -215,8 +216,8 @@
             const isFinal = btn.dataset.finalized === 'true';
             const isCleared = btn.dataset.cleared === 'true';
             const stepText = isCleared
-                ? 'This reverts Cleared status back to Deposited so clearing date or details can be corrected.'
-                : 'This reverts Deposited status back to Undeposited so deposit date, bank account, or collection details can be corrected.';
+                ? 'This receipt has already cleared. Reverting moves Cleared status back to Deposited so clearing date or details can be corrected. This reversal is logged in the audit trail.'
+                : 'This reverts Deposited status back to Undeposited so deposit date, bank account, or collection details can be corrected. This reversal is logged in the audit trail.';
             const text = isFinal
                 ? `${stepText} Because this receipt belongs to a finalized period, reverting tags it as Adjusted in the audit history.`
                 : stepText;

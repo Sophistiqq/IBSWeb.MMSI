@@ -205,9 +205,9 @@ namespace IBS.Services.MSAP
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
+                if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length is < 5 or > 500)
                 {
-                    return ServiceResult.Failure("Please provide a valid reason for reverting this banking step (minimum 5 characters).");
+                    return ServiceResult.Failure("Please provide a valid reason for reverting this banking step (5 to 500 characters).");
                 }
 
                 var existing = await unitOfWork.Collection.GetAsync(c => c.MsapCollectionId == id, ct);
@@ -263,17 +263,25 @@ namespace IBS.Services.MSAP
 
                     if (collection.ClearedDate.HasValue)
                     {
-                        stepDescription = "Cleared status reverted to Deposited";
-                        changes.Add(new MsapFieldChange { Field = "ClearedDate", Label = "Cleared Date", Before = collection.ClearedDate.Value.ToString("yyyy-MM-dd"), After = "" });
+                        var priorClearedDate = collection.ClearedDate.Value.ToString("yyyy-MM-dd");
+                        stepDescription = $"Cleared ({priorClearedDate}) reverted to Deposited";
+                        changes.Add(new MsapFieldChange { Field = "ClearedDate", Label = "Cleared Date", Before = priorClearedDate, After = "" });
                         collection.ClearedDate = null;
                     }
                     else if (collection.DepositDate.HasValue)
                     {
-                        stepDescription = "Deposit status reverted to " + (collection.ReturnedDate.HasValue ? "Returned" : "Undeposited");
-                        changes.Add(new MsapFieldChange { Field = "DepositDate", Label = "Deposit Date", Before = collection.DepositDate.Value.ToString("yyyy-MM-dd"), After = "" });
+                        var priorDepositDate = collection.DepositDate.Value.ToString("yyyy-MM-dd");
+                        var priorBankDetails = string.Join(" · ", new[] { collection.BankAccountNumber, collection.BankAccountName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+                        var priorBank = string.IsNullOrWhiteSpace(priorBankDetails) ? "-" : priorBankDetails;
+                        stepDescription = $"Deposited ({priorDepositDate}, bank {priorBank}) reverted to {(collection.ReturnedDate.HasValue ? "Returned" : "Undeposited")}";
+                        changes.Add(new MsapFieldChange { Field = "DepositDate", Label = "Deposit Date", Before = priorDepositDate, After = "" });
                         collection.DepositDate = null;
                         if (!collection.ReturnedDate.HasValue)
                         {
+                            if (collection.BankId.HasValue || !string.IsNullOrWhiteSpace(collection.BankAccountName) || !string.IsNullOrWhiteSpace(collection.BankAccountNumber))
+                            {
+                                changes.Add(new MsapFieldChange { Field = "Bank", Label = "Bank", Before = priorBank, After = "-" });
+                            }
                             collection.BankId = null;
                             collection.BankAccountName = null;
                             collection.BankAccountNumber = null;
