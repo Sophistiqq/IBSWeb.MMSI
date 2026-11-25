@@ -446,6 +446,27 @@ namespace IBS.Services.MSAP
 
                 customerOrderSlip.Status = MsapConstants.CustomerOrderSlipStatus.Closed;
                 await RecordAuditAsync($"Auto-closed COS #{customerOrderSlip.CustomerOrderSlipNumber}", username, cancellationToken, customerOrderSlip.CustomerOrderSlipId, customerOrderSlip.CustomerOrderSlipNumber);
+
+                var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == customerOrderSlipId, cancellationToken);
+                if (schedule != null && schedule.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled))
+                {
+                    schedule = await unitOfWork.VesselSchedule.GetForUpdateAsync(schedule.VesselScheduleId, cancellationToken);
+                    if (schedule != null && schedule.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled))
+                    {
+                        schedule.Status = MsapConstants.VesselScheduleStatus.Completed;
+                        schedule.EditedBy = username;
+                        schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                        await unitOfWork.AuditTrail.AddAsync(
+                            new AuditTrail(
+                                username,
+                                $"Auto-completed vessel schedule #{schedule.VesselScheduleId} upon final billing approval of COS #{customerOrderSlip.CustomerOrderSlipNumber}.",
+                                "Vessel Schedule",
+                                schedule.VesselScheduleId,
+                                $"VS-{schedule.VesselScheduleId}"),
+                            cancellationToken);
+                    }
+                }
+
                 await unitOfWork.SaveAsync(cancellationToken);
             }
             catch (Exception ex)

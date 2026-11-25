@@ -3852,6 +3852,28 @@ async function main() {
 
     report.passed = report.errors.length === 0;
 
+    if (report.passed && loadedPlaybooks.length > 0) {
+        const runsPath = path.join(repoRoot, "artifacts", "proof-verify", "playbook-runs.local.json");
+        let runs = {};
+        try {
+            if (fs.existsSync(runsPath)) {
+                runs = JSON.parse(fs.readFileSync(runsPath, "utf8")) || {};
+            }
+        } catch {
+            runs = {};
+        }
+        for (const pb of loadedPlaybooks) {
+            const key = pb.doc?.name || path.relative(path.join(repoRoot, ".agents", "skills", "proof-verify", "playbooks"), pb.path).replace(/\\/g, "/");
+            runs[key] = {
+                lastPassedAt: report.timestamp,
+                ...(opts.preset ? { preset: opts.preset } : {}),
+                steps: (pb.doc?.steps || []).length
+            };
+        }
+        fs.mkdirSync(path.dirname(runsPath), { recursive: true });
+        fs.writeFileSync(runsPath, JSON.stringify(runs, null, 2) + "\n", "utf8");
+    }
+
     if (report.passed && !opts.noUpdatePlaybook && loadedPlaybooks.length > 1 && !opts.savePlaybook) {
         const byPath = new Map();
         for (const pb of loadedPlaybooks) {
@@ -3877,11 +3899,18 @@ async function main() {
             delete base._sourceStepIndex;
             entry.steps[targetIdx] = base;
         });
+        let updatedCount = 0;
         for (const [pbPath, entry] of byPath.entries()) {
-            const updatedDoc = { ...entry.doc, lastPassedAt: report.timestamp, steps: entry.steps };
+            const stepsChanged = JSON.stringify(entry.steps) !== JSON.stringify(entry.doc.steps || []);
+            if (!stepsChanged) continue;
+            const { lastPassedAt: _ignored, ...restDoc } = entry.doc;
+            const updatedDoc = { ...restDoc, steps: entry.steps };
             fs.writeFileSync(pbPath, JSON.stringify(updatedDoc, null, 2) + "\n", "utf8");
+            updatedCount++;
         }
-        console.log(`[guided-hands] Updated ${byPath.size} chained module playbook(s)${report.patchedSteps.length ? ` (${report.patchedSteps.length} step(s) auto-patched)` : ""}`);
+        if (updatedCount > 0) {
+            console.log(`[guided-hands] Updated ${updatedCount} chained module playbook(s)${report.patchedSteps.length ? ` (${report.patchedSteps.length} step(s) auto-patched)` : ""}`);
+        }
     } else if (report.passed && savePlaybookPath) {
         fs.mkdirSync(path.dirname(savePlaybookPath), { recursive: true });
         const updatedSteps = opts.steps.map((s, idx) => {
@@ -3898,18 +3927,21 @@ async function main() {
             delete base._sourceStepIndex;
             return base;
         });
-        const playbookDoc = {
-            name: loadedPlaybook?.name || path.basename(savePlaybookPath, ".json"),
-            description: loadedPlaybook?.description || (opts.goal ? `Goal playbook: ${opts.goal}` : `Auto-recorded Guided Hands playbook for ${opts.url}`),
-            url: loadedPlaybook?.url || opts.url,
-            ...(opts.account || loadedPlaybook?.account ? { account: opts.account || loadedPlaybook?.account } : {}),
-            ...(loadedPlaybook?.vars ? { vars: loadedPlaybook.vars } : {}),
-            notes: loadedPlaybook?.notes || [],
-            lastPassedAt: report.timestamp,
-            steps: updatedSteps
-        };
-        fs.writeFileSync(savePlaybookPath, JSON.stringify(playbookDoc, null, 2) + "\n", "utf8");
-        console.log(`[guided-hands] Playbook saved/updated: ${savePlaybookPath}${report.patchedSteps.length ? ` (${report.patchedSteps.length} step(s) auto-patched)` : ""}`);
+        const isExplicitSave = Boolean(opts.savePlaybook);
+        const stepsChanged = !loadedPlaybook || JSON.stringify(updatedSteps) !== JSON.stringify(loadedPlaybook.steps || []);
+        if (isExplicitSave || stepsChanged) {
+            const playbookDoc = {
+                name: loadedPlaybook?.name || path.basename(savePlaybookPath, ".json"),
+                description: loadedPlaybook?.description || (opts.goal ? `Goal playbook: ${opts.goal}` : `Auto-recorded Guided Hands playbook for ${opts.url}`),
+                url: loadedPlaybook?.url || opts.url,
+                ...(opts.account || loadedPlaybook?.account ? { account: opts.account || loadedPlaybook?.account } : {}),
+                ...(loadedPlaybook?.vars ? { vars: loadedPlaybook.vars } : {}),
+                notes: loadedPlaybook?.notes || [],
+                steps: updatedSteps
+            };
+            fs.writeFileSync(savePlaybookPath, JSON.stringify(playbookDoc, null, 2) + "\n", "utf8");
+            console.log(`[guided-hands] Playbook saved/updated: ${savePlaybookPath}${report.patchedSteps.length ? ` (${report.patchedSteps.length} step(s) auto-patched)` : ""}`);
+        }
     }
 
     const latestPath = path.join(repoRoot, "artifacts", "proof-verify", "latest-guided-hands.json");

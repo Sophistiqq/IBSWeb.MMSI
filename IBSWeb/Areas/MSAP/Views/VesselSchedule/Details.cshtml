@@ -319,17 +319,6 @@
             {
                 <section class="ui-panel ui-stack schedule-review-actions" aria-labelledby="bookingActionsTitle">
                     <h2 class="ui-section-title" id="bookingActionsTitle">Booking actions</h2>
-                    @if (!closed && ViewBag.CanEdit == true && ViewBag.CanComplete == true)
-                    {
-                        <div class="schedule-action-item ui-stack">
-                            <h3 class="ui-label">Finish vessel service</h3>
-                            <p class="ui-body ui-muted">All recorded services have actual end times. Complete service when no more Dispatch Tickets are expected. Billing and collection continue separately.</p>
-                            <form asp-action="Complete" method="post" data-schedule-action="Complete">
-                                <input type="hidden" name="id" value="@Model.VesselScheduleId" />
-                                <button type="submit" class="modern-btn-complete"><span class="material-symbols-outlined" aria-hidden="true">task_alt</span> Complete Service</button>
-                            </form>
-                        </div>
-                    }
                     @if (!closed && ViewBag.CanEdit == true)
                     {
                         @if (ViewBag.CanRevise == true)

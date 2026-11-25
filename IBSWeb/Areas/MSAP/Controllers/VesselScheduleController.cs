@@ -217,9 +217,6 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var closed = schedule.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled;
             ViewBag.CanRevise = !closed && ViewBag.CanEdit == true && !hasTickets && !hasBilling && !schedule.ServiceEntries.Any(e => e.CancelledAt.HasValue)
                 && (job == null || job.Status == MsapConstants.CustomerOrderSlipStatus.Open);
-            ViewBag.CanComplete = job != null && !closed
-                && ((JobProgressViewModel)ViewBag.JobProgress).Stage >= JobProgressCalculator.TariffStage
-                && CustomerOrderSlipService.CanCompleteService(await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == job.CustomerOrderSlipId, ct));
             ViewBag.CanCancel = schedule.CustomerOrderSlipId == null || (job?.Status == MsapConstants.CustomerOrderSlipStatus.Open && !hasActiveTickets && !hasBilling);
             var isPendingReview = !closed
                 && (!schedule.CustomerOrderSlipId.HasValue || schedule.ApprovedRevision != schedule.Revision || schedule.Status == MsapConstants.VesselScheduleStatus.Tentative);
