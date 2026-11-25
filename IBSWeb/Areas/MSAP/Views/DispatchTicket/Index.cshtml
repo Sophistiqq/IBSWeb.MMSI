@@ -28,6 +28,7 @@
             <button id="filterCalculationPending" class="modern-btn-secondary">AWAITING RATE</button>
             <button id="filterForBilling" class="modern-btn-secondary">FOR BILLING</button>
             <button id="filterBilled" class="modern-btn-secondary">BILLED</button>
+            <button id="filterVoided" class="modern-btn-secondary">VOIDED</button>
         </div>
 
         @if (hasPeriod)
@@ -85,6 +86,9 @@
     <script>
         $(document).ready(function () {
             const previewUrl = '@Url.Action("Preview", "DispatchTicket")';
+            const cosDetailsUrl = '@Url.Action("Details", "CustomerOrderSlip", new { area = "MSAP" })';
+            const billingReviewUrl = '@Url.Action("Review", "Billing", new { area = "MSAP" })';
+            const canViewBilling = @((ViewBag.CanViewBilling as bool? ?? false).ToString().ToLowerInvariant());
             let filterType = '@ViewBag.FilterType';
 
             const urlParams = new URLSearchParams(window.location.search);
@@ -93,6 +97,7 @@
 
             let table = $('#paginatedTable').DataTable(ModernTable.config({
                 order: [[0, 'desc']],
+                placeholder: 'Search ticket #, COS #, billing #, customer, vessel, tug, port...',
                 stateLoadParams: function(settings, data) {
                     if (periodSearch) {
                         data.search.search = '';
@@ -107,12 +112,32 @@
                 }),
                 columns: [
                     { data: "date", defaultContent: "" },
-                    { data: "cosNumber", defaultContent: "" },
+                    {
+                        data: "cosNumber",
+                        defaultContent: "",
+                        render: (data, type, row) => {
+                            if (!data) return "";
+                            const text = ModernTable.render.text(data);
+                            return row.customerOrderSlipId
+                                ? `<a href="${cosDetailsUrl}?id=${row.customerOrderSlipId}" style="text-decoration:none; color: var(--primary)">${text}</a>`
+                                : text;
+                        }
+                    },
                     {
                         data: "dispatchNumber",
                         render: (data, type, row) => `<a href="${previewUrl}?id=${row.dispatchTicketId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${ModernTable.render.text(data)}</a>`
                     },
-                    { data: "billing.msapBillingNumber", defaultContent: "" },
+                    {
+                        data: "billing.msapBillingNumber",
+                        defaultContent: "",
+                        render: (data, type, row) => {
+                            if (!data) return "";
+                            const text = ModernTable.render.text(data);
+                            return canViewBilling && row.billingId
+                                ? `<a href="${billingReviewUrl}?id=${row.billingId}" style="text-decoration:none; color: var(--primary)">${text}</a>`
+                                : text;
+                        }
+                    },
                     {
                         data: "dateLeft",
                         render: (data, type, row) => ModernTable.render.dateTime(row.dateLeft, row.timeLeft)
@@ -166,10 +191,11 @@
                     }
                 ],
                 initComplete: function() {
+                    const activeStatus = statusFilter || this.api().column(11).search();
                     if (statusFilter) {
                         this.api().column(11).search(statusFilter).draw();
-                        updateFilterButtons(statusFilter);
                     }
+                    updateFilterButtons(activeStatus);
                 }
             }));
 
@@ -191,6 +217,7 @@
                 if (id === 'filterCalculationPending') status = '@MsapConstants.DispatchTicketStatus.AwaitingRate';
                 else if (id === 'filterForBilling') status = '@MsapConstants.DispatchTicketStatus.ForBilling';
                 else if (id === 'filterBilled') status = '@MsapConstants.DispatchTicketStatus.Billed';
+                else if (id === 'filterVoided') status = '@MsapConstants.DispatchTicketStatus.Deleted';
 
                 filterType = '';
                 table.column(11).search(status).draw();
@@ -206,11 +233,12 @@
             }
 
             function updateFilterButtons(status) {
-                $('.modern-btn-secondary').removeClass('active');
+                $('.modern-btn-secondary[id^="filter"]').removeClass('active');
                 if (!status) $('#filterAll').addClass('active');
                 else if (status === "@MsapConstants.DispatchTicketStatus.AwaitingRate") $('#filterCalculationPending').addClass('active');
                 else if (status === "@MsapConstants.DispatchTicketStatus.ForBilling") $('#filterForBilling').addClass('active');
                 else if (status === "@MsapConstants.DispatchTicketStatus.Billed") $('#filterBilled').addClass('active');
+                else if (status === "@MsapConstants.DispatchTicketStatus.Deleted") $('#filterVoided').addClass('active');
             }
         });
 

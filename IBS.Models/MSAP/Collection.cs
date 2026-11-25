@@ -120,5 +120,8 @@ namespace IBS.Models.MSAP
 
         [NotMapped]
         public bool IsMonthClosed { get; set; }
+
+        [NotMapped]
+        public string? BillingNumbers { get; set; }
     }
 }

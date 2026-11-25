@@ -130,8 +130,10 @@
                         {
                             string billStatus = bill.Status switch
                             {
-                                MsapConstants.BillingStatus.ForPosting => "Awaiting approval",
-                                MsapConstants.BillingStatus.ForCollection or MsapConstants.BillingStatus.Collected => "Approved",
+                                MsapConstants.BillingStatus.ForPosting => "For review",
+                                MsapConstants.BillingStatus.Reviewed => "For approval",
+                                MsapConstants.BillingStatus.ForCollection => "For collection",
+                                MsapConstants.BillingStatus.Collected => "Collected",
                                 _ => bill.Status
                             };
                             string billType = bill.BasicBillingId.HasValue ? "BAF" : bill.BafBilling != null ? "Basic" : "Combined";

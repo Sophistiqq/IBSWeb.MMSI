@@ -351,6 +351,10 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                     dt.MsapBillingNumber.ToLower().Contains(s)
                     || dt.Customer.CustomerName.ToLower().Contains(s)
                     || dt.Vessel.VesselName.ToLower().Contains(s)
+                    || (dt.COSNumber != null && dt.COSNumber.ToLower().Contains(s))
+                    || (dt.VoyageNumber != null && dt.VoyageNumber.ToLower().Contains(s))
+                    || (dt.Terminal != null && dt.Terminal.TerminalName.ToLower().Contains(s))
+                    || (dt.Terminal != null && dt.Terminal.Port != null && dt.Terminal.Port.PortName.ToLower().Contains(s))
                     || dt.Status.ToLower().Contains(s)
                     || matchingBillingIds.Contains(dt.MsapBillingId));
             }

@@ -45,6 +45,7 @@
             var ids = assignments[schedule.VesselScheduleId];
             <article class="schedule-panel-record @(schedule.Status == MsapConstants.VesselScheduleStatus.Cancelled ? "schedule-cancelled opacity-60" : "")">
                 <div class="schedule-panel-heading"><strong>@schedule.Vessel.VesselName</strong><span class="schedule-status" data-status="@schedule.Status">@MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status)</span></div>
+                <p>@(schedule.Customer?.CustomerName ?? "Customer pending")@if (schedule.CustomerOrderSlip != null) { <text> · </text><a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@schedule.CustomerOrderSlipId" style="color: var(--primary); font-weight: 600;">@schedule.CustomerOrderSlip.CustomerOrderSlipNumber</a> }</p>
                 <p>@schedule.PlannedStart.ToString("MMM d HH:mm") – @schedule.PlannedEnd.ToString("MMM d HH:mm") · @schedule.Terminal.TerminalName</p>
                 <div class="schedule-panel-tugs">
                     <span class="schedule-muted">Assigned tugboats</span>

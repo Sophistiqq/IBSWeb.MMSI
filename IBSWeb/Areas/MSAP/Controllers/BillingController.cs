@@ -49,6 +49,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewBag.CanPost = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateBilling);
             ViewBag.CanDelete = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.DeleteBilling);
+            ViewBag.CanViewOperations = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ViewOperations);
             return View(Enumerable.Empty<Billing>());
         }
 

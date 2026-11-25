@@ -16,15 +16,20 @@
     var tugboats = Model.Tugboats.ToDictionary(t => t.TugboatId);
     var assignments = Model.Schedules.ToDictionary(s => s.VesselScheduleId,
         s => (JsonSerializer.Deserialize<List<int>>(s.AssignedTugboatIds ?? "[]") ?? new List<int>()).Distinct().ToList());
+    var isListView = string.Equals(Model.ViewMode, "list", StringComparison.OrdinalIgnoreCase);
     var filters = new Dictionary<string, string>
     {
         ["portId"] = Model.PortId?.ToString() ?? "",
         ["terminalId"] = Model.TerminalId?.ToString() ?? "",
         ["search"] = Model.Search ?? "",
-        ["status"] = Model.Status ?? ""
+        ["status"] = Model.Status ?? "",
+        ["view"] = Model.ViewMode
     };
-    var statuses = new[] {MsapConstants.VesselScheduleStatus.Tentative, MsapConstants.VesselScheduleStatus.Confirmed,
-        MsapConstants.VesselScheduleStatus.InProgress, MsapConstants.VesselScheduleStatus.Completed, MsapConstants.VesselScheduleStatus.Cancelled };
+    var statuses = new[] { MsapConstants.VesselScheduleStatus.Tentative, MsapConstants.VesselScheduleStatus.Confirmed,
+        MsapConstants.VesselScheduleStatus.Completed, MsapConstants.VesselScheduleStatus.Cancelled };
+    var otherMonthMatches = !isListView && !string.IsNullOrWhiteSpace(Model.Search)
+        ? Model.AllMatchingSchedules.Where(s => s.PlannedStart >= month.AddMonths(1) || s.PlannedEnd <= month).ToList()
+        : new List<VesselSchedule>();
 }
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/vessel-calendar.css" asp-append-version="true" />
@@ -39,24 +44,150 @@
                 </ol>
             </nav>
             <h1 class="ui-page-title" data-page-header>Vessel calendar</h1>
-            @if (canCreateSchedule)
-            {
-                <a asp-action="Create" asp-route-date="@((Model.SelectedDate ?? today).ToString("yyyy-MM-dd"))" class="modern-btn-primary ui-page-action" data-hotkey="c">+ New schedule</a>
-            }
-            <p class="schedule-muted ui-body ui-muted ui-page-description">Find a booking, preview a vessel or select a day. All times are Philippine time.</p>
+            <div class="flex flex-wrap items-center gap-2 ui-page-action">
+                <div class="flex items-center gap-1" role="group" aria-label="View mode">
+                    <a asp-action="Index" asp-all-route-data="@(new Dictionary<string, string>(filters) { ["view"] = "calendar" })" asp-route-month="@month.ToString("yyyy-MM")" asp-route-date="@Model.SelectedDate?.ToString("yyyy-MM-dd")" class="modern-btn-secondary @(!isListView ? "active" : "")">
+                        <span class="material-symbols-outlined">calendar_month</span> Calendar
+                    </a>
+                    <a asp-action="Index" asp-all-route-data="@(new Dictionary<string, string>(filters) { ["view"] = "list" })" asp-route-month="@month.ToString("yyyy-MM")" class="modern-btn-secondary @(isListView ? "active" : "")">
+                        <span class="material-symbols-outlined">view_list</span> List
+                    </a>
+                </div>
+                @if (canCreateSchedule)
+                {
+                    <a asp-action="Create" asp-route-date="@((Model.SelectedDate ?? today).ToString("yyyy-MM-dd"))" class="modern-btn-primary" data-hotkey="c">+ New schedule</a>
+                }
+            </div>
+            <p class="schedule-muted ui-body ui-muted ui-page-description">Find a booking across months, preview a vessel, or switch to List view. All times are Philippine time.</p>
         </header>
 
         <form method="get" class="schedule-calendar-filters" id="calendarFilters">
-            @if (Model.SelectedDate.HasValue)
+            <input type="hidden" name="view" value="@Model.ViewMode" />
+            @if (Model.SelectedDate.HasValue && !isListView)
             {
                 <input type="hidden" name="date" value="@Model.SelectedDate.Value.ToString("yyyy-MM-dd")" />
             }
             <label for="calendarPort">Port<select asp-for="PortId" asp-items="Model.Ports" id="calendarPort" class="js-modern-select" data-placeholder="All ports"><option value="">-- All ports --</option></select></label>
             <label for="calendarTerminal">Terminal<select asp-for="TerminalId" asp-items="Model.Terminals" id="calendarTerminal" class="js-modern-select" data-placeholder="All terminals"><option value="">-- All terminals --</option></select></label>
-            <label for="calendarSearch">Find schedule<input name="search" id="calendarSearch" type="search" value="@Model.Search" maxlength="120" class="modern-input" placeholder="Vessel, voyage or tugboat" /></label>
+            <label for="calendarSearch">Find schedule<input name="search" id="calendarSearch" type="search" value="@Model.Search" maxlength="120" class="modern-input" placeholder="Vessel, customer, COS #, voyage, tug or #id" /></label>
             <label for="calendarStatus">Status<select asp-for="Status" id="calendarStatus" class="js-modern-select" data-placeholder="All statuses" data-searchable="false"><option value="">-- All statuses --</option>@foreach (var status in statuses) { <option value="@status">@MsapConstants.VesselScheduleStatus.GetDisplayName(status)</option> }</select></label>
-            <div class="schedule-filter-actions"><button type="submit" class="modern-btn-primary">Apply</button><a asp-action="Index" asp-route-month="@month.ToString("yyyy-MM")" asp-route-date="@Model.SelectedDate?.ToString("yyyy-MM-dd")" class="modern-btn-secondary">Clear</a></div>
+            <div class="schedule-filter-actions"><button type="submit" class="modern-btn-primary">Apply</button><a asp-action="Index" asp-route-month="@month.ToString("yyyy-MM")" asp-route-date="@Model.SelectedDate?.ToString("yyyy-MM-dd")" asp-route-view="@Model.ViewMode" class="modern-btn-secondary">Clear</a></div>
         </form>
+
+        @if (!isListView && otherMonthMatches.Count > 0)
+        {
+            <section class="modern-card ui-card" aria-label="Cross-month search matches">
+                <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">manage_search</span>
+                        <h2 class="modern-headline-md ui-section-title">
+                            Found @Model.AllMatchingTotalCount matching schedule@(Model.AllMatchingTotalCount == 1 ? "" : "s") across all months (@monthSchedules.Count in @month.ToString("MMMM yyyy"))
+                        </h2>
+                    </div>
+                    <a asp-action="Index" asp-all-route-data="@(new Dictionary<string, string>(filters) { ["view"] = "list" })" class="modern-btn-secondary">
+                        View all in List →
+                    </a>
+                </div>
+                <div class="modern-card-body ui-card-body">
+                    <div class="flex flex-wrap gap-2">
+                        @foreach (var match in otherMonthMatches.Take(6))
+                        {
+                            <a asp-action="Index"
+                               asp-all-route-data="@(new Dictionary<string, string>(filters) { ["view"] = "calendar" })"
+                               asp-route-month="@match.PlannedStart.ToString("yyyy-MM")"
+                               asp-route-date="@match.PlannedStart.ToString("yyyy-MM-dd")"
+                               class="modern-btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.65rem;">
+                                <strong>@match.PlannedStart.ToString("dd MMM yyyy")</strong> · @match.Vessel.VesselName@(match.CustomerOrderSlip != null ? $" ({match.CustomerOrderSlip.CustomerOrderSlipNumber})" : "")
+                            </a>
+                        }
+                    </div>
+                </div>
+            </section>
+        }
+
+        @if (isListView)
+        {
+            <section class="modern-card ui-card" aria-label="All matching schedules">
+                <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">view_list</span>
+                        <h2 class="modern-headline-md ui-section-title">All Schedules · @Model.LocationHeading</h2>
+                    </div>
+                    <span class="ui-caption ui-muted">
+                        @(Model.AllMatchingTotalCount > Model.AllMatchingSchedules.Count
+                            ? $"Showing latest {Model.AllMatchingSchedules.Count} of {Model.AllMatchingTotalCount} matching schedules"
+                            : $"{Model.AllMatchingTotalCount} matching schedule{(Model.AllMatchingTotalCount == 1 ? "" : "s")}")
+                    </span>
+                </div>
+                <div class="modern-card-body ui-card-body">
+                    <div class="modern-table-container">
+                        <table class="modern-table ui-table">
+                            <thead>
+                                <tr>
+                                    <th>Planned Window</th>
+                                    <th>Booking / COS #</th>
+                                    <th>Vessel / Voyage</th>
+                                    <th>Customer</th>
+                                    <th>Port - Terminal</th>
+                                    <th class="text-center">Tugs</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.AllMatchingSchedules.Count == 0)
+                                {
+                                    <tr><td colspan="8" class="text-center ui-muted py-4">No schedules match these filters.</td></tr>
+                                }
+                                else
+                                {
+                                    @foreach (var item in Model.AllMatchingSchedules)
+                                    {
+                                        var itemTugs = (JsonSerializer.Deserialize<List<int>>(item.AssignedTugboatIds ?? "[]") ?? new List<int>()).Distinct().ToList();
+                                        <tr class="@(item.Status == MsapConstants.VesselScheduleStatus.Cancelled ? "schedule-cancelled" : "")">
+                                            <td>
+                                                <strong>@item.PlannedStart.ToString("dd MMM yyyy, HH:mm")</strong>
+                                                <div class="text-xs ui-muted">to @(item.PlannedEnd.Date == item.PlannedStart.Date ? item.PlannedEnd.ToString("HH:mm") : item.PlannedEnd.ToString("dd MMM yyyy, HH:mm"))</div>
+                                            </td>
+                                            <td>
+                                                <a asp-action="Details" asp-route-id="@item.VesselScheduleId" class="font-bold" style="text-decoration:none; color: var(--primary)">Booking #@item.VesselScheduleId</a>
+                                                @if (item.CustomerOrderSlip != null)
+                                                {
+                                                    <div class="text-xs">
+                                                        <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@item.CustomerOrderSlipId" style="text-decoration:none; color: var(--primary)">@item.CustomerOrderSlip.CustomerOrderSlipNumber</a>
+                                                    </div>
+                                                }
+                                            </td>
+                                            <td>
+                                                <strong class="uppercase">@item.Vessel.VesselName</strong>
+                                                @if (!string.IsNullOrWhiteSpace(item.VoyageNumber))
+                                                {
+                                                    <div class="text-xs ui-muted">Voyage: @item.VoyageNumber</div>
+                                                }
+                                            </td>
+                                            <td>@(item.Customer?.CustomerName ?? "Not recorded")</td>
+                                            <td>@item.Port.PortName - @item.Terminal.TerminalName</td>
+                                            <td class="text-center">@itemTugs.Count / @item.RequiredTugCount</td>
+                                            <td class="text-center"><span class="schedule-status" data-status="@item.Status">@MsapConstants.VesselScheduleStatus.GetDisplayName(item.Status)</span></td>
+                                            <td class="text-center">
+                                                <div class="flex justify-center gap-2">
+                                                    <a asp-action="Details" asp-route-id="@item.VesselScheduleId" class="modern-btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.55rem;">Open</a>
+                                                    <a asp-action="Index" asp-all-route-data="@(new Dictionary<string, string>(filters) { ["view"] = "calendar" })" asp-route-month="@item.PlannedStart.ToString("yyyy-MM")" asp-route-date="@item.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.55rem;" title="Jump to calendar date">
+                                                        <span class="material-symbols-outlined" style="font-size: 16px;">calendar_month</span>
+                                                    </a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        }
+        else
+        {
         <div class="schedule-calendar-split @(Model.SelectedDate.HasValue ? "has-selected-day" : "")">
             <section class="modern-card schedule-month" aria-label="Monthly calendar">
                 <div class="schedule-navigation">
@@ -124,7 +255,14 @@
                 </div>
                 <div class="schedule-preview-state">
                     <span>@MsapConstants.VesselScheduleStatus.GetDisplayName(entry.Status)</span>
-                    <small>@(entry.CustomerOrderSlipId.HasValue ? "COS linked" : "No COS yet")</small>
+                    @if (entry.CustomerOrderSlip != null)
+                    {
+                        <small><a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@entry.CustomerOrderSlipId" style="color: var(--primary); font-weight: 600;">@entry.CustomerOrderSlip.CustomerOrderSlipNumber</a></small>
+                    }
+                    else
+                    {
+                        <small>No COS yet</small>
+                    }
                 </div>
                 <dl>
                     <dt>Customer</dt>
@@ -157,6 +295,7 @@
                 @if (!string.IsNullOrWhiteSpace(entry.Notes)) { <p class="schedule-note">@entry.Notes</p> }
                 <a asp-action="Details" asp-route-id="@entry.VesselScheduleId" class="schedule-preview-open">Open booking / COS →</a>
             </div>
+        }
         }
     </main>
 </div>

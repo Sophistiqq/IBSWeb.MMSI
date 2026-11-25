@@ -69,6 +69,7 @@
                         <tr>
                             <th>DATE</th>
                             <th>BILLING #</th>
+                            <th>COS #</th>
                             <th>AMOUNT</th>
                             <th>CUSTOMER</th>
                             <th>PORT - TERMINAL</th>
@@ -87,7 +88,7 @@
 @section Scripts {
     <script>
         window.IBS_TOUR_STEPS = [
-            { selector: '#filterAll', title: 'Billing stages', text: 'Awaiting approval lists prepared bills needing final approval. For collection lists approved bills awaiting payment. Collected lists paid bills; payment does not by itself mean the receipt has cleared.', interactive: false },
+            { selector: '#filterAll', title: 'Billing stages', text: 'For review lists prepared bills awaiting commercial review. For approval lists reviewed bills needing final approval. For collection lists approved bills awaiting payment. Collected lists paid bills; payment does not by itself mean the receipt has cleared.', interactive: false },
             { selector: '#dateFilter', title: 'Filter by date', text: 'Choose a billing date to narrow the list.', interactive: false },
             { selector: '#paginatedTable', title: 'Billing list', text: 'Open a billing number to review its charges, statement and supporting tickets. Separate Basic and BAF bills have separate numbers, balances and approvals. Available actions depend on the bill’s status and your access.', interactive: false }
         ];
@@ -101,7 +102,9 @@
     <script>
         $(document).ready(function () {
             const reviewUrl = '@Url.Action("Review", "Billing")';
+            const cosDetailsUrl = '@Url.Action("Details", "CustomerOrderSlip", new { area = "MSAP" })';
             const canDelete = @((ViewBag.CanDelete as bool? ?? false).ToString().ToLower());
+            const canViewOperations = @((ViewBag.CanViewOperations as bool? ?? false).ToString().ToLowerInvariant());
 
             // Get status from URL on load
             const urlParams = new URLSearchParams(window.location.search);
@@ -110,13 +113,25 @@
 
             let table = $('#paginatedTable').DataTable(ModernTable.config({
                 order: [[0, 'desc']],
-                columnDefs: [{ orderable: false, targets: [8] }],
+                placeholder: 'Search billing #, COS #, ticket #, customer, vessel, port...',
+                columnDefs: [{ orderable: false, targets: [9] }],
                 ajax: ModernTable.ajax("@Url.Action("GetBillingList", "Billing", new { area = "MSAP", customerOrderSlipId = ViewBag.CustomerOrderSlipId })"),
                 columns: [
                     { data: "date", defaultContent: "" },
                     {
                         data: "msapBillingNumber",
                         render: (data, type, row) => `<a href="${reviewUrl}?id=${row.msapBillingId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${ModernTable.render.text(data)}</a>`
+                    },
+                    {
+                        data: "cosNumber",
+                        defaultContent: "",
+                        render: (data, type, row) => {
+                            if (!data) return "";
+                            const text = ModernTable.render.text(data);
+                            return canViewOperations && row.customerOrderSlipId
+                                ? `<a href="${cosDetailsUrl}?id=${row.customerOrderSlipId}" style="text-decoration:none; color: var(--primary)">${text}</a>`
+                                : text;
+                        }
                     },
                     {
                         data: "amount",
@@ -136,6 +151,7 @@
                     { data: "vessel.vesselName", defaultContent: "" },
                     {
                         data: "dispatchTicketNumbers",
+                        orderable: false,
                         render: (data, type, row) => {
                             if (!data) return "";
                             const parts = data.split(", ");
@@ -174,9 +190,9 @@
                     }
                 ],
                 initComplete: function() {
+                    const activeStatus = statusFilter || this.api().column(8).search();
                     if (statusFilter) {
-                        this.api().column(7).search(statusFilter);
-                        updateFilterButtons(statusFilter);
+                        this.api().column(8).search(statusFilter);
                     }
                     if (billingNumber) {
                         this.api().search(billingNumber);
@@ -184,6 +200,7 @@
                     if (statusFilter || billingNumber) {
                         this.api().draw();
                     }
+                    updateFilterButtons(activeStatus);
                 }
             }));
 
@@ -201,7 +218,7 @@
                 else if (id === 'filterForCollection') status = "@MsapConstants.BillingStatus.ForCollection";
                 else if (id === 'filterCollected') status = "@MsapConstants.BillingStatus.Collected";
 
-                table.column(7).search(status).draw();
+                table.column(8).search(status).draw();
                 updateUrl(status);
                 updateFilterButtons(status);
             });
@@ -214,7 +231,7 @@
             }
 
             function updateFilterButtons(status) {
-                $('.modern-btn-secondary').removeClass('active');
+                $('.modern-btn-secondary[id^="filter"]').removeClass('active');
                 if (!status) $('#filterAll').addClass('active');
                 else if (status === "@MsapConstants.BillingStatus.ForPosting") $('#filterForPosting').addClass('active');
                 else if (status === "@MsapConstants.BillingStatus.Reviewed") $('#filterReviewed').addClass('active');

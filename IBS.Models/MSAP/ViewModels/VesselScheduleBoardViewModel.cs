@@ -11,10 +11,13 @@ namespace IBS.Models.MSAP.ViewModels
         public int? TerminalId { get; set; }
         public string? Search { get; set; }
         public string? Status { get; set; }
+        public string ViewMode { get; set; } = "calendar";
         public string LocationHeading { get; set; } = "All ports / All terminals";
         public List<SelectListItem> Ports { get; set; } = [];
         public List<SelectListItem> Terminals { get; set; } = [];
         public List<VesselSchedule> Schedules { get; set; } = [];
+        public List<VesselSchedule> AllMatchingSchedules { get; set; } = [];
+        public int AllMatchingTotalCount { get; set; }
         public List<VesselSchedule> TugBookings { get; set; } = [];
         public Dictionary<DateTime, HashSet<int>> ConflictsByDay { get; set; } = [];
         public List<Tugboat> Tugboats { get; set; } = [];

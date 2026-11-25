@@ -74,5 +74,17 @@ namespace IBS.Models.MSAP
 
         [NotMapped]
         public bool IsMonthClosed { get; set; }
+
+        [NotMapped]
+        public int? ExpectedTicketCount { get; set; }
+
+        [NotMapped]
+        public string? WorkflowStage { get; set; }
+
+        [NotMapped]
+        public int? LinkedBillingId { get; set; }
+
+        [NotMapped]
+        public string? LinkedBillingNumber { get; set; }
     }
 }

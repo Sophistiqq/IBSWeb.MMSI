@@ -21,6 +21,15 @@
             }
             <p class="ui-page-description ui-caption ui-muted">Review receipts, billing payments and deposit or clearing status.</p>
         </header>
+        <!-- Filter Group -->
+        <div class="flex flex-wrap gap-2">
+            <button id="filterAll" class="modern-btn-secondary active">ALL</button>
+            <button id="filterForDeposit" class="modern-btn-secondary">FOR DEPOSIT</button>
+            <button id="filterDeposited" class="modern-btn-secondary">DEPOSITED</button>
+            <button id="filterReturned" class="modern-btn-secondary">RETURNED</button>
+            <button id="filterCleared" class="modern-btn-secondary">CLEARED</button>
+            <button id="filterVoided" class="modern-btn-secondary">VOIDED</button>
+        </div>
         <section class="ui-panel ui-stack" aria-labelledby="collectionRecordsHeading">
             <div class="collection-heading">
                 <h2 id="collectionRecordsHeading" class="ui-section-title">Collection records</h2>
@@ -28,7 +37,7 @@
             </div>
             <div class="collection-table-scroll">
                 <table class="modern-table ui-table" id="paginatedTable">
-                    <thead><tr><th>Date</th><th>Receipt number</th><th>Check date</th><th>Deposited</th><th class="text-right">Net received</th><th>Service customer</th><th>Status</th><th class="text-center">Actions</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Receipt number</th><th>Billing #</th><th>Check date</th><th>Deposited</th><th class="text-right">Net received</th><th>Service customer</th><th>Status</th><th class="text-center">Actions</th></tr></thead>
                 </table>
             </div>
         </section>
@@ -48,13 +57,17 @@
             const previewUrl = '@Url.Action("Preview", "Collection")';
             const editUrl = '@Url.Action("Edit", "Collection")';
 
+            const urlParams = new URLSearchParams(window.location.search);
+            const statusFilter = urlParams.get('status') || '';
+
             let table = $('#paginatedTable').DataTable(ModernTable.config({
                 order: [[0, 'desc']],
+                placeholder: 'Search receipt #, billing #, customer, check #, ref #...',
                 rowCallback: function (row, data) {
                     $(row).toggleClass('ui-critical', data.paymentStatus === 'Returned' || data.paymentStatus === 'Voided')
                         .toggleClass('ui-attention', data.paymentStatus !== 'Returned' && data.paymentStatus !== 'Cleared' && data.paymentStatus !== 'Voided');
                 },
-                columnDefs: [{ orderable: false, targets: [6, 7] }],
+                columnDefs: [{ orderable: false, targets: [2, 7, 8] }],
                 ajax: $.extend(ModernTable.ajax("@Url.Action("GetCollectionList", "Collection", new { area = "MSAP" })"), {
                     error: function () {
                         ModernAlert.error('Failed to load collection records.');
@@ -70,6 +83,17 @@
                         data: "msapCollectionNumber",
                         defaultContent: "",
                         render: (data, type, row) => `<a href="${previewUrl}?id=${row.msapCollectionId}" class="font-bold collection-receipt-link">${ModernTable.render.text(data)}</a>`
+                    },
+                    {
+                        data: "billingNumbers",
+                        orderable: false,
+                        defaultContent: "",
+                        render: (data) => {
+                            if (!data) return "";
+                            const parts = data.split(", ");
+                            if (parts.length <= 3) return ModernTable.render.text(data);
+                            return `<span title="${ModernTable.render.text(data)}">${ModernTable.render.text(parts.slice(0, 3).join(", "))} +${parts.length - 3} more</span>`;
+                        }
                     },
                     {
                         data: "checkDate",
@@ -108,13 +132,49 @@
                             { label: 'Edit Record', icon: 'edit', url: `${editUrl}?id=${row.msapCollectionId}`, condition: canPrepare && !row.isVoided && (!row.isMonthClosed || row.periodStatus === 'Final' || row.periodStatus === 'Adjusted') && !row.depositDate && !row.returnedDate && !row.clearedDate }
                         ])
                     }
-                ]
+                ],
+                initComplete: function () {
+                    const activeStatus = statusFilter || this.api().column(7).search();
+                    if (statusFilter) {
+                        this.api().column(7).search(statusFilter).draw();
+                    }
+                    updateFilterButtons(activeStatus);
+                }
             }));
 
             // Date filter
             $('#dateFilter').on('change', function () {
                 table.column(0).search($(this).val()).draw();
             });
+
+            // Status filter buttons
+            $('.modern-btn-secondary[id^="filter"]').on('click', function () {
+                const id = $(this).attr('id');
+                let status = '';
+                if (id === 'filterForDeposit') status = 'For Deposit';
+                else if (id === 'filterDeposited') status = 'Deposited';
+                else if (id === 'filterReturned') status = 'Returned';
+                else if (id === 'filterCleared') status = 'Cleared';
+                else if (id === 'filterVoided') status = 'Voided';
+
+                table.column(7).search(status).draw();
+                const url = new URL(window.location);
+                if (status) url.searchParams.set('status', status);
+                else url.searchParams.delete('status');
+                window.history.replaceState({}, '', url);
+                updateFilterButtons(status);
+            });
+
+            function updateFilterButtons(status) {
+                $('.modern-btn-secondary[id^="filter"]').removeClass('active');
+                const normalized = (status || '').toLowerCase();
+                if (!normalized) $('#filterAll').addClass('active');
+                else if (normalized === 'for deposit') $('#filterForDeposit').addClass('active');
+                else if (normalized === 'deposited' || normalized === 'redeposited') $('#filterDeposited').addClass('active');
+                else if (normalized === 'returned') $('#filterReturned').addClass('active');
+                else if (normalized === 'cleared') $('#filterCleared').addClass('active');
+                else if (normalized === 'voided') $('#filterVoided').addClass('active');
+            }
         });
     </script>
 }

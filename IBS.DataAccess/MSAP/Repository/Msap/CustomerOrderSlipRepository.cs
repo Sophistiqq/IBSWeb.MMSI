@@ -121,7 +121,14 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 query = query.Where(dt =>
                     dt.CustomerOrderSlipNumber.ToLower().Contains(s)
                     || dt.Customer.CustomerName.ToLower().Contains(s)
-                    || dt.Status.ToLower().Contains(s));
+                    || dt.Vessel.VesselName.ToLower().Contains(s)
+                    || (dt.VoyageNumber != null && dt.VoyageNumber.ToLower().Contains(s))
+                    || (dt.COSNumber != null && dt.COSNumber.ToLower().Contains(s))
+                    || dt.Port.PortName.ToLower().Contains(s)
+                    || dt.Terminal.TerminalName.ToLower().Contains(s)
+                    || dt.Status.ToLower().Contains(s)
+                    || dt.DispatchTickets.Any(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted
+                        && t.DispatchNumber.ToLower().Contains(s)));
             }
 
             // Column-specific search
@@ -133,7 +140,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                     {
                         if (column.Data == "status")
                         {
-                            query = query.Where(b => b.Status.ToLower() == searchValue);
+                            var normalizedStatus = searchValue.ToLower();
+                            query = query.Where(b => b.Status.ToLower() == normalizedStatus);
                         }
                         else if (column.Data == "date" || column.Data == "Date")
                         {
@@ -184,6 +192,87 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Skip(start)
                 .Take(length)
                 .ToListAsync(cancellationToken);
+
+            if (data.Count > 0)
+            {
+                var cosIds = data.Select(j => j.CustomerOrderSlipId).ToList();
+
+                var schedules = await _db.MsapVesselSchedules.AsNoTracking()
+                    .Where(s => s.CustomerOrderSlipId != null && cosIds.Contains(s.CustomerOrderSlipId.Value))
+                    .Select(s => new
+                    {
+                        CosId = s.CustomerOrderSlipId!.Value,
+                        s.Status,
+                        s.Revision,
+                        s.ApprovedRevision,
+                        ExpectedCount = s.ServiceEntries.Count(e => e.CancelledAt == null)
+                    })
+                    .ToListAsync(cancellationToken);
+                var scheduleMap = schedules
+                    .GroupBy(s => s.CosId)
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                var billings = await _db.MsapBillings.AsNoTracking()
+                    .Where(b => b.CustomerOrderSlipId != null && cosIds.Contains(b.CustomerOrderSlipId.Value))
+                    .OrderBy(b => b.MsapBillingId)
+                    .Select(b => new
+                    {
+                        CosId = b.CustomerOrderSlipId!.Value,
+                        b.MsapBillingId,
+                        b.MsapBillingNumber,
+                        b.Status
+                    })
+                    .ToListAsync(cancellationToken);
+                var billingMap = billings
+                    .GroupBy(b => b.CosId)
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                foreach (var cos in data)
+                {
+                    scheduleMap.TryGetValue(cos.CustomerOrderSlipId, out var sched);
+                    billingMap.TryGetValue(cos.CustomerOrderSlipId, out var bill);
+
+                    if (sched != null)
+                    {
+                        cos.ExpectedTicketCount = sched.ExpectedCount;
+                    }
+
+                    if (bill != null)
+                    {
+                        cos.LinkedBillingId = bill.MsapBillingId;
+                        cos.LinkedBillingNumber = bill.MsapBillingNumber;
+                    }
+
+                    if (cos.Status == MsapConstants.CustomerOrderSlipStatus.Open)
+                    {
+                        var activeTickets = cos.DispatchTickets;
+                        if (sched != null && (sched.Status == MsapConstants.VesselScheduleStatus.Tentative || sched.ApprovedRevision != sched.Revision))
+                        {
+                            cos.WorkflowStage = "Approval pending";
+                        }
+                        else if (bill != null && (bill.Status == MsapConstants.BillingStatus.ForPosting || bill.Status == MsapConstants.BillingStatus.Reviewed))
+                        {
+                            cos.WorkflowStage = "Under billing";
+                        }
+                        else if (activeTickets.Any(t => t.Status == MsapConstants.DispatchTicketStatus.AwaitingRate))
+                        {
+                            cos.WorkflowStage = "Awaiting rate";
+                        }
+                        else if (sched != null && sched.ExpectedCount > 0 && activeTickets.Count < sched.ExpectedCount)
+                        {
+                            cos.WorkflowStage = "Missing tickets";
+                        }
+                        else if (activeTickets.Any(t => t.Status == MsapConstants.DispatchTicketStatus.ForBilling))
+                        {
+                            cos.WorkflowStage = "Ready for billing";
+                        }
+                        else
+                        {
+                            cos.WorkflowStage = "Open";
+                        }
+                    }
+                }
+            }
 
             return (data, recordsFiltered, totalRecords);
         }

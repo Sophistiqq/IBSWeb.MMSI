@@ -115,7 +115,7 @@
         return drop;
     }
 
-    function renderSearchResults(drop, query) {
+    function renderSearchResults(drop, query, remoteItems, isLoading) {
         drop.innerHTML = '';
 
         if (!query) { drop.style.display = 'none'; return; }
@@ -124,10 +124,15 @@
         var links = collectAllNavLinks().filter(function (l) {
             return l.label.toLowerCase().includes(q) || l.url.toLowerCase().includes(q);
         });
+        var records = Array.isArray(remoteItems) ? remoteItems : [];
 
-        if (links.length === 0) {
+        if (links.length === 0 && records.length === 0) {
             drop.style.display = 'block';
-            drop.innerHTML = '<div class="mnav-search-empty"><span class="material-symbols-outlined">search_off</span>No results for "<strong>' + escapeHtml(query) + '</strong>"</div>';
+            if (isLoading) {
+                drop.innerHTML = '<div class="mnav-search-empty">Searching records for "<strong>' + escapeHtml(query) + '</strong>"...</div>';
+            } else {
+                drop.innerHTML = '<div class="mnav-search-empty"><span class="material-symbols-outlined">search_off</span>No results for "<strong>' + escapeHtml(query) + '</strong>"</div>';
+            }
             return;
         }
 
@@ -137,7 +142,13 @@
         links.forEach(function (l) {
             var sec = l.section || 'Navigation';
             if (!grouped[sec]) grouped[sec] = [];
-            grouped[sec].push(l);
+            grouped[sec].push({ url: l.url, label: l.label, icon: 'chevron_right', sub: '' });
+        });
+        records.forEach(function (r) {
+            if (!r || !r.url || !r.label) return;
+            var sec = r.section || 'Records';
+            if (!grouped[sec]) grouped[sec] = [];
+            grouped[sec].push({ url: r.url, label: r.label, icon: r.icon || 'description', sub: r.sub || '' });
         });
 
         Object.entries(grouped).forEach(function (_a) {
@@ -151,14 +162,22 @@
                 var a = document.createElement('a');
                 a.href = l.url;
                 a.className = 'mnav-search-result-item';
-                a.innerHTML = '<span class="material-symbols-outlined">chevron_right</span><span>' + highlightMatch(escapeHtml(l.label), escapeHtml(q)) + '</span>';
+                var subHtml = l.sub ? '<span class="mnav-search-sub">' + escapeHtml(l.sub) + '</span>' : '';
+                a.innerHTML = '<span class="material-symbols-outlined">' + escapeHtml(l.icon) + '</span><span class="mnav-search-text"><span>' + highlightMatch(escapeHtml(l.label), escapeHtml(q)) + '</span>' + subHtml + '</span>';
                 drop.appendChild(a);
             });
         });
+
+        if (isLoading) {
+            var loadingEl = document.createElement('div');
+            loadingEl.className = 'mnav-search-section-header';
+            loadingEl.textContent = 'Searching records...';
+            drop.appendChild(loadingEl);
+        }
     }
 
     function escapeHtml(str) {
-        return str.replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; });
+        return String(str).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; });
     }
 
     function highlightMatch(label, query) {
@@ -177,8 +196,47 @@
         var drop = buildSearchDropdown();
         wrap.appendChild(drop);
 
+        var globalSearchUrl = input.getAttribute('data-global-search-url') || '';
+        var debounceTimer = null;
+        var activeController = null;
+
         input.addEventListener('input', function () {
-            renderSearchResults(drop, input.value.trim());
+            var query = input.value.trim();
+            if (debounceTimer) window.clearTimeout(debounceTimer);
+            if (activeController) {
+                activeController.abort();
+                activeController = null;
+            }
+
+            if (!query) {
+                renderSearchResults(drop, '', [], false);
+                return;
+            }
+
+            var shouldFetch = Boolean(globalSearchUrl && query.length >= 2);
+            renderSearchResults(drop, query, [], shouldFetch);
+
+            if (shouldFetch) {
+                debounceTimer = window.setTimeout(function () {
+                    activeController = new AbortController();
+                    fetch(globalSearchUrl + '?q=' + encodeURIComponent(query), {
+                        credentials: 'same-origin',
+                        signal: activeController.signal
+                    })
+                        .then(function (resp) { return resp.ok ? resp.json() : []; })
+                        .then(function (items) {
+                            if (input.value.trim() === query) {
+                                renderSearchResults(drop, query, items, false);
+                            }
+                        })
+                        .catch(function (err) {
+                            if (err && err.name === 'AbortError') return;
+                            if (input.value.trim() === query) {
+                                renderSearchResults(drop, query, [], false);
+                            }
+                        });
+                }, 220);
+            }
         });
 
         input.addEventListener('keydown', function (e) {

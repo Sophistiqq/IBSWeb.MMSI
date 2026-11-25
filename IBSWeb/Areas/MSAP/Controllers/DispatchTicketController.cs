@@ -37,6 +37,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             ViewBag.FilterType = filterType;
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewBag.CanEditTicket = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditDispatchTicket);
+            ViewBag.CanViewBilling = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ViewBillings);
             ViewData["CanViewRates"] = await CanViewRatesAsync(userId);
             return View(Enumerable.Empty<DispatchTicket>());
         }

@@ -26,6 +26,14 @@
             </div>
         </div>
 
+        <!-- Filter Group -->
+        <div class="flex flex-wrap gap-2">
+            <button id="filterAll" class="modern-btn-secondary active">ALL</button>
+            <button id="filterOpen" class="modern-btn-secondary">OPEN</button>
+            <button id="filterClosed" class="modern-btn-secondary">FULLY BILLED</button>
+            <button id="filterCancelled" class="modern-btn-secondary">CANCELLED</button>
+        </div>
+
         <!-- Table Card -->
         <div class="modern-card ui-card">
             <div class="modern-card-header-action flex justify-between items-center w-full ui-card-header">
@@ -46,7 +54,7 @@
                             <th>COS #</th>
                             <th>Customer</th>
                             <th>Vessel</th>
-                            <th>Manual / Ref #</th>
+                            <th>Port - Terminal</th>
                             <th>Voyage #</th>
                             <th class="text-center">Tickets</th>
                             <th class="text-center">Status</th>
@@ -70,16 +78,20 @@
     <script>
         $(document).ready(function () {
             const detailsUrl = '@Url.Action("Details", "CustomerOrderSlip", new { area = "MSAP" })';
+            const billingReviewUrl = '@Url.Action("Review", "Billing", new { area = "MSAP" })';
+            const canViewBilling = @((ViewBag.CanViewBilling as bool? ?? false).ToString().ToLowerInvariant());
 
             const urlParams = new URLSearchParams(window.location.search);
             const searchTerm = urlParams.get('q') || '';
+            const statusFilter = urlParams.get('status') || '';
 
             let table = $('#customerOrderSlipsTable').DataTable(ModernTable.config({
                 order: [[0, 'desc']],
+                placeholder: 'Search COS #, customer, vessel, voyage, port, ticket #...',
                 search: { search: searchTerm },
                 columnDefs: [
                     { targets: [6, 7, 8], className: 'text-center' },
-                    { targets: [8], orderable: false }
+                    { targets: [4, 8], orderable: false }
                 ],
                 ajax: ModernTable.ajax("@Url.Action("GetCustomerOrderSlipList", "CustomerOrderSlip", new { area = "MSAP" })"),
                 columns: [
@@ -90,29 +102,77 @@
                     },
                     {
                         data: "customerOrderSlipNumber",
-                        render: (data, type, row) => `<a href="${detailsUrl}?id=${row.customerOrderSlipId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${ModernTable.render.text(data)}</a>`
+                        render: (data, type, row) => {
+                            const link = `<a href="${detailsUrl}?id=${row.customerOrderSlipId}" class="font-bold" style="text-decoration:none; color: var(--primary)">${ModernTable.render.text(data)}</a>`;
+                            const ref = row.cosNumber ? `<div class="text-xs" style="color: var(--on-surface-variant)">Ref: ${ModernTable.render.text(row.cosNumber)}</div>` : '';
+                            return link + ref;
+                        }
                     },
                     {
                         data: "customer.customerName",
                         defaultContent: "",
-                        render: (data) => ModernTable.render.ellipsis(data, 250)
+                        render: (data) => ModernTable.render.ellipsis(data, "180px")
                     },
                     {
                         data: "vessel.vesselName",
                         defaultContent: "",
-                        render: (data) => `<span class="font-bold uppercase">${ModernTable.render.ellipsis(data, 200)}</span>`
+                        render: (data) => `<span class="font-bold uppercase">${ModernTable.render.ellipsis(data, "140px")}</span>`
                     },
-                    { data: "cosNumber", defaultContent: "-" },
-                    { data: "voyageNumber", defaultContent: "" },
+                    {
+                        data: null,
+                        orderable: false,
+                        render: (data, type, row) => {
+                            const portName = row.port?.portName ?? "";
+                            const terminalName = row.terminal?.terminalName ?? "";
+                            return portName || terminalName ? ModernTable.render.ellipsis(`${portName} - ${terminalName}`, "165px") : "-";
+                        }
+                    },
+                    {
+                        data: "voyageNumber",
+                        defaultContent: "",
+                        render: (data) => ModernTable.render.ellipsis(data, "130px")
+                    },
                     {
                         data: "dispatchTickets",
-                        render: (data) => `<span class="modern-badge-sm" style="background-color: var(--surface-container-low); color: var(--on-surface-variant)">${data ? data.length : 0}</span>`
+                        render: (data, type, row) => {
+                            const recorded = data ? data.length : 0;
+                            const expected = row.expectedTicketCount;
+                            if (expected && expected > 0) {
+                                const incomplete = recorded < expected && row.status === "@MsapConstants.CustomerOrderSlipStatus.Open";
+                                const cls = incomplete ? "ui-status ui-attention" : "";
+                                const style = incomplete ? "" : "background-color: var(--surface-container-low); color: var(--on-surface-variant)";
+                                return `<span class="modern-badge-sm ${cls}" style="${style}">${recorded} / ${expected}</span>`;
+                            }
+                            return `<span class="modern-badge-sm" style="background-color: var(--surface-container-low); color: var(--on-surface-variant)">${recorded}</span>`;
+                        }
                     },
                     {
                         data: "status",
-                        render: (data) => {
-                            const cls = data === "Open" ? "status-open" : "status-closed";
-                            return ModernTable.render.badge(data === "Closed" ? "@MsapConstants.CustomerOrderSlipStatus.GetDisplayName(MsapConstants.CustomerOrderSlipStatus.Closed)" : data, cls);
+                        render: (data, type, row) => {
+                            let badge;
+                            if (data === "@MsapConstants.CustomerOrderSlipStatus.Open") {
+                                const stage = row.workflowStage || "Open";
+                                const cls = stage === "Awaiting rate"
+                                    ? "ui-status ui-critical"
+                                    : (stage === "Approval pending" || stage === "Missing tickets" || stage === "Ready for billing" || stage === "Under billing")
+                                        ? "ui-status ui-attention"
+                                        : "status-open";
+                                badge = ModernTable.render.badge(stage, cls);
+                            } else if (data === "@MsapConstants.CustomerOrderSlipStatus.Closed") {
+                                badge = ModernTable.render.badge("@MsapConstants.CustomerOrderSlipStatus.GetDisplayName(MsapConstants.CustomerOrderSlipStatus.Closed)", "ui-status ui-complete");
+                            } else if (data === "@MsapConstants.CustomerOrderSlipStatus.Cancelled") {
+                                badge = ModernTable.render.badge("Cancelled", "ui-status ui-critical");
+                            } else {
+                                badge = ModernTable.render.badge(data, "status-closed");
+                            }
+                            if (row.linkedBillingId && row.linkedBillingNumber) {
+                                const billText = ModernTable.render.text(row.linkedBillingNumber);
+                                const billLink = canViewBilling
+                                    ? `<a href="${billingReviewUrl}?id=${row.linkedBillingId}" style="text-decoration:none; color: var(--primary)">Bill #${billText}</a>`
+                                    : `<span>Bill #${billText}</span>`;
+                                return `${badge}<div class="text-xs mt-1">${billLink}</div>`;
+                            }
+                            return badge;
                         }
                     },
                     {
@@ -120,16 +180,48 @@
                         orderable: false,
                         className: "text-center",
                         render: (data, type, row) => ModernTable.render.dropdown([
-                            { label: 'View Details', icon: 'visibility', url: `${detailsUrl}?id=${row.customerOrderSlipId}` }
+                            { label: 'View Details', icon: 'visibility', url: `${detailsUrl}?id=${row.customerOrderSlipId}` },
+                            { label: 'Review Billing', icon: 'receipt_long', url: `${billingReviewUrl}?id=${row.linkedBillingId}`, condition: Boolean(canViewBilling && row.linkedBillingId) }
                         ])
                     }
-                ]
+                ],
+                initComplete: function () {
+                    const activeStatus = statusFilter || this.api().column(7).search();
+                    if (statusFilter) {
+                        this.api().column(7).search(statusFilter).draw();
+                    }
+                    updateFilterButtons(activeStatus);
+                }
             }));
 
             // Date filter
             $('#dateFilter').on('change', function () {
                 table.column(0).search($(this).val()).draw();
             });
+
+            // Status filter buttons
+            $('.modern-btn-secondary[id^="filter"]').on('click', function () {
+                const id = $(this).attr('id');
+                let status = '';
+                if (id === 'filterOpen') status = '@MsapConstants.CustomerOrderSlipStatus.Open';
+                else if (id === 'filterClosed') status = '@MsapConstants.CustomerOrderSlipStatus.Closed';
+                else if (id === 'filterCancelled') status = '@MsapConstants.CustomerOrderSlipStatus.Cancelled';
+
+                table.column(7).search(status).draw();
+                const url = new URL(window.location);
+                if (status) url.searchParams.set('status', status);
+                else url.searchParams.delete('status');
+                window.history.replaceState({}, '', url);
+                updateFilterButtons(status);
+            });
+
+            function updateFilterButtons(status) {
+                $('.modern-btn-secondary[id^="filter"]').removeClass('active');
+                if (!status) $('#filterAll').addClass('active');
+                else if (status.toLowerCase() === '@MsapConstants.CustomerOrderSlipStatus.Open'.toLowerCase()) $('#filterOpen').addClass('active');
+                else if (status.toLowerCase() === '@MsapConstants.CustomerOrderSlipStatus.Closed'.toLowerCase()) $('#filterClosed').addClass('active');
+                else if (status.toLowerCase() === '@MsapConstants.CustomerOrderSlipStatus.Cancelled'.toLowerCase()) $('#filterCancelled').addClass('active');
+            }
 
             // Sync search with URL
             table.on('search.dt', function () {

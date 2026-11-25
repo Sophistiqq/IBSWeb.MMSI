@@ -161,6 +161,10 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Include(dt => dt.Billing)
                 .Where(dt => dt.Status != "For Posting" && dt.Status != "Incomplete" && dt.Status != "Draft" && dt.Status != "Requested");
 
+            var requestedDeleted = parameters?.Columns?.Any(c =>
+                c?.Data == "status"
+                && string.Equals(c.Search?.Value, MsapConstants.DispatchTicketStatus.Deleted, StringComparison.OrdinalIgnoreCase)) == true;
+
             if (!string.IsNullOrEmpty(filterType))
             {
                 query = filterType.ToLower() switch
@@ -171,10 +175,10 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                     "for billing" => query.Where(dt => dt.Status == "For Billing"),
                     "billed" => query.Where(dt => dt.Status == "Billed"),
                     "deleted" => query.Where(dt => dt.Status == MsapConstants.DispatchTicketStatus.Deleted),
-                    _ => query.Where(dt => dt.Status != MsapConstants.DispatchTicketStatus.Deleted)
+                    _ => requestedDeleted ? query : query.Where(dt => dt.Status != MsapConstants.DispatchTicketStatus.Deleted)
                 };
             }
-            else
+            else if (!requestedDeleted)
             {
                 query = query.Where(dt => dt.Status != MsapConstants.DispatchTicketStatus.Deleted);
             }
@@ -191,6 +195,9 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                     || (dt.Customer != null && dt.Customer.CustomerName.ToLower().Contains(s))
                     || (dt.Vessel != null && dt.Vessel.VesselName.ToLower().Contains(s))
                     || (dt.Billing != null && dt.Billing.MsapBillingNumber.ToLower().Contains(s))
+                    || (dt.Terminal != null && dt.Terminal.TerminalName.ToLower().Contains(s))
+                    || (dt.Terminal != null && dt.Terminal.Port != null && dt.Terminal.Port.PortName.ToLower().Contains(s))
+                    || (dt.VoyageNumber != null && dt.VoyageNumber.ToLower().Contains(s))
                     || dt.Status.ToLower().Contains(s));
             }
 
@@ -203,7 +210,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                     {
                         if (column.Data == "status")
                         {
-                            query = query.Where(dt => dt.Status.ToLower() == searchValue);
+                            var normalizedStatus = searchValue.ToLower();
+                            query = query.Where(dt => dt.Status.ToLower() == normalizedStatus);
                         }
                         else if (column.Data == "date" || column.Data == "Date")
                         {

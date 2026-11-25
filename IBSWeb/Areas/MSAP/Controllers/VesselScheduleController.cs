@@ -27,7 +27,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpGet]
         [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> Index(DateTime? month, CancellationToken ct, DateTime? date = null,
-            int? portId = null, int? terminalId = null, string? search = null, string? status = null)
+            int? portId = null, int? terminalId = null, string? search = null, string? status = null, string? view = null)
         {
             if (!ModelState.IsValid || search?.Length > 120)
             {
@@ -54,7 +54,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 PortId = portId,
                 TerminalId = terminalId,
                 Search = search,
-                Status = status
+                Status = status,
+                ViewMode = view ?? "calendar"
             }, ct);
             return result.IsSuccess ? View(result.Data) : BadRequest(result.Message);
         }

@@ -30,8 +30,51 @@ const ModernTable = {
             }
         }, options, {
             initComplete: function(settings, json) {
+                const api = this.api();
                 const $dateFilter = $('#dateFilter');
-                if ($dateFilter.length) $dateFilter.val(this.api().column(0).search());
+                if ($dateFilter.length) $dateFilter.val(api.column(0).search());
+
+                const $filterWrap = $(api.table().container()).find('.dataTables_filter');
+                if ($filterWrap.length && !$filterWrap.find('.js-modern-reset-filters').length) {
+                    const $resetBtn = $(`<button type="button" class="modern-btn-secondary js-modern-reset-filters" style="height: 32px; padding: 0 10px; font-size: 0.75rem; margin-left: 8px; display: none;" title="Clear active search and filters"><span class="material-symbols-outlined" style="font-size: 16px;">filter_alt_off</span> Reset filters</button>`);
+                    $filterWrap.css({ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }).append($resetBtn);
+
+                    const updateResetVisibility = () => {
+                        let hasFilter = Boolean(api.search());
+                        if (!hasFilter) {
+                            api.columns().every(function() {
+                                if (this.search()) hasFilter = true;
+                            });
+                        }
+                        if (!hasFilter && $dateFilter.length && $dateFilter.val()) {
+                            hasFilter = true;
+                        }
+                        $resetBtn.toggle(hasFilter);
+                    };
+
+                    $resetBtn.on('click', () => {
+                        api.search('');
+                        api.columns().search('');
+                        if ($dateFilter.length) $dateFilter.val('');
+                        const $filterAll = $('#filterAll');
+                        if ($filterAll.length) {
+                            $('.modern-btn-secondary[id^="filter"]').removeClass('active');
+                            $filterAll.addClass('active');
+                        }
+                        const url = new URL(window.location);
+                        url.searchParams.delete('q');
+                        url.searchParams.delete('status');
+                        url.searchParams.delete('from');
+                        url.searchParams.delete('to');
+                        window.history.replaceState({}, '', url);
+                        $('#dispatchPeriod').remove();
+                        api.draw();
+                    });
+
+                    api.on('draw.dt', updateResetVisibility);
+                    updateResetVisibility();
+                }
+
                 if (initComplete) initComplete.call(this, settings, json);
             }
         });

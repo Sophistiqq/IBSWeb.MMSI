@@ -6,6 +6,7 @@ using IBS.Models.MSAP.ViewModels;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace IBS.Services.MSAP
@@ -34,6 +35,7 @@ namespace IBS.Services.MSAP
             {
                 terminalId = null;
             }
+            var viewMode = string.Equals(filters.ViewMode, "list", StringComparison.OrdinalIgnoreCase) ? "list" : "calendar";
             var board = new VesselScheduleBoardViewModel
             {
                 Date = filters.Date,
@@ -42,6 +44,7 @@ namespace IBS.Services.MSAP
                 TerminalId = terminalId,
                 Search = search?.Trim(),
                 Status = status,
+                ViewMode = viewMode,
                 Schedules = schedules,
                 Tugboats = (await unitOfWork.Tugboat.GetAllAsync(null, ct)).OrderBy(t => t.TugboatName).ToList(),
                 Ports = ports.Select(p => new SelectListItem(p.PortName, p.PortId.ToString())).ToList(),
@@ -52,14 +55,93 @@ namespace IBS.Services.MSAP
             board.TugBookings = schedules.Where(s => s.Status != MsapConstants.VesselScheduleStatus.Cancelled).ToList();
             var matchingTugIds = board.Tugboats.Where(t => t.TugboatName.Contains(board.Search ?? "", StringComparison.OrdinalIgnoreCase)
                 || t.TugboatNumber.Contains(board.Search ?? "", StringComparison.OrdinalIgnoreCase)).Select(t => t.TugboatId).ToHashSet();
-            board.Schedules = schedules.Where(s => (!portId.HasValue || s.PortId == portId)
-                && (!terminalId.HasValue || s.TerminalId == terminalId)
-                && (string.IsNullOrEmpty(status) || s.Status == status)
-                && (string.IsNullOrEmpty(board.Search)
-                    || s.Vessel.VesselName.Contains(board.Search, StringComparison.OrdinalIgnoreCase)
-                    || (s.VoyageNumber?.Contains(board.Search, StringComparison.OrdinalIgnoreCase) ?? false)
-                    || (JsonSerializer.Deserialize<List<int>>(s.AssignedTugboatIds ?? "[]") ?? []).Any(matchingTugIds.Contains))).ToList();
+            board.Schedules = schedules.Where(s => MatchesBoardFilters(s, portId, terminalId, status, board.Search, matchingTugIds)).ToList();
+
+            if (viewMode == "list" || !string.IsNullOrEmpty(board.Search))
+            {
+                var crossQuery = unitOfWork.VesselSchedule.GetAllQuery()
+                    .AsNoTracking()
+                    .Include(s => s.Customer)
+                    .Include(s => s.CustomerOrderSlip)
+                    .Include(s => s.Vessel)
+                    .Include(s => s.Port)
+                    .Include(s => s.Terminal)
+                    .AsQueryable();
+
+                if (portId.HasValue)
+                {
+                    crossQuery = crossQuery.Where(s => s.PortId == portId.Value);
+                }
+                if (terminalId.HasValue)
+                {
+                    crossQuery = crossQuery.Where(s => s.TerminalId == terminalId.Value);
+                }
+                if (!string.IsNullOrEmpty(status))
+                {
+                    crossQuery = crossQuery.Where(s => s.Status == status);
+                }
+
+                if (string.IsNullOrEmpty(board.Search))
+                {
+                    board.AllMatchingTotalCount = await crossQuery.CountAsync(ct);
+                    board.AllMatchingSchedules = await crossQuery
+                        .OrderByDescending(s => s.PlannedStart)
+                        .Take(100)
+                        .ToListAsync(ct);
+                }
+                else
+                {
+                    var allFiltered = (await crossQuery
+                            .OrderByDescending(s => s.PlannedStart)
+                            .ToListAsync(ct))
+                        .Where(s => MatchesBoardFilters(s, portId, terminalId, status, board.Search, matchingTugIds))
+                        .ToList();
+                    board.AllMatchingTotalCount = allFiltered.Count;
+                    board.AllMatchingSchedules = allFiltered.Take(100).ToList();
+                }
+            }
+
             return ServiceResult<VesselScheduleBoardViewModel>.Success(board);
+        }
+
+        private static bool MatchesBoardFilters(
+            VesselSchedule s,
+            int? portId,
+            int? terminalId,
+            string? status,
+            string? search,
+            HashSet<int> matchingTugIds)
+        {
+            if (portId.HasValue && s.PortId != portId)
+            {
+                return false;
+            }
+            if (terminalId.HasValue && s.TerminalId != terminalId)
+            {
+                return false;
+            }
+            if (!string.IsNullOrEmpty(status) && s.Status != status)
+            {
+                return false;
+            }
+            if (string.IsNullOrEmpty(search))
+            {
+                return true;
+            }
+
+            var normalizedIdSearch = search.TrimStart('#');
+            if (normalizedIdSearch.StartsWith("VS-", StringComparison.OrdinalIgnoreCase))
+            {
+                normalizedIdSearch = normalizedIdSearch[3..];
+            }
+
+            return s.Vessel.VesselName.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || (s.Customer?.CustomerName.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (s.CustomerOrderSlip?.CustomerOrderSlipNumber.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (s.CustomerOrderSlip?.COSNumber?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (s.VoyageNumber?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (int.TryParse(normalizedIdSearch, out var parsedId) && s.VesselScheduleId == parsedId)
+                || (JsonSerializer.Deserialize<List<int>>(s.AssignedTugboatIds ?? "[]") ?? []).Any(matchingTugIds.Contains);
         }
 
         private async Task MarkConflictsAsync(VesselScheduleBoardViewModel board, DateTime from, DateTime to, CancellationToken ct)

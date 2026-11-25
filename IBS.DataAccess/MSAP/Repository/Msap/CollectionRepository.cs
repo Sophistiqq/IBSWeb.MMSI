@@ -193,11 +193,17 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             if (!string.IsNullOrEmpty(globalSearch))
             {
                 var s = globalSearch.ToLower();
+                var matchingCollectionIds = await _db.MsapBillings
+                    .Where(b => b.CollectionId != null && b.MsapBillingNumber.ToLower().Contains(s))
+                    .Select(b => b.CollectionId!.Value)
+                    .Distinct()
+                    .ToListAsync(cancellationToken);
                 query = query.Where(c =>
                     c.MsapCollectionNumber.ToLower().Contains(s)
                     || c.Customer.CustomerName.ToLower().Contains(s)
                     || (c.CheckNumber != null && c.CheckNumber.ToLower().Contains(s))
-                    || (c.ReferenceNo != null && c.ReferenceNo.ToLower().Contains(s)));
+                    || (c.ReferenceNo != null && c.ReferenceNo.ToLower().Contains(s))
+                    || matchingCollectionIds.Contains(c.MsapCollectionId));
             }
 
             // Column-specific search
@@ -213,6 +219,18 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                             {
                                 query = query.Where(c => c.Date == parsedDate);
                             }
+                        }
+                        else if (column.Data == "paymentStatus")
+                        {
+                            query = searchValue.Trim().ToLowerInvariant() switch
+                            {
+                                "for deposit" => query.Where(c => c.VoidedDate == null && c.CanceledDate == null && c.ClearedDate == null && c.DepositDate == null && c.ReturnedDate == null),
+                                "deposited" => query.Where(c => c.VoidedDate == null && c.CanceledDate == null && c.ClearedDate == null && c.DepositDate != null),
+                                "returned" => query.Where(c => c.VoidedDate == null && c.CanceledDate == null && c.ClearedDate == null && c.DepositDate == null && c.ReturnedDate != null),
+                                "cleared" => query.Where(c => c.VoidedDate == null && c.CanceledDate == null && c.ClearedDate != null),
+                                "voided" => query.Where(c => c.VoidedDate != null || c.CanceledDate != null),
+                                _ => query
+                            };
                         }
                     }
                 }
@@ -256,6 +274,24 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .Skip(start)
                 .Take(length)
                 .ToListAsync(cancellationToken);
+
+            if (data.Count > 0)
+            {
+                var collectionIds = data.Select(c => c.MsapCollectionId).ToList();
+                var billingGroups = await _db.MsapBillings.AsNoTracking()
+                    .Where(b => b.CollectionId != null && collectionIds.Contains(b.CollectionId.Value))
+                    .GroupBy(b => b.CollectionId!.Value)
+                    .Select(g => new { CollectionId = g.Key, Numbers = g.Select(b => b.MsapBillingNumber) })
+                    .ToListAsync(cancellationToken);
+                var billingMap = billingGroups.ToDictionary(g => g.CollectionId, g => string.Join(", ", g.Numbers));
+                foreach (var item in data)
+                {
+                    if (billingMap.TryGetValue(item.MsapCollectionId, out var numbers))
+                    {
+                        item.BillingNumbers = numbers;
+                    }
+                }
+            }
 
             return (data, recordsFiltered, totalRecords);
         }

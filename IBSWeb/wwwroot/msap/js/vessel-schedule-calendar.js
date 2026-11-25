@@ -7,19 +7,29 @@
     const form = document.getElementById('calendarFilters');
     const port = document.getElementById('calendarPort');
     const terminal = document.getElementById('calendarTerminal');
+    const status = document.getElementById('calendarStatus');
     $(port).on('change', () => {
-        $(terminal).val('').trigger('change');
+        $(terminal).val('').trigger('change.select2');
         form.requestSubmit();
     });
-    document.getElementById('calendarMonth').addEventListener('change', event => {
-        const selectedDate = form.querySelector('[name="date"]');
-        if (selectedDate && /^\d{4}-\d{2}$/.test(event.target.value)) {
-            const [year, month] = event.target.value.split('-').map(Number);
-            const day = Math.min(Number(selectedDate.value.slice(-2)), new Date(year, month, 0).getDate());
-            selectedDate.value = `${event.target.value}-${String(day).padStart(2, '0')}`;
-        }
+    $(terminal).on('change', () => {
         form.requestSubmit();
     });
+    $(status).on('change', () => {
+        form.requestSubmit();
+    });
+    const monthInput = document.getElementById('calendarMonth');
+    if (monthInput) {
+        monthInput.addEventListener('change', event => {
+            const selectedDate = form.querySelector('[name="date"]');
+            if (selectedDate && /^\d{4}-\d{2}$/.test(event.target.value)) {
+                const [year, month] = event.target.value.split('-').map(Number);
+                const day = Math.min(Number(selectedDate.value.slice(-2)), new Date(year, month, 0).getDate());
+                selectedDate.value = `${event.target.value}-${String(day).padStart(2, '0')}`;
+            }
+            form.requestSubmit();
+        });
+    }
 
     workspace.querySelectorAll('.schedule-day').forEach(cell => {
         cell.addEventListener('click', event => {

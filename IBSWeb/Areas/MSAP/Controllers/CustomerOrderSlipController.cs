@@ -49,6 +49,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             ViewBag.CanEdit = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.EditCustomerOrderSlip);
             ViewBag.CanCreate = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.CreateCustomerOrderSlip);
+            ViewBag.CanViewBilling = userId != null && await accessControl.HasAccessAsync(userId, ProcedureEnum.ViewBillings);
             return View();
         }
 

@@ -426,7 +426,7 @@ else
                                 </div>
                                 <div class="dashboard-action-item-footer">
                                     <span class="dashboard-action-item-hint">PHP @Model.BankingAmounts.GetValueOrDefault("Returned").ToString("N2")</span>
-                                    <a asp-controller="Collection" asp-action="Index" class="dashboard-action-item-btn">Banking &rarr;</a>
+                                    <a asp-controller="Collection" asp-action="Index" asp-route-status="Returned" class="dashboard-action-item-btn">Banking &rarr;</a>
                                 </div>
                             </article>
                         }
@@ -501,7 +501,7 @@ else
                                                     <tr class="@(Model.ConflictingScheduleIds.Contains(schedule.VesselScheduleId) ? "ui-critical" : schedule.Status != MsapConstants.VesselScheduleStatus.Completed && (schedule.Status == MsapConstants.VesselScheduleStatus.Tentative || Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) < schedule.RequiredTugCount) ? "ui-attention" : "")">
                                                         <td class="dashboard-window">@schedule.PlannedStart.ToString(schedule.PlannedStart.Date == day ? "HH:mm" : "dd MMM HH:mm") – @schedule.PlannedEnd.ToString(schedule.PlannedEnd.Date == day ? "HH:mm" : "dd MMM HH:mm")</td>
                                                         <td>@(schedule.Vessel?.VesselName ?? $"Schedule #{schedule.VesselScheduleId}")<small>@(schedule.Port?.PortName ?? "Port") · @(schedule.Terminal?.TerminalName ?? "Terminal")</small></td>
-                                                        <td><span class="dashboard-status">@(schedule.Status == MsapConstants.VesselScheduleStatus.Tentative ? "Awaiting review" : MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status))</span>@if (Model.ConflictingScheduleIds.Contains(schedule.VesselScheduleId)) { <small><span class="ui-status ui-critical">Overlap · needs review</span></small> }</td>
+                                                        <td><span class="dashboard-status">@MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status)</span>@if (Model.ConflictingScheduleIds.Contains(schedule.VesselScheduleId)) { <small><span class="ui-status ui-critical">Overlap · needs review</span></small> }</td>
                                                         <td>@Model.AssignedTugs.GetValueOrDefault(schedule.VesselScheduleId) of @schedule.RequiredTugCount</td>
                                                         <td><a asp-controller="VesselSchedule" asp-action="Details" asp-route-id="@schedule.VesselScheduleId" aria-label="Open @(schedule.Vessel?.VesselName ?? "vessel") schedule">Open</a></td>
                                                     </tr>
