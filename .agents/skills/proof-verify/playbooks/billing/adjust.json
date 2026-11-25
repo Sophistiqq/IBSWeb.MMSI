@@ -1,10 +1,12 @@
 {
   "name": "billing/adjust",
-  "description": "ENCODER adjusts rejected/reopened Billing {billingId} with authorization PDF and resubmits.",
+  "description": "ENCODER adjusts rejected/reopened Billing {billingId} (modifying ticket Basic/BAF rates with authorization PDF) and resubmits for review.",
   "url": "/MSAP/Billing/Review/{billingId}",
   "vars": {
     "encoderAccount": "ENCODER",
-    "adjustReason": "Adjusted billing per authorization ({today}-{rand})."
+    "adjustBasicRate": "21500",
+    "adjustBafRate": "3200",
+    "adjustReason": "Adjusted billing rates per authorization ({today}-{rand})."
   },
   "steps": [
     {
@@ -22,6 +24,15 @@
       "waitForNavigation": true
     },
     {
+      "action": "fill_form",
+      "scope": "#adjustTicketsTable tbody tr:first-child",
+      "onlyEmpty": false,
+      "overrides": {
+        "Tickets[0].DispatchRate": "{adjustBasicRate}",
+        "Tickets[0].BAFRate": "{adjustBafRate}"
+      }
+    },
+    {
       "action": "upload",
       "selector": "#adjustAuthFile",
       "fixture": "pdf"
@@ -32,13 +43,6 @@
       "onlyEmpty": false,
       "overrides": {
         "adjustReason": "{adjustReason}"
-      },
-      "knownFields": {
-        "adjustReason": {
-          "label": "Authorized reason for adjustment *",
-          "type": "textarea",
-          "value": "{adjustReason}"
-        }
       }
     },
     {
@@ -48,10 +52,19 @@
     },
     {
       "action": "click",
-      "target": "Save adjustment",
+      "target": "Save & resubmit",
       "scope": ".swal2-popup",
       "optional": true,
       "waitForPopupMs": 2000,
+      "waitAfterMs": 2200,
+      "waitForNavigation": true
+    },
+    {
+      "action": "click",
+      "target": "Save adjustment",
+      "scope": ".swal2-popup",
+      "optional": true,
+      "waitForPopupMs": 1000,
       "waitAfterMs": 2200,
       "waitForNavigation": true
     },
@@ -62,7 +75,11 @@
       "optional": true,
       "waitForPopupMs": 2000,
       "waitAfterMs": 500
+    },
+    {
+      "action": "assert",
+      "urlIncludes": "/MSAP/Billing/Review/",
+      "text": "Revised from"
     }
-  ],
-  "lastPassedAt": "2026-11-24T08:28:13.093Z"
+  ]
 }

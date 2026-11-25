@@ -1282,6 +1282,15 @@ function resolveOverrides(fields, overrides) {
     }
 
     for (const [k, v] of Object.entries(overrides)) {
+        if (k.includes("*")) {
+            const regex = new RegExp(`^${k.trim().replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`, "i");
+            for (const f of fields) {
+                if (regex.test(f.key) || regex.test(f.label || "")) {
+                    resolved[f.key] = v;
+                }
+            }
+            continue;
+        }
         const needle = k.trim().toLowerCase();
         const found = fields.find((f) => f.key.toLowerCase() === needle)
             || fields.find((f) => f.label.toLowerCase().replace(/\*/g, "").trim() === needle)
@@ -1320,7 +1329,13 @@ function buildTemplateVars(userVars = {}) {
 
 function expandTemplate(value, vars) {
     if (typeof value !== "string") return value;
-    return value.replace(/\{([a-zA-Z0-9_]+)\}/g, (m, key) => (key in vars ? String(vars[key]) : m));
+    let out = value;
+    for (let pass = 0; pass < 3; pass++) {
+        const next = out.replace(/\{([a-zA-Z0-9_]+)\}/g, (m, key) => (key in vars ? String(vars[key]) : m));
+        if (next === out) break;
+        out = next;
+    }
+    return out;
 }
 
 function expandTemplatesDeep(obj, vars) {

@@ -1,9 +1,10 @@
 {
   "name": "schedule/revise",
-  "description": "OPERATIONS revises an approved Schedule {scheduleId}, returning it to Tentative for re-approval.",
+  "description": "OPERATIONS revises an approved Schedule {scheduleId} (updating VoyageNumber and Notes), returning it to Tentative for re-approval.",
   "url": "/MSAP/VesselSchedule/Details/{scheduleId}",
   "vars": {
-    "opsAccount": "OPERATIONS"
+    "opsAccount": "OPERATIONS",
+    "revisedVoyage": "VOY-REV-{rand}"
   },
   "steps": [
     {
@@ -22,17 +23,18 @@
     },
     {
       "action": "fill_form",
+      "scope": "div:has(> #VoyageNumber)",
+      "onlyEmpty": false,
+      "overrides": {
+        "VoyageNumber": "{revisedVoyage}"
+      }
+    },
+    {
+      "action": "fill_form",
       "scope": "div:has(> #Notes)",
       "onlyEmpty": false,
       "overrides": {
-        "Notes": "Revised schedule #{scheduleId} ({today}-{rand})."
-      },
-      "knownFields": {
-        "Notes": {
-          "label": "Add coordination notes or service instructions...",
-          "type": "textarea",
-          "value": "Revised schedule #{scheduleId} ({today}-{rand})."
-        }
+        "Notes": "Revised schedule #{scheduleId} voyage to {revisedVoyage} ({today}-{rand})."
       }
     },
     {
@@ -62,7 +64,11 @@
       "optional": true,
       "waitAfterMs": 2200,
       "waitForNavigation": true
+    },
+    {
+      "action": "assert",
+      "urlIncludes": "/MSAP/VesselSchedule/Details/",
+      "text": "Revised for reapproval"
     }
-  ],
-  "lastPassedAt": "2026-11-24T08:19:03.484Z"
+  ]
 }

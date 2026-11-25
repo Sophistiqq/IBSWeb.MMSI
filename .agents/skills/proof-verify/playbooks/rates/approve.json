@@ -3,7 +3,9 @@
   "description": "Approver (rml1) enters any missing table rates and approves them for Schedule {scheduleId}.",
   "url": "/MSAP/RateUpload/Editor?mode=combined&asOfDate={weekStart}&scheduleId={scheduleId}",
   "vars": {
-    "approverAccount": "rml1"
+    "approverAccount": "rml1",
+    "defaultBasicRate": "18500",
+    "defaultBafRate": "2500"
   },
   "steps": [
     {
@@ -19,6 +21,10 @@
       "scope": "#rateEditorRows",
       "onlyEmpty": true,
       "optional": true,
+      "overrides": {
+        "*Basic*": "{defaultBasicRate}",
+        "*BAF*": "{defaultBafRate}"
+      },
       "scenario": "Enter positive Philippine Peso maritime tugboat rates as plain numbers ONLY (e.g. 18500 for Basic and 2500 for BAF)."
     },
     {
@@ -35,6 +41,5 @@
       "waitAfterMs": 2500,
       "waitForNavigation": true
     }
-  ],
-  "lastPassedAt": "2026-11-24T08:19:03.484Z"
+  ]
 }
