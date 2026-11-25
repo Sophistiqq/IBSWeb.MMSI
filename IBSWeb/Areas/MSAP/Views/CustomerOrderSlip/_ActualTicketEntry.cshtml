@@ -33,6 +33,7 @@
     @if (!readOnly)
     {
         <input id="cosTicketImage" name="imageFile" type="file" accept="image/*" class="cos-sr-file-input" required="@imageRequired" tabindex="-1" aria-label="Supporting dispatch ticket image" />
+        <input id="cosTicketCamera" type="file" accept="image/*" capture="environment" class="cos-sr-file-input" tabindex="-1" aria-label="Take dispatch ticket photo with camera" />
     }
     @if (isNewTicket)
     {
@@ -40,8 +41,11 @@
             <div class="cos-photo-dropzone" id="cosPhotoDropzone">
                 <span class="material-symbols-outlined cos-photo-dropzone-icon" aria-hidden="true">add_a_photo</span>
                 <h3 class="ui-section-title">Start with the dispatch ticket photo</h3>
-                <p class="ui-body ui-muted">Choose or capture a photo, drag &amp; drop it here, or press <kbd>Ctrl+V</kbd> to paste. The photo will open side-by-side with the entry form.</p>
+                <p class="ui-body ui-muted">Take a photo, choose one from your device, drag &amp; drop it here, or press <kbd>Ctrl+V</kbd> to paste. The photo will open side-by-side with the entry form.</p>
                 <div class="cos-photo-dropzone-actions">
+                    <button type="button" class="modern-btn-primary cos-camera-only" data-trigger-camera-upload>
+                        <span class="material-symbols-outlined" aria-hidden="true">photo_camera</span> Take photo
+                    </button>
                     <button type="button" class="modern-btn-primary" data-trigger-photo-upload>
                         <span class="material-symbols-outlined" aria-hidden="true">upload_file</span> Choose photo
                     </button>
@@ -61,8 +65,6 @@
                     <span class="cos-image-pane-title" id="cosTicketImageStatus">@(hasInitialImage ? "Saved photo" : "Ticket photo")</span>
                 </div>
                 <div class="cos-image-toolbar" role="toolbar" aria-label="Image controls">
-                    <button type="button" class="cos-icon-btn" data-image-zoom-out title="Zoom out" aria-label="Zoom out"><span class="material-symbols-outlined" aria-hidden="true">zoom_out</span></button>
-                    <button type="button" class="cos-icon-btn" data-image-zoom-in title="Zoom in" aria-label="Zoom in"><span class="material-symbols-outlined" aria-hidden="true">zoom_in</span></button>
                     <button type="button" class="cos-icon-btn" data-image-rotate title="Rotate 90°" aria-label="Rotate 90 degrees"><span class="material-symbols-outlined" aria-hidden="true">rotate_right</span></button>
                     <button type="button" class="cos-icon-btn" data-image-reset title="Reset view" aria-label="Reset view"><span class="material-symbols-outlined" aria-hidden="true">restart_alt</span></button>
                     @if (!readOnly)
@@ -130,6 +132,9 @@
             {
                 <span class="ui-label">Supporting image @(imageRequired ? "*" : "")</span>
                 <div class="cos-file-picker-row">
+                    <button type="button" class="modern-btn-secondary cos-file-picker-btn cos-camera-only" data-trigger-camera-upload>
+                        <span class="material-symbols-outlined" aria-hidden="true">photo_camera</span> Take photo
+                    </button>
                     <button type="button" class="modern-btn-secondary cos-file-picker-btn" data-trigger-photo-upload>
                         <span class="material-symbols-outlined" aria-hidden="true">upload_file</span> @(hasInitialImage ? "Replace photo" : "Choose photo")
                     </button>

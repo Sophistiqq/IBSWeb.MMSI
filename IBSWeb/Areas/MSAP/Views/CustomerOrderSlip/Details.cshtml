@@ -361,11 +361,12 @@
             <section class="ui-panel ui-stack cos-ticket-entry-panel cos-ticket-lifted" id="actualTicketEntry" data-ticket-entry-mode="@entryMode" data-ticket-step="@initialStep" data-close-url="@closeTicketUrl" role="dialog" aria-modal="true" aria-labelledby="actualTicketTitle">
                 <div class="cos-section-heading cos-entry-heading">
                     <div class="cos-entry-heading-title">
-                        <h2 class="ui-section-title" id="actualTicketTitle">@(ViewData["EditActualTicket"] is true ? "Edit actual ticket" : ticketEntry.DispatchTicketId.HasValue ? "View actual ticket" : "Enter actual ticket") · @(selectedEntry?.Tugboat.TugboatName ?? viewedTicket?.Tugboat.TugboatName) / @(selectedEntry?.Service.ServiceName ?? viewedTicket?.Service.ServiceName)</h2>
+                        <h2 class="ui-section-title" id="actualTicketTitle">@(ViewData["EditActualTicket"] is true ? "Edit actual ticket" : ticketEntry.DispatchTicketId.HasValue ? "View actual ticket" : "Enter actual ticket")</h2>
+                        <p class="ui-caption ui-muted cos-entry-heading-subtitle">@(selectedEntry?.Tugboat.TugboatName ?? viewedTicket?.Tugboat.TugboatName) — @(selectedEntry?.Service.ServiceName ?? viewedTicket?.Service.ServiceName)</p>
                     </div>
                     <div class="cos-entry-heading-actions">
                         <span class="schedule-status-pill">@(ticketEntry.DispatchTicketId.HasValue ? "Recorded" : "Not saved yet")</span>
-                        <a href="@closeTicketUrl" class="cos-icon-btn" title="Close" aria-label="Close">
+                        <a href="@closeTicketUrl" class="cos-icon-btn cos-entry-close-btn" title="Close" aria-label="Close">
                             <span class="material-symbols-outlined" aria-hidden="true">close</span>
                         </a>
                     </div>

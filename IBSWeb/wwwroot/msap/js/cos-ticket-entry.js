@@ -149,7 +149,7 @@ const initializeCosTicketEntry = () => {
         if (submitting) return;
         let message = timeError(times());
         if (!message && !form.elements.TugMasterId.value) message = 'Select the captain / tug master for this service.';
-        if (!message && form.dataset.imageRequired === 'true' && !form.elements.imageFile?.files?.length) {
+        if (!message && form.dataset.imageRequired === 'true' && !form.elements.imageFile?.files?.length && !form._fallbackImageFile) {
             message = 'Attach a photo of the dispatch ticket before saving.';
         }
         if (!message && form.elements.Tons) {
@@ -179,9 +179,13 @@ const initializeCosTicketEntry = () => {
             });
             if (!confirmation.isConfirmed) return;
             ModernAlert.showLoading(editing ? 'Saving ticket changes…' : 'Saving actual ticket…');
+            const payload = new FormData(form);
+            if (!form.elements.imageFile?.files?.length && form._fallbackImageFile) {
+                payload.set('imageFile', form._fallbackImageFile);
+            }
             const response = await fetch(form.action, {
                 method: 'POST',
-                body: new FormData(form),
+                body: payload,
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
             if (!response.ok || response.redirected) throw new Error('Save failed');
@@ -208,6 +212,7 @@ const initializeTicketFocusAndViewer = (panel, formEl) => {
     const entryMain = document.getElementById('cosEntryMain');
     const dropzone = document.getElementById('cosPhotoDropzone');
     const fileInput = document.getElementById('cosTicketImage');
+    const cameraInput = document.getElementById('cosTicketCamera');
     const previewImg = document.getElementById('cosTicketImagePreview');
     const emptyState = document.getElementById('cosTicketImageEmpty');
     const statusLabel = document.getElementById('cosTicketImageStatus');
@@ -296,37 +301,7 @@ const initializeTicketFocusAndViewer = (panel, formEl) => {
         window.location.href = closeUrl;
     };
 
-    const assignFileToInput = file => {
-        if (!fileInput || !file) return false;
-        if (!file.type || !file.type.startsWith('image/')) {
-            ModernAlert.warning('Please choose an image file for the dispatch ticket photo.');
-            return false;
-        }
-        try {
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            fileInput.files = dt.files;
-            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-            return true;
-        } catch {
-            ModernAlert.warning('Use Choose photo to attach this image on your browser.');
-            return false;
-        }
-    };
-
-    const handleFileSelected = () => {
-        if (!fileInput) return;
-        const file = fileInput.files && fileInput.files[0];
-        if (file && (!file.type || !file.type.startsWith('image/'))) {
-            fileInput.value = '';
-            if (blobUrl) {
-                URL.revokeObjectURL(blobUrl);
-                blobUrl = null;
-            }
-            setImageSource(initialUrl, initialUrl ? 'Saved photo' : 'No photo');
-            ModernAlert.warning('Please select an image file for the dispatch ticket photo.');
-            return;
-        }
+    const applySelectedFile = file => {
         if (blobUrl) {
             URL.revokeObjectURL(blobUrl);
             blobUrl = null;
@@ -334,7 +309,7 @@ const initializeTicketFocusAndViewer = (panel, formEl) => {
         if (file) {
             blobUrl = URL.createObjectURL(file);
             setImageSource(blobUrl, 'Selected photo (unsaved)');
-            if (fileNameLabel) fileNameLabel.textContent = file.name;
+            if (fileNameLabel) fileNameLabel.textContent = file.name || 'Captured photo';
             if (workspace) {
                 workspace.dataset.imageCollapsed = 'false';
                 const toggleBtn = panel.querySelector('[data-image-toggle]');
@@ -357,14 +332,70 @@ const initializeTicketFocusAndViewer = (panel, formEl) => {
         }
     };
 
+    const assignFileToInput = file => {
+        if (!fileInput || !file) return false;
+        if (!file.type || !file.type.startsWith('image/')) {
+            ModernAlert.warning('Please choose an image file for the dispatch ticket photo.');
+            return false;
+        }
+        try {
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            fileInput.files = dt.files;
+            formEl._fallbackImageFile = null;
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        } catch {
+            formEl._fallbackImageFile = file;
+            applySelectedFile(file);
+            return true;
+        }
+    };
+
+    const handleFileSelected = () => {
+        if (!fileInput) return;
+        const file = fileInput.files && fileInput.files[0];
+        if (file && (!file.type || !file.type.startsWith('image/'))) {
+            fileInput.value = '';
+            formEl._fallbackImageFile = null;
+            applySelectedFile(null);
+            ModernAlert.warning('Please select an image file for the dispatch ticket photo.');
+            return;
+        }
+        if (file) {
+            formEl._fallbackImageFile = null;
+        }
+        applySelectedFile(file || formEl._fallbackImageFile || null);
+    };
+
     if (fileInput) {
         fileInput.addEventListener('change', handleFileSelected);
+    }
+
+    if (cameraInput) {
+        cameraInput.addEventListener('change', () => {
+            const captured = cameraInput.files && cameraInput.files[0];
+            if (!captured) return;
+            assignFileToInput(captured);
+            cameraInput.value = '';
+        });
     }
 
     panel.querySelectorAll('[data-trigger-photo-upload]').forEach(btn => {
         btn.addEventListener('click', event => {
             event.stopPropagation();
             if (fileInput) fileInput.click();
+        });
+    });
+
+    panel.querySelectorAll('[data-trigger-camera-upload]').forEach(btn => {
+        btn.addEventListener('click', event => {
+            event.stopPropagation();
+            if (cameraInput) {
+                cameraInput.click();
+            } else if (fileInput) {
+                fileInput.click();
+            }
         });
     });
 
@@ -441,31 +472,11 @@ const initializeTicketFocusAndViewer = (panel, formEl) => {
     formEl.addEventListener('scroll', closeModernSelects, { passive: true });
 
     // Image toolbar controls
-    const zoomInBtn = panel.querySelector('[data-image-zoom-in]');
-    const zoomOutBtn = panel.querySelector('[data-image-zoom-out]');
     const rotateBtn = panel.querySelector('[data-image-rotate]');
     const resetBtn = panel.querySelector('[data-image-reset]');
     const fullscreenBtn = panel.querySelector('[data-image-fullscreen]');
     const collapseBtn = panel.querySelector('[data-image-toggle]');
 
-    if (zoomInBtn) {
-        zoomInBtn.addEventListener('click', () => {
-            if (!activeUrl) return;
-            scale = Math.min(4, +(scale + 0.25).toFixed(2));
-            applyTransform();
-        });
-    }
-    if (zoomOutBtn) {
-        zoomOutBtn.addEventListener('click', () => {
-            if (!activeUrl) return;
-            scale = Math.max(0.5, +(scale - 0.25).toFixed(2));
-            if (scale <= 1) {
-                panX = 0;
-                panY = 0;
-            }
-            applyTransform();
-        });
-    }
     if (rotateBtn) {
         rotateBtn.addEventListener('click', () => {
             if (!activeUrl) return;
@@ -495,40 +506,152 @@ const initializeTicketFocusAndViewer = (panel, formEl) => {
         });
     }
 
-    // Pointer pan + wheel zoom + double-click zoom on stage
+    // Multi-touch pinch-to-zoom, pointer pan, wheel zoom, and double-tap/double-click zoom on stage
     if (stage) {
+        const activePointers = new Map();
         let dragging = false;
-        let pointerId = null;
-        let startX = 0;
-        let startY = 0;
+        let pinching = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let downX = 0;
+        let downY = 0;
+        let movedDuringTap = false;
+        let pinchStartDist = 0;
+        let pinchStartScale = 1;
+        let pinchStartMidX = 0;
+        let pinchStartMidY = 0;
+        let pinchStartPanX = 0;
+        let pinchStartPanY = 0;
+        let lastTapTime = 0;
+        let lastTapX = 0;
+        let lastTapY = 0;
+
+        const getPinchMetrics = () => {
+            const pts = Array.from(activePointers.values());
+            const dx = pts[1].x - pts[0].x;
+            const dy = pts[1].y - pts[0].y;
+            return {
+                dist: Math.hypot(dx, dy) || 1,
+                midX: (pts[0].x + pts[1].x) / 2,
+                midY: (pts[0].y + pts[1].y) / 2
+            };
+        };
+
+        const toggleDoubleZoom = () => {
+            if (!activeUrl) return;
+            if (scale > 1) {
+                scale = 1;
+                panX = 0;
+                panY = 0;
+            } else {
+                scale = 2.25;
+            }
+            applyTransform();
+        };
 
         stage.addEventListener('pointerdown', event => {
-            if (!activeUrl || scale <= 1 || event.button !== 0) return;
-            dragging = true;
-            pointerId = event.pointerId;
-            startX = event.clientX - panX;
-            startY = event.clientY - panY;
-            stage.classList.add('is-dragging');
-            try { stage.setPointerCapture(pointerId); } catch { /* ignore */ }
+            if (!activeUrl) return;
+            if (event.pointerType === 'mouse' && event.button !== 0) return;
+            activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+            try { stage.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+
+            if (activePointers.size === 2) {
+                pinching = true;
+                dragging = false;
+                movedDuringTap = true;
+                const metrics = getPinchMetrics();
+                pinchStartDist = metrics.dist;
+                pinchStartScale = scale;
+                pinchStartMidX = metrics.midX;
+                pinchStartMidY = metrics.midY;
+                pinchStartPanX = panX;
+                pinchStartPanY = panY;
+                stage.classList.add('is-dragging');
+            } else if (activePointers.size === 1) {
+                downX = event.clientX;
+                downY = event.clientY;
+                movedDuringTap = false;
+                if (scale > 1) {
+                    dragging = true;
+                    dragStartX = event.clientX - panX;
+                    dragStartY = event.clientY - panY;
+                    stage.classList.add('is-dragging');
+                }
+            }
         });
 
         stage.addEventListener('pointermove', event => {
-            if (!dragging || event.pointerId !== pointerId) return;
-            panX = event.clientX - startX;
-            panY = event.clientY - startY;
-            applyTransform();
+            if (!activePointers.has(event.pointerId)) return;
+            activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+            if (pinching && activePointers.size >= 2) {
+                const metrics = getPinchMetrics();
+                scale = Math.min(4, Math.max(0.5, +(pinchStartScale * (metrics.dist / pinchStartDist)).toFixed(3)));
+                if (scale <= 1) {
+                    panX = 0;
+                    panY = 0;
+                } else {
+                    panX = pinchStartPanX + (metrics.midX - pinchStartMidX);
+                    panY = pinchStartPanY + (metrics.midY - pinchStartMidY);
+                }
+                applyTransform();
+                return;
+            }
+
+            if (Math.hypot(event.clientX - downX, event.clientY - downY) > 10) {
+                movedDuringTap = true;
+            }
+
+            if (dragging && activePointers.size === 1) {
+                panX = event.clientX - dragStartX;
+                panY = event.clientY - dragStartY;
+                applyTransform();
+            }
         });
 
-        const stopDrag = event => {
-            if (!dragging || (pointerId !== null && event.pointerId !== pointerId)) return;
-            dragging = false;
-            stage.classList.remove('is-dragging');
-            try { stage.releasePointerCapture(pointerId); } catch { /* ignore */ }
-            pointerId = null;
+        const stopPointer = event => {
+            if (!activePointers.has(event.pointerId)) return;
+            const wasSingleTouchTap = event.pointerType === 'touch'
+                && activePointers.size === 1
+                && !pinching
+                && !movedDuringTap;
+
+            activePointers.delete(event.pointerId);
+            try { stage.releasePointerCapture(event.pointerId); } catch { /* ignore */ }
+
+            if (activePointers.size < 2) {
+                pinching = false;
+            }
+
+            if (activePointers.size === 1 && scale > 1) {
+                const remaining = Array.from(activePointers.values())[0];
+                dragging = true;
+                dragStartX = remaining.x - panX;
+                dragStartY = remaining.y - panY;
+            } else if (activePointers.size === 0) {
+                dragging = false;
+                stage.classList.remove('is-dragging');
+                if (scale <= 1) {
+                    panX = 0;
+                    panY = 0;
+                    applyTransform();
+                }
+                if (wasSingleTouchTap) {
+                    const now = Date.now();
+                    if (now - lastTapTime < 300 && Math.hypot(event.clientX - lastTapX, event.clientY - lastTapY) < 32) {
+                        lastTapTime = 0;
+                        toggleDoubleZoom();
+                    } else {
+                        lastTapTime = now;
+                        lastTapX = event.clientX;
+                        lastTapY = event.clientY;
+                    }
+                }
+            }
         };
 
-        stage.addEventListener('pointerup', stopDrag);
-        stage.addEventListener('pointercancel', stopDrag);
+        stage.addEventListener('pointerup', stopPointer);
+        stage.addEventListener('pointercancel', stopPointer);
 
         stage.addEventListener('wheel', event => {
             if (!activeUrl) return;
@@ -542,17 +665,7 @@ const initializeTicketFocusAndViewer = (panel, formEl) => {
             applyTransform();
         }, { passive: false });
 
-        stage.addEventListener('dblclick', () => {
-            if (!activeUrl) return;
-            if (scale > 1) {
-                scale = 1;
-                panX = 0;
-                panY = 0;
-            } else {
-                scale = 2;
-            }
-            applyTransform();
-        });
+        stage.addEventListener('dblclick', () => toggleDoubleZoom());
     }
 
     window.addEventListener('beforeunload', () => {

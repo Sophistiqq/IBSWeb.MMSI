@@ -434,6 +434,18 @@ body.cos-ticket-focus-open .swal2-container {
 .cos-entry-heading-title {
     min-width: 0;
     flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cos-entry-heading-title .ui-section-title {
+    text-wrap: balance;
+}
+
+.cos-entry-heading-subtitle {
+    margin: 0;
+    overflow-wrap: break-word;
 }
 
 .cos-entry-heading-actions {
@@ -441,6 +453,20 @@ body.cos-ticket-focus-open .swal2-container {
     align-items: center;
     gap: var(--ui-space-2);
     flex-shrink: 0;
+}
+
+@media (min-width: 1024px) {
+    .cos-ticket-entry-form .cos-camera-only {
+        display: none;
+    }
+}
+
+@media (pointer: coarse) {
+    .cos-icon-btn,
+    .cos-image-toolbar .cos-icon-btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
 }
 
 .cos-icon-btn {
@@ -834,7 +860,24 @@ body.cos-ticket-focus-open .swal2-container {
         border-radius: 16px 16px 0 0;
         border-bottom: 0;
         padding: var(--ui-space-4);
+        padding-bottom: max(var(--ui-space-4), env(safe-area-inset-bottom, 0px));
         box-sizing: border-box;
+    }
+
+    .cos-entry-heading {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--ui-space-2);
+    }
+
+    .cos-entry-heading-actions {
+        order: -1;
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .cos-entry-heading-title {
+        width: 100%;
     }
 
     .cos-ticket-entry-panel.cos-ticket-lifted .cos-ticket-entry-form {
@@ -847,9 +890,9 @@ body.cos-ticket-focus-open .swal2-container {
     }
 
     .cos-image-pane-stage {
-        min-height: 180px;
-        height: 210px;
-        max-height: 32dvh;
+        min-height: 200px;
+        height: 230px;
+        max-height: 36dvh;
     }
 
     .cos-image-pane-caption {

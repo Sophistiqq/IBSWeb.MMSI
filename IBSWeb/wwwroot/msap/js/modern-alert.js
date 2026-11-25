@@ -319,95 +319,251 @@ const ModernAlert = {
     },
 
     /**
-     * Show an image preview with zoom and pan controls
+     * Show an image preview with zoom and pan controls (mouse + touch pinch/pan)
      */
     image: function(imageUrl, title = 'Image Preview', options = {}) {
+        const safeTitle = this._escapeHtml(title);
         return Swal.fire({
             ...this._baseConfig,
             customClass: {
                 ...this._baseConfig.customClass,
-                popup: 'modern-swal-popup modern-swal-popup--media'
+                container: 'modern-swal-media-container',
+                popup: 'modern-swal-popup modern-swal-popup--media modern-swal-popup--image',
+                actions: 'modern-swal-actions modern-swal-actions--hidden'
             },
             titleText: title,
             html: `
-                <div class="modern-swal-media-header">
-                    <div class="modern-swal-header-text">
-                        <h2 class="modern-swal-title">${title}</h2>
-                    </div>
-                </div>
                 <div class="modern-image-viewer-container">
-                    <div class="modern-image-viewer-toolbar">
-                        <button type="button" class="modern-image-viewer-btn zoom-in" title="Zoom In"><span class="material-symbols-outlined">zoom_in</span></button>
-                        <button type="button" class="modern-image-viewer-btn zoom-out" title="Zoom Out"><span class="material-symbols-outlined">zoom_out</span></button>
-                        <button type="button" class="modern-image-viewer-btn rotate-right" title="Rotate 90°"><span class="material-symbols-outlined">rotate_right</span></button>
-                        <button type="button" class="modern-image-viewer-btn reset" title="Reset"><span class="material-symbols-outlined">restart_alt</span></button>
-                        <button type="button" class="modern-image-viewer-btn modern-image-viewer-btn--close close-viewer" title="Close"><span class="material-symbols-outlined">close</span></button>
+                    <div class="modern-image-viewer-topbar">
+                        <span class="modern-image-viewer-title">${safeTitle}</span>
+                        <div class="modern-image-viewer-toolbar" role="toolbar" aria-label="Image controls">
+                            <button type="button" class="modern-image-viewer-btn zoom-out" title="Zoom Out" aria-label="Zoom out"><span class="material-symbols-outlined" aria-hidden="true">zoom_out</span></button>
+                            <button type="button" class="modern-image-viewer-btn zoom-in" title="Zoom In" aria-label="Zoom in"><span class="material-symbols-outlined" aria-hidden="true">zoom_in</span></button>
+                            <button type="button" class="modern-image-viewer-btn rotate-right" title="Rotate 90°" aria-label="Rotate 90 degrees"><span class="material-symbols-outlined" aria-hidden="true">rotate_right</span></button>
+                            <button type="button" class="modern-image-viewer-btn reset" title="Reset" aria-label="Reset view"><span class="material-symbols-outlined" aria-hidden="true">restart_alt</span></button>
+                            <button type="button" class="modern-image-viewer-btn modern-image-viewer-btn--close close-viewer" title="Close" aria-label="Close"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
+                        </div>
                     </div>
                     <div class="modern-image-viewer-wrapper">
-                        <img src="${imageUrl}" class="modern-image-viewer-img" alt="${this._escapeHtml(title)}" />
+                        <img src="${imageUrl}" class="modern-image-viewer-img" alt="${safeTitle}" />
                     </div>
                     <div class="modern-image-viewer-hint">
-                        Scroll to Zoom • Drag to Pan • Close to Exit
+                        Pinch or scroll to zoom · Drag to pan · Double-tap to zoom
                     </div>
                 </div>
             `,
             showConfirmButton: false,
+            showCancelButton: false,
             showCloseButton: false,
-            width: 'min(92vw, 1120px)',
+            width: 'min(94vw, 1120px)',
             padding: '0',
-            didOpen: () => {
-                const img = document.querySelector('.modern-image-viewer-img');
-                const wrapper = document.querySelector('.modern-image-viewer-wrapper');
+            didOpen: (popup) => {
+                const img = popup.querySelector('.modern-image-viewer-img');
+                const wrapper = popup.querySelector('.modern-image-viewer-wrapper');
+                if (!img || !wrapper) return;
+
                 let scale = 1;
                 let rotation = Number.isFinite(options?.rotation) ? options.rotation : 0;
-                let isDragging = false;
-                let startX, startY, translateX = 0, translateY = 0;
+                let translateX = 0;
+                let translateY = 0;
+
+                const activePointers = new Map();
+                let dragging = false;
+                let pinching = false;
+                let dragStartX = 0;
+                let dragStartY = 0;
+                let downX = 0;
+                let downY = 0;
+                let movedDuringTap = false;
+                let pinchStartDist = 0;
+                let pinchStartScale = 1;
+                let pinchStartMidX = 0;
+                let pinchStartMidY = 0;
+                let pinchStartX = 0;
+                let pinchStartY = 0;
+                let lastTapTime = 0;
+                let lastTapX = 0;
+                let lastTapY = 0;
 
                 const updateTransform = () => {
                     img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotation}deg)`;
+                    wrapper.classList.toggle('is-zoomed', scale > 1);
                 };
                 updateTransform();
 
-                document.querySelector('.zoom-in').onclick = (e) => { e.stopPropagation(); scale += 0.3; updateTransform(); };
-                document.querySelector('.zoom-out').onclick = (e) => { e.stopPropagation(); if (scale > 0.4) scale -= 0.3; updateTransform(); };
-                document.querySelector('.rotate-right').onclick = (e) => { e.stopPropagation(); rotation = (rotation + 90) % 360; updateTransform(); };
-                document.querySelector('.reset').onclick = (e) => { e.stopPropagation(); scale = 1; rotation = 0; translateX = 0; translateY = 0; updateTransform(); };
-                document.querySelector('.close-viewer').onclick = (e) => { e.stopPropagation(); Swal.close(); };
-
-                wrapper.onmousedown = (e) => {
-                    if (e.button !== 0) return;
-                    isDragging = true;
-                    startX = e.clientX - translateX;
-                    startY = e.clientY - translateY;
-                    wrapper.style.cursor = 'grabbing';
-                };
-
-                const onMouseMove = (e) => {
-                    if (!isDragging) return;
-                    translateX = e.clientX - startX;
-                    translateY = e.clientY - startY;
+                const resetView = () => {
+                    scale = 1;
+                    rotation = 0;
+                    translateX = 0;
+                    translateY = 0;
                     updateTransform();
                 };
 
-                const onMouseUp = () => {
-                    isDragging = false;
-                    wrapper.style.cursor = 'grab';
+                const toggleDoubleZoom = () => {
+                    if (scale > 1) {
+                        scale = 1;
+                        translateX = 0;
+                        translateY = 0;
+                    } else {
+                        scale = 2.25;
+                    }
+                    updateTransform();
                 };
 
-                window.addEventListener('mousemove', onMouseMove);
-                window.addEventListener('mouseup', onMouseUp);
+                const getPinchMetrics = () => {
+                    const pts = Array.from(activePointers.values());
+                    const dx = pts[1].x - pts[0].x;
+                    const dy = pts[1].y - pts[0].y;
+                    return {
+                        dist: Math.hypot(dx, dy) || 1,
+                        midX: (pts[0].x + pts[1].x) / 2,
+                        midY: (pts[0].y + pts[1].y) / 2
+                    };
+                };
 
-                wrapper.onwheel = (e) => {
+                popup.querySelector('.zoom-in').onclick = (e) => {
+                    e.stopPropagation();
+                    scale = Math.min(8, +(scale + 0.35).toFixed(2));
+                    updateTransform();
+                };
+                popup.querySelector('.zoom-out').onclick = (e) => {
+                    e.stopPropagation();
+                    scale = Math.max(0.5, +(scale - 0.35).toFixed(2));
+                    if (scale <= 1) {
+                        translateX = 0;
+                        translateY = 0;
+                    }
+                    updateTransform();
+                };
+                popup.querySelector('.rotate-right').onclick = (e) => {
+                    e.stopPropagation();
+                    rotation = (rotation + 90) % 360;
+                    updateTransform();
+                };
+                popup.querySelector('.reset').onclick = (e) => {
+                    e.stopPropagation();
+                    resetView();
+                };
+                popup.querySelector('.close-viewer').onclick = (e) => {
+                    e.stopPropagation();
+                    Swal.close();
+                };
+
+                wrapper.addEventListener('pointerdown', (e) => {
+                    if (e.pointerType === 'mouse' && e.button !== 0) return;
+                    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                    try { wrapper.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+
+                    if (activePointers.size === 2) {
+                        pinching = true;
+                        dragging = false;
+                        movedDuringTap = true;
+                        const metrics = getPinchMetrics();
+                        pinchStartDist = metrics.dist;
+                        pinchStartScale = scale;
+                        pinchStartMidX = metrics.midX;
+                        pinchStartMidY = metrics.midY;
+                        pinchStartX = translateX;
+                        pinchStartY = translateY;
+                        wrapper.classList.add('is-dragging');
+                    } else if (activePointers.size === 1) {
+                        downX = e.clientX;
+                        downY = e.clientY;
+                        movedDuringTap = false;
+                        if (scale > 1) {
+                            dragging = true;
+                            dragStartX = e.clientX - translateX;
+                            dragStartY = e.clientY - translateY;
+                            wrapper.classList.add('is-dragging');
+                        }
+                    }
+                });
+
+                wrapper.addEventListener('pointermove', (e) => {
+                    if (!activePointers.has(e.pointerId)) return;
+                    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+                    if (pinching && activePointers.size >= 2) {
+                        const metrics = getPinchMetrics();
+                        scale = Math.min(8, Math.max(0.5, +(pinchStartScale * (metrics.dist / pinchStartDist)).toFixed(3)));
+                        if (scale <= 1) {
+                            translateX = 0;
+                            translateY = 0;
+                        } else {
+                            translateX = pinchStartX + (metrics.midX - pinchStartMidX);
+                            translateY = pinchStartY + (metrics.midY - pinchStartMidY);
+                        }
+                        updateTransform();
+                        return;
+                    }
+
+                    if (Math.hypot(e.clientX - downX, e.clientY - downY) > 10) {
+                        movedDuringTap = true;
+                    }
+
+                    if (dragging && activePointers.size === 1) {
+                        translateX = e.clientX - dragStartX;
+                        translateY = e.clientY - dragStartY;
+                        updateTransform();
+                    }
+                });
+
+                const stopPointer = (e) => {
+                    if (!activePointers.has(e.pointerId)) return;
+                    const wasSingleTouchTap = e.pointerType === 'touch'
+                        && activePointers.size === 1
+                        && !pinching
+                        && !movedDuringTap;
+
+                    activePointers.delete(e.pointerId);
+                    try { wrapper.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+
+                    if (activePointers.size < 2) {
+                        pinching = false;
+                    }
+
+                    if (activePointers.size === 1 && scale > 1) {
+                        const remaining = Array.from(activePointers.values())[0];
+                        dragging = true;
+                        dragStartX = remaining.x - translateX;
+                        dragStartY = remaining.y - translateY;
+                    } else if (activePointers.size === 0) {
+                        dragging = false;
+                        wrapper.classList.remove('is-dragging');
+                        if (scale <= 1) {
+                            translateX = 0;
+                            translateY = 0;
+                            updateTransform();
+                        }
+                        if (wasSingleTouchTap) {
+                            const now = Date.now();
+                            if (now - lastTapTime < 300 && Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < 32) {
+                                lastTapTime = 0;
+                                toggleDoubleZoom();
+                            } else {
+                                lastTapTime = now;
+                                lastTapX = e.clientX;
+                                lastTapY = e.clientY;
+                            }
+                        }
+                    }
+                };
+
+                wrapper.addEventListener('pointerup', stopPointer);
+                wrapper.addEventListener('pointercancel', stopPointer);
+
+                wrapper.addEventListener('wheel', (e) => {
                     e.preventDefault();
                     const delta = e.deltaY > 0 ? -0.15 : 0.15;
-                    scale = Math.min(Math.max(0.3, scale + delta), 8);
+                    scale = Math.min(Math.max(0.5, +(scale + delta).toFixed(2)), 8);
+                    if (scale <= 1) {
+                        translateX = 0;
+                        translateY = 0;
+                    }
                     updateTransform();
-                };
+                }, { passive: false });
 
-                Swal.getPopup().addEventListener('remove', () => {
-                    window.removeEventListener('mousemove', onMouseMove);
-                    window.removeEventListener('mouseup', onMouseUp);
-                });
+                wrapper.addEventListener('dblclick', () => toggleDoubleZoom());
             }
         });
     },
@@ -420,7 +576,8 @@ const ModernAlert = {
             ...this._baseConfig,
             customClass: {
                 ...this._baseConfig.customClass,
-                popup: 'modern-swal-popup modern-swal-popup--media'
+                popup: 'modern-swal-popup modern-swal-popup--media',
+                actions: 'modern-swal-actions modern-swal-actions--hidden'
             },
             titleText: title,
             html: `
