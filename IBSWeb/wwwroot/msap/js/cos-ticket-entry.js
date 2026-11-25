@@ -218,6 +218,11 @@ const initializeTicketFocusAndViewer = (panel, formEl) => {
     const statusLabel = document.getElementById('cosTicketImageStatus');
     const fileNameLabel = document.getElementById('cosTicketImageFileName');
     const stage = document.getElementById('cosTicketImageStage');
+    const ocrContainer = document.getElementById('cosTicketNumberOcr');
+    const ocrStatus = document.getElementById('cosTicketNumberOcrStatus');
+    const ocrChip = document.getElementById('cosTicketNumberOcrChip');
+    const ocrValueEl = document.getElementById('cosTicketNumberOcrValue');
+    const ticketNumberInput = formEl.elements?.DispatchNumber || null;
 
     const isNewTicket = formEl.dataset.isNewTicket === 'true';
     const isReadOnly = formEl.dataset.isReadonly === 'true';
@@ -230,6 +235,193 @@ const initializeTicketFocusAndViewer = (panel, formEl) => {
     let rotation = 0;
     let panX = 0;
     let panY = 0;
+    let ocrScanToken = 0;
+    let suggestedTicketNumber = '';
+
+    const hideOcrSuggestion = () => {
+        suggestedTicketNumber = '';
+        if (ocrStatus) {
+            ocrStatus.textContent = '';
+            ocrStatus.hidden = true;
+        }
+        if (ocrChip) ocrChip.hidden = true;
+        if (ocrContainer) ocrContainer.hidden = true;
+    };
+
+    const showOcrScanning = () => {
+        if (!ocrContainer || !ocrStatus || !ocrChip) return;
+        suggestedTicketNumber = '';
+        ocrChip.hidden = true;
+        ocrStatus.textContent = 'Reading ticket # from photo…';
+        ocrStatus.hidden = false;
+        ocrContainer.hidden = false;
+    };
+
+    const showOcrSuggestion = value => {
+        if (!ocrContainer || !ocrStatus || !ocrChip || !ocrValueEl) return;
+        suggestedTicketNumber = value;
+        ocrValueEl.textContent = value;
+        ocrStatus.hidden = true;
+        ocrChip.hidden = false;
+        ocrContainer.hidden = false;
+    };
+
+    const extractTicketNumberFromOcr = rawText => {
+        const cleaned = String(rawText || '').replace(/[|]/g, ' ').replace(/\r/g, '\n');
+        const explicitPatterns = [
+            /(?:\bcontrol\s*no\.?|\bticket\s*no\.?|\bno\.?|\bn[°ºo¢0?]\.?)\s*[:#-]?\s*(?:[A-Z]{2,6}\s+){0,2}([0-9]{2,4}-[0-9]{3,6}|[0-9]{3,8})\b/i,
+            /\b([0-9]{2}-[0-9]{3,6})\b/
+        ];
+        for (const rx of explicitPatterns) {
+            const match = cleaned.match(rx);
+            if (match && match[1]) {
+                const candidate = match[1].trim();
+                if (!/^(19|20)\d{2}$/.test(candidate)) return candidate;
+            }
+        }
+        const skipLine = /tel|fax|date|form|rev|issue|unit|residences|bldg|building|floor|st\.|street|manila|pasig|malate|ortigas|ermita|boulevard|ave|center|inc\.?|corp/i;
+        const lines = cleaned.split('\n').map(l => l.trim()).filter(l => l && !skipLine.test(l));
+        const candidates = [];
+        for (const line of lines) {
+            const nums = line.match(/\b\d{3,7}\b/g);
+            if (!nums) continue;
+            for (const n of nums) {
+                if (/^(19|20)\d{2}$/.test(n)) continue;
+                candidates.push(n);
+            }
+        }
+        return candidates.find(n => n.length >= 4) || candidates[0] || null;
+    };
+
+    const loadTesseractWorker = () => {
+        if (window.__msapTicketOcrWorkerPromise) return window.__msapTicketOcrWorkerPromise;
+        window.__msapTicketOcrWorkerPromise = new Promise((resolve, reject) => {
+            const initWorker = async () => {
+                if (!window.Tesseract?.createWorker) {
+                    reject(new Error('Tesseract unavailable'));
+                    return;
+                }
+                const worker = await window.Tesseract.createWorker('eng');
+                resolve(worker);
+            };
+            if (window.Tesseract?.createWorker) {
+                initWorker().catch(reject);
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+            script.async = true;
+            script.onload = () => initWorker().catch(reject);
+            script.onerror = () => reject(new Error('Failed to load Tesseract'));
+            document.head.appendChild(script);
+        }).catch(err => {
+            window.__msapTicketOcrWorkerPromise = null;
+            throw err;
+        });
+        return window.__msapTicketOcrWorkerPromise;
+    };
+
+    const buildTopRightCropCanvas = (url, angleDeg) => new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            const rad = ((angleDeg % 360) * Math.PI) / 180;
+            const swap = angleDeg % 180 !== 0;
+            const fullW = swap ? img.naturalHeight : img.naturalWidth;
+            const fullH = swap ? img.naturalWidth : img.naturalHeight;
+            if (!fullW || !fullH) {
+                reject(new Error('Empty image'));
+                return;
+            }
+            const maxDim = 1400;
+            const downscale = Math.min(1, maxDim / Math.max(fullW, fullH));
+            const scaledW = Math.max(1, Math.round(fullW * downscale));
+            const scaledH = Math.max(1, Math.round(fullH * downscale));
+
+            const fullCanvas = document.createElement('canvas');
+            fullCanvas.width = scaledW;
+            fullCanvas.height = scaledH;
+            const fullCtx = fullCanvas.getContext('2d');
+            if (!fullCtx) {
+                reject(new Error('Canvas unavailable'));
+                return;
+            }
+            fullCtx.translate(scaledW / 2, scaledH / 2);
+            fullCtx.rotate(rad);
+            fullCtx.drawImage(
+                img,
+                -(img.naturalWidth * downscale) / 2,
+                -(img.naturalHeight * downscale) / 2,
+                img.naturalWidth * downscale,
+                img.naturalHeight * downscale
+            );
+
+            const cropX = Math.floor(scaledW * 0.48);
+            const cropY = 0;
+            const cropW = Math.max(1, scaledW - cropX);
+            const cropH = Math.max(1, Math.floor(scaledH * 0.30));
+
+            const cropCanvas = document.createElement('canvas');
+            cropCanvas.width = cropW;
+            cropCanvas.height = cropH;
+            const cropCtx = cropCanvas.getContext('2d');
+            if (!cropCtx) {
+                reject(new Error('Canvas unavailable'));
+                return;
+            }
+            cropCtx.drawImage(fullCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+            resolve(cropCanvas);
+        };
+        img.onerror = () => reject(new Error('Image load failed'));
+        img.src = url;
+    });
+
+    const scanTicketNumberFromPhoto = async (url, angleDeg = 0) => {
+        if (isReadOnly || !ticketNumberInput || !ocrContainer) return;
+        if (!url || ticketNumberInput.value.trim()) {
+            hideOcrSuggestion();
+            return;
+        }
+        const token = ++ocrScanToken;
+        showOcrScanning();
+        try {
+            const [cropCanvas, worker] = await Promise.all([
+                buildTopRightCropCanvas(url, angleDeg),
+                loadTesseractWorker()
+            ]);
+            if (token !== ocrScanToken || ticketNumberInput.value.trim()) return;
+            const { data } = await worker.recognize(cropCanvas);
+            if (token !== ocrScanToken || ticketNumberInput.value.trim()) return;
+            const detected = extractTicketNumberFromOcr(data?.text || '');
+            if (detected) {
+                showOcrSuggestion(detected.slice(0, 20));
+            } else {
+                hideOcrSuggestion();
+            }
+        } catch {
+            if (token === ocrScanToken) hideOcrSuggestion();
+        }
+    };
+
+    if (ocrChip && ticketNumberInput) {
+        ocrChip.addEventListener('click', () => {
+            if (!suggestedTicketNumber) return;
+            ticketNumberInput.value = suggestedTicketNumber;
+            ticketNumberInput.dispatchEvent(new Event('input', { bubbles: true }));
+            ticketNumberInput.dispatchEvent(new Event('change', { bubbles: true }));
+            hideOcrSuggestion();
+            ticketNumberInput.focus();
+        });
+    }
+
+    if (ticketNumberInput) {
+        ticketNumberInput.addEventListener('input', () => {
+            if (ticketNumberInput.value.trim()) {
+                ocrScanToken++;
+                hideOcrSuggestion();
+            }
+        });
+    }
 
     const closeModernSelects = () => {
         document.querySelectorAll('.modern-select-dropdown.show').forEach(el => el.classList.remove('show'));
@@ -323,12 +515,15 @@ const initializeTicketFocusAndViewer = (panel, formEl) => {
             if (panel.dataset.ticketStep === 'upload') {
                 setStep('split', { focusTicketNumber: true });
             }
+            scanTicketNumberFromPhoto(blobUrl, 0);
         } else if (initialUrl) {
             setImageSource(initialUrl, 'Saved photo');
             if (fileNameLabel) fileNameLabel.textContent = 'Saved photo';
+            hideOcrSuggestion();
         } else {
             setImageSource('', 'No photo');
             if (fileNameLabel) fileNameLabel.textContent = 'No file selected';
+            hideOcrSuggestion();
         }
     };
 
@@ -482,6 +677,9 @@ const initializeTicketFocusAndViewer = (panel, formEl) => {
             if (!activeUrl) return;
             rotation = (rotation + 90) % 360;
             applyTransform();
+            if (!isReadOnly && ticketNumberInput && !ticketNumberInput.value.trim()) {
+                scanTicketNumberFromPhoto(activeUrl, rotation);
+            }
         });
     }
     if (resetBtn) {
