@@ -17,7 +17,10 @@
             <h1 class="ui-page-title" data-page-header>Collections</h1>
             @if (canPrepare)
             {
-                <a id="createCollection" asp-action="Create" class="modern-btn-primary ui-page-action" data-hotkey="c">Record collection</a>
+                <a id="createCollection" asp-action="Create" class="modern-btn-primary ui-page-action" data-hotkey="c">
+                    <span class="material-symbols-outlined" aria-hidden="true">add_circle</span>
+                    CREATE COLLECTION
+                </a>
             }
             <p class="ui-page-description ui-caption ui-muted">Review receipts, billing payments and deposit or clearing status.</p>
         </header>

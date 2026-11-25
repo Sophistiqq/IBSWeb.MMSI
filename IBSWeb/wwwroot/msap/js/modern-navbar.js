@@ -23,15 +23,29 @@
     }
 
     /* ══════════════════════════════════════════════════════
-       Mega-menu open/close
+       Mega-menu open/close + viewport-edge clamping
     ══════════════════════════════════════════════════════ */
     function setupMegaMenus() {
         var overlay = document.getElementById('mnav-overlay');
         var items   = document.querySelectorAll('.mnav-item[data-mega]');
 
         function closeAll() {
-            items.forEach(function (i) { i.classList.remove('mnav-open'); });
+            items.forEach(function (i) {
+                i.classList.remove('mnav-open');
+                var trig = i.querySelector('.mnav-trigger');
+                if (trig) trig.setAttribute('aria-expanded', 'false');
+            });
             if (overlay) overlay.classList.remove('active');
+        }
+
+        function positionMega(item) {
+            var mega = item.querySelector('.mnav-mega');
+            if (!mega) return;
+            mega.classList.remove('mnav-mega-align-right');
+            var rect = mega.getBoundingClientRect();
+            if (rect.right > window.innerWidth - 16) {
+                mega.classList.add('mnav-mega-align-right');
+            }
         }
 
         items.forEach(function (item) {
@@ -42,7 +56,9 @@
                 var wasOpen = item.classList.contains('mnav-open');
                 closeAll();
                 if (!wasOpen) {
+                    positionMega(item);
                     item.classList.add('mnav-open');
+                    trigger.setAttribute('aria-expanded', 'true');
                     if (overlay) overlay.classList.add('active');
                 }
             });
@@ -53,10 +69,68 @@
     }
 
     /* ══════════════════════════════════════════════════════
+       Responsive Inline-vs-Drawer Layout (ResizeObserver)
+       Collapses automatically when the inline row no longer fits.
+    ══════════════════════════════════════════════════════ */
+    function setupResponsiveLayout(closeDrawer) {
+        var header  = document.getElementById('modern-navbar');
+        var navList = header ? header.querySelector('.mnav-nav-area .mnav-list') : null;
+        if (!header || !navList) return;
+
+        var lastCollapsedWidth = 0;
+
+        function measure() {
+            var isCurrentlyWide = header.classList.contains('is-wide');
+            var currentWidth    = header.clientWidth;
+
+            // Avoid layout thrashing: while collapsed, only remeasure when header grows
+            if (!isCurrentlyWide && lastCollapsedWidth > 0 && currentWidth <= lastCollapsedWidth) {
+                return;
+            }
+
+            header.classList.add('is-measuring');
+            header.classList.add('is-wide');
+
+            var fits = header.scrollWidth <= header.clientWidth;
+
+            if (fits) {
+                lastCollapsedWidth = 0;
+                if (typeof closeDrawer === 'function') closeDrawer();
+            } else {
+                header.classList.remove('is-wide');
+                lastCollapsedWidth = currentWidth;
+            }
+
+            window.requestAnimationFrame(function () {
+                header.classList.remove('is-measuring');
+            });
+        }
+
+        if (typeof ResizeObserver === 'function') {
+            var ro = new ResizeObserver(function () {
+                measure();
+            });
+            ro.observe(header);
+            ro.observe(navList);
+        } else {
+            window.addEventListener('resize', measure);
+        }
+
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(function () {
+                lastCollapsedWidth = 0;
+                measure();
+            });
+        }
+
+        measure();
+    }
+
+    /* ══════════════════════════════════════════════════════
        Spotlight search
     ══════════════════════════════════════════════════════ */
 
-    function collectAllNavLinks() {
+    function collectAllNavLinks(includeHome) {
         var seen  = new Set();
         var links = [];
 
@@ -85,26 +159,29 @@
             var raw = anchor.getAttribute('href') || '';
             var url = sanitize(raw);
             if (!url) return;
-            if (url === '/' || url.toLowerCase().includes('/home/')) return;
+            if (!includeHome && (url === '/' || url.toLowerCase().includes('/home/'))) return;
             if (seen.has(url)) return;
             seen.add(url);
 
             var label = getCleanLabel(anchor);
             if (!label) return;
 
-            var section = '';
-            var el = anchor.closest('.mnav-link-list, .mnav-mega');
-            if (el) {
-                var heading = el.querySelector('.mnav-section-label') || el.previousElementSibling;
-                if (heading && heading.classList.contains('mnav-section-label')) {
-                    section = heading.textContent.trim();
+            var section = anchor.getAttribute('data-nav-section') || '';
+            if (!section) {
+                var el = anchor.closest('.mnav-link-list, .mnav-mega');
+                if (el) {
+                    var heading = el.querySelector('.mnav-section-label') || el.previousElementSibling;
+                    if (heading && heading.classList.contains('mnav-section-label')) {
+                        section = heading.textContent.trim();
+                    }
                 }
             }
 
-            links.push({ url: url, label: label, section: section });
+            var isCurrent = anchor.getAttribute('aria-current') === 'page';
+            links.push({ url: url, label: label, section: section, isCurrent: isCurrent });
         }
 
-        document.querySelectorAll('#modern-navbar a[href]:not([href="#"]):not([data-search-ignore])').forEach(push);
+        document.querySelectorAll('#modern-navbar .mnav-nav-area a[href]:not([href="#"]):not([data-search-ignore])').forEach(push);
 
         return links;
     }
@@ -281,9 +358,9 @@
         var drawer      = document.getElementById('mnav-drawer');
         var overlay     = document.getElementById('mnav-drawer-overlay');
         var drawerList  = drawer ? drawer.querySelector('.mnav-list') : null;
-        if (!hamburger || !drawer || !drawerList || !overlay) return;
+        if (!hamburger || !drawer || !drawerList || !overlay) return null;
 
-        var links   = collectAllNavLinks();
+        var links   = collectAllNavLinks(true);
         var grouped = {};
         links.forEach(function (l) {
             var sec = l.section || 'Navigation';
@@ -296,20 +373,28 @@
             var header = document.createElement('div');
             header.className = 'mnav-section-label';
             header.textContent = sec;
-            header.style.cssText = 'padding:12px 16px 4px;margin:0;border-bottom:none';
             drawerList.appendChild(header);
 
             grouped[sec].forEach(function (l) {
                 var a = document.createElement('a');
                 a.href = l.url;
                 a.className = 'mnav-mega-link';
-                a.textContent = escapeHtml(l.label);
+                a.textContent = l.label;
+                if (l.isCurrent) a.setAttribute('aria-current', 'page');
                 drawerList.appendChild(a);
             });
         });
 
-        function open()  { document.body.classList.add('mnav-drawer-open'); overlay.classList.add('active'); }
-        function close() { document.body.classList.remove('mnav-drawer-open'); overlay.classList.remove('active'); }
+        function open()  {
+            document.body.classList.add('mnav-drawer-open');
+            overlay.classList.add('active');
+            hamburger.setAttribute('aria-expanded', 'true');
+        }
+        function close() {
+            document.body.classList.remove('mnav-drawer-open');
+            overlay.classList.remove('active');
+            hamburger.setAttribute('aria-expanded', 'false');
+        }
 
         hamburger.addEventListener('click', function () {
             if (document.body.classList.contains('mnav-drawer-open')) { close(); } else { open(); }
@@ -321,6 +406,8 @@
         drawer.addEventListener('click', function (e) {
             if (e.target.closest('a[href]')) close();
         });
+
+        return close;
     }
 
     /* ══════════════════════════════════════════════════════
@@ -358,7 +445,8 @@
         suppressQuickAccess();
         setupMegaMenus();
         setupSearch();
-        setupMobileDrawer();
+        var closeDrawer = setupMobileDrawer();
+        setupResponsiveLayout(closeDrawer);
         setupUserDropdown();
     });
 })();

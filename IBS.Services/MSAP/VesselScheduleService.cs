@@ -19,11 +19,16 @@ namespace IBS.Services.MSAP
         public async Task<ServiceResult<VesselScheduleBoardViewModel>> GetCalendarAsync(VesselScheduleBoardViewModel filters, CancellationToken ct = default)
         {
             var gridStart = filters.Date.AddDays(-(int)filters.Date.DayOfWeek);
-            int? portId = filters.PortId;
-            int? terminalId = filters.TerminalId;
-            string? search = filters.Search;
-            string? status = filters.Status;
-            var schedules = (await GetSchedulesAsync(gridStart, gridStart.AddDays(42), ct)).ToList();
+            var gridEnd = gridStart.AddDays(42);
+            var rangeStart = filters.SelectedDate?.Date ?? gridStart;
+            var rangeEndExclusive = (filters.SelectedEndDate?.Date ?? rangeStart).AddDays(1);
+            var queryStart = rangeStart < gridStart ? rangeStart : gridStart;
+            var queryEnd = rangeEndExclusive > gridEnd ? rangeEndExclusive : gridEnd;
+            var portId = filters.PortId;
+            var terminalId = filters.TerminalId;
+            var search = filters.Search;
+            var status = filters.Status;
+            var schedules = (await GetSchedulesAsync(queryStart, queryEnd, ct)).ToList();
             var ports = (await unitOfWork.Port.GetAllAsync(null, ct)).OrderBy(p => p.PortName).ToList();
             if (portId.HasValue && ports.All(p => p.PortId != portId))
             {
@@ -40,6 +45,7 @@ namespace IBS.Services.MSAP
             {
                 Date = filters.Date,
                 SelectedDate = filters.SelectedDate,
+                SelectedEndDate = filters.SelectedEndDate,
                 PortId = portId,
                 TerminalId = terminalId,
                 Search = search?.Trim(),
@@ -51,7 +57,7 @@ namespace IBS.Services.MSAP
                 Terminals = terminals.Select(t => new SelectListItem(t.TerminalName, t.TerminalId.ToString())).ToList(),
                 LocationHeading = $"{ports.FirstOrDefault(p => p.PortId == portId)?.PortName ?? "All ports"} / {terminals.FirstOrDefault(t => t.TerminalId == terminalId)?.TerminalName ?? "All terminals"}"
             };
-            await MarkConflictsAsync(board, gridStart, gridStart.AddDays(42), ct);
+            await MarkConflictsAsync(board, queryStart, queryEnd, ct);
             board.TugBookings = schedules.Where(s => s.Status != MsapConstants.VesselScheduleStatus.Cancelled).ToList();
             var matchingTugIds = board.Tugboats.Where(t => t.TugboatName.Contains(board.Search ?? "", StringComparison.OrdinalIgnoreCase)
                 || t.TugboatNumber.Contains(board.Search ?? "", StringComparison.OrdinalIgnoreCase)).Select(t => t.TugboatId).ToHashSet();

@@ -27,30 +27,59 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpGet]
         [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> Index(DateTime? month, CancellationToken ct, DateTime? date = null,
-            int? portId = null, int? terminalId = null, string? search = null, string? status = null, string? view = null)
+            DateTime? endDate = null, int? portId = null, int? terminalId = null, string? search = null, string? status = null, string? view = null)
         {
             if (!ModelState.IsValid || search?.Length > 120)
             {
                 return BadRequest("Choose a valid month and a search of at most 120 characters.");
             }
 
-            var selected = month ?? date ?? DateTimeHelper.GetCurrentPhilippineTime();
+            var today = DateTimeHelper.GetCurrentPhilippineTime().Date;
+            var selected = month ?? date ?? today;
             var start = new DateTime(selected.Year, selected.Month, 1);
-            if (start.Year < 1900 || start.Year > 9998 || date.HasValue && (date.Value.Year < 1900 || date.Value.Year > 9998))
+            if (start.Year < 1900 || start.Year > 9998
+                || (date.HasValue && (date.Value.Year < 1900 || date.Value.Year > 9998))
+                || (endDate.HasValue && (endDate.Value.Year < 1900 || endDate.Value.Year > 9998)))
             {
                 return BadRequest("Choose a month between 1900 and 9998.");
             }
 
             var gridStart = start.AddDays(-(int)start.DayOfWeek);
-            if (date.HasValue && (date.Value < gridStart || date.Value >= gridStart.AddDays(42)))
+            var selectedDate = date?.Date;
+            var selectedEndDate = endDate?.Date;
+
+            if (!selectedDate.HasValue)
             {
-                date = new DateTime(start.Year, start.Month, Math.Min(date.Value.Day, DateTime.DaysInMonth(start.Year, start.Month)));
+                selectedDate = start.Year == today.Year && start.Month == today.Month ? today : start;
+            }
+            else if (!selectedEndDate.HasValue && (selectedDate.Value < gridStart || selectedDate.Value >= gridStart.AddDays(42)))
+            {
+                selectedDate = new DateTime(start.Year, start.Month, Math.Min(selectedDate.Value.Day, DateTime.DaysInMonth(start.Year, start.Month)));
+            }
+
+            if (selectedEndDate.HasValue)
+            {
+                if (selectedEndDate.Value < selectedDate.Value)
+                {
+                    (selectedDate, selectedEndDate) = (selectedEndDate, selectedDate);
+                }
+
+                if ((selectedEndDate.Value - selectedDate.Value).TotalDays > 62)
+                {
+                    selectedEndDate = selectedDate.Value.AddDays(62);
+                }
+
+                if (selectedEndDate.Value == selectedDate.Value)
+                {
+                    selectedEndDate = null;
+                }
             }
 
             var result = await scheduleService.GetCalendarAsync(new VesselScheduleBoardViewModel
             {
                 Date = start,
-                SelectedDate = date?.Date,
+                SelectedDate = selectedDate,
+                SelectedEndDate = selectedEndDate,
                 PortId = portId,
                 TerminalId = terminalId,
                 Search = search,

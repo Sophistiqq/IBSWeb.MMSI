@@ -7,6 +7,7 @@ namespace IBS.Models.MSAP.ViewModels
     {
         public DateTime Date { get; set; }
         public DateTime? SelectedDate { get; set; }
+        public DateTime? SelectedEndDate { get; set; }
         public int? PortId { get; set; }
         public int? TerminalId { get; set; }
         public string? Search { get; set; }
