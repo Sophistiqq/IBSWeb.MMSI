@@ -1037,14 +1037,6 @@ else
                 });
             });
 
-            window.IBS_TOUR_STEPS = [
-                { selector: '.dashboard-header', title: 'Maritime dashboard', text: 'Overview of operations, actionable queues, and financial summary for your role.', interactive: false },
-                { selector: '.dashboard-sidebar', title: 'Next Actions', text: 'Separated task queue with detailed hover cards and segmented filtering.', interactive: false },
-                { selector: '[aria-labelledby="operations-heading"]', title: 'Daily operations', text: 'Today’s vessel movements, tug assignments, overlaps, and upcoming arrivals.', interactive: false }
-            ];
-            if (document.querySelector('[aria-labelledby="finance-heading"]')) {
-                window.IBS_TOUR_STEPS.push({ selector: '[aria-labelledby="finance-heading"]', title: 'Finance overview', text: 'Billing totals, unbilled completed services, collections, and banking queue.', interactive: false });
-            }
         </script>
     }
 }

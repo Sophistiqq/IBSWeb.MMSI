@@ -140,18 +140,3 @@
         </main>
     </form>
 </div>
-<script>
-    window.IBS_TOUR_STEPS = [
-        { selector: '[aria-label="Billing filters"]', title: 'Service customer and billed party', text: 'Select the service customer to load its billings, then use the billed-party filter if needed. The service customer is fixed when editing a receipt.', interactive: false },
-        { selector: '[aria-labelledby="allocationHeading"]', title: 'Select bills for full net payment', text: 'Search by billing number or COS and select eligible approved bills. Each selected bill is paid at its full net balance after withholding. Unapproved bills and bills reserved on another receipt cannot be selected.', interactive: false },
-        { selector: '[aria-labelledby="collectionDetailsHeading"]', title: 'Receipt details', text: 'Enter the receipt number and collection date, or check Undocumented to auto-generate a receipt number on save.', interactive: false },
-        { selector: '[aria-labelledby="paymentHeading"]', title: 'Payment and withholding', text: 'Choose Check, Cash, or Cash + Check. Single-method receipts auto-fill the exact net payment after withholding; split mode lets you divide between cash and check.', interactive: false },
-        { selector: '[aria-labelledby="checkHeading"]', title: 'Check details', text: 'When receiving a check, enter the check number and check date. The MMSI receiving bank account is confirmed when recording the deposit.', interactive: false },
-        { selector: '[aria-labelledby="settlementHeading"]', title: 'Receipt settlement', text: 'Compare the selected gross balance, received payment, withholding and allocated total. Resolve any mismatch before saving. A paid balance does not mean the receipt has cleared.', interactive: false },
-        { selector: '.collection-entry footer', title: 'Save the receipt', text: 'Add any remarks and save. One receipt covers the selected bills, with a separate allocation for each. Record deposit and clearing afterward from the receipt page.', interactive: false },
-        { selector: '[aria-label="Job Progress"]', title: 'Progress for each COS', text: 'When the selected bills cover more than one COS, use Viewing COS to review each job’s progress.', interactive: false }
-    ].filter(function (step) {
-        const el = document.querySelector(step.selector);
-        return el && !el.hidden;
-    });
-</script>

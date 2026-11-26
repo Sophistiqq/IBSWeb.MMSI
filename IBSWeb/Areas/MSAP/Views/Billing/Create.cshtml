@@ -270,18 +270,7 @@
 </div>
 
 @section Scripts {
-    <script>
-        window.IBS_TOUR_STEPS = [
-            { selector: '[aria-label="Booking details"]', title: 'Choose the service customer and COS', text: 'Select a service customer, then a billable COS to load its completed services. Check the vessel, voyage, service dates and location. IOC / Non-IOC is shown below the location and cannot be changed here.', interactive: false },
-            { selector: '.billing-vat-settings', title: 'Tax information', text: 'VAT, VAT inclusive and Print withholding are read-only information for the selected customer. Review these before preparing the statement.', interactive: false },
-            { selector: '[aria-labelledby="billingHeading"]', title: 'Billing details and recipient', text: 'Enter the billing number and date, then choose the billed party. Separate Basic and BAF creates two numbered bills with separate balances; supply both numbers when enabled. Review the statement address, TIN and payment terms.', interactive: false },
-            { selector: '.billing-commercial-options', title: 'Discount and SBMA share', text: 'For a scheduled COS, the customer discount starts from its saved default. Enable it to enter a percentage; clearing the value skips the discount. Apply SBMA share is available only for Subic. Existing tickets without a schedule retain their recorded discounts.', interactive: false },
-            { selector: '[aria-labelledby="servicesHeading"]', title: 'Completed services', text: 'Review each tugboat and service, actual and billable hours, Basic and BAF amounts, and rate sources. When a discount applies, extra columns show the discount and net amounts.', interactive: false },
-            { selector: '.billing-summary-grid', title: 'Check the amount breakdown', text: 'Review Basic and BAF amounts, any customer discount, VAT and withholding, and the resulting amount due. SBMA share is shown separately. Combined amount due is shown when Basic and BAF share one bill.', interactive: false },
-            { selector: '.billing-footer', title: 'Preview and save for reviewing', text: 'Preview the statements before saving. Save for reviewing creates the numbered bill for final approval. Separate Basic and BAF bills each require their own final approval.', interactive: false },
-            { selector: '.billing-progress', title: 'Job progress', text: 'After selecting a COS, use its progress panel to see the current stage and any work still needed.', interactive: false }
-        ];
-    </script>
+
     <script src="~/msap/js/job-progress.js" asp-append-version="true"></script>
     <script src="~/msap/js/billing-preparation.js" asp-append-version="true"></script>
 }

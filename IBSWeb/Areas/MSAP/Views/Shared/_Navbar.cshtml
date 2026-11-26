@@ -394,9 +394,10 @@
                         <span class="mnav-dropdown-check" id="mnav-theme-check" style="display:none">check</span>
                     </button>
 
-                    <button class="mnav-dropdown-item" id="mnav-tour-btn" type="button">
-                        <span class="material-symbols-outlined">school</span>
-                        <span>Guided Tour</span>
+                    <button class="mnav-dropdown-item" id="mnav-whats-new-btn" type="button" data-whats-new-url="@Url.Action("WhatsNew", "Home", new { area = "MSAP" })">
+                        <span class="material-symbols-outlined">auto_awesome</span>
+                        <span>What's New</span>
+                        <span class="mnav-wn-dot" id="mnav-whats-new-dot" aria-hidden="true"></span>
                     </button>
 
                     <a class="mnav-dropdown-item" asp-area="Identity" asp-page="/Account/Manage/ChangePassword">

@@ -558,19 +558,7 @@
 <form id="discardBillingForm" method="post" hidden>@Html.AntiForgeryToken()</form>
 
 @section Scripts {
-    <script>
-        window.IBS_TOUR_STEPS = [
-            { selector: '.ui-page-header', title: 'Review this numbered bill', text: 'Check the billing number, component and approval status. Preview statements opens the statement for this bill.', interactive: false },
-            { selector: '[aria-label="Related billing"]', title: 'Separate Basic and BAF bills', text: 'The related bill has its own balance and approval. Open it to review the other component separately.', interactive: false },
-            { selector: '[aria-label="Billing recipient and booking"]', title: 'Recipient and booking', text: 'Confirm the service customer, billed party, vessel, location, statement address, TIN, terms and tax information.', interactive: false },
-            { selector: '[aria-labelledby="reviewChargesHeading"]', title: 'Review the service charges', text: 'Check the tickets, actual and billed hours, Basic and BAF rates, rate sources and saved amounts for this bill.', interactive: false },
-            { selector: '[aria-label="Saved billing totals"]', title: 'Saved totals and balance', text: 'Compare the saved Basic and BAF charges with the statement total and remaining billing balance.', interactive: false },
-            { selector: '[aria-labelledby="ticketImagesHeading"]', title: 'Supporting tickets', text: 'Review the available ticket images against the services and amounts before final approval.', interactive: false },
-            { selector: '.billing-footer', title: 'Final approval', text: 'An authorized approver can approve this numbered bill when its checks are satisfied. Read any blocker here. Approval applies only to this bill; review a related Basic or BAF bill separately.', interactive: false }
-        ].filter(function (step) {
-            return document.querySelector(step.selector);
-        });
-    </script>
+
     <script>
         $('#btnReopenBilling').on('click', async function () {
             const btn = this;

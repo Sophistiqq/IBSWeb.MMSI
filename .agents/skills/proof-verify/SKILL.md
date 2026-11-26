@@ -115,3 +115,11 @@ Each run writes timestamped proof files and updates the latest summary under git
 - `artifacts/proof-verify/latest-linear-payload.json` — Structured Linear issue/comment payload (`IBS-MSAP`) + screenshot upload metadata.
 - `artifacts/proof-verify/latest-guided-hands.json` — Latest interactive `guided-hands.mjs` step trace, Ollama latency stats, telemetry, and screenshot paths.
 - `artifacts/proof-verify/<timestamp>/*-desktop.png` & `*-mobile.png` — Visual proof screenshots.
+
+## Updating MSAP "What's New" (`MSAP_CHANGELOG.md`)
+
+MSAP's in-app **What's New** modal (`GET /MSAP/Home/WhatsNew` via `MsapChangelogParser`) reads directly from `MSAP_CHANGELOG.md`. After verifying an MSAP change, update `MSAP_CHANGELOG.md` **only** when the change directly affects end users:
+
+- Add a plain-English bullet under the active `## [vX.Y.Z] - YYYY-MM-DD` release heading using `### Added`, `### Changed`, or `### Fixed` and `- **Short title:** Brief explanation for MSAP users.`
+- **Skip `MSAP_CHANGELOG.md` completely** for changes that do not affect end users (dead-code cleanup, internal refactors, migrations, performance plumbing, skill/script updates, or non-MSAP IBSWeb/Filpride changes).
+- Bump the `## [vX.Y.Z] - YYYY-MM-DD` heading when cutting a new release so signed-in users automatically see the updated popup once on the MSAP Dashboard.

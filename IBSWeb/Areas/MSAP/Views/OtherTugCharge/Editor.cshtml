@@ -154,12 +154,6 @@
             form.submit();
         });
 
-        window.IBS_TOUR_STEPS = [
-            { selector: '.other-tug-charge-workspace .ui-page-header', title: 'Provider charge status', text: 'Check the provider and whether the charges are awaiting review or confirmed. Provider costs are separate from customer billing; payment is handled in IBS.', interactive: false },
-            { selector: '[data-charge-fields]', title: 'Provider bill and VAT', text: 'Enter the provider reference and document date, and attach the supporting document when available. Includes VAT starts enabled for a new charge; check it against the provider document. Saved charges must be opened with Edit before changing them.', interactive: false },
-            { selector: '#otherTugChargeForm > section', title: 'Allocate costs to actual tickets', text: 'Select the covered tickets and enter the provider charge for each. Blank means pending; zero records an explicitly zero charge. Check the allocated total before saving.', interactive: false },
-            { selector: '.cos-entry-footer', title: 'Save, review and confirm', text: 'Save for reviewing stores a draft. An authorized reviewer confirms the saved charges after checking the document and allocations. Draft amounts do not update AP reports, and confirmed charges are locked.', interactive: false }
-        ];
     </script>
     <script src="~/msap/js/other-tug-charges.js" asp-append-version="true"></script>
 }

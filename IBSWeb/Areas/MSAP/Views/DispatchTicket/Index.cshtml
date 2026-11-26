@@ -1,6 +1,5 @@
 @{
 
-
     ViewData["Title"] = "Dispatch Tickets";
     ViewData["IsFullWidth"] = true;
     var hasFrom = DateOnly.TryParseExact(Context.Request.Query["from"], "yyyy-MM-dd", out var periodFrom);
@@ -76,13 +75,7 @@
 </div>
 
 @section Scripts {
-    <script>
-        window.IBS_TOUR_STEPS = [
-            { selector: '#filterAll', title: 'Ticket status filters', text: 'Use Awaiting rate for tickets waiting on an approved rate, For billing for calculated tickets awaiting billing, or Billed for tickets already linked to a bill. All returns to the full registry.', interactive: false },
-            { selector: '#dateFilter', title: 'Filter by date', text: 'Filter tickets by dispatch date. A date range may also be applied from another screen and can be cleared above the registry.', interactive: false },
-            { selector: '#paginatedTable', title: 'Ticket registry', text: 'Review the actual service times, tugboat, customer, vessel and status. Open a ticket number or View Details to inspect its service, charges and supporting files. Use the COS and billing references to identify the related order and bill.', interactive: false }
-        ];
-    </script>
+
     <script>
         $(document).ready(function () {
             const previewUrl = '@Url.Action("Preview", "DispatchTicket")';

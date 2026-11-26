@@ -20,7 +20,8 @@ namespace IBSWeb.Areas.MSAP.Controllers
         UserManager<ApplicationUser> userManager,
         IUnitOfWork unitOfWork,
         IAccessControlService accessControl,
-        DashboardService dashboardService) : Controller
+        DashboardService dashboardService,
+        IWebHostEnvironment webHostEnvironment) : Controller
     {
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public async Task<IActionResult> Index(CancellationToken ct)
@@ -285,6 +286,15 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             return Json(results);
+        }
+
+        [Authorize]
+        [HttpGet]
+        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+        public async Task<IActionResult> WhatsNew(CancellationToken ct)
+        {
+            var releases = await MsapChangelogParser.ReadReleasesAsync(webHostEnvironment.ContentRootPath, ct);
+            return Json(new { releases });
         }
     }
 }

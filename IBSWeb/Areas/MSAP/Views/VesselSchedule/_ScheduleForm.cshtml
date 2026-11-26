@@ -63,14 +63,14 @@
                 </div>
                 <div class="schedule-card-body ui-stack">
                     <div class="schedule-grid-2">
-                        <div class="schedule-field ui-field" data-tour-step="2">
+                        <div class="schedule-field ui-field">
                             <label asp-for="CustomerId" class="schedule-field-label ui-label">Customer *</label>
                             <select asp-for="CustomerId" asp-items="Model.Customers" class="js-modern-select" id="CustomerId" required>
                                 <option value="">Select customer</option>
                             </select>
                             <span asp-validation-for="CustomerId" class="text-error ui-caption"></span>
                         </div>
-                        <div class="schedule-field ui-field" data-tour-step="3">
+                        <div class="schedule-field ui-field">
                             <label asp-for="VesselId" class="schedule-field-label ui-label">Vessel *</label>
                             <select asp-for="VesselId" asp-items="Model.Vessels" class="js-modern-select" id="VesselId" required>
                                 <option value="">Select vessel</option>
@@ -79,14 +79,14 @@
                         </div>
                     </div>
                     <div class="schedule-grid-3">
-                        <div class="schedule-field ui-field" data-tour-step="5">
+                        <div class="schedule-field ui-field">
                             <label asp-for="PortId" class="schedule-field-label ui-label">Port *</label>
                             <select asp-for="PortId" asp-items="Model.Ports" class="js-modern-select" id="PortId" required>
                                 <option value="">Select port</option>
                             </select>
                             <span asp-validation-for="PortId" class="text-error ui-caption"></span>
                         </div>
-                        <div class="schedule-field ui-field" data-tour-step="6">
+                        <div class="schedule-field ui-field">
                             <label asp-for="TerminalId" class="schedule-field-label ui-label">Terminal *</label>
                             <select asp-for="TerminalId" class="js-modern-select" id="TerminalId" required>
                                 <option value="">Select terminal</option>
@@ -97,7 +97,7 @@
                             </select>
                             <span asp-validation-for="TerminalId" class="text-error ui-caption"></span>
                         </div>
-                        <div class="schedule-field ui-field" data-tour-step="4">
+                        <div class="schedule-field ui-field">
                             <label asp-for="VoyageNumber" class="schedule-field-label ui-label">Voyage number *</label>
                             <input asp-for="VoyageNumber" class="modern-input" id="VoyageNumber" maxlength="50" placeholder="VOY-001" required />
                             <span asp-validation-for="VoyageNumber" class="text-error ui-caption"></span>
@@ -105,12 +105,12 @@
                     </div>
                     <p id="terminalMessage" class="schedule-muted schedule-field-wide" role="status"></p>
                     <div class="schedule-grid-2">
-                        <div class="schedule-field ui-field" data-tour-step="7">
+                        <div class="schedule-field ui-field">
                             <label asp-for="PlannedStart" class="schedule-field-label ui-label">Planned start *</label>
                             <input asp-for="PlannedStart" type="datetime-local" asp-format="{0:yyyy-MM-ddTHH:mm}" class="modern-input" id="PlannedStart" min="1900-01-01T00:00" max="9998-12-31T23:59" required />
                             <span asp-validation-for="PlannedStart" class="text-error ui-caption"></span>
                         </div>
-                        <div class="schedule-field ui-field" data-tour-step="8">
+                        <div class="schedule-field ui-field">
                             <label asp-for="PlannedEnd" class="schedule-field-label ui-label">Planned end *</label>
                             <input asp-for="PlannedEnd" type="datetime-local" asp-format="{0:yyyy-MM-ddTHH:mm}" class="modern-input" id="PlannedEnd" min="1900-01-01T00:00" max="9998-12-31T23:59" required />
                             <span asp-validation-for="PlannedEnd" class="text-error ui-caption"></span>
@@ -127,7 +127,7 @@
                         <p class="schedule-section-subtitle ui-body ui-muted">Add one service entry for each assist the tug will perform.</p>
                     </div>
                     <div class="schedule-service-actions">
-                        <button type="button" class="modern-btn-secondary js-add-tugboat-btn" id="addTugboatBtn" data-tour-step="12">
+                        <button type="button" class="modern-btn-secondary js-add-tugboat-btn" id="addTugboatBtn">
                             <span class="material-symbols-outlined" aria-hidden="true">add</span> Add tugboat
                         </button>
                     </div>
@@ -205,7 +205,7 @@
             </section>
 
             <!-- Card 4: Planning notes -->
-            <section class="schedule-card ui-panel" aria-labelledby="planningNotesHeading" data-tour-step="9">
+            <section class="schedule-card ui-panel" aria-labelledby="planningNotesHeading">
                 <div class="schedule-card-header">
                     <h2 class="schedule-card-title ui-section-title" id="planningNotesHeading">Planning notes</h2>
                 </div>
@@ -263,7 +263,7 @@
         </aside>
 
         <!-- Bottom Action Bar -->
-        <div class="schedule-bottom-bar" data-tour-step="14">
+        <div class="schedule-bottom-bar">
             <span class="schedule-save-notice ui-body ui-muted">Saving sends this booking for review.</span>
             <div class="schedule-action-buttons">
                 <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">Cancel</a>
@@ -328,21 +328,3 @@
         </div>
     </div>
 </template>
-
-<script>
-    window.IBS_TOUR_STEPS = [
-        { selector: '.job-progress', title: 'Job Progress', text: 'Follow the booking from planning through COS approval, ticket entry, billing, and clearing.', interactive: false },
-        { step: 2, title: 'Customer', text: 'Select the customer requesting this vessel service.', required: true, autoAdvance: true },
-        { step: 3, title: 'Vessel', text: 'Choose the vessel for this visit.', required: true, autoAdvance: true },
-        { step: 5, title: 'Port', text: 'Choose the service port. Changing the port clears the terminal selection.', required: true, autoAdvance: true },
-        { step: 6, title: 'Terminal', text: 'Choose a terminal within the selected port, then continue.', required: true, autoAdvance: false },
-        { step: 4, title: 'Voyage number', text: 'Enter the voyage reference for this vessel visit. This is required before saving.', required: true, autoAdvance: false },
-        { step: 7, title: 'Planned start', text: 'Enter the expected service start in Philippine time.', required: true, autoAdvance: false },
-        { step: 8, title: 'Planned end', text: 'Enter an end later than the start, including the correct date for overnight service. Actual times are recorded on Dispatch Tickets.', required: true, autoAdvance: false },
-        { step: 12, title: 'Add tugboats', text: 'Add each tugboat assigned to this booking. You can add more than one tugboat before continuing.', required: false, autoAdvance: false },
-        { selector: '.schedule-services-section', title: 'Expected services', text: 'Add one service entry for each assist the tugboat will perform.', interactive: false },
-        { step: 9, title: 'Planning notes', text: 'Add service instructions or coordination notes when needed.', required: false, autoAdvance: false },
-        { selector: '.schedule-summary-sidebar', title: 'Booking summary and defaults', text: 'Review the location, planned window and assigned tugboats. Commercial details and rates are managed during commercial review and billing.', interactive: false },
-        { step: 14, title: 'Save for reviewing', text: 'Review the booking and expected services, then save for reviewing.', interactive: true }
-    ];
-</script>
