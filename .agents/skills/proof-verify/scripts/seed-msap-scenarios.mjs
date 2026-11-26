@@ -197,28 +197,37 @@ async function ensureMasterFiles(adminPage) {
         return lookups;
     }
 
-    // 1. Ports & Terminals (only seed if no locations exist)
-    if (lookups.locations.length === 0) {
-        console.log("[master] Seeding Ports & Terminals...");
+    // 1. Ports (only seed if no ports exist) & Terminals (only seed if no terminals exist)
+    if (lookups.ports.length === 0) {
+        console.log("[master] Seeding Ports...");
         for (const p of [
             { PortNumber: "P01", PortName: "BATANGAS" },
             { PortNumber: "P02", PortName: "SUBIC" },
             { PortNumber: "P03", PortName: "MANILA" },
             { PortNumber: "P04", PortName: "CEBU" }
         ]) await postForm(adminPage, "/MSAP/Port/Create", p);
+    }
 
+    if (lookups.locations.length === 0) {
+        console.log("[master] Seeding Terminals...");
         const portList = await getSelectOptions(adminPage, "/MSAP/Terminal/Create", "PortId");
         const byPort = Object.fromEntries(portList.map((p) => [p.name.toUpperCase(), p.id]));
+        const fallbackPort = portList[0]?.id;
         for (const t of [
-            { TerminalNumber: "001", TerminalName: "JG Summit Petrochem Jetty", PortId: byPort.BATANGAS, IsIoc: true },
-            { TerminalNumber: "002", TerminalName: "Batangas International Port", PortId: byPort.BATANGAS, IsIoc: false },
-            { TerminalNumber: "003", TerminalName: "Shell Tabangao Terminal", PortId: byPort.BATANGAS, IsIoc: true },
-            { TerminalNumber: "004", TerminalName: "Subic Bay Naval Supply Depot", PortId: byPort.SUBIC, IsIoc: true },
-            { TerminalNumber: "005", TerminalName: "Subic New Container Terminal", PortId: byPort.SUBIC, IsIoc: false },
-            { TerminalNumber: "006", TerminalName: "Manila South Harbor Pier 15", PortId: byPort.MANILA, IsIoc: false },
-            { TerminalNumber: "007", TerminalName: "Manila North Harbor", PortId: byPort.MANILA, IsIoc: false },
-            { TerminalNumber: "008", TerminalName: "Cebu International Port", PortId: byPort.CEBU, IsIoc: false }
-        ]) await postForm(adminPage, "/MSAP/Terminal/Create", t);
+            { TerminalNumber: "001", TerminalName: "JG Summit Petrochem Jetty", PortId: byPort.BATANGAS || fallbackPort, IsIoc: true },
+            { TerminalNumber: "002", TerminalName: "Batangas International Port", PortId: byPort.BATANGAS || fallbackPort, IsIoc: false },
+            { TerminalNumber: "003", TerminalName: "Shell Tabangao Terminal", PortId: byPort.BATANGAS || fallbackPort, IsIoc: true },
+            { TerminalNumber: "004", TerminalName: "Subic Bay Naval Supply Depot", PortId: byPort.SUBIC || fallbackPort, IsIoc: true },
+            { TerminalNumber: "005", TerminalName: "Subic New Container Terminal", PortId: byPort.SUBIC || fallbackPort, IsIoc: false },
+            { TerminalNumber: "006", TerminalName: "Manila South Harbor Pier 15", PortId: byPort.MANILA || fallbackPort, IsIoc: false },
+            { TerminalNumber: "007", TerminalName: "Manila North Harbor", PortId: byPort.MANILA || fallbackPort, IsIoc: false },
+            { TerminalNumber: "008", TerminalName: "Cebu International Port", PortId: byPort.CEBU || fallbackPort, IsIoc: false }
+        ]) {
+            const res = await postForm(adminPage, "/MSAP/Terminal/Create", t);
+            if (!res.ok) {
+                throw new Error(`Terminal/Create failed for ${t.TerminalName}: ${JSON.stringify(res)} (ensure IBSWeb was restarted with the Terminal.Port [ValidateNever] fix)`);
+            }
+        }
         lookups = await inspectCurrentLookups(adminPage);
     }
 

@@ -495,27 +495,51 @@ namespace IBS.Services.MSAP
             var terminals = await _db.MsapTerminals.AsNoTracking().ToListAsync(ct);
             var services = await _db.MsapServices.AsNoTracking().ToListAsync(ct);
 
+            var portById = ports.ToDictionary(p => p.PortId);
+
             var resolutionErrors = new List<string>();
             foreach (var row in rows)
             {
                 var customer = customers.FirstOrDefault(c => !string.IsNullOrEmpty(row.CustomerName)
                     ? string.Equals(c.CustomerName, row.CustomerName, StringComparison.OrdinalIgnoreCase)
                     : !string.IsNullOrEmpty(row.CustomerCode) && string.Equals(c.CustomerCode, row.CustomerCode, StringComparison.OrdinalIgnoreCase));
-                var port = ports.FirstOrDefault(p => !string.IsNullOrEmpty(row.PortName)
+                var matchingPorts = ports.Where(p => !string.IsNullOrEmpty(row.PortName)
                     ? string.Equals(p.PortName, row.PortName, StringComparison.OrdinalIgnoreCase)
-                    : !string.IsNullOrEmpty(row.PortCode) && string.Equals(p.PortNumber, row.PortCode, StringComparison.OrdinalIgnoreCase));
-                var terminal = port == null
+                    : !string.IsNullOrEmpty(row.PortCode) && string.Equals(p.PortNumber, row.PortCode, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                var matchingPortIds = matchingPorts.Select(p => p.PortId).ToHashSet();
+                var terminal = matchingPortIds.Count == 0
                     ? null
-                    : terminals.FirstOrDefault(t => t.PortId == port.PortId && (!string.IsNullOrEmpty(row.TerminalName)
+                    : terminals.FirstOrDefault(t => matchingPortIds.Contains(t.PortId) && (!string.IsNullOrEmpty(row.TerminalName)
                         ? string.Equals(t.TerminalName, row.TerminalName, StringComparison.OrdinalIgnoreCase)
                         : !string.IsNullOrEmpty(row.TerminalCode) && string.Equals(t.TerminalNumber, row.TerminalCode, StringComparison.OrdinalIgnoreCase)));
+                var port = terminal != null && portById.TryGetValue(terminal.PortId, out var terminalPort)
+                    ? terminalPort
+                    : matchingPorts.FirstOrDefault();
                 var service = services.FirstOrDefault(s => !string.IsNullOrEmpty(row.ServiceName)
                     ? string.Equals(s.ServiceName, row.ServiceName, StringComparison.OrdinalIgnoreCase)
                     : !string.IsNullOrEmpty(row.ServiceCode) && string.Equals(s.ServiceNumber, row.ServiceCode, StringComparison.OrdinalIgnoreCase));
 
                 if (customer == null || port == null || terminal == null || service == null)
                 {
-                    resolutionErrors.Add($"Excel row {row.RowNumber}: unable to match Customer, Port, Terminal, or Service in MMSI master files.");
+                    var missing = new List<string>();
+                    if (customer == null)
+                    {
+                        missing.Add($"Customer '{(string.IsNullOrEmpty(row.CustomerName) ? row.CustomerCode : row.CustomerName)}'");
+                    }
+                    if (port == null)
+                    {
+                        missing.Add($"Port '{(string.IsNullOrEmpty(row.PortName) ? row.PortCode : row.PortName)}'");
+                    }
+                    else if (terminal == null)
+                    {
+                        missing.Add($"Terminal '{(string.IsNullOrEmpty(row.TerminalName) ? row.TerminalCode : row.TerminalName)}' under Port '{port.PortName}'");
+                    }
+                    if (service == null)
+                    {
+                        missing.Add($"Service '{(string.IsNullOrEmpty(row.ServiceName) ? row.ServiceCode : row.ServiceName)}'");
+                    }
+                    resolutionErrors.Add($"Excel row {row.RowNumber}: unable to match {string.Join(", ", missing)} in MMSI master files.");
                     continue;
                 }
 
