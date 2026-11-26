@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
-import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, execFileSync } from "node:child_process";
+import { launchBrowserSession, attemptAutoLogin } from "./browser-session.mjs";
 
 const DEFAULT_PORT = 5073;
 const DEFAULT_OLLAMA_URL = process.env.OLLAMA_HOST || "http://localhost:11434";
@@ -16,13 +16,6 @@ const DEFAULT_OPENCODE_MODELS = [
     "opencode/flint-40b-free"
 ];
 const DESTRUCTIVE_TARGET_RE = /\b(delete|void|reverse|finalize|cancel\s+service|remove|destroy|purge|drop|reset\s+all)\b/i;
-
-const BROWSER_CANDIDATES = [
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"
-];
 
 function printUsage() {
     console.log(`Usage: node .agents/skills/proof-verify/scripts/guided-hands.mjs [options]
@@ -60,13 +53,9 @@ Options:
   --benchmark              Run a local Ollama speed + schema accuracy test (no browser/app required)
   --headed                 Show Chrome/Edge window with live HUD & highlight rings
   --devtools               Open Chrome DevTools automatically (implies --headed)
-  --keep-open              Keep Chrome window open after the run finishes
+  --keep-open              Keep Chrome window open after the run finishes (implies --headed)
+  --trace                  Record a Playwright trace.zip (inspect with: npx playwright show-trace <path>)
   --slow-mo <ms>           Extra delay between steps in ms (default: 0 for full speed)
-  --cdp-port <number>      Attach to an already-running Chrome remote debugging port
-  --attach-chrome          Attach to your live Chrome via DevToolsActivePort (chrome://inspect/#remote-debugging)
-  --extension              Drive your main Chrome via the zero-prompt Guided Hands extension (ws://127.0.0.1:17373)
-  --background             With --extension, run in a background tab in the Guided Hands tab group (do not steal focus)
-  --bridge-url <url>       Local extension bridge URL (default: http://127.0.0.1:17373)
   --no-autostart           Fail instead of auto-starting IBSWeb on --port when server is down
   --port <number>          Local IBSWeb port (default: 5073)
   --base-url <url>         Base URL override (default: http://localhost:<port>)
@@ -134,12 +123,8 @@ function parseArgs(argv) {
         headed: false,
         devtools: false,
         keepOpen: false,
+        trace: false,
         slowMo: 0,
-        cdpPort: 0,
-        attachChrome: false,
-        extension: false,
-        background: false,
-        bridgeUrl: (process.env.GUIDED_HANDS_BRIDGE_URL || "http://127.0.0.1:17373").replace(/\/+$/, ""),
         noAutostart: false,
         port: DEFAULT_PORT,
         baseUrl: null,
@@ -234,22 +219,16 @@ function parseArgs(argv) {
             opts.headed = true;
         } else if (arg === "--keep-open") {
             opts.keepOpen = true;
+            opts.headed = true;
+        } else if (arg === "--trace") {
+            opts.trace = true;
         } else if (arg === "--slow-mo") {
             opts.slowMo = Number.parseInt(next(), 10) || 0;
-        } else if (arg === "--cdp-port") {
-            opts.cdpPort = Number.parseInt(next(), 10) || 0;
-        } else if (arg === "--attach-chrome") {
-            opts.attachChrome = true;
-            opts.headed = true;
-            opts.keepOpen = true;
-        } else if (arg === "--extension") {
-            opts.extension = true;
-            opts.headed = true;
-            opts.keepOpen = true;
-        } else if (arg === "--background") {
-            opts.background = true;
-        } else if (arg === "--bridge-url") {
-            opts.bridgeUrl = next().replace(/\/+$/, "");
+        } else if (arg === "--extension" || arg === "--background" || arg === "--attach-chrome") {
+            console.warn(`[guided-hands] Note: ${arg} is no longer needed; Playwright drives system Chrome/Edge directly (use --headed or --trace).`);
+        } else if (arg === "--cdp-port" || arg === "--bridge-url") {
+            next();
+            console.warn(`[guided-hands] Note: ${arg} is no longer needed; Playwright drives system Chrome/Edge directly.`);
         } else if (arg === "--no-autostart") {
             opts.noAutostart = true;
         } else if (arg === "--port") {
@@ -471,263 +450,6 @@ async function ensureAppRunning(repoRoot, baseUrl, port, noAutostart) {
     throw new Error(`Timed out waiting for IBSWeb /health at ${baseUrl}.`);
 }
 
-function findBrowserExecutable() {
-    for (const candidate of BROWSER_CANDIDATES) {
-        if (fs.existsSync(candidate)) return candidate;
-    }
-    throw new Error("Could not find Chrome or Microsoft Edge executable.");
-}
-
-class CdpSession {
-    constructor(wsUrl) {
-        this.wsUrl = wsUrl;
-        this.ws = null;
-        this.sessionId = null;
-        this.nextId = 1;
-        this.pending = new Map();
-        this.listeners = new Map();
-    }
-
-    async connect() {
-        await new Promise((resolve, reject) => {
-            const ws = new WebSocket(this.wsUrl);
-            this.ws = ws;
-            ws.addEventListener("open", () => resolve());
-            ws.addEventListener("error", (err) => reject(new Error(`CDP WebSocket error: ${err.message || "failed"}`)));
-            ws.addEventListener("message", (event) => {
-                const msg = JSON.parse(String(event.data));
-                if (msg.id) {
-                    const entry = this.pending.get(msg.id);
-                    if (entry) {
-                        this.pending.delete(msg.id);
-                        if (msg.error) entry.reject(new Error(`${entry.method}: ${msg.error.message}`));
-                        else entry.resolve(msg.result);
-                    }
-                } else if (msg.method) {
-                    if (this.sessionId && msg.sessionId && msg.sessionId !== this.sessionId) {
-                        return;
-                    }
-                    const handlers = this.listeners.get(msg.method);
-                    if (handlers) {
-                        for (const fn of handlers) fn(msg.params || {});
-                    }
-                }
-            });
-        });
-    }
-
-    on(eventName, handler) {
-        if (!this.listeners.has(eventName)) this.listeners.set(eventName, []);
-        this.listeners.get(eventName).push(handler);
-    }
-
-    off(eventName, handler) {
-        const handlers = this.listeners.get(eventName);
-        if (!handlers) return;
-        this.listeners.set(eventName, handlers.filter((fn) => fn !== handler));
-    }
-
-    send(method, params = {}, useBrowserSession = false) {
-        const id = this.nextId++;
-        return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => {
-                if (this.pending.has(id)) {
-                    this.pending.delete(id);
-                    reject(new Error(`CDP timeout waiting for ${method}`));
-                }
-            }, 25000);
-            this.pending.set(id, {
-                method,
-                resolve: (res) => { clearTimeout(timer); resolve(res); },
-                reject: (err) => { clearTimeout(timer); reject(err); }
-            });
-            const payload = { id, method, params };
-            if (this.sessionId && !useBrowserSession) {
-                payload.sessionId = this.sessionId;
-            }
-            this.ws.send(JSON.stringify(payload));
-        });
-    }
-
-    async evaluate(expression) {
-        const res = await this.send("Runtime.evaluate", {
-            expression,
-            returnByValue: true,
-            awaitPromise: true
-        });
-        if (res.exceptionDetails) {
-            throw new Error(res.exceptionDetails.exception?.description || res.exceptionDetails.text || "Runtime.evaluate exception");
-        }
-        return res.result ? res.result.value : undefined;
-    }
-
-    close() {
-        try {
-            this.ws?.close();
-        } catch {
-            // Ignore close errors
-        }
-    }
-}
-
-async function connectToCdpPort(devToolsPort) {
-    let targets = [];
-    for (let i = 0; i < 20; i++) {
-        const list = await (await fetch(`http://127.0.0.1:${devToolsPort}/json/list`)).json();
-        targets = list.filter((t) => t.type === "page" && t.webSocketDebuggerUrl);
-        if (targets.length > 0) break;
-        await new Promise((r) => setTimeout(r, 150));
-    }
-    if (targets.length === 0) {
-        const created = await fetch(`http://127.0.0.1:${devToolsPort}/json/new?about:blank`, { method: "PUT" });
-        targets = [await created.json()];
-    }
-
-    const cdp = new CdpSession(targets[0].webSocketDebuggerUrl);
-    await cdp.connect();
-    await cdp.send("Page.enable");
-    await cdp.send("Runtime.enable");
-    await cdp.send("Network.enable");
-    return cdp;
-}
-
-function findFreePort() {
-    return new Promise((resolve, reject) => {
-        const srv = net.createServer();
-        srv.listen(0, "127.0.0.1", () => {
-            const addr = srv.address();
-            const port = typeof addr === "object" && addr ? addr.port : 0;
-            srv.close(() => resolve(port));
-        });
-        srv.on("error", reject);
-    });
-}
-
-async function waitForCdpPort(devToolsPort, timeoutMs = 15000) {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-        try {
-            const resp = await fetch(`http://127.0.0.1:${devToolsPort}/json/version`);
-            if (resp.ok) return;
-        } catch {
-            // Not ready yet
-        }
-        await new Promise((r) => setTimeout(r, 150));
-    }
-    throw new Error(`Timed out waiting for Chrome DevTools on http://127.0.0.1:${devToolsPort}`);
-}
-
-async function attachToUserChrome() {
-    const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Local");
-    const portFile = path.join(localAppData, "Google", "Chrome", "User Data", "DevToolsActivePort");
-    if (!fs.existsSync(portFile)) {
-        throw new Error(`DevToolsActivePort not found at ${portFile}. Enable remote debugging at chrome://inspect/#remote-debugging.`);
-    }
-    const [portLine, wsPathLine] = fs.readFileSync(portFile, "utf8").trim().split(/\r?\n/);
-    const port = Number.parseInt((portLine || "").trim(), 10);
-    const wsPath = (wsPathLine || "").trim();
-    if (!port || !wsPath) {
-        throw new Error(`Invalid DevToolsActivePort contents at ${portFile}.`);
-    }
-
-    const browserWsUrl = `ws://127.0.0.1:${port}${wsPath}`;
-    console.log(`[guided-hands] Attaching to live Chrome via DevToolsActivePort (port ${port})...`);
-    const cdp = new CdpSession(browserWsUrl);
-    await cdp.connect();
-    const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank" }, true);
-    const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true }, true);
-    cdp.sessionId = sessionId;
-    await cdp.send("Page.bringToFront");
-    await cdp.send("Page.enable");
-    await cdp.send("Runtime.enable");
-    await cdp.send("Network.enable");
-    return { proc: null, cdp, devToolsPort: port, attached: true };
-}
-
-async function launchBrowserWithCdp(profileDir, { headless, devtools = false, keepOpen = false, cdpPort = 0, attachChrome = false }) {
-    if (attachChrome) {
-        return attachToUserChrome();
-    }
-    if (cdpPort > 0) {
-        console.log(`[guided-hands] Attaching to existing Chrome CDP on http://127.0.0.1:${cdpPort}`);
-        const cdp = await connectToCdpPort(cdpPort);
-        return { proc: null, cdp, devToolsPort: cdpPort, attached: true };
-    }
-
-    fs.mkdirSync(profileDir, { recursive: true });
-    const exe = findBrowserExecutable();
-
-    // On Windows headed mode, launch via Start-Process -WindowStyle Normal so Chrome
-    // actually displays a visible window even when invoked from a hidden agent shell.
-    if (!headless && process.platform === "win32") {
-        const chosenPort = await findFreePort();
-        const chromeArgs = [
-            `--remote-debugging-port=${chosenPort}`,
-            `--user-data-dir=${profileDir}`,
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--disable-background-networking",
-            "--window-size=1440,900",
-            "--new-window"
-        ];
-        if (devtools) chromeArgs.push("--auto-open-devtools-for-tabs");
-        chromeArgs.push("about:blank");
-
-        const psArray = chromeArgs.map((a) => `'${a.replace(/'/g, "''")}'`).join(", ");
-        const psCmd = `$p = Start-Process -FilePath '${exe.replace(/'/g, "''")}' -ArgumentList @(${psArray}) -WindowStyle Normal -PassThru; Write-Output $p.Id`;
-        const pidOut = execFileSync("powershell.exe", ["-NoProfile", "-Command", psCmd], { encoding: "utf8" }).trim();
-        const pid = Number.parseInt(pidOut.split(/\r?\n/).pop() || "0", 10);
-
-        await waitForCdpPort(chosenPort, 15000);
-        console.log(`[guided-hands] Visible Chrome launched (PID ${pid}) | CDP: http://127.0.0.1:${chosenPort}`);
-        const cdp = await connectToCdpPort(chosenPort);
-        return { proc: pid > 0 ? { pid } : null, cdp, devToolsPort: chosenPort, attached: false };
-    }
-
-    const args = [
-        "--remote-debugging-port=0",
-        `--user-data-dir=${profileDir}`,
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-background-networking",
-        "--mute-audio",
-        "--window-size=1440,900"
-    ];
-    if (headless) {
-        args.push("--headless=new", "--disable-gpu");
-    } else {
-        args.push("--new-window");
-        if (devtools) args.push("--auto-open-devtools-for-tabs");
-    }
-    args.push("about:blank");
-
-    const proc = spawn(exe, args, {
-        detached: keepOpen,
-        windowsHide: headless,
-        stdio: ["ignore", "ignore", "pipe"]
-    });
-    const devToolsPort = await new Promise((resolve, reject) => {
-        let stderr = "";
-        const timer = setTimeout(() => reject(new Error(`Timed out waiting for DevTools port.\n${stderr}`)), 15000);
-        proc.stderr.on("data", (chunk) => {
-            stderr += String(chunk);
-            const m = stderr.match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//);
-            if (m) {
-                clearTimeout(timer);
-                resolve(Number.parseInt(m[1], 10));
-            }
-        });
-        proc.on("exit", (code) => {
-            clearTimeout(timer);
-            reject(new Error(`Browser exited early (code ${code}).\n${stderr}`));
-        });
-    });
-
-    console.log(`[guided-hands] Chrome DevTools CDP listening on http://127.0.0.1:${devToolsPort}`);
-    const cdp = await connectToCdpPort(devToolsPort);
-    return { proc, cdp, devToolsPort, attached: false };
-}
-
 async function updateVisualHud(cdp, statusText, selectorToHighlight = "") {
     await cdp.evaluate(`((status, sel) => {
         let hud = document.getElementById("__gh_hud");
@@ -770,46 +492,6 @@ async function updateVisualHud(cdp, statusText, selectorToHighlight = "") {
             }
         }
     })(${JSON.stringify(statusText)}, ${JSON.stringify(selectorToHighlight)})`).catch(() => {});
-}
-
-async function navigateAndWait(cdp, url, timeoutMs = 20000) {
-    let loaded = false;
-    const onLoad = () => { loaded = true; };
-    cdp.on("Page.loadEventFired", onLoad);
-    try {
-        await cdp.send("Page.navigate", { url });
-        const start = Date.now();
-        while (!loaded && Date.now() - start < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 80));
-        }
-        await new Promise((r) => setTimeout(r, 150));
-    } finally {
-        cdp.off("Page.loadEventFired", onLoad);
-    }
-}
-
-async function attemptAutoLogin(cdp, username, password) {
-    if (!username || !password) return false;
-    const submitted = await cdp.evaluate(`(() => {
-        const u = document.querySelector("#username, input[name='Input.Username']");
-        const p = document.querySelector("#password, input[name='Input.Password']");
-        const r = document.querySelector("input[name='Input.RememberMe']");
-        const btn = document.querySelector("#login-submit, button[type='submit']");
-        if (!u || !p || !btn) return false;
-        u.value = ${JSON.stringify(username)};
-        p.value = ${JSON.stringify(password)};
-        if (r) r.checked = true;
-        btn.click();
-        return true;
-    })()`);
-    if (!submitted) return false;
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 300));
-        const p = await cdp.evaluate("location.pathname").catch(() => "");
-        if (p && !p.toLowerCase().includes("/identity/account/login")) return true;
-    }
-    return false;
 }
 
 // ============================================================================
@@ -1909,172 +1591,6 @@ async function runBenchmark(opts) {
 }
 
 // ============================================================================
-// Chrome Extension Bridge Driver (--extension, zero-prompt Codex-style tab)
-// ============================================================================
-
-class ExtensionDriver {
-    constructor(bridgeUrl) {
-        this.bridgeUrl = bridgeUrl;
-        this.tabId = null;
-    }
-
-    async rpc(action, params = {}, timeoutMs = 30000) {
-        const resp = await fetch(`${this.bridgeUrl}/rpc`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action, params: { ...params, ...(this.tabId ? { tabId: this.tabId } : {}) }, timeoutMs })
-        });
-        const data = await resp.json();
-        if (!resp.ok || !data.ok) {
-            throw new Error(data.error || `Extension bridge HTTP ${resp.status}`);
-        }
-        return data.result;
-    }
-
-    async ensureBridgeRunning() {
-        const fetchStatus = async () => {
-            try {
-                const resp = await fetch(`${this.bridgeUrl}/status`);
-                return resp.ok ? await resp.json() : null;
-            } catch {
-                return null;
-            }
-        };
-
-        let status = await fetchStatus();
-        if (!status) {
-            const bridgeScript = path.join(path.dirname(fileURLToPath(import.meta.url)), "guided-hands-bridge.mjs");
-            if (fs.existsSync(bridgeScript)) {
-                console.log("[guided-hands] Bridge not running; auto-starting guided-hands-bridge.mjs...");
-                const proc = spawn(process.execPath, [bridgeScript], {
-                    detached: true,
-                    windowsHide: true,
-                    stdio: "ignore"
-                });
-                proc.unref();
-                const startDeadline = Date.now() + 4000;
-                while (Date.now() < startDeadline) {
-                    await new Promise((r) => setTimeout(r, 250));
-                    status = await fetchStatus();
-                    if (status) break;
-                }
-            }
-        }
-        if (!status) {
-            throw new Error(`Guided Hands bridge is not running at ${this.bridgeUrl}. Start it with: node .agents/skills/proof-verify/scripts/guided-hands-bridge.mjs`);
-        }
-        if (!status.extensionConnected) {
-            // Give the extension a few seconds to auto-reconnect if the bridge just started
-            const extDeadline = Date.now() + 5000;
-            while (Date.now() < extDeadline) {
-                await new Promise((r) => setTimeout(r, 400));
-                status = await fetchStatus();
-                if (status?.extensionConnected) break;
-            }
-        }
-        if (!status?.extensionConnected) {
-            throw new Error("Guided Hands Chrome extension is not connected to the local bridge. Click the Guided Hands extension icon in Chrome -> Reconnect (or load .agents/skills/proof-verify/extension in chrome://extensions).");
-        }
-    }
-
-    async open(url, active) {
-        await this.ensureBridgeRunning();
-        const res = await this.rpc("open_tab", { url, active, status: "Guided Hands starting..." });
-        this.tabId = res.tabId;
-    }
-
-    async closeTab() {
-        await this.rpc("close_tab", { tabId: this.tabId }).catch(() => {});
-        this.tabId = null;
-    }
-
-    async navigate(url) {
-        const res = await this.rpc("navigate", { url });
-        if (res.tabId) this.tabId = res.tabId;
-        return res.url;
-    }
-
-    async waitLoad() {
-        return this.rpc("wait_load");
-    }
-
-    async extractClickables(scopeSelector = "") {
-        return this.rpc("extract_clickables", { scopeSelector });
-    }
-
-    async clickSelector(selector) {
-        const res = await this.rpc("click", { selector });
-        return Boolean(res?.clicked);
-    }
-
-    async extractFields(scopeSelector = "", onlyEmpty = false) {
-        return this.rpc("extract_fields", { scopeSelector, onlyEmpty });
-    }
-
-    async applyValues(values) {
-        return this.rpc("apply_values", { values });
-    }
-
-    async readFeedback() {
-        return this.rpc("read_feedback");
-    }
-
-    async consumeTelemetry() {
-        return this.rpc("consume_telemetry");
-    }
-
-    async checkSelector(selector) {
-        const res = await this.rpc("check_selector", { selector });
-        return Boolean(res?.found);
-    }
-
-    async selectOption(target, value, scopeSelector = "") {
-        return this.rpc("select_option", { target, value, scopeSelector });
-    }
-
-    async uploadFile(selector, payload, scopeSelector = "") {
-        return this.rpc("upload_file", {
-            selector,
-            fileName: payload.fileName,
-            mimeType: payload.mimeType,
-            base64Content: payload.base64Content,
-            scopeSelector
-        });
-    }
-
-    async captureSnapshot(scopeSelector = "") {
-        return this.rpc("capture_snapshot", { scopeSelector });
-    }
-
-    async stepPreflight(params = {}) {
-        return this.rpc("step_preflight", params);
-    }
-
-    async autoLogin(username, password) {
-        const res = await this.rpc("auto_login", { username, password });
-        return Boolean(res?.submitted);
-    }
-
-    async autoLogout() {
-        const res = await this.rpc("auto_logout");
-        return Boolean(res?.submitted);
-    }
-
-    async setIndicator(text, mode = "active", highlight = "") {
-        await this.rpc("set_indicator", { text, mode, highlight }).catch(() => {});
-    }
-
-    async captureScreenshot(filePath) {
-        const res = await this.rpc("screenshot");
-        if (res?.dataUrl && res.dataUrl.startsWith("data:image/png;base64,")) {
-            fs.writeFileSync(filePath, Buffer.from(res.dataUrl.slice("data:image/png;base64,".length), "base64"));
-            return true;
-        }
-        return false;
-    }
-}
-
-// ============================================================================
 // Autonomous Recovery Helpers (Tier 0 / Tier 1 Ollama / Tier 2 OpenCode)
 // ============================================================================
 
@@ -2607,15 +2123,13 @@ async function main() {
         : `${opts.baseUrl}${expandedStartUrl.startsWith("/") ? "" : "/"}${expandedStartUrl}`;
 
     let startedProc = null;
-    let browserProc = null;
-    let cdp = null;
-    let ext = null;
+    let session = null;
 
     const report = {
         timestamp: new Date().toISOString(),
         model: opts.model,
         healEngine: opts.healEngine,
-        transport: opts.extension ? "chrome-extension" : "cdp",
+        transport: "playwright",
         startUrl,
         fromStep: opts.fromStep,
         goal: opts.goal || null,
@@ -2625,6 +2139,7 @@ async function main() {
         patchedSteps: [],
         failureSnapshot: null,
         screenshots: [],
+        trace: null,
         errors: []
     };
 
@@ -2639,100 +2154,64 @@ async function main() {
         const consoleErrors = [];
         const failedRequests = [];
 
-        if (opts.extension) {
-            ext = new ExtensionDriver(opts.bridgeUrl);
-            await ext.open(startUrl, !opts.background);
-        } else {
-            const browser = await launchBrowserWithCdp(profileDir, {
-                headless: !opts.headed,
-                devtools: opts.devtools,
-                keepOpen: opts.keepOpen,
-                cdpPort: opts.cdpPort,
-                attachChrome: opts.attachChrome
-            });
-            browserProc = browser.proc;
-            cdp = browser.cdp;
+        session = await launchBrowserSession(profileDir, {
+            headless: !opts.headed,
+            devtools: opts.devtools,
+            slowMo: opts.slowMo,
+            trace: opts.trace
+        });
 
-            cdp.on("Runtime.exceptionThrown", (p) => {
-                pageErrors.push(p.exceptionDetails?.exception?.description || p.exceptionDetails?.text || "Uncaught exception");
-            });
-            cdp.on("Runtime.consoleAPICalled", (p) => {
-                if (p.type === "error") {
-                    consoleErrors.push((p.args || []).map((a) => a.value ?? a.description ?? "").join(" ") || "console.error");
-                }
-            });
-            cdp.on("Network.responseReceived", (p) => {
-                const url = p.response?.url || "";
-                const status = p.response?.status || 0;
-                if (status >= 400 && !url.includes("favicon") && (url.startsWith(opts.baseUrl) || status >= 500)) {
-                    failedRequests.push({ url, status });
-                }
-            });
+        session.onPageError((desc) => {
+            pageErrors.push(desc);
+        });
+        session.onConsoleError((txt) => {
+            consoleErrors.push(txt);
+        });
+        session.onResponse(({ url, status }) => {
+            if (status >= 400 && !url.includes("favicon") && (url.startsWith(opts.baseUrl) || status >= 500)) {
+                failedRequests.push({ url, status });
+            }
+        });
+        session.onRequestFailed(({ url, status, error }) => {
+            if (url && url.startsWith(opts.baseUrl)) {
+                failedRequests.push({ url, status, error });
+            }
+        });
 
-            await navigateAndWait(cdp, startUrl);
-        }
+        await session.navigate(startUrl);
 
-        const getFeedback = () => (ext ? ext.readFeedback() : readPageFeedback(cdp));
-        const doNavigate = (url) => (ext ? ext.navigate(url) : navigateAndWait(cdp, url));
-        const doExtractClickables = (scope) => (ext ? ext.extractClickables(scope) : extractClickables(cdp, scope));
-        const doExtractFields = (scope, onlyEmpty) => (ext ? ext.extractFields(scope, onlyEmpty) : extractFormFields(cdp, scope, onlyEmpty));
-        const doApplyValues = (vals) => (ext ? ext.applyValues(vals) : applyFormValues(cdp, vals));
-        const doSelectOption = (target, value, scope) => (ext
-            ? ext.selectOption(target, value, scope)
-            : selectOptionCdp(cdp, target, value, scope));
-        const doUploadFile = (selector, payload, scope) => (ext
-            ? ext.uploadFile(selector, payload, scope)
-            : uploadFileCdp(cdp, selector, payload, scope));
-        const doCaptureSnapshot = (scope = "") => (ext
-            ? ext.captureSnapshot(scope)
-            : captureSnapshotCdp(cdp, scope));
-        const doCheckSelector = (sel) => (ext
-            ? ext.checkSelector(sel)
-            : cdp.evaluate(`(() => { try { return Boolean(document.querySelector(${JSON.stringify(sel)})); } catch { return false; } })()`));
-        const doClickSelector = (sel) => (ext
-            ? ext.clickSelector(sel)
-            : cdp.evaluate(`(() => {
+        const getFeedback = () => readPageFeedback(session);
+        const doNavigate = (url) => session.navigate(url);
+        const doExtractClickables = (scope) => extractClickables(session, scope);
+        const doExtractFields = (scope, onlyEmpty) => extractFormFields(session, scope, onlyEmpty);
+        const doApplyValues = (vals) => applyFormValues(session, vals);
+        const doSelectOption = (target, value, scope) => selectOptionCdp(session, target, value, scope);
+        const doUploadFile = (selector, payload, scope) => uploadFileCdp(session, selector, payload, scope);
+        const doCaptureSnapshot = (scope = "") => captureSnapshotCdp(session, scope);
+        const doCheckSelector = (sel) => session.evaluate(`(() => { try { return Boolean(document.querySelector(${JSON.stringify(sel)})); } catch { return false; } })()`);
+        const doClickSelector = (sel) => session.evaluate(`(() => {
                 let el = null;
                 try { el = document.querySelector(${JSON.stringify(sel)}); } catch { return false; }
                 if (!el) return false;
                 el.scrollIntoView({ block: "center" });
                 el.click();
                 return true;
-            })()`));
-        const doHud = (text, mode = "active", highlight = "") => {
-            if (ext) return ext.setIndicator(text, mode, highlight);
-            if (opts.headed && cdp) return updateVisualHud(cdp, text, highlight);
+            })()`);
+        const doHud = (text, _mode = "active", highlight = "") => {
+            if (opts.headed && session) return updateVisualHud(session, text, highlight);
             return Promise.resolve();
         };
         const doScreenshot = async (shotPath) => {
-            if (ext) {
-                const saved = await ext.captureScreenshot(shotPath);
-                if (saved) report.screenshots.push(shotPath);
-                return saved ? shotPath : null;
-            }
-            const img = await cdp.send("Page.captureScreenshot", { format: "png" });
-            fs.writeFileSync(shotPath, Buffer.from(img.data, "base64"));
+            await session.screenshot(shotPath);
             report.screenshots.push(shotPath);
             return shotPath;
         };
         const doLogin = async (username, password) => {
             if (!username || !password) return false;
-            if (!ext) return attemptAutoLogin(cdp, username, password);
-            const ok = await ext.autoLogin(username, password);
-            if (!ok) return false;
-            const deadline = Date.now() + 15000;
-            while (Date.now() < deadline) {
-                await new Promise((r) => setTimeout(r, 300));
-                const fb = await ext.readFeedback().catch(() => null);
-                if (fb?.pathname && !fb.pathname.toLowerCase().includes("/identity/account/login")) {
-                    return true;
-                }
-            }
-            return false;
+            return attemptAutoLogin(session, username, password);
         };
         const doLogout = async () => {
-            if (ext) return ext.autoLogout();
-            const submitted = await cdp.evaluate(`(() => {
+            const submitted = await session.evaluate(`(() => {
                 const form = document.querySelector("form#mnav-logout-form, form#logoutForm, form[action*='Logout']");
                 if (!form) return false;
                 form.submit();
@@ -2751,7 +2230,7 @@ async function main() {
                 const fb = await getFeedback().catch(() => null);
                 if (!fb) continue;
                 if (urlBefore && fb.url !== urlBefore) {
-                    if (ext) await ext.waitLoad().catch(() => {});
+                    await session.waitForLoad().catch(() => {});
                     return true;
                 }
                 if (!fb.swal) return true;
@@ -3079,7 +2558,7 @@ async function main() {
                                 const okFallback = await doClickSelector(clickSel);
                                 if (okFallback) {
                                     await new Promise((r) => setTimeout(r, step.waitAfterMs ?? 250));
-                                    if (ext && step.waitForNavigation) await ext.waitLoad();
+                                    if (step.waitForNavigation) await session.waitForLoad();
                                     return { inModal, target: effectiveTarget, matched: pick.matched, via: `selector-fallback:${pick.via}` };
                                 }
                             }
@@ -3088,8 +2567,8 @@ async function main() {
                         throw new Error(`Selector not found: ${effectiveSelector}`);
                     }
                     await new Promise((r) => setTimeout(r, step.waitAfterMs ?? 250));
-                    if (ext && step.waitForNavigation) {
-                        await ext.waitLoad();
+                    if (step.waitForNavigation) {
+                        await session.waitForLoad();
                     }
                     return { selector: effectiveSelector, via: "selector", skipped: false };
                 }
@@ -3142,8 +2621,8 @@ async function main() {
                 const clicked = await doClickSelector(clickSel);
                 if (!clicked) throw new Error("Matched element disappeared before click.");
                 await new Promise((r) => setTimeout(r, step.waitAfterMs ?? 250));
-                if (ext && step.waitForNavigation) {
-                    await ext.waitLoad();
+                if (step.waitForNavigation) {
+                    await session.waitForLoad();
                 }
                 return { inModal, target: clickTargetText, matched: pick.matched, via: pick.via, llmStats: pick.llmStats };
             }
@@ -3241,8 +2720,8 @@ async function main() {
                     });
 
                     if (errParts.length === 0) {
-                        if (ext && step.waitForNavigation) {
-                            await ext.waitLoad();
+                        if (step.waitForNavigation) {
+                            await session.waitForLoad();
                         }
                         attemptRecord.submitted = true;
                         attempts.push(attemptRecord);
@@ -3310,7 +2789,7 @@ async function main() {
 
                 while (true) {
                     feedback = await getFeedback();
-                    const bodyText = ext ? (feedback.bodySample || "") : await cdp.evaluate("(document.body?.innerText || '')");
+                    const bodyText = await session.evaluate("(document.body?.innerText || '')");
                     failures = [];
                     if (expectedUrl && !feedback.url.toLowerCase().includes(expectedUrl.toLowerCase())) {
                         failures.push(`URL "${feedback.url}" does not include "${expectedUrl}"`);
@@ -3783,19 +3262,9 @@ async function main() {
 
                 stepResult.detail = await runStepWithRecovery(step, stepNum);
 
-                let newPageErrs;
-                let newConsoleErrs;
-                let newNetErrs;
-                if (ext) {
-                    const tel = await ext.consumeTelemetry().catch(() => ({ pageErrors: [], consoleErrors: [], failedRequests: [] }));
-                    newPageErrs = tel.pageErrors || [];
-                    newConsoleErrs = tel.consoleErrors || [];
-                    newNetErrs = tel.failedRequests || [];
-                } else {
-                    newPageErrs = pageErrors.slice(errStart.page);
-                    newConsoleErrs = consoleErrors.slice(errStart.console);
-                    newNetErrs = failedRequests.slice(errStart.net);
-                }
+                const newPageErrs = pageErrors.slice(errStart.page);
+                const newConsoleErrs = consoleErrors.slice(errStart.console);
+                const newNetErrs = failedRequests.slice(errStart.net);
                 if (newPageErrs.length || newNetErrs.length) {
                     stepResult.ok = false;
                     if (newPageErrs.length) report.errors.push(`Step ${stepNum} page error: ${newPageErrs[0]}`);
@@ -3833,9 +3302,9 @@ async function main() {
         // Tier 3: Rich 1-turn Failure Dossier (URL, DOM snapshot, visible controls, screenshot)
         try {
             const failShotPath = path.join(runDir, `failure-step-${Math.max(1, currentStepIndex + 1)}.png`);
-            const shot = await (ext ? ext.captureScreenshot(failShotPath).then((ok) => (ok ? failShotPath : null)) : (cdp ? cdp.send("Page.captureScreenshot", { format: "png" }).then((img) => { fs.writeFileSync(failShotPath, Buffer.from(img.data, "base64")); return failShotPath; }) : Promise.resolve(null))).catch(() => null);
+            const shot = session ? await session.screenshot(failShotPath).catch(() => null) : null;
             if (shot) report.screenshots.push(shot);
-            const snap = await (ext ? ext.captureSnapshot("") : (cdp ? captureSnapshotCdp(cdp, "") : Promise.resolve(null))).catch(() => null);
+            const snap = session ? await captureSnapshotCdp(session, "").catch(() => null) : null;
             report.failureSnapshot = {
                 failedStep: currentStepIndex >= 0 ? currentStepIndex + 1 : null,
                 stepConfig: currentStepObj || null,
@@ -3846,21 +3315,19 @@ async function main() {
         } catch {
             // Best-effort failure snapshot
         }
-        if (ext) {
-            await ext.setIndicator(`Guided Hands ERROR · ${err.message.slice(0, 70)}`, "error").catch(() => {});
-        }
     } finally {
-        const runFailed = report.errors.length > 0;
-        if (runFailed && !opts.keepOpen && ext) {
-            await ext.closeTab();
+        if (session && opts.trace) {
+            const tracePath = path.join(runDir, "trace.zip");
+            report.trace = await session.stopTracing(tracePath).catch(() => null);
+            if (report.trace) {
+                console.log(`[guided-hands] Trace saved: ${report.trace}`);
+            }
         }
-        cdp?.close();
-        if (!opts.keepOpen) {
-            killProcessTree(browserProc);
-        } else if (browserProc) {
-            browserProc.stderr?.destroy();
-            browserProc.unref?.();
-            console.log("[guided-hands] --keep-open set: leaving Chrome open for inspection.");
+        if (session && opts.keepOpen && opts.headed) {
+            console.log("[guided-hands] --keep-open set: close the browser window when done inspecting.");
+            await session.waitForClose();
+        } else {
+            await session?.close();
         }
         if (startedProc) killProcessTree(startedProc);
     }

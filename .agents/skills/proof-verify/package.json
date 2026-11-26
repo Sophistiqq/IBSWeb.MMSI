@@ -1,0 +1,9 @@
+{
+  "name": "ibsweb-proof-verify",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local dependencies for the IBSWeb proof-verify skill (uses system Chrome/Edge via playwright-core).",
+  "dependencies": {
+    "playwright-core": "^1.52.0"
+  }
+}

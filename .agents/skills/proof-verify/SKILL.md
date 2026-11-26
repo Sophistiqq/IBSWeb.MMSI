@@ -23,7 +23,7 @@ Use this skill after making backend, `.cshtml`, `.js`, `.css`, or MSAP UI change
 
 2. **Stage 2 — Auto-Started App (Port `5073`) & Dual-Viewport Browser Proof (0 tokens)**
    - Checks `http://localhost:5073/health`. If not running, automatically starts `IBSWeb` on port `5073` (`ASPNETCORE_ENVIRONMENT=Development`) and stops it cleanly on exit.
-   - Uses installed Chrome/Edge headlessly via native Node CDP (zero npm dependencies) with a persistent profile at `artifacts/proof-verify/.browser-profile` (verified gitignored via `git check-ignore`).
+   - Uses installed Chrome/Edge via `playwright-core` (`channel: "chrome"` / `"msedge"`, no browser binary download required) with a persistent profile at `artifacts/proof-verify/.browser-profile` (verified gitignored via `git check-ignore`).
    - Captures **Desktop (`1440×900`)** and **Mobile (`390×844`)** screenshots (plus `dark` theme Desktop proof for `/MSAP` routes).
    - Traps ASP.NET 500/error pages, uncaught JS exceptions (`pageerror`), `console.error`, failed local network/AJAX calls, broken `<img>` elements, and DOM horizontal overflow (`scrollWidth > innerWidth`).
 
@@ -66,23 +66,24 @@ node .agents/skills/proof-verify/scripts/proof-verify.mjs --skip-ai
 # 5. Interactive one-time sign-in to cache auth cookies for protected routes
 node .agents/skills/proof-verify/scripts/proof-verify.mjs --interactive-login --urls /MSAP/Billing/Index
 
-# 6. Interactive 3-tier self-healing automation ("Guided Hands")
+# 6. Interactive 3-tier self-healing automation ("Guided Hands" via Playwright on Chrome/Edge)
 node .agents/skills/proof-verify/scripts/guided-hands.mjs --url /MSAP/VesselSchedule/Create --inspect
 node .agents/skills/proof-verify/scripts/guided-hands.mjs --steps-file plan.json --account rml1 --no-autostart
-node .agents/skills/proof-verify/scripts/guided-hands-bridge.mjs   # start once for zero-prompt Chrome extension mode
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --account rml1 --steps-file plan.json
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --background --account rml1 --steps-file plan.json
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook schedule/create                                    # single atomic module playbook
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --playbook schedule/create,rates/approve,schedule/approve     # mix-and-match module chain (shared vars pipe)
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --preset full-cleared                                         # named preset from playbooks/presets.json
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --preset billing-reopen-flow --var billingId=2                # parameterized edge-case preset
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --resume                                                      # resume from last checkpoint (restores URL & captured vars)
-node .agents/skills/proof-verify/scripts/guided-hands.mjs --extension --account rml1 --url /MSAP/AuditTrail --goal "Select COS #14 in Job Order and verify Schedule Revision Diff appears" --save-playbook verify-def05
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --headed --account rml1 --steps-file plan.json                           # visible Chrome/Edge window with live HUD
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --trace --account rml1 --steps-file plan.json                            # headless + Playwright trace.zip replay
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --playbook schedule/create                                               # single atomic module playbook
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --playbook schedule/create,rates/approve,schedule/approve                # mix-and-match module chain (shared vars pipe)
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --preset full-cleared                                                    # named preset from playbooks/presets.json
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --preset billing-reopen-flow --var billingId=2                           # parameterized edge-case preset
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --resume                                                                 # resume from last checkpoint (restores URL & captured vars)
+node .agents/skills/proof-verify/scripts/guided-hands.mjs --account rml1 --url /MSAP/AuditTrail --goal "Select COS #14 in Job Order and verify Schedule Revision Diff appears" --save-playbook verify-def05
 ```
+
+One-time setup (if `.agents/skills/proof-verify/node_modules` is missing): `npm --prefix .agents/skills/proof-verify install`. Uses your already-installed Chrome/Edge—no browser downloads, no Chrome extensions, and no bridge server required.
 
 For unattended login against protected routes without `--interactive-login`, pass `--account <name>` (reads gitignored `artifacts/proof-verify/test-accounts.local.json`), or set `IBS_VERIFY_USER` and `IBS_VERIFY_PASS` (or `--user` and `--pass`).
 
-## Interactive Form Automation ("Guided Hands" — 3-Tier Self-Healing + CDP / Extension)
+## Interactive Form Automation ("Guided Hands" — 3-Tier Self-Healing + Playwright)
 
 When a change requires multi-step UI interactions (opening modals, clicking dynamic row buttons, selecting `ModernSelect` / Select2 / cascading AJAX dropdowns, uploading memo files, filling forms, and asserting saved results), use `.agents/skills/proof-verify/scripts/guided-hands.mjs` before escalating to paid/heavy browser agents:
 
@@ -93,7 +94,7 @@ When a change requires multi-step UI interactions (opening modals, clicking dyna
   - **Tier 3 (1-Turn Failure Dossier + Checkpoint `--resume`):** Real app bugs fail fast with `failureSnapshot` (URL, title, active Swal, validation errors, visible clickables/fields, PNG screenshot) in `latest-guided-hands.json` and persist step state to `artifacts/proof-verify/last-checkpoint.json` so `--resume` / `--from-step N` continues from the exact failing step.
 - **Goal-Driven Playbook Authoring (`--goal "..." --save-playbook <name>`):** Pass a 1-sentence plain-English verification goal so free OpenCode explores the live DOM and compiles the successful trace into a deterministic Tier 0 playbook (0 paid main-model tokens on Run 1; 0 LLM calls of any kind on Run 2+).
 - **Self-Updating & Auto-Patching Playbooks (`--playbook` / `--save-playbook`):** Playbooks under `.agents/skills/proof-verify/playbooks/*.json` store `knownFields` + dynamic URL captures (`capture_url` → `{scheduleId}`, `{cosId}`, `{billingId}`, `{collectionId}`) + template variables (`{today}`, `{tomorrow}`, `{rand}`, `--var`). Recovered step patches and drifted fields auto-update on PASS (disable with `--no-update-playbook`) and are always logged in `report.recoveries[]`.
-- **Zero-Prompt Chrome Extension Mode (`--extension`):** Load `.agents/skills/proof-verify/extension` once via `chrome://extensions` (*Load unpacked*). `guided-hands.mjs --extension` auto-starts `guided-hands-bridge.mjs` if needed, opens/reuses a cyan **`Guided Hands`** tab group with a pulsing border + live HUD pill, and never triggers Chrome's *"Allow remote debugging?"* prompt. Add `--background` to run quietly without stealing focus.
+- **Zero-Prerequisite Headless / Headed / Trace Modes (`playwright-core`):** Runs headlessly on your installed Chrome/Edge by default with a persistent profile (`artifacts/proof-verify/.browser-profile`)—no Chrome extension, no bridge daemon, and no *"Allow remote debugging?"* prompt. Pass `--headed` (optionally `--devtools` / `--keep-open`) to watch live with HUD highlights, or `--trace` to record a Playwright `trace.zip` from a headless run.
 - **Account Registry & Multi-Role SoD (`--account` / `{ "action": "login", "account": "FINANCE" }`):** Reads gitignored `artifacts/proof-verify/test-accounts.local.json` cleanly without echoing credentials.
 - **Standalone Checks:** `--inspect` dumps a live page snapshot as JSON (`0` LLM calls); `--benchmark` tests local Ollama latency and JSON schema accuracy without starting the app.
 

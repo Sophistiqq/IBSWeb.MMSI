@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { spawn, execFileSync } from "node:child_process";
+import { launchBrowserSession, attemptAutoLogin } from "./browser-session.mjs";
 
 const DEFAULT_PORT = 5073;
 const DEFAULT_LINEAR_TEAM = "IBS-MSAP";
@@ -14,13 +15,6 @@ const DEFAULT_TEXT_MODELS = [
     "opencode/flint-40b-free"
 ];
 const DEFAULT_VISION_MODEL = "opencode/nemotron-3.5-super-vl-free";
-
-const BROWSER_CANDIDATES = [
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"
-];
 
 const VIEWPORTS = [
     { name: "desktop", width: 1440, height: 900, deviceScaleFactor: 1, mobile: false },
@@ -761,215 +755,16 @@ async function ensureAppRunning(repoRoot, baseUrl, port, didBuild) {
     throw new Error(`Timed out waiting for IBSWeb /health at ${baseUrl}. Recent logs:\n${serverLogs.slice(-25).join("\n")}`);
 }
 
-function findBrowserExecutable() {
-    for (const candidate of BROWSER_CANDIDATES) {
-        if (fs.existsSync(candidate)) {
-            return candidate;
-        }
-    }
-    throw new Error("Could not find Chrome or Microsoft Edge executable on this machine.");
-}
-
-class CdpSession {
-    constructor(wsUrl) {
-        this.wsUrl = wsUrl;
-        this.ws = null;
-        this.nextId = 1;
-        this.pending = new Map();
-        this.listeners = new Map();
-    }
-
-    async connect() {
-        await new Promise((resolve, reject) => {
-            const ws = new WebSocket(this.wsUrl);
-            this.ws = ws;
-            ws.addEventListener("open", () => resolve());
-            ws.addEventListener("error", (err) => reject(new Error(`CDP WebSocket error: ${err.message || "connection failed"}`)));
-            ws.addEventListener("message", (event) => {
-                const msg = JSON.parse(String(event.data));
-                if (msg.id) {
-                    const entry = this.pending.get(msg.id);
-                    if (entry) {
-                        this.pending.delete(msg.id);
-                        if (msg.error) {
-                            entry.reject(new Error(`${entry.method}: ${msg.error.message}`));
-                        } else {
-                            entry.resolve(msg.result);
-                        }
-                    }
-                } else if (msg.method) {
-                    const handlers = this.listeners.get(msg.method);
-                    if (handlers) {
-                        for (const fn of handlers) {
-                            fn(msg.params || {});
-                        }
-                    }
-                }
-            });
-        });
-    }
-
-    on(eventName, handler) {
-        if (!this.listeners.has(eventName)) {
-            this.listeners.set(eventName, []);
-        }
-        this.listeners.get(eventName).push(handler);
-    }
-
-    off(eventName, handler) {
-        const handlers = this.listeners.get(eventName);
-        if (!handlers) {
-            return;
-        }
-        this.listeners.set(
-            eventName,
-            handlers.filter((fn) => fn !== handler)
-        );
-    }
-
-    send(method, params = {}) {
-        const id = this.nextId++;
-        return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => {
-                if (this.pending.has(id)) {
-                    this.pending.delete(id);
-                    reject(new Error(`CDP timeout waiting for ${method}`));
-                }
-            }, 25000);
-
-            this.pending.set(id, {
-                method,
-                resolve: (res) => {
-                    clearTimeout(timer);
-                    resolve(res);
-                },
-                reject: (err) => {
-                    clearTimeout(timer);
-                    reject(err);
-                }
-            });
-            this.ws.send(JSON.stringify({ id, method, params }));
-        });
-    }
-
-    async evaluate(expression) {
-        const res = await this.send("Runtime.evaluate", {
-            expression,
-            returnByValue: true,
-            awaitPromise: true
-        });
-        if (res.exceptionDetails) {
-            throw new Error(res.exceptionDetails.text || "Runtime.evaluate exception");
-        }
-        return res.result ? res.result.value : undefined;
-    }
-
-    close() {
-        try {
-            this.ws?.close();
-        } catch {
-            // Ignore close errors
-        }
-    }
-}
-
-async function launchBrowserWithCdp(profileDir, headless) {
-    fs.mkdirSync(profileDir, { recursive: true });
-    const exe = findBrowserExecutable();
-    const args = [
-        "--remote-debugging-port=0",
-        `--user-data-dir=${profileDir}`,
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-background-networking",
-        "--mute-audio"
-    ];
-    if (headless) {
-        args.push("--headless=new", "--disable-gpu", "--window-size=1440,900");
-    } else {
-        args.push("--new-window");
-    }
-    args.push("about:blank");
-
-    const proc = spawn(exe, args, { stdio: ["ignore", "pipe", "pipe"] });
-
-    const devToolsPort = await new Promise((resolve, reject) => {
-        let stderr = "";
-        const timer = setTimeout(() => {
-            reject(new Error(`Timed out waiting for DevTools port from ${exe}.\n${stderr}`));
-        }, 15000);
-
-        const onData = (chunk) => {
-            stderr += String(chunk);
-            const match = stderr.match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//);
-            if (match) {
-                clearTimeout(timer);
-                resolve(Number.parseInt(match[1], 10));
-            }
-        };
-        proc.stderr.on("data", onData);
-        proc.on("exit", (code) => {
-            clearTimeout(timer);
-            reject(new Error(`Browser exited before DevTools ready (code ${code}).\n${stderr}`));
-        });
-    });
-
-    let targets = [];
-    for (let attempt = 0; attempt < 20; attempt++) {
-        const resp = await fetch(`http://127.0.0.1:${devToolsPort}/json/list`);
-        const list = await resp.json();
-        targets = list.filter((t) => t.type === "page" && t.webSocketDebuggerUrl);
-        if (targets.length > 0) {
-            break;
-        }
-        await new Promise((r) => setTimeout(r, 150));
-    }
-
-    if (targets.length === 0) {
-        const created = await fetch(`http://127.0.0.1:${devToolsPort}/json/new?about:blank`, { method: "PUT" });
-        const page = await created.json();
-        targets = [page];
-    }
-
-    const cdp = new CdpSession(targets[0].webSocketDebuggerUrl);
-    await cdp.connect();
-    await cdp.send("Page.enable");
-    await cdp.send("Runtime.enable");
-    await cdp.send("Log.enable");
-    await cdp.send("Network.enable");
-
-    return { proc, cdp, devToolsPort };
-}
-
-async function navigateAndWait(cdp, url, timeoutMs = 20000) {
-    let loaded = false;
-    const onLoad = () => { loaded = true; };
-    cdp.on("Page.loadEventFired", onLoad);
-
-    try {
-        await cdp.send("Page.navigate", { url });
-        const start = Date.now();
-        while (!loaded && Date.now() - start < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 100));
-        }
-        await new Promise((r) => setTimeout(r, 600));
-    } finally {
-        cdp.off("Page.loadEventFired", onLoad);
-    }
-}
-
 async function runInteractiveLogin(baseUrl, profileDir) {
     console.log(`[Auth] Launching visible browser at ${baseUrl}/Identity/Account/Login`);
     console.log("[Auth] Sign in and select Remember Me; the script will continue once you leave the login page (or close the browser).");
-    const { proc, cdp } = await launchBrowserWithCdp(profileDir, false);
+    const session = await launchBrowserSession(profileDir, { headless: false });
     try {
-        await navigateAndWait(cdp, `${baseUrl}/Identity/Account/Login`);
-        let closed = false;
-        proc.on("exit", () => { closed = true; });
+        await session.navigate(`${baseUrl}/Identity/Account/Login`);
         const deadline = Date.now() + 180000;
-        while (!closed && Date.now() < deadline) {
+        while (!session.isClosed && Date.now() < deadline) {
             try {
-                const pathname = await cdp.evaluate("location.pathname");
+                const pathname = await session.evaluate("location.pathname");
                 if (pathname && !pathname.toLowerCase().includes("/identity/account/login")) {
                     console.log(`[Auth] Authenticated! Current path: ${pathname}. Waiting 1.5s to flush cookies...`);
                     await new Promise((r) => setTimeout(r, 1500));
@@ -981,41 +776,8 @@ async function runInteractiveLogin(baseUrl, profileDir) {
             await new Promise((r) => setTimeout(r, 500));
         }
     } finally {
-        cdp.close();
-        killProcessTree(proc);
+        await session.close();
     }
-}
-
-async function attemptAutoLogin(cdp, baseUrl, username, password) {
-    if (!username || !password) {
-        return false;
-    }
-    console.log("[Stage 2] Redirected to Login; attempting automated credential sign-in...");
-    const result = await cdp.evaluate(`(() => {
-        const userEl = document.querySelector("#username, input[name='Input.Username']");
-        const passEl = document.querySelector("#password, input[name='Input.Password']");
-        const remEl = document.querySelector("input[name='Input.RememberMe']");
-        const submitEl = document.querySelector("#login-submit, button[type='submit']");
-        if (!userEl || !passEl || !submitEl) return false;
-        userEl.value = ${JSON.stringify(username)};
-        passEl.value = ${JSON.stringify(password)};
-        if (remEl) remEl.checked = true;
-        submitEl.click();
-        return true;
-    })()`);
-
-    if (!result) {
-        return false;
-    }
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 300));
-        const pathname = await cdp.evaluate("location.pathname").catch(() => "");
-        if (pathname && !pathname.toLowerCase().includes("/identity/account/login")) {
-            return true;
-        }
-    }
-    return false;
 }
 
 function slugifyRoute(route) {
@@ -1026,8 +788,7 @@ function slugifyRoute(route) {
 async function runStage2RuntimeProof(repoRoot, runDir, opts, routes, didBuild) {
     const profileDir = path.join(repoRoot, "artifacts", "proof-verify", ".browser-profile");
     let startedProc = null;
-    let browserProc = null;
-    let cdp = null;
+    let session = null;
 
     const results = {
         passed: true,
@@ -1058,44 +819,28 @@ async function runStage2RuntimeProof(repoRoot, runDir, opts, routes, didBuild) {
             return results;
         }
 
-        const browser = await launchBrowserWithCdp(profileDir, true);
-        browserProc = browser.proc;
-        cdp = browser.cdp;
+        session = await launchBrowserSession(profileDir, { headless: true });
 
-        const requestStatuses = new Map();
         const pageErrors = [];
         const consoleErrors = [];
         const failedRequests = [];
 
-        cdp.on("Network.responseReceived", (params) => {
-            const url = params.response?.url || "";
-            const status = params.response?.status || 0;
-            requestStatuses.set(params.requestId, { url, status });
+        session.onResponse(({ url, status }) => {
             if (status >= 400 && !url.includes("favicon")) {
                 failedRequests.push({ url, status });
             }
         });
 
-        cdp.on("Network.loadingFailed", (params) => {
-            if (!params.canceled) {
-                failedRequests.push({
-                    url: params.type || "unknown",
-                    status: 0,
-                    error: params.errorText || "loadingFailed"
-                });
-            }
+        session.onRequestFailed(({ url, status, error }) => {
+            failedRequests.push({ url: url || "unknown", status, error });
         });
 
-        cdp.on("Runtime.exceptionThrown", (params) => {
-            const desc = params.exceptionDetails?.exception?.description || params.exceptionDetails?.text || "Uncaught exception";
+        session.onPageError((desc) => {
             pageErrors.push(desc);
         });
 
-        cdp.on("Runtime.consoleAPICalled", (params) => {
-            if (params.type === "error") {
-                const txt = (params.args || []).map((a) => a.value ?? a.description ?? "").join(" ");
-                consoleErrors.push(txt || "console.error");
-            }
+        session.onConsoleError((txt) => {
+            consoleErrors.push(txt);
         });
 
         for (const route of routes) {
@@ -1113,25 +858,20 @@ async function runStage2RuntimeProof(repoRoot, runDir, opts, routes, didBuild) {
                 pageErrors.length = 0;
                 consoleErrors.length = 0;
                 failedRequests.length = 0;
-                requestStatuses.clear();
 
-                await cdp.send("Emulation.setDeviceMetricsOverride", {
-                    width: vp.width,
-                    height: vp.height,
-                    deviceScaleFactor: vp.deviceScaleFactor,
-                    mobile: vp.mobile
-                });
+                await session.setViewport(vp);
 
                 console.log(`[Stage 2] Capturing ${route} @ ${vp.name} (${vp.width}x${vp.height})...`);
-                await navigateAndWait(cdp, fullUrl);
+                await session.navigate(fullUrl);
 
-                let finalPath = await cdp.evaluate("location.pathname + location.search");
+                let finalPath = await session.evaluate("location.pathname + location.search");
                 const isLoginTarget = route.toLowerCase().includes("/identity/account/login");
                 if (!isLoginTarget && String(finalPath).toLowerCase().includes("/identity/account/login")) {
-                    const loggedIn = await attemptAutoLogin(cdp, opts.baseUrl, opts.user, opts.pass);
+                    console.log("[Stage 2] Redirected to Login; attempting automated credential sign-in...");
+                    const loggedIn = await attemptAutoLogin(session, opts.user, opts.pass);
                     if (loggedIn) {
-                        await navigateAndWait(cdp, fullUrl);
-                        finalPath = await cdp.evaluate("location.pathname + location.search");
+                        await session.navigate(fullUrl);
+                        finalPath = await session.evaluate("location.pathname + location.search");
                     } else {
                         routeResult.authBlocked = true;
                         results.warnings.push(
@@ -1140,11 +880,11 @@ async function runStage2RuntimeProof(repoRoot, runDir, opts, routes, didBuild) {
                     }
                 }
 
-                routeResult.finalUrl = await cdp.evaluate("location.href");
-                await cdp.evaluate("document.fonts ? document.fonts.ready.catch(() => {}) : Promise.resolve()");
+                routeResult.finalUrl = await session.evaluate("location.href");
+                await session.evaluate("document.fonts ? document.fonts.ready.catch(() => {}) : Promise.resolve()");
                 await new Promise((r) => setTimeout(r, 400));
 
-                const domAudit = await cdp.evaluate(`(() => {
+                const domAudit = await session.evaluate(`(() => {
                     const docEl = document.documentElement;
                     const innerW = window.innerWidth;
                     const scrollW = docEl.scrollWidth;
@@ -1183,8 +923,7 @@ async function runStage2RuntimeProof(repoRoot, runDir, opts, routes, didBuild) {
                 })()`);
 
                 const shotFile = path.join(runDir, `${slug}-${vp.name}.png`);
-                const shotData = await cdp.send("Page.captureScreenshot", { format: "png" });
-                fs.writeFileSync(shotFile, Buffer.from(shotData.data, "base64"));
+                await session.screenshot(shotFile);
                 results.screenshots.push(shotFile);
 
                 const localFailedRequests = failedRequests.filter((r) =>
@@ -1224,13 +963,12 @@ async function runStage2RuntimeProof(repoRoot, runDir, opts, routes, didBuild) {
 
                 // If MSAP route and authenticated, also capture dark mode desktop proof
                 if (vp.name === "desktop" && !routeResult.authBlocked && /\/msap\b/i.test(route)) {
-                    await cdp.evaluate("document.documentElement.setAttribute('data-bs-theme', 'dark')");
+                    await session.evaluate("document.documentElement.setAttribute('data-bs-theme', 'dark')");
                     await new Promise((r) => setTimeout(r, 300));
                     const darkShot = path.join(runDir, `${slug}-desktop-dark.png`);
-                    const darkData = await cdp.send("Page.captureScreenshot", { format: "png" });
-                    fs.writeFileSync(darkShot, Buffer.from(darkData.data, "base64"));
+                    await session.screenshot(darkShot);
                     results.screenshots.push(darkShot);
-                    await cdp.evaluate("document.documentElement.setAttribute('data-bs-theme', 'light')");
+                    await session.evaluate("document.documentElement.setAttribute('data-bs-theme', 'light')");
                 }
             }
 
@@ -1239,8 +977,7 @@ async function runStage2RuntimeProof(repoRoot, runDir, opts, routes, didBuild) {
     } catch (err) {
         results.errors.push(`Stage 2 runtime error: ${err.message}`);
     } finally {
-        cdp?.close();
-        killProcessTree(browserProc);
+        await session?.close();
         if (startedProc) {
             console.log("[Stage 2] Stopping auto-started IBSWeb server...");
             killProcessTree(startedProc);
