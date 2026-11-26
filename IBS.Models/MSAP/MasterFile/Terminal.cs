@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace IBS.Models.MSAP.MasterFile
@@ -24,6 +25,7 @@ namespace IBS.Models.MSAP.MasterFile
         public int PortId { get; set; }
 
         [ForeignKey(nameof(PortId))]
+        [ValidateNever]
         public Port Port { get; set; } = null!;
 
         [StringLength(10)]

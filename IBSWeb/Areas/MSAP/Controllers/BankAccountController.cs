@@ -40,6 +40,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(BankAccountViewModel bankAccount, CancellationToken cancellationToken)
         {
+            if (!ModelState.IsValid)
+            {
+                return View(bankAccount);
+            }
+
             if (await unitOfWork.BankAccount.IsBankAccountNoExist(bankAccount.AccountNo, cancellationToken))
             {
                 ModelState.AddModelError("AccountNo", "Account Number already exists.");
@@ -72,6 +77,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(BankAccountViewModel bankAccount, CancellationToken cancellationToken)
         {
+            if (!ModelState.IsValid)
+            {
+                return View(bankAccount);
+            }
+
             var existingBankAccount = await unitOfWork.BankAccount.GetAsync(b => b.BankAccountId == bankAccount.BankAccountId, cancellationToken);
             if (existingBankAccount == null)
             {
