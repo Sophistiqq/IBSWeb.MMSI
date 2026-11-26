@@ -32,7 +32,8 @@ function parseArgs(argv) {
         only: null,
         skip: null,
         skipMasterSeed: false,
-        headed: false
+        headed: false,
+        concurrency: 3
     };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
@@ -44,6 +45,8 @@ function parseArgs(argv) {
         else if (a.startsWith("--only=")) args.only = new Set(a.slice(7).split(",").map((s) => s.trim()).filter(Boolean));
         else if (a === "--skip" && argv[i + 1]) args.skip = new Set(argv[++i].split(",").map((s) => s.trim()).filter(Boolean));
         else if (a.startsWith("--skip=")) args.skip = new Set(a.slice(7).split(",").map((s) => s.trim()).filter(Boolean));
+        else if (a === "--concurrency" && argv[i + 1]) args.concurrency = Math.max(1, Math.min(4, Number(argv[++i]) || 1));
+        else if (a.startsWith("--concurrency=")) args.concurrency = Math.max(1, Math.min(4, Number(a.slice(14)) || 1));
         else if (a === "--skip-master-seed") args.skipMasterSeed = true;
         else if (a === "--headed") args.headed = true;
     }
@@ -424,9 +427,10 @@ try {
     const principalCust = lookups.customers[4]?.id || pickCust(0);
     const repCust = lookups.customers[6]?.id || pickCust(1);
 
-    // ---- Transactional helpers ----
+    // ---- Transactional helpers (scoped per worker tab set, sharing the 5 single-session role contexts) ----
+    function createWorkerHelpers(w) {
     async function createSchedule({ dateStr, startHour, durationHrs = 2, customerId, vesselId, portId, terminalId, tugServices, voyage, notes }) {
-        const page = roles.OPS.page;
+        const page = w.OPS;
         const pad = (n) => String(n).padStart(2, "0");
         const startDt = `${dateStr}T${pad(startHour)}:00`;
         const endDt = `${dateStr}T${pad(startHour + durationHrs)}:00`;
@@ -475,7 +479,7 @@ try {
     }
 
     async function approveRates(scheduleId, dateStr, { basicRate = 18500, bafRate = 2500, forceUpdate = false } = {}) {
-        const page = roles.REV.page;
+        const page = w.REV;
         const weekStart = getWeekStart(dateStr);
         await page.goto(`${BASE}/MSAP/RateUpload/Editor?mode=combined&asOfDate=${weekStart}&scheduleId=${scheduleId}`, { waitUntil: "load" });
         await page.waitForTimeout(350);
@@ -504,7 +508,7 @@ try {
     }
 
     async function approveSchedule(scheduleId) {
-        const page = roles.REV.page;
+        const page = w.REV;
         await page.goto(`${BASE}/MSAP/VesselSchedule/Details/${scheduleId}`, { waitUntil: "load" });
         await page.locator('#confirmSchedule button[type="submit"]').click();
         await page.waitForTimeout(500);
@@ -522,7 +526,7 @@ try {
     }
 
     async function cancelSchedule(scheduleId, reason) {
-        const page = roles.OPS.page;
+        const page = w.OPS;
         await page.goto(`${BASE}/MSAP/VesselSchedule/Details/${scheduleId}`, { waitUntil: "load" });
         await page.evaluate(async ({ scheduleId, reason }) => {
             const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || "";
@@ -536,7 +540,7 @@ try {
     }
 
     async function reviseSchedule(scheduleId, newVoyage, newNotes) {
-        const page = roles.OPS.page;
+        const page = w.OPS;
         await page.goto(`${BASE}/MSAP/VesselSchedule/Edit/${scheduleId}`, { waitUntil: "load" });
         await page.fill("#VoyageNumber", newVoyage);
         await page.fill("#Notes", newNotes);
@@ -549,7 +553,7 @@ try {
     }
 
     async function urgentEntry(scheduleId) {
-        const page = roles.OPS.page;
+        const page = w.OPS;
         await page.goto(`${BASE}/MSAP/VesselSchedule/Details/${scheduleId}`, { waitUntil: "load" });
         await Promise.all([
             page.waitForNavigation({ waitUntil: "load" }).catch(() => {}),
@@ -560,7 +564,7 @@ try {
     }
 
     async function adoptTableRates(scheduleId) {
-        const page = roles.REV.page;
+        const page = w.REV;
         await page.goto(`${BASE}/MSAP/VesselSchedule/Details/${scheduleId}`, { waitUntil: "load" });
         const btns = page.locator('button[data-adopt-kind], button:has-text("Adopt table rate"), button:has-text("Use table rate")');
         const count = await btns.count();
@@ -577,7 +581,7 @@ try {
     }
 
     async function recordTickets(cosId, dateStr, { maxTickets = 4, startHour = 8, ticketPrefix = "DT" } = {}) {
-        const page = roles.OPS.page;
+        const page = w.OPS;
         let recorded = 0;
         for (let i = 0; i < maxTickets; i++) {
             await page.goto(`${BASE}/MSAP/COS/Details/${cosId}`, { waitUntil: "load" });
@@ -646,7 +650,7 @@ try {
     }
 
     async function cancelCosService(cosId, reason) {
-        const page = roles.OPS.page;
+        const page = w.OPS;
         await page.goto(`${BASE}/MSAP/COS/Details/${cosId}`, { waitUntil: "load" });
         await page.evaluate(async ({ cosId, reason }) => {
             const link = document.querySelector('tr.ui-attention a[href*="expectedServiceEntryId"]');
@@ -663,7 +667,7 @@ try {
     }
 
     async function cancelCos(cosId, reason) {
-        const page = roles.REV.page;
+        const page = w.REV;
         await page.goto(`${BASE}/MSAP/COS/Details/${cosId}`, { waitUntil: "load" });
         await page.evaluate(async ({ cosId, reason }) => {
             const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || "";
@@ -677,7 +681,7 @@ try {
     }
 
     async function createBilling(cosId, { dateStr, isUndocumented = false, separateBaf = false, sbmaEnabled = false, billToPrincipal = false, useReps = false, remarks = "" } = {}) {
-        const page = roles.ENC.page;
+        const page = w.ENC;
         await page.goto(`${BASE}/MSAP/Billing/Create?cosId=${cosId}`, { waitUntil: "load" });
         await page.waitForSelector("#saveBilling:not([disabled])", { timeout: 12000 });
         await page.waitForTimeout(450);
@@ -743,7 +747,7 @@ try {
     }
 
     async function endorseBilling(billingId) {
-        const page = roles.REV.page;
+        const page = w.REV;
         await page.goto(`${BASE}/MSAP/Billing/Review/${billingId}`, { waitUntil: "load" });
         await page.click('#endorseReviewedBilling button[type="submit"]');
         await page.waitForTimeout(450);
@@ -754,7 +758,7 @@ try {
     }
 
     async function approveBilling(billingId) {
-        const page = roles.FIN.page;
+        const page = w.FIN;
         await page.goto(`${BASE}/MSAP/Billing/Review/${billingId}`, { waitUntil: "load" });
         await page.click('#postReviewedBilling button[type="submit"]');
         await page.waitForTimeout(450);
@@ -765,7 +769,7 @@ try {
     }
 
     async function rejectBilling(billingId, reason) {
-        const page = roles.REV.page;
+        const page = w.REV;
         await page.goto(`${BASE}/MSAP/Billing/Review/${billingId}`, { waitUntil: "load" });
         await page.click("#btnRejectBilling");
         await page.waitForSelector(".swal2-popup", { timeout: 4000 });
@@ -776,7 +780,7 @@ try {
     }
 
     async function reopenBilling(billingId, reason) {
-        const page = roles.FIN.page;
+        const page = w.FIN;
         await page.goto(`${BASE}/MSAP/Billing/Review/${billingId}`, { waitUntil: "load" });
         await page.click("#btnReopenBilling");
         await page.waitForSelector(".swal2-popup", { timeout: 4000 });
@@ -789,7 +793,7 @@ try {
     }
 
     async function adjustBilling(billingId, { basicRate, bafRate, discountMode, discountPercent, flatTariff, flatBaf, scope, includeSubcon, reason } = {}) {
-        const page = roles.ENC.page;
+        const page = w.ENC;
         await page.goto(`${BASE}/MSAP/Billing/Adjust/${billingId}`, { waitUntil: "load" });
         await page.waitForTimeout(350);
         await page.evaluate(({ basicRate, bafRate, discountMode, discountPercent, flatTariff, flatBaf, scope, includeSubcon, reason }) => {
@@ -838,7 +842,7 @@ try {
     }
 
     async function createCollection(cosId, { dateStr, receiptNo, refNo, checkNo, isCash = false, isUndocumented = false, selectAll = false, remarks = "" } = {}) {
-        const page = roles.ENC.page;
+        const page = w.ENC;
         await page.goto(`${BASE}/MSAP/Collection/Create?customerOrderSlipId=${cosId}`, { waitUntil: "load" });
         await page.waitForSelector('#collectionBillings input[type="checkbox"]:not([disabled])', { timeout: 10000 });
         if (selectAll) {
@@ -886,7 +890,7 @@ try {
     }
 
     async function editCollection(collectionId, newRefNo, newRemarks) {
-        const page = roles.ENC.page;
+        const page = w.ENC;
         await page.goto(`${BASE}/MSAP/Collection/Edit/${collectionId}`, { waitUntil: "load" });
         await page.waitForTimeout(350);
         await page.fill("#ReferenceNo", newRefNo);
@@ -900,7 +904,7 @@ try {
     }
 
     async function collectionBanking(collectionId, actionLabel, { bankIndex = 0, reason = "DAIF - Drawn Against Insufficient Funds" } = {}) {
-        const page = roles.ENC.page;
+        const page = w.ENC;
         await page.goto(`${BASE}/MSAP/Collection/Preview/${collectionId}`, { waitUntil: "load" });
         await page.locator(`a[data-collection-banking="${actionLabel}"]`).click();
         await page.waitForSelector("#collectionBankingForm", { timeout: 8000 });
@@ -921,7 +925,7 @@ try {
     }
 
     async function revertCollectionBanking(collectionId, reason) {
-        const page = roles.ADM.page;
+        const page = w.ADM;
         await page.goto(`${BASE}/MSAP/Collection/Preview/${collectionId}`, { waitUntil: "load" });
         await page.click("#btnRevertBanking");
         await page.waitForSelector(".swal2-popup", { timeout: 4000 });
@@ -933,7 +937,7 @@ try {
     }
 
     async function voidCollection(collectionId, reason) {
-        const page = roles.ADM.page;
+        const page = w.ADM;
         await page.goto(`${BASE}/MSAP/Collection/Preview/${collectionId}`, { waitUntil: "load" });
         await page.click("#btnVoidCollection");
         await page.waitForSelector(".swal2-popup", { timeout: 4000 });
@@ -942,6 +946,15 @@ try {
         await page.waitForTimeout(1300);
         await clickSwalConfirm(page, 2000);
         await page.waitForLoadState("load").catch(() => {});
+    }
+
+    return {
+        createSchedule, approveRates, approveSchedule, cancelSchedule, reviseSchedule,
+        urgentEntry, adoptTableRates, recordTickets, cancelCosService, cancelCos,
+        createBilling, endorseBilling, approveBilling, rejectBilling, reopenBilling,
+        adjustBilling, createCollection, editCollection, collectionBanking,
+        revertCollectionBanking, voidCollection
+    };
     }
 
     const SVC = {
@@ -1000,12 +1013,46 @@ try {
 
     const results = [];
     const runTag = String(Date.now()).slice(-4);
+    const items = SCENARIOS
+        .map((sc, idx) => ({ sc, idx }))
+        .filter(({ sc }) => (!OPTS.only || OPTS.only.has(sc.code)) && (!OPTS.skip || !OPTS.skip.has(sc.code)));
 
-    for (let idx = 0; idx < SCENARIOS.length; idx++) {
-        const sc = SCENARIOS[idx];
-        if (OPTS.only && !OPTS.only.has(sc.code)) continue;
-        if (OPTS.skip && OPTS.skip.has(sc.code)) continue;
+    const workerCount = Math.min(OPTS.concurrency, Math.max(1, items.length));
+    const chunkSize = Math.ceil(items.length / workerCount);
+    const chunks = [];
+    for (let i = 0; i < items.length; i += chunkSize) {
+        chunks.push(items.slice(i, i + chunkSize));
+    }
 
+    async function newTab(roleName) {
+        const p = await roles[roleName].ctx.newPage();
+        p.setDefaultTimeout(15000);
+        p.setDefaultNavigationTimeout(18000);
+        await p.goto(`${BASE}/MSAP`, { waitUntil: "domcontentloaded" }).catch(() => {});
+        return p;
+    }
+
+    console.log(`Running ${items.length} scenario(s) across ${chunks.length} concurrent worker(s) (sharing single-session role contexts)...`);
+
+    await Promise.all(chunks.map(async (chunk, wIdx) => {
+        const w = wIdx === 0
+            ? { OPS: roles.OPS.page, REV: roles.REV.page, ENC: roles.ENC.page, FIN: roles.FIN.page, ADM: roles.ADM.page }
+            : {
+                OPS: await newTab("OPS"),
+                REV: await newTab("REV"),
+                ENC: await newTab("ENC"),
+                FIN: await newTab("FIN"),
+                ADM: await newTab("ADM")
+            };
+        const {
+            createSchedule, approveRates, approveSchedule, cancelSchedule, reviseSchedule,
+            urgentEntry, adoptTableRates, recordTickets, cancelCosService, cancelCos,
+            createBilling, endorseBilling, approveBilling, rejectBilling, reopenBilling,
+            adjustBilling, createCollection, editCollection, collectionBanking,
+            revertCollectionBanking, voidCollection
+        } = createWorkerHelpers(w);
+
+        for (const { sc, idx } of chunk) {
         const dateStr = addDays(OPTS.startDate, idx);
         const startHour = 6 + ((idx * 3) % 12);
         const rec = { code: sc.code, desc: sc.desc, date: dateStr, startHour, status: "OK" };
@@ -1200,7 +1247,9 @@ try {
             console.error(`FAIL ${sc.code} (${sc.flow}): ${err.message}`);
         }
         results.push(rec);
-    }
+        }
+    }));
+    results.sort((a, b) => a.code.localeCompare(b.code));
 
     const outPath = path.resolve("artifacts/proof-verify/latest-seed-scenarios.json");
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
