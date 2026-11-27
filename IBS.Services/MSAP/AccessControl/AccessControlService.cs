@@ -1,7 +1,4 @@
-using ApplicationUser = IBS.Models.ApplicationUser;
-using IBS.Models.MSAP;
 using IBS.Models.MSAP.Enums;
-using Microsoft.AspNetCore.Identity;
 
 namespace IBS.Services.MSAP.AccessControl
 {
@@ -14,11 +11,9 @@ namespace IBS.Services.MSAP.AccessControl
         Task<bool> HasAnyAccessAsync(string userId, params ProcedureEnum[] procedures);
     }
 
-    public class AccessControlService(UserManager<ApplicationUser> userManager, IUserAccessService userAccessService)
+    public class AccessControlService(IUserAccessService userAccessService)
         : IAccessControlService
     {
-        private readonly UserManager<ApplicationUser> _userManager = userManager;
-
         /// <summary>
         /// Check if user has access to ANY of the specified procedures
         /// </summary>
@@ -47,32 +42,5 @@ namespace IBS.Services.MSAP.AccessControl
         {
             return await HasAnyAccessAsync(userId, procedures);
         }
-    }
-
-    /// <summary>
-    /// Extension methods for easy access control in controllers
-    /// </summary>
-    public static class AccessControlExtensions
-    {
-
-        #region -- MSAP Import --
-
-        public static async Task<bool> HasMsapImportAccessAsync(this IAccessControlService accessControl, string userId)
-        {
-            return await accessControl.HasAnyAccessAsync(userId,
-                ProcedureEnum.ManageMsapImport);
-        }
-
-        #endregion -- MSAP Import --
-
-        #region -- Reports --
-
-        public static async Task<bool> HasMaritimeReportAccessAsync(this IAccessControlService accessControl, string userId)
-        {
-            return await accessControl.HasAnyAccessAsync(userId,
-                ProcedureEnum.ViewMaritimeReport);
-        }
-
-        #endregion -- Reports --
     }
 }

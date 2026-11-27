@@ -50,13 +50,13 @@ namespace Checks.MSAP
             ((CollectionCheck.CheckProxy)(object)repository).Handler = (_, _) => Task.FromResult(grants);
             IUnitOfWork work = DispatchProxy.Create<IUnitOfWork, CollectionCheck.CheckProxy>();
             ((CollectionCheck.CheckProxy)(object)work).Handler = (_, _) => repository;
-            var access = new UserAccessService(work, null!, roles, NullLogger<UserAccessService>.Instance);
+            UserAccessService CreateAccess() => new(work, null!, roles, NullLogger<UserAccessService>.Instance);
             using ServiceProvider services = new ServiceCollection()
-                .AddSingleton<IAccessControlService>(new AccessControlService(null!, access)).BuildServiceProvider();
+                .AddTransient<IAccessControlService>(_ => new AccessControlService(CreateAccess())).BuildServiceProvider();
 
             async Task AssertAccessAsync(ProcedureEnum permission, bool allowed)
             {
-                Check(await access.CheckAccess("access-check", permission) == allowed, $"Unexpected grant for {role}: {permission}.");
+                Check(await CreateAccess().CheckAccess("access-check", permission) == allowed, $"Unexpected grant for {role}: {permission}.");
             }
             async Task AssertEndpointAsync(Type controller, string action, bool allowed, bool post = false)
             {
@@ -109,7 +109,7 @@ namespace Checks.MSAP
             async Task<DashboardCountViewModel> DashboardAsync()
             {
                 var model = new DashboardCountViewModel();
-                await dashboardService.SetAccessAsync(model, "access-check", new AccessControlService(null!, access));
+                await dashboardService.SetAccessAsync(model, "access-check", new AccessControlService(CreateAccess()));
                 return model;
             }
             async Task AssertEntryAsync(bool expected)
@@ -119,7 +119,7 @@ namespace Checks.MSAP
                     new Claim(ClaimTypes.NameIdentifier, "access-check"), new Claim(MsapRoles.ClaimType, MsapRoles.User)], "check"));
                 var context = new AuthorizationHandlerContext([requirement], principal, null);
                 await requirement.HandleAsync(context);
-                await new MsapRoleHandler(roles, new AccessControlService(null!, access)).HandleAsync(context);
+                await new MsapRoleHandler(roles, new AccessControlService(CreateAccess())).HandleAsync(context);
                 Check(context.HasSucceeded == expected, "MSAP entry policy ignored effective grants or trusted a stale cookie.");
             }
             Check(!(await DashboardAsync()).ShowDashboard, "An unassigned User can open MSAP.");
@@ -177,7 +177,7 @@ namespace Checks.MSAP
                     new Claim(ClaimTypes.NameIdentifier, "access-check"), new Claim(MsapRoles.ClaimType, "SuperAdmin")], "check"));
                 var context = new AuthorizationHandlerContext([requirement], legacyPrincipal, null);
                 await requirement.HandleAsync(context);
-                await new MsapRoleHandler(roles, new AccessControlService(null!, access)).HandleAsync(context);
+                await new MsapRoleHandler(roles, new AccessControlService(CreateAccess())).HandleAsync(context);
                 Check(context.HasSucceeded == expected, "A legacy cookie must grant only ordinary Admin access.");
             }
             var adminDashboard = await DashboardAsync();
@@ -344,8 +344,9 @@ namespace Checks.MSAP
             {
                 Check(typeof(DispatchTicketController).GetMethods().All(m => m.Name != name), $"Retired action still exposed: {name}.");
             }
-            Check(typeof(MsapImportController).GetCustomAttribute<AuthorizeAttribute>()?.Policy == MsapRoles.AdminPolicy,
-                "Master-file import must remain Admin-only.");
+            Check(typeof(MsapImportController).GetCustomAttribute<AuthorizeAttribute>()?.Policy == MsapRoles.AccessPolicy
+                && typeof(MsapImportController).GetCustomAttributes<RequireAccessAttribute>().Any(),
+                "Master-file import must enforce MsapRoles.AccessPolicy and RequireAccess(ManageMsapImport).");
             Check(typeof(AuditTrailController).GetCustomAttribute<AuthorizeAttribute>()?.Policy == MsapRoles.AdminPolicy,
                 "MSAP audit history and COS timelines must be Admin-only.");
             var auditController = new AuditTrailController(null!, null!, NullLogger<AuditTrailController>.Instance);

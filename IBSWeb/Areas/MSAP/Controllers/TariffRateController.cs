@@ -10,9 +10,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
     [RequireAnyAccess(ProcedureEnum.ViewRates, ProcedureEnum.ManageRates, ProcedureEnum.ApproveRateUpload)]
     public class TariffRateController : Controller
     {
-        private readonly ITariffRateService _rates;
+        private readonly RateUploadService _rates;
 
-        public TariffRateController(ITariffRateService rates)
+        public TariffRateController(RateUploadService rates)
         {
             _rates = rates;
         }

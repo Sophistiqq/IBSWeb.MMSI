@@ -203,11 +203,23 @@ namespace IBS.Services.MSAP
                 throw new InvalidDataException("Each workbook must contain data and be no larger than 10 MB.");
             }
             await using var stream = file.OpenReadStream();
+            const long maxExpandedBytes = 50L * 1024 * 1024;
             using (var zip = new ZipArchive(stream, ZipArchiveMode.Read, true))
             {
-                if (zip.Entries.Sum(entry => entry.Length) > 50 * 1024 * 1024)
+                var buffer = new byte[81920];
+                var totalExpandedBytes = 0L;
+                foreach (var entry in zip.Entries)
                 {
-                    throw new InvalidDataException("Workbook expands beyond the supported 50 MB limit.");
+                    await using var entryStream = entry.Open();
+                    int bytesRead;
+                    while ((bytesRead = await entryStream.ReadAsync(buffer, ct)) > 0)
+                    {
+                        totalExpandedBytes += bytesRead;
+                        if (totalExpandedBytes > maxExpandedBytes)
+                        {
+                            throw new InvalidDataException("Workbook expands beyond the supported 50 MB limit.");
+                        }
+                    }
                 }
             }
             stream.Position = 0;

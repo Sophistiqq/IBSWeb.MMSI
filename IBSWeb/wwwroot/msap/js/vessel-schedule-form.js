@@ -16,19 +16,19 @@
 
     const saveErrors = [...document.querySelectorAll('#scheduleSaveErrors [data-save-error]')];
     if (saveErrors.length) {
-        // ModernAlert accepts HTML; escape server messages containing reference names.
+        // Escape server messages containing reference names before passing trusted HTML.
         const errorMessage = saveErrors.map(error => $('<div>').text(error.textContent).html()).join('<br><br>');
         if (saveErrors.some(error => error.dataset.conflict === 'true')) {
             acknowledgeConflicts(errorMessage);
         } else {
-            ModernAlert.error(errorMessage, 'Schedule could not be saved');
+            ModernAlert.error('', 'Schedule could not be saved', { html: errorMessage });
         }
     }
 
     async function acknowledgeConflicts(errorMessage) {
         const review = await ModernAlert.confirm({
             title: 'Schedule overlaps found',
-            text: '<span class="schedule-conflict-details">' + errorMessage.replace(/^Overlapping plans:\s*/, '') + '</span>', icon: 'warning',
+            html: '<span class="schedule-conflict-details">' + errorMessage.replace(/^Overlapping plans:\s*/, '') + '</span>', icon: 'warning',
             confirmText: 'Continue', cancelText: 'Keep editing'
         });
         if (!review.isConfirmed) return;

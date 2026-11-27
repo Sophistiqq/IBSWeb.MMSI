@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using IBS.Models.MSAP.Enums;
 using IBS.Models.MSAP.ViewModels;
 using IBS.Services.MSAP;
+using IBS.Services.MSAP.Attributes;
 using IBS.Utility.MSAP.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,7 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace IBSWeb.Areas.MSAP.Controllers
 {
     [Area("MSAP")]
-    [Authorize(Policy = MsapRoles.AdminPolicy)]
+    [Authorize(Policy = MsapRoles.AccessPolicy)]
+    [RequireAccess(ProcedureEnum.ManageMsapImport)]
     public class MsapImportController(MasterFileImportService imports, ILogger<MsapImportController> logger) : Controller
     {
         [HttpGet]

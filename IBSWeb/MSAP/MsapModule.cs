@@ -42,7 +42,6 @@ namespace IBSWeb.MSAP
             services.AddScoped<IMaritimeServiceService, MaritimeServiceService>();
             services.AddScoped<IPortService, PortService>();
             services.AddScoped<IPrincipalService, PrincipalService>();
-            services.AddScoped<ITariffRateService, TariffRateService>();
             services.AddScoped<RateUploadService>();
             services.AddScoped<OtherTugChargeService>();
             services.AddScoped<MasterFileImportService>();

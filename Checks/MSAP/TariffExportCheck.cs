@@ -42,7 +42,7 @@ namespace Checks.MSAP
                 _ => throw new NotSupportedException(method.Name)
             };
             await using var db = new MsapDbContext(new DbContextOptionsBuilder<MsapDbContext>().UseNpgsql("Host=localhost;Database=unused").Options);
-            var service = new TariffRateService(new RateUploadService(db, work), NullLogger<TariffRateService>.Instance);
+            var service = new RateUploadService(db, work, NullLogger<RateUploadService>.Instance);
             Check(!(await service.ExportAsync(date.AddDays(1), date, default)).IsSuccess, "Reversed range was accepted.");
             foreach (var kind in Enum.GetValues<RateTableKind>())
             {

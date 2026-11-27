@@ -677,23 +677,35 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     return BadRequest(new { message = "No valid rate found in rate table to adopt." });
                 }
                 tableRate = rate.Dispatch;
-                entry.ManualTariffRate = null;
-                entry.IsManualTariffOverride = false;
             }
             else
             {
                 var rate = await unitOfWork.BafTable.GetApplicableRateAsync(schedule.CustomerId.GetValueOrDefault(), schedule.TerminalId, entry.ServiceId, rateDate, ct);
-                if (rate == null)
+                if (rate == null || rate.AsOfDate < ScheduledTicketCharges.BafCycleStart(rateDate))
                 {
-                    return BadRequest(new { message = "No valid BAF rate found in rate table to adopt." });
+                    return BadRequest(new { message = "No valid current-cycle BAF rate found in rate table to adopt." });
                 }
                 tableRate = rate.Amount;
-                entry.ManualBafRate = null;
             }
-            await unitOfWork.AuditTrail.AddAsync(new AuditTrail(User.Identity?.Name ?? "system",
-                $"Adopted {kind} table rate ({tableRate:N2}) for booking #{scheduleId} entry #{entryId}",
-                "Vessel Schedule", scheduleId), ct);
-            await unitOfWork.SaveAsync(ct);
+            await unitOfWork.ExecuteInTransactionAsync(async () =>
+            {
+                if (kind == RateTableKind.Tariff)
+                {
+                    entry.ManualTariffRate = null;
+                    entry.IsManualTariffOverride = false;
+                }
+                else
+                {
+                    entry.ManualBafRate = null;
+                }
+                var actorName = User.Identity?.Name ?? "system";
+                schedule.EditedBy = actorName;
+                schedule.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                await unitOfWork.AuditTrail.AddAsync(new AuditTrail(actorName,
+                    $"Adopted {kind} table rate ({tableRate:N2}) for booking #{scheduleId} entry #{entryId}",
+                    "Vessel Schedule", scheduleId), ct);
+                await unitOfWork.SaveAsync(ct);
+            }, ct);
             return Json(new { success = true, newRate = tableRate?.ToString("N2"), rate = tableRate });
         }
 

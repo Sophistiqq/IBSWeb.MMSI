@@ -59,13 +59,30 @@ namespace IBS.Services.MSAP.Attributes
             var referer = httpContext.Request.Headers["Referer"].ToString();
             if (!string.IsNullOrWhiteSpace(referer)
                 && Uri.TryCreate(referer, UriKind.Absolute, out var refererUri)
-                && string.Equals(refererUri.Host, httpContext.Request.Host.Host, StringComparison.OrdinalIgnoreCase))
+                && (refererUri.Scheme == Uri.UriSchemeHttp || refererUri.Scheme == Uri.UriSchemeHttps)
+                && string.Equals(refererUri.Host, httpContext.Request.Host.Host, StringComparison.OrdinalIgnoreCase)
+                && IsSafeLocalPath(refererUri.PathAndQuery))
             {
-                context.Result = new RedirectResult(refererUri.PathAndQuery);
+                context.Result = new LocalRedirectResult(refererUri.PathAndQuery);
                 return;
             }
 
             context.Result = new RedirectToActionResult("Index", "Home", new { area = "MSAP" });
+        }
+
+        private static bool IsSafeLocalPath(string? path)
+        {
+            if (string.IsNullOrEmpty(path) || path[0] != '/')
+            {
+                return false;
+            }
+
+            if (path.Length > 1 && (path[1] == '/' || path[1] == '\\'))
+            {
+                return false;
+            }
+
+            return !path.Contains('\r') && !path.Contains('\n');
         }
     }
 

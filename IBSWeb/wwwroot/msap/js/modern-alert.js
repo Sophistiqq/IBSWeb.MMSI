@@ -39,15 +39,16 @@ const ModernAlert = {
     },
 
     _renderHeader: function(type, title, subtitle = '') {
+        const safeTitle = this._escapeHtml(title);
         const safeSubtitle = subtitle
-            ? `<p class="modern-swal-subtitle">${subtitle}</p>`
+            ? `<p class="modern-swal-subtitle">${this._escapeHtml(subtitle)}</p>`
             : '';
 
         return `
             <div class="modern-swal-header">
                 ${this._getIconBadge(type)}
                 <div class="modern-swal-header-text">
-                    <h2 class="modern-swal-title">${title}</h2>
+                    <h2 class="modern-swal-title">${safeTitle}</h2>
                     ${safeSubtitle}
                 </div>
             </div>
@@ -75,7 +76,7 @@ const ModernAlert = {
         const config = typeof callout === 'string'
             ? { text: callout, tone: 'info' }
             : callout;
-        if (!config.text) return '';
+        if (!config.text && !config.html) return '';
 
         const tone = config.tone || 'info';
         const iconMap = {
@@ -84,12 +85,13 @@ const ModernAlert = {
             error: 'error',
             success: 'check_circle'
         };
-        const icon = iconMap[tone] || 'info';
+        const safeTone = iconMap[tone] ? tone : 'info';
+        const icon = iconMap[safeTone];
 
         return `
-            <div class="modern-swal-callout modern-swal-callout--${tone}">
+            <div class="modern-swal-callout modern-swal-callout--${safeTone}">
                 <span class="material-symbols-outlined modern-swal-callout-icon" aria-hidden="true">${icon}</span>
-                <div class="modern-swal-callout-text">${config.text}</div>
+                <div class="modern-swal-callout-text">${config.html ? config.html : this._escapeHtml(config.text)}</div>
             </div>
         `;
     },
@@ -159,13 +161,17 @@ const ModernAlert = {
         const width = this._resolveWidth({
             width: extra.width,
             size: extra.size,
-            content: message,
+            content: extra.html ?? message,
             details: extra.details,
             callout: extra.callout
         });
 
+        const messageHtml = extra.html
+            ? `<div class="modern-swal-rich">${extra.html}</div>`
+            : (message ? `<div class="modern-swal-message">${this._escapeHtml(message)}</div>` : '');
+
         const bodyParts = [
-            message ? `<div class="modern-swal-message">${message}</div>` : '',
+            messageHtml,
             this._renderDetails(extra.details),
             this._renderCallout(extra.callout)
         ].filter(Boolean).join('');
@@ -253,7 +259,7 @@ const ModernAlert = {
 
         const bodyContent = html
             ? `<div class="modern-swal-rich">${html}</div>`
-            : `<div class="modern-swal-message">${text}</div>`;
+            : `<div class="modern-swal-message">${this._escapeHtml(text)}</div>`;
 
         const detailsHtml = this._renderDetails(details);
         const calloutHtml = this._renderCallout(callout);
@@ -308,8 +314,8 @@ const ModernAlert = {
                 <div class="modern-swal-loading">
                     <div class="modern-loader-inline"></div>
                     <div class="modern-swal-loading-text">
-                        <h2 class="modern-swal-title">${title}</h2>
-                        <p class="modern-swal-message">${message}</p>
+                        <h2 class="modern-swal-title">${this._escapeHtml(title)}</h2>
+                        <p class="modern-swal-message">${this._escapeHtml(message)}</p>
                     </div>
                 </div>
             `,
@@ -323,6 +329,7 @@ const ModernAlert = {
      */
     image: function(imageUrl, title = 'Image Preview', options = {}) {
         const safeTitle = this._escapeHtml(title);
+        const safeImageUrl = this._escapeHtml(imageUrl);
         return Swal.fire({
             ...this._baseConfig,
             customClass: {
@@ -345,7 +352,7 @@ const ModernAlert = {
                         </div>
                     </div>
                     <div class="modern-image-viewer-wrapper">
-                        <img src="${imageUrl}" class="modern-image-viewer-img" alt="${safeTitle}" />
+                        <img src="${safeImageUrl}" class="modern-image-viewer-img" alt="${safeTitle}" />
                     </div>
                     <div class="modern-image-viewer-hint">
                         Pinch or scroll to zoom · Drag to pan · Double-tap to zoom
@@ -572,6 +579,8 @@ const ModernAlert = {
      * Show a video preview
      */
     video: function(videoUrl, title = 'Video Preview') {
+        const safeTitle = this._escapeHtml(title);
+        const safeVideoUrl = this._escapeHtml(videoUrl);
         return Swal.fire({
             ...this._baseConfig,
             customClass: {
@@ -583,12 +592,12 @@ const ModernAlert = {
             html: `
                 <div class="modern-swal-media-header">
                     <div class="modern-swal-header-text">
-                        <h2 class="modern-swal-title">${title}</h2>
+                        <h2 class="modern-swal-title">${safeTitle}</h2>
                     </div>
                 </div>
                 <div class="modern-swal-video-wrap">
                     <video width="100%" height="auto" controls autoplay class="modern-swal-video">
-                        <source src="${videoUrl}" type="video/mp4">
+                        <source src="${safeVideoUrl}" type="video/mp4">
                         Your browser does not support the video tag.
                     </video>
                 </div>
@@ -626,7 +635,7 @@ const ModernAlert = {
             html: `
                 ${this._renderHeader(icon, title, subtitle)}
                 <div class="modern-swal-body">
-                    <div class="modern-swal-message">${text}</div>
+                    <div class="modern-swal-message">${this._escapeHtml(text)}</div>
                 </div>
             `,
             input: 'text',
@@ -677,12 +686,12 @@ const ModernAlert = {
             html: `
                 ${this._renderHeader(icon, title, subtitle)}
                 <div class="modern-swal-body">
-                    <div class="modern-swal-message">${text}</div>
+                    <div class="modern-swal-message">${this._escapeHtml(text)}</div>
                     <div class="modern-swal-field">
                         <label for="swalAdjustmentReason" class="modern-swal-field-label">
                             Reason <span class="modern-swal-required">*</span>
                         </label>
-                        <textarea id="swalAdjustmentReason" rows="3" maxlength="${maxReasonLength}" placeholder="${placeholder}" class="modern-swal-input modern-swal-textarea"></textarea>
+                        <textarea id="swalAdjustmentReason" rows="3" maxlength="${maxReasonLength}" placeholder="${this._escapeHtml(placeholder)}" class="modern-swal-input modern-swal-textarea"></textarea>
                     </div>
                     ${attachmentHtml}
                 </div>

@@ -9,6 +9,8 @@ using IBS.Models.MSAP.ViewModels;
 using IBS.Utility.MSAP.Constants;
 using IBS.Utility.MSAP.Helpers;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace IBS.Services.MSAP
 {
@@ -16,11 +18,33 @@ namespace IBS.Services.MSAP
     {
         private readonly MsapDbContext _db;
         private readonly IUnitOfWork _work;
+        private readonly ILogger<RateUploadService> _logger;
 
-        public RateUploadService(MsapDbContext db, IUnitOfWork work)
+        public RateUploadService(MsapDbContext db, IUnitOfWork work, ILogger<RateUploadService>? logger = null)
         {
             _db = db;
             _work = work;
+            _logger = logger ?? NullLogger<RateUploadService>.Instance;
+        }
+
+        public async Task<ServiceResult<byte[]>> ExportAsync(DateOnly? dateFrom, DateOnly dateTo, CancellationToken ct, RateTableKind kind = RateTableKind.Tariff)
+        {
+            if (!Enum.IsDefined(kind) || dateTo.Year is < 1900 or > 9998 || (dateFrom.HasValue
+                && (dateFrom.Value.Year is < 1900 or > 9998 || dateFrom > dateTo)))
+            {
+                return ServiceResult<byte[]>.Failure("Choose a valid table and dates between 1900 and 9998, with From on or before To.");
+            }
+            try
+            {
+                var rows = await GetRowsAsync(kind, dateFrom, dateTo, ct);
+                var masterLists = dateFrom.HasValue ? null : await GetMasterListsAsync(ct);
+                return ServiceResult<byte[]>.Success(await RateUploadWorkbook.WriteAsync(rows, kind, dateFrom.HasValue, ct, masterLists));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Failed to export {Kind} rates", kind);
+                return ServiceResult<byte[]>.Failure("The rate export could not be generated. Try again or contact support.");
+            }
         }
 
         public async Task<List<RateUpload>> GetRecentAsync(bool awaitingReview, CancellationToken ct)
@@ -1013,22 +1037,85 @@ namespace IBS.Services.MSAP
             {
                 return false;
             }
-            List<RateUploadRowViewModel> rates = await GetRowsAsync(kind, new DateOnly(1900, 1, 1), rows.Max(row => row.EffectiveDate), ct);
-            ILookup<(int CustomerId, int TerminalId, int ServiceId), RateUploadRowViewModel> lookup = rates.ToLookup(rate => (rate.CustomerId, rate.TerminalId, rate.ServiceId));
-            bool changed = false;
+            var maxDate = rows.Max(row => row.EffectiveDate);
+            var customerIds = rows.Select(row => row.CustomerId).Distinct().ToList();
+            var terminalIds = rows.Select(row => row.TerminalId).Distinct().ToList();
+            var serviceIds = rows.Select(row => row.ServiceId).Distinct().ToList();
+            var keys = rows.Select(row => (row.CustomerId, row.TerminalId, row.ServiceId)).ToHashSet();
+
+            List<(int CustomerId, int TerminalId, int ServiceId, DateOnly EffectiveDate, int RateId, DateTime? UpdatedAt, decimal Amount)> rates;
+            if (kind == RateTableKind.Tariff)
+            {
+                var raw = await _db.MsapTariffRates.AsNoTracking()
+                    .Where(rate => customerIds.Contains(rate.CustomerId)
+                        && terminalIds.Contains(rate.TerminalId)
+                        && serviceIds.Contains(rate.ServiceId)
+                        && rate.AsOfDate <= maxDate
+                        && rate.Customer.Company == MsapConstants.Company_MMSI)
+                    .Select(rate => new
+                    {
+                        rate.CustomerId,
+                        rate.TerminalId,
+                        rate.ServiceId,
+                        rate.AsOfDate,
+                        RateId = rate.TariffRateId,
+                        UpdatedAt = rate.UpdateDate ?? rate.CreatedDate,
+                        Amount = rate.Dispatch
+                    })
+                    .ToListAsync(ct);
+                rates = raw.Where(r => keys.Contains((r.CustomerId, r.TerminalId, r.ServiceId)))
+                    .Select(r => (r.CustomerId, r.TerminalId, r.ServiceId, r.AsOfDate, r.RateId, r.UpdatedAt, r.Amount))
+                    .ToList();
+            }
+            else
+            {
+                var raw = await _db.MsapBafRates.AsNoTracking()
+                    .Where(rate => customerIds.Contains(rate.CustomerId)
+                        && terminalIds.Contains(rate.TerminalId)
+                        && serviceIds.Contains(rate.ServiceId)
+                        && rate.AsOfDate <= maxDate
+                        && rate.Customer.Company == MsapConstants.Company_MMSI)
+                    .Select(rate => new
+                    {
+                        rate.CustomerId,
+                        rate.TerminalId,
+                        rate.ServiceId,
+                        rate.AsOfDate,
+                        RateId = rate.BafRateId,
+                        UpdatedAt = rate.UpdateDate ?? rate.CreatedDate,
+                        Amount = rate.Amount
+                    })
+                    .ToListAsync(ct);
+                rates = raw.Where(r => keys.Contains((r.CustomerId, r.TerminalId, r.ServiceId)))
+                    .Select(r => (r.CustomerId, r.TerminalId, r.ServiceId, r.AsOfDate, r.RateId, r.UpdatedAt, r.Amount))
+                    .ToList();
+            }
+
+            var lookup = rates.ToLookup(rate => (rate.CustomerId, rate.TerminalId, rate.ServiceId));
+            var changed = false;
             foreach (var row in rows)
             {
-                RateUploadRowViewModel? baseline = lookup[(row.CustomerId, row.TerminalId, row.ServiceId)].Where(rate => rate.EffectiveDate <= row.EffectiveDate)
-                    .OrderByDescending(rate => rate.EffectiveDate).ThenByDescending(rate => rate.ExistingRateId).FirstOrDefault();
-                int? existingId = baseline?.EffectiveDate == row.EffectiveDate ? baseline.ExistingRateId : null;
-                changed |= row.ExistingRateId != existingId || row.BaselineRateId != baseline?.ExistingRateId
-                    || row.BaselineDate != baseline?.EffectiveDate || row.BaselineUpdatedAt != baseline?.BaselineUpdatedAt || row.StoredAmount != baseline?.Amount;
+                var baseline = lookup[(row.CustomerId, row.TerminalId, row.ServiceId)]
+                    .Where(rate => rate.EffectiveDate <= row.EffectiveDate)
+                    .OrderByDescending(rate => rate.EffectiveDate)
+                    .ThenByDescending(rate => rate.RateId)
+                    .Select(rate => new
+                    {
+                        rate.EffectiveDate,
+                        rate.RateId,
+                        rate.UpdatedAt,
+                        rate.Amount
+                    })
+                    .FirstOrDefault();
+                int? existingId = baseline?.EffectiveDate == row.EffectiveDate ? baseline.RateId : null;
+                changed |= row.ExistingRateId != existingId || row.BaselineRateId != baseline?.RateId
+                    || row.BaselineDate != baseline?.EffectiveDate || row.BaselineUpdatedAt != baseline?.UpdatedAt || row.StoredAmount != baseline?.Amount;
                 if (apply)
                 {
                     row.ExistingRateId = existingId;
-                    row.BaselineRateId = baseline?.ExistingRateId;
+                    row.BaselineRateId = baseline?.RateId;
                     row.BaselineDate = baseline?.EffectiveDate;
-                    row.BaselineUpdatedAt = baseline?.BaselineUpdatedAt;
+                    row.BaselineUpdatedAt = baseline?.UpdatedAt;
                     row.StoredAmount = baseline?.Amount;
                 }
             }

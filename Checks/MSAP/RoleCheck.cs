@@ -153,7 +153,7 @@ namespace Checks.MSAP
             var context = new AuthorizationHandlerContext([requirement], principal, null);
             // Run the default claim handler too: persisted cookie claims must not bypass the live role check.
             await requirement.HandleAsync(context);
-            await new MsapRoleHandler(new RoleService(users), new AccessControlService(users,
+            await new MsapRoleHandler(new RoleService(users), new AccessControlService(
                 new UserAccessService(work, users, new RoleService(users), NullLogger<UserAccessService>.Instance))).HandleAsync(context);
             return context.HasSucceeded;
         }

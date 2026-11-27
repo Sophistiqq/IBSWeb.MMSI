@@ -713,7 +713,7 @@
                 const isApprove = action === 'approve';
                 const confirmation = await ModernAlert.confirm({
                     title: isApprove ? `Save & approve ${preview.items.length} rate(s)?` : `Submit ${preview.items.length} rate(s) for approval?`,
-                    text: `<div class="schedule-batch-preview">
+                    html: `<div class="schedule-batch-preview">
                         <p class="ui-caption ui-muted" style="margin-bottom: .75rem; text-align: left;">
                             ${isApprove
                                 ? 'These rates will become active immediately in the rate tables and recalculate eligible unbilled tickets.'

@@ -157,7 +157,12 @@ namespace IBS.Services.MSAP
                 }
                 if (model.CanApproveSchedule || model.CanManageRates || model.CanViewRates || model.CanReviewCalculations)
                 {
-                    var pendingList = await tickets.Where(t => t.BillingId == null && t.Status == MsapConstants.DispatchTicketStatus.AwaitingRate)
+                    var pendingRatesQuery = tickets.Where(t => t.BillingId == null && t.Status == MsapConstants.DispatchTicketStatus.AwaitingRate);
+                    var overdueCutoff = model.UpdatedAt.AddHours(-24);
+                    model.RatePendingCount = await pendingRatesQuery.CountAsync(ct);
+                    model.RatePendingOverdueCount = await pendingRatesQuery.CountAsync(t => t.CreatedDate <= overdueCutoff, ct);
+
+                    var pendingList = await pendingRatesQuery
                         .Include(t => t.CustomerOrderSlip).Include(t => t.ExpectedServiceEntry)
                         .Include(t => t.Customer).Include(t => t.Terminal).Include(t => t.Service).Include(t => t.Tugboat).Include(t => t.Vessel)
                         .OrderBy(t => t.CreatedDate).Take(15).ToListAsync(ct);
@@ -184,8 +189,6 @@ namespace IBS.Services.MSAP
                         });
                     }
 
-                    model.RatePendingCount = rateItems.Count;
-                    model.RatePendingOverdueCount = rateItems.Count(i => i.IsPast24h);
                     model.RatePendingItems = rateItems;
                 }
                 if (model.CanViewDispatch || model.CanViewReports)

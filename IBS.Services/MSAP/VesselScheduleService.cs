@@ -695,7 +695,9 @@ namespace IBS.Services.MSAP
                     {
                         // Preserve existing CustomerOrderSlip identity and sync details
                         var job = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(schedule.CustomerOrderSlipId.Value, ct);
-                        var existingTickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == schedule.CustomerOrderSlipId, ct)).ToList();
+                        var existingTickets = (await unitOfWork.DispatchTicket.GetAllAsync(
+                            t => t.CustomerOrderSlipId == schedule.CustomerOrderSlipId
+                                && t.Status != MsapConstants.DispatchTicketStatus.Deleted, ct)).ToList();
                         if (job?.Status != MsapConstants.CustomerOrderSlipStatus.Open
                             || existingTickets.Any(t => t.BillingId.HasValue
                                 || t.Status != MsapConstants.DispatchTicketStatus.AwaitingRate

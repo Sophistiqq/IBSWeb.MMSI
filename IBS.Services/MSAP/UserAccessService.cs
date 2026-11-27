@@ -17,6 +17,8 @@ namespace IBS.Services.MSAP
         ILogger<UserAccessService> logger)
         : IUserAccessService
     {
+        private readonly Dictionary<string, UserAccess?> _userAccessCache = [];
+
         public async Task<bool> CheckAccess(string id, ProcedureEnum procedure, CancellationToken cancellationToken = default)
         {
             if (!Enum.IsDefined(procedure) || procedure is ProcedureEnum.EditBilling or ProcedureEnum.SetTariff or ProcedureEnum.ApproveTariff
@@ -38,8 +40,12 @@ namespace IBS.Services.MSAP
                 return false;
             }
 
-            var userAccess = await unitOfWork.UserAccess
-                .GetAsync(a => a.UserId == id, cancellationToken);
+            if (!_userAccessCache.TryGetValue(id, out var userAccess))
+            {
+                userAccess = await unitOfWork.UserAccess
+                    .GetAsync(a => a.UserId == id, cancellationToken);
+                _userAccessCache[id] = userAccess;
+            }
 
             if (userAccess == null)
             {
@@ -162,6 +168,7 @@ namespace IBS.Services.MSAP
                     await unitOfWork.SaveAsync(cancellationToken);
                 }, cancellationToken);
 
+                _userAccessCache.Remove(model.UserId);
                 return ServiceResult.Success("User access created successfully.");
             }
             catch (Exception ex)
@@ -287,6 +294,7 @@ namespace IBS.Services.MSAP
                     await unitOfWork.SaveAsync(cancellationToken);
                 }, cancellationToken);
 
+                _userAccessCache.Remove(existing.UserId);
                 return ServiceResult.Success("User access edited successfully.");
             }
             catch (Exception ex)

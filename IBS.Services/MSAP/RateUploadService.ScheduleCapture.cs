@@ -42,7 +42,7 @@ namespace IBS.Services.MSAP
                         eligible = rate == null || rate.AsOfDate < ScheduledTicketCharges.BafCycleStart(plannedDate) || rate.Amount == amount;
                     }
 
-                    if (!amount.HasValue && tableRate.HasValue && tableRate > 0)
+                    if (!amount.HasValue && tableRate.HasValue && (kind == RateTableKind.BAF ? tableRate >= 0 : tableRate > 0))
                     {
                         continue;
                     }

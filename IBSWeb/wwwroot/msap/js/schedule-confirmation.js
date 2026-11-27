@@ -33,7 +33,7 @@
             for (let attempt = 0; attempt < 3 && !result.success; attempt++) {
                 if (result.rateAcknowledgement) {
                     const manual = await ModernAlert.confirm({
-                        title: 'Manual rates are not published', text: escape(result.message),
+                        title: 'Manual rates are not published', text: result.message,
                         icon: 'warning', confirmText: 'Approve using manual rates', cancelText: 'Keep reviewing'
                     });
                     if (!manual.isConfirmed) return;
@@ -42,7 +42,7 @@
                     continue;
                 }
                 if (!result.requiresConflictAcknowledgement) break;
-                const conflicts = await ModernAlert.confirm({title: 'Schedule overlaps found', text: '<span class="schedule-conflict-details">' + escape(result.message).replace(/^Overlapping plans:\s*/, '') + '</span>', icon: 'warning', confirmText: 'Continue', cancelText: 'Keep reviewing'});
+                const conflicts = await ModernAlert.confirm({title: 'Schedule overlaps found', html: '<span class="schedule-conflict-details">' + escape(result.message).replace(/^Overlapping plans:\s*/, '') + '</span>', icon: 'warning', confirmText: 'Continue', cancelText: 'Keep reviewing'});
                 if (!conflicts.isConfirmed) return;
                 const acknowledgement = await ModernAlert.confirm({
                     title: 'Approve this overlapping booking?', text: 'I acknowledge the overlapping bookings and want to approve this schedule.',
@@ -53,9 +53,9 @@
                 result = await submit();
             }
             if (result.success && result.redirectUrl) window.location.href = result.redirectUrl;
-            else ModernAlert.error(escape(result.message || 'Schedule approval failed. Refresh the review if the booking changed.'));
+            else ModernAlert.error(result.message || 'Schedule approval failed. Refresh the review if the booking changed.');
         } catch (error) {
-            ModernAlert.error(escape(error.message));
+            ModernAlert.error(error.message);
         } finally {
             submitting = false;
             button.disabled = false;

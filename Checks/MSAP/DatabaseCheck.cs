@@ -133,10 +133,10 @@ namespace Checks.MSAP
                 await original.Database.MigrateAsync();
                 before = await SchemaAsync(settings.ConnectionString);
                 var roles = new RoleService(users);
-                var access = new AccessControlService(users, new UserAccessService(dashboardWork, users, roles, NullLogger<UserAccessService>.Instance));
+                var access = new AccessControlService(new UserAccessService(dashboardWork, users, roles, NullLogger<UserAccessService>.Instance));
                 var dashboard = new IBSWeb.Areas.MSAP.Controllers.HomeController(users, dashboardWork, access, new DashboardService(module,
                     new VesselScheduleService(dashboardWork, new CustomerOrderSlipService(dashboardWork, NullLogger<CustomerOrderSlipService>.Instance), NullLogger<VesselScheduleService>.Instance),
-                    NullLogger<DashboardService>.Instance));
+                    NullLogger<DashboardService>.Instance), null!);
                 var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "shared-check"), new Claim("Company", "Filpride")], "check");
                 dashboard.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } };
                 Check(await dashboard.Index(default) is ForbidResult, "An unassigned shared user entered the MSAP dashboard.");
