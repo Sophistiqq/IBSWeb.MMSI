@@ -11,6 +11,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 {
     public class CollectionRepository(MsapDbContext db): Repository<Collection>(db), ICollectionRepository
     {
+        private const long CollectionNumberSeriesLockKey = 20771003L;
         private readonly MsapDbContext _db = db;
 
         public Task<Collection?> GetForUpdateAsync(int id, CancellationToken ct = default)
@@ -46,17 +47,6 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             return await query.ToListAsync(cancellationToken);
         }
 
-        public async Task<List<SelectListItem>> GetMsapCustomersById(CancellationToken cancellationToken = default)
-        {
-            return await _db.Customers
-                .OrderBy(s => s.CustomerName)
-                .Select(s => new SelectListItem
-                {
-                    Value = s.CustomerId.ToString(),
-                    Text = s.CustomerName
-                }).ToListAsync(cancellationToken);
-        }
-
         public async Task<List<SelectListItem>> GetMsapCustomersWithCollectiblesSelectList(int collectionId, string type, CancellationToken cancellationToken = default)
         {
             return await _db.Customers.AsNoTracking()
@@ -70,19 +60,6 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                     Value = s.CustomerId.ToString(),
                     Text = s.CustomerName
                 }).ToListAsync(cancellationToken);
-        }
-
-        public async Task<List<SelectListItem>> GetMsapUncollectedBillingsById(CancellationToken cancellationToken = default)
-        {
-            var billingsList = await _db.MsapBillings
-                .Where(dt => dt.Balance > 0)
-                .OrderBy(dt => dt.MsapBillingNumber).Select(s => new SelectListItem
-                {
-                    Value = s.MsapBillingId.ToString(),
-                    Text = $"{s.MsapBillingNumber} - {s.Customer.CustomerName}, {s.Date}"
-                }).ToListAsync(cancellationToken);
-
-            return billingsList;
         }
 
         public async Task<List<SelectListItem>> GetMsapCollectedBillsById(int collectionId, CancellationToken cancellationToken = default)
@@ -116,37 +93,6 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             return billingsList;
         }
 
-        public async Task<List<Billing>> GetMsapUncollectedBillingsByCustomerList(int? customerId, CancellationToken cancellationToken)
-        {
-            return await _db
-                .MsapBillings
-                .Where(b => b.CustomerId == customerId && b.Balance > 0 && b.Status == MsapConstants.BillingStatus.ForCollection)
-                .OrderBy(b => b.MsapBillingNumber)
-                .ToListAsync(cancellationToken);
-        }
-
-        public async Task UpdateBillingPayment(int billingId, decimal paidAmount, CancellationToken cancellationToken = default)
-        {
-            var billing = await _db.MsapBillings.FirstOrDefaultAsync(b => b.MsapBillingId == billingId, cancellationToken);
-            if (billing != null)
-            {
-                billing.AmountPaid += paidAmount;
-                billing.Balance = billing.Amount - billing.AmountPaid;
-
-                if (billing.Balance <= 0)
-                {
-                    billing.IsPaid = true;
-                    billing.Status = MsapConstants.BillingStatus.Collected;
-                }
-                else
-                {
-                    billing.IsPaid = false;
-                    billing.Status = MsapConstants.BillingStatus.ForCollection;
-                }
-                await _db.SaveChangesAsync(cancellationToken);
-            }
-        }
-
         public async Task RemoveBillingPayment(int billingId, decimal paidAmount, decimal offsetAmount, CancellationToken cancellationToken = default)
         {
             var billing = await _db.MsapBillings.FirstOrDefaultAsync(b => b.MsapBillingId == billingId, cancellationToken);
@@ -163,6 +109,7 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
 
         public async Task<string> GenerateCollectionNumber(CancellationToken cancellationToken = default)
         {
+            await _db.AcquireAdvisoryXactLockAsync(CollectionNumberSeriesLockKey, cancellationToken);
             var lastRecord = await _db.MsapCollections
                 .Where(b => b.IsUndocumented && !string.IsNullOrEmpty(b.MsapCollectionNumber))
                 .OrderByDescending(b => b.MsapCollectionNumber)

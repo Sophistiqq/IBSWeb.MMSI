@@ -109,7 +109,9 @@ namespace IBS.Services
                 }
             }
 
-            var reserved = (await _sources.ReservedItemsAsync(cvId, ct))
+            var billings = await _sources.ApprovedBillingsForRepresentativeAsync(representativeId, ct);
+            var billingIds = billings.Select(b => b.MsapBillingId).ToArray();
+            var reserved = (await _sources.ReservedItemsAsync(cvId, billingIds, ct))
                 .Select(x => (x.BillingId, x.Category))
                 .ToHashSet();
 
@@ -123,7 +125,6 @@ namespace IBS.Services
                     .ToHashSet()
                 : [];
 
-            var billings = await _sources.ApprovedBillingsForRepresentativeAsync(representativeId, ct);
             var items = new List<MsapCommissionBillableItemDto>();
 
             foreach (var billing in billings)
@@ -182,6 +183,11 @@ namespace IBS.Services
             try
             {
                 await GuardPeriodAsync(form.TransactionDate, ct);
+                if (form.BankId.HasValue)
+                {
+                    await _db.LockRowForUpdateAsync<FilprideBankAccount, int>(form.BankId.Value, ct);
+                }
+
                 if (!form.CheckNo.Contains("DM", StringComparison.OrdinalIgnoreCase))
                 {
                     var duplicateCheck = await _db.FilprideCheckVoucherHeaders
@@ -193,11 +199,6 @@ namespace IBS.Services
                     {
                         throw new InvalidOperationException("Check No. already exists for this bank account.");
                     }
-                }
-
-                if (form.BankId.HasValue)
-                {
-                    await _db.LockRowForUpdateAsync<FilprideBankAccount, int>(form.BankId.Value, ct);
                 }
 
                 var bank = await _db.FilprideBankAccounts
@@ -214,7 +215,7 @@ namespace IBS.Services
                     throw new InvalidOperationException(profileError);
                 }
 
-                var reserved = (await _sources.ReservedItemsAsync(null, ct)).ToHashSet();
+                var reserved = (await _sources.ReservedItemsAsync(null, billingIds, ct)).ToHashSet();
                 var payments = BuildPaymentAllocations(requestedItems, billings, rep, reserved);
 
                 var totalGross = payments.Sum(p => p.GrossAmount);
@@ -331,6 +332,11 @@ namespace IBS.Services
                 }
 
                 await GuardPeriodAsync(form.TransactionDate, ct);
+                if (form.BankId.HasValue)
+                {
+                    await _db.LockRowForUpdateAsync<FilprideBankAccount, int>(form.BankId.Value, ct);
+                }
+
                 if (!form.CheckNo.Contains("DM", StringComparison.OrdinalIgnoreCase))
                 {
                     var duplicateCheck = await _db.FilprideCheckVoucherHeaders
@@ -343,11 +349,6 @@ namespace IBS.Services
                     {
                         throw new InvalidOperationException("Check No. already exists for this bank account.");
                     }
-                }
-
-                if (form.BankId.HasValue)
-                {
-                    await _db.LockRowForUpdateAsync<FilprideBankAccount, int>(form.BankId.Value, ct);
                 }
 
                 var bank = await _db.FilprideBankAccounts
@@ -364,7 +365,7 @@ namespace IBS.Services
                     throw new InvalidOperationException(profileError);
                 }
 
-                var reserved = (await _sources.ReservedItemsAsync(header.CheckVoucherHeaderId, ct)).ToHashSet();
+                var reserved = (await _sources.ReservedItemsAsync(header.CheckVoucherHeaderId, billingIds, ct)).ToHashSet();
                 var newPayments = BuildPaymentAllocations(requestedItems, billings, rep, reserved);
 
                 var totalGross = newPayments.Sum(p => p.GrossAmount);

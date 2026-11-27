@@ -41,10 +41,22 @@ namespace IBS.DataAccess.Repository.Filpride
                 .SingleOrDefaultAsync(r => r.RepresentativeId == representativeId, ct);
         }
 
-        public async Task<List<(int BillingId, string Category)>> ReservedItemsAsync(int? excludeCvId, CancellationToken ct)
+        public async Task<List<(int BillingId, string Category)>> ReservedItemsAsync(
+            int? excludeCvId,
+            IEnumerable<int> billingIds,
+            CancellationToken ct)
         {
+            var ids = billingIds.Distinct().ToArray();
+            if (ids.Length == 0)
+            {
+                return [];
+            }
+
             var reserved = await _db.FilprideMsapCommissionPayments
-                .Where(p => p.ReleasedAt == null && (!excludeCvId.HasValue || p.CheckVoucherHeaderId != excludeCvId.Value))
+                .AsNoTracking()
+                .Where(p => p.ReleasedAt == null
+                    && ids.Contains(p.MsapBillingId)
+                    && (!excludeCvId.HasValue || p.CheckVoucherHeaderId != excludeCvId.Value))
                 .Select(p => new { p.MsapBillingId, p.Category })
                 .ToListAsync(ct);
             return reserved.Select(x => (x.MsapBillingId, x.Category)).ToList();

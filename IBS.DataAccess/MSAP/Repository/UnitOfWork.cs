@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using IBS.DataAccess.Data;
 using IBS.DataAccess.MSAP.Data;
 using IBS.DataAccess.MSAP.Repository.IRepository;
@@ -156,12 +155,6 @@ namespace IBS.DataAccess.MSAP.Repository
         public void Dispose() => _db.Dispose();
 
         #region--Master Files
-
-        // Make the function generic - always returns true (no company filtering)
-        Expression<Func<T, bool>> GetCompanyFilter<T>(string companyName) where T : class
-        {
-            return x => true;
-        }
 
         public async Task<List<SelectListItem>> GetCustomerListAsyncById(CancellationToken cancellationToken = default)
         {
