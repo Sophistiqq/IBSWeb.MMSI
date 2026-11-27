@@ -499,6 +499,7 @@ try {
         }, { basicRate, bafRate, forceUpdate });
         const btn = page.locator("#rateApprove");
         if (await btn.isVisible().catch(() => false) && await btn.isEnabled().catch(() => false)) {
+            await clickSwalConfirm(page, 600);
             await btn.click();
             await page.waitForTimeout(500);
             await clickSwalConfirm(page, 4000);

@@ -153,6 +153,9 @@ namespace IBS.Models.MSAP
         [NotMapped]
         public string? BafBillingNumber { get; set; }
 
+        [NotMapped]
+        public string? SuggestedBirNumber { get; set; }
+
         public bool IsUndocumented { get; set; }
 
         [Column("CUSTNO", TypeName = "varchar(10)")]

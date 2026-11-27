@@ -72,6 +72,7 @@ namespace IBS.Services.MSAP
                         }
                         model.SeparateBaf = existingDraft.BafBilling != null;
                     }
+                    await unitOfWork.Billing.AcquireBillingNumberLockAsync(cancellationToken);
                     var prepared = await PrepareBillingAsync(model, username, company, cancellationToken);
                     if (!prepared.IsSuccess || prepared.Data == null)
                     {
@@ -476,6 +477,32 @@ namespace IBS.Services.MSAP
             var duplicate = await unitOfWork.Billing.GetAsync(b => b.Company == company && b.Year == model.Date.Year
                 && b.MsapBillingId != ignoreBasicId && b.MsapBillingId != ignoreBafId
                 && (b.MsapBillingNumber == basicNumber || (model.SeparateBaf && b.MsapBillingNumber == bafNumber)), cancellationToken);
+            if (duplicate != null && existingDraft == null && !model.IsUndocumented)
+            {
+                var suggestedBasic = model.SuggestedBirNumber?.Trim();
+                var suggestedBaf = !string.IsNullOrWhiteSpace(suggestedBasic)
+                    ? unitOfWork.Billing.IncrementBillingSeries(suggestedBasic)
+                    : null;
+                var usedAutoSuggestedBasic = !string.IsNullOrWhiteSpace(suggestedBasic)
+                    && string.Equals(basicNumber, suggestedBasic, StringComparison.OrdinalIgnoreCase);
+                var usedAutoSuggestedBaf = !model.SeparateBaf
+                    || string.IsNullOrWhiteSpace(model.BafBillingNumber)
+                    || (!string.IsNullOrWhiteSpace(suggestedBaf)
+                        && string.Equals(bafNumber, suggestedBaf, StringComparison.OrdinalIgnoreCase));
+                if (usedAutoSuggestedBasic && usedAutoSuggestedBaf)
+                {
+                    basicNumber = await unitOfWork.Billing.GetSuggestedBirBillingNumberAsync(company, model.Date.Year, cancellationToken);
+                    model.MsapBillingNumber = basicNumber;
+                    if (model.SeparateBaf)
+                    {
+                        bafNumber = unitOfWork.Billing.IncrementBillingSeries(basicNumber);
+                        model.BafBillingNumber = bafNumber;
+                    }
+                    duplicate = await unitOfWork.Billing.GetAsync(b => b.Company == company && b.Year == model.Date.Year
+                        && b.MsapBillingId != ignoreBasicId && b.MsapBillingId != ignoreBafId
+                        && (b.MsapBillingNumber == basicNumber || (model.SeparateBaf && b.MsapBillingNumber == bafNumber)), cancellationToken);
+                }
+            }
             if (duplicate != null)
             {
                 return ServiceResult<List<Billing>>.Failure($"Billing number '{duplicate.MsapBillingNumber}' is already used for this year and company.");

@@ -117,7 +117,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling, "Access denied. You don't have permission to create Billings.")]
-        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,DiscountOnTariff,DiscountOnBaf,SbmaEnabled,Terms,Remarks,AgencyIncentiveRepresentativeId,AgentCommissionRepresentativeId,TicketBasisOverrides")] Billing model, CancellationToken cancellationToken)
+        public async Task<IActionResult> Create([Bind("CustomerId,PrincipalId,BilledTo,MsapBillingNumber,SuggestedBirNumber,Date,CustomerOrderSlipId,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,DiscountOnTariff,DiscountOnBaf,SbmaEnabled,Terms,Remarks,AgencyIncentiveRepresentativeId,AgentCommissionRepresentativeId,TicketBasisOverrides")] Billing model, CancellationToken cancellationToken)
         {
             try
             {

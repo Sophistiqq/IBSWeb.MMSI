@@ -28,6 +28,7 @@
           data-suggested-bir-number="@ViewData["SuggestedBirNumber"]"
           data-suggested-bir-baf-number="@ViewData["SuggestedBirBafNumber"]">
         @Html.AntiForgeryToken()
+        <input type="hidden" name="SuggestedBirNumber" value="@ViewData["SuggestedBirNumber"]" />
         <main class="billing-workspace">
             <aside class="ui-panel schedule-details-progress billing-progress" aria-label="Job Progress">
                 <div id="financialJobProgress" data-progress-url="@Url.Action("Progress", "CustomerOrderSlip")" data-action-stage="5">

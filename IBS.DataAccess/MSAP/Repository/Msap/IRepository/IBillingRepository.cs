@@ -28,6 +28,8 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
 
         Task<List<SelectListItem>> GetMsapBilledTicketsById(int id, CancellationToken cancellationToken = default);
 
+        Task AcquireBillingNumberLockAsync(CancellationToken cancellationToken = default);
+
         Task<string> GenerateBillingNumber(int year, CancellationToken cancellationToken = default);
 
         Task<string> GetSuggestedBirBillingNumberAsync(string company, int year, CancellationToken cancellationToken = default);

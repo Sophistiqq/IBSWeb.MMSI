@@ -212,6 +212,11 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
             return dispatchTicketList;
         }
 
+        public Task AcquireBillingNumberLockAsync(CancellationToken cancellationToken = default)
+        {
+            return _db.AcquireAdvisoryXactLockAsync(MsapLockExtensions.BillingNumberSeries, cancellationToken);
+        }
+
         public async Task<string> GenerateBillingNumber(int year, CancellationToken cancellationToken = default)
         {
             await _db.AcquireAdvisoryXactLockAsync(MsapLockExtensions.BillingNumberSeries, cancellationToken);
