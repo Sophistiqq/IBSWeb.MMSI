@@ -93,6 +93,7 @@ builder.Services.AddControllersWithViews(options =>
     options.Conventions.Add(new IbsAuthorizationConvention());
 });
 builder.Services.AddMsapModule(builder.Configuration);
+builder.Services.AddScoped<IBS.Services.MSAP.IMaritimeReportService, IBS.Services.MSAP.MaritimeReportService>();
 builder.Services.AddScoped<ProvisionalReceiptTaggingService>();
 builder.Services.AddScoped<CheckVoucherDocumentationService>();
 builder.Services.AddScoped<TugboatPaymentService>();
