@@ -114,7 +114,7 @@ namespace Checks.MSAP
         private static async Task CheckLongReferenceReopenAndReconfirmAsync(string connection)
         {
             const string longRef = "SUBCON-INV-2026-LONG-REF-0001";
-            var expectedGlRef = longRef[..20];
+            string? expectedGlRef = null;
             await using var db = new MsapDbContext(new DbContextOptionsBuilder<MsapDbContext>().UseNpgsql(connection).Options);
             await using var accounting = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseNpgsql(connection).Options);
 
@@ -211,6 +211,7 @@ namespace Checks.MSAP
                 }, null, actor.Id, default);
                 Check(created.IsSuccess, created.Message ?? "Failed to save long-reference provider charge.");
                 chargeId = created.Data;
+                expectedGlRef = $"OTC-{chargeId.Value}";
 
                 var confirmed = await service.ConfirmAsync(chargeId.Value, 1, actor.Id, default);
                 Check(confirmed.IsSuccess, confirmed.Message ?? "Failed to confirm long-reference provider charge.");
@@ -266,13 +267,16 @@ namespace Checks.MSAP
             finally
             {
                 accounting.ChangeTracker.Clear();
-                var glToRemove = await accounting.FilprideGeneralLedgerBooks.IgnoreQueryFilters(["TugboatWorkspace"])
-                    .Where(g => g.WorkspaceTugboatId == null && g.Reference == expectedGlRef
-                        && g.CounterpartyId == owner.TugboatOwnerId)
-                    .ToListAsync();
-                if (glToRemove.Count != 0)
+                if (expectedGlRef != null)
                 {
-                    accounting.FilprideGeneralLedgerBooks.RemoveRange(glToRemove);
+                    var glToRemove = await accounting.FilprideGeneralLedgerBooks.IgnoreQueryFilters(["TugboatWorkspace"])
+                        .Where(g => g.WorkspaceTugboatId == null && g.Reference == expectedGlRef
+                            && g.CounterpartyId == owner.TugboatOwnerId)
+                        .ToListAsync();
+                    if (glToRemove.Count != 0)
+                    {
+                        accounting.FilprideGeneralLedgerBooks.RemoveRange(glToRemove);
+                    }
                 }
 
                 var accountingAudits = await accounting.FilprideAuditTrails

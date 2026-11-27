@@ -205,11 +205,20 @@ namespace IBS.Services.MSAP
                         result = ServiceResult.Failure("COS not found.", ServiceResultStatus.NotFound);
                         return;
                     }
-                    string? error = await GetEditErrorAsync(customerOrderSlip, cancellationToken);
+                    var error = await GetEditErrorAsync(customerOrderSlip, cancellationToken);
                     if (error != null)
                     {
                         result = ServiceResult.Failure(error);
                         return;
+                    }
+                    if (model.Date != customerOrderSlip.Date)
+                    {
+                        var newDateGuard = await GuardClosedPeriodAsync(model.Date, cancellationToken);
+                        if (newDateGuard != null)
+                        {
+                            result = newDateGuard;
+                            return;
+                        }
                     }
                     var timeError = ValidateTimeRange(model.PlannedStartTime, model.PlannedEndTime);
                     if (timeError != null)
@@ -217,8 +226,6 @@ namespace IBS.Services.MSAP
                         result = ServiceResult.Failure(timeError);
                         return;
                     }
-
-                    var old = (customerOrderSlip.CustomerId, customerOrderSlip.VesselId, customerOrderSlip.PortId, customerOrderSlip.TerminalId);
 
                     customerOrderSlip.Date = model.Date;
                     customerOrderSlip.CustomerId = model.CustomerId;
@@ -234,9 +241,6 @@ namespace IBS.Services.MSAP
                     customerOrderSlip.Remarks = model.Remarks;
                     customerOrderSlip.EditedBy = username;
                     customerOrderSlip.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-
-                    // Cascade updates to related records
-                    await SyncRelatedRecordsAsync(customerOrderSlip, old, cancellationToken);
 
                     await RecordAuditAsync($"Edited COS #{customerOrderSlip.CustomerOrderSlipNumber}", username, cancellationToken, customerOrderSlip.CustomerOrderSlipId, customerOrderSlip.CustomerOrderSlipNumber);
                     await unitOfWork.SaveAsync(cancellationToken);
@@ -357,70 +361,6 @@ namespace IBS.Services.MSAP
             {
                 logger.LogError(ex, "Failed to change booking status for COS {Id}", id);
                 return ServiceResult.Failure("Failed to update the booking. Please try again.");
-            }
-        }
-
-        private async Task SyncRelatedRecordsAsync(CustomerOrderSlip customerOrderSlip, (int CustomerId, int VesselId, int PortId, int TerminalId) old, CancellationToken cancellationToken)
-        {
-            var criticalChanged = customerOrderSlip.CustomerId != old.CustomerId ||
-                                  customerOrderSlip.VesselId != old.VesselId ||
-                                  customerOrderSlip.PortId != old.PortId ||
-                                  customerOrderSlip.TerminalId != old.TerminalId;
-
-            // 1. Update unbilled dispatch tickets
-            var tickets = await unitOfWork.DispatchTicket.GetAllAsync(
-                dt => dt.CustomerOrderSlipId == customerOrderSlip.CustomerOrderSlipId &&
-                      dt.Status != MsapConstants.DispatchTicketStatus.Billed &&
-                      dt.Status != MsapConstants.DispatchTicketStatus.Deleted,
-                cancellationToken);
-
-            foreach (var ticket in tickets)
-            {
-                ticket.CustomerId = customerOrderSlip.CustomerId;
-                ticket.VesselId = customerOrderSlip.VesselId;
-                ticket.VoyageNumber = customerOrderSlip.VoyageNumber;
-                ticket.COSNumber = customerOrderSlip.CustomerOrderSlipNumber;
-                ticket.PortId = customerOrderSlip.PortId;
-                ticket.TerminalId = customerOrderSlip.TerminalId;
-                ticket.Date = customerOrderSlip.Date;
-
-                if (criticalChanged && ticket.Status is not MsapConstants.DispatchTicketStatus.ForTariff)
-                {
-                    ticket.Status = MsapConstants.DispatchTicketStatus.ForTariff;
-                    ticket.DispatchRate = 0;
-                    ticket.DispatchBillingAmount = 0;
-                    ticket.DispatchDiscount = 0;
-                    ticket.DispatchNetRevenue = 0;
-                    ticket.BAFRate = 0;
-                    ticket.BAFBillingAmount = 0;
-                    ticket.BAFDiscount = 0;
-                    ticket.BAFNetRevenue = 0;
-                    ticket.TotalBilling = 0;
-                    ticket.TotalNetRevenue = 0;
-                    ticket.ApOtherTugs = 0;
-                    ticket.ApOtherTugsIncludesVat = true;
-                    ticket.TariffBy = string.Empty;
-                    ticket.TariffDate = default;
-                    ticket.TariffEditedBy = string.Empty;
-                    ticket.TariffEditedDate = null;
-                }
-            }
-
-            // 2. Update unposted/uncollected billings
-            var billings = await unitOfWork.Billing.GetAllAsync(
-                b => b.CustomerOrderSlipId == customerOrderSlip.CustomerOrderSlipId &&
-                     (b.Status == MsapConstants.BillingStatus.ForPosting || b.Status == MsapConstants.BillingStatus.ForCollection),
-                cancellationToken);
-
-            foreach (var billing in billings)
-            {
-                billing.CustomerId = customerOrderSlip.CustomerId;
-                billing.VesselId = customerOrderSlip.VesselId;
-                billing.VoyageNumber = customerOrderSlip.VoyageNumber;
-                billing.COSNumber = customerOrderSlip.COSNumber;
-                billing.PortId = customerOrderSlip.PortId;
-                billing.TerminalId = customerOrderSlip.TerminalId;
-                billing.Date = customerOrderSlip.Date;
             }
         }
 

@@ -96,6 +96,16 @@ namespace IBS.Services.MSAP
                     return ServiceResult<int>.Failure("Dispatch tickets must be created under a COS.");
                 }
 
+                if (imageFile is { Length: > 0 } && !await IsSupportedImageAsync(imageFile, cancellationToken))
+                {
+                    return ServiceResult<int>.Failure("Upload a valid JPEG, PNG, GIF, or WebP image of up to 10 MB.");
+                }
+
+                if (videoFile is { Length: > 0 } && !await IsSupportedVideoAsync(videoFile, cancellationToken))
+                {
+                    return ServiceResult<int>.Failure("Upload a valid MP4, MOV, WebM, AVI, or MKV video of up to 50 MB.");
+                }
+
                 var readinessError = await ValidateReadyAsync(viewModel, cancellationToken, canEditWateringRate);
                 if (readinessError != null)
                 {
@@ -455,6 +465,16 @@ namespace IBS.Services.MSAP
             bool committed = false;
             try
             {
+                if (imageFile is { Length: > 0 } && !await IsSupportedImageAsync(imageFile, cancellationToken))
+                {
+                    return ServiceResult.Failure("Upload a valid JPEG, PNG, GIF, or WebP image of up to 10 MB.");
+                }
+
+                if (videoFile is { Length: > 0 } && !await IsSupportedVideoAsync(videoFile, cancellationToken))
+                {
+                    return ServiceResult.Failure("Upload a valid MP4, MOV, WebM, AVI, or MKV video of up to 50 MB.");
+                }
+
                 ticket = await unitOfWork.DispatchTicket.GetAsync(t => t.DispatchTicketId == viewModel.DispatchTicketId, cancellationToken);
                 originalImage = ticket?.ImageName;
                 originalVideo = ticket?.VideoName;
@@ -717,18 +737,18 @@ namespace IBS.Services.MSAP
 
                 await RefreshSbmaAsync(currentModel, cancellationToken);
                 // File management
-                if (imageFile != null)
+                if (imageFile is { Length: > 0 })
                 {
-                    var ext = Path.GetExtension(imageFile.FileName);
+                    var ext = Path.GetExtension(imageFile.FileName).ToLowerInvariant();
                     var name = Path.GetFileNameWithoutExtension(imageFile.FileName);
                     currentModel.ImageName = $"{name}-img-{Guid.NewGuid():N}{ext}";
                     currentModel.ImageSavedUrl = await cloudStorageService.UploadFileAsync(imageFile, currentModel.ImageName);
                     changes.Add("Image updated");
                 }
 
-                if (videoFile != null)
+                if (videoFile is { Length: > 0 })
                 {
-                    var ext = Path.GetExtension(videoFile.FileName);
+                    var ext = Path.GetExtension(videoFile.FileName).ToLowerInvariant();
                     var name = Path.GetFileNameWithoutExtension(videoFile.FileName);
                     currentModel.VideoName = $"{name}-vid-{Guid.NewGuid():N}{ext}";
                     currentModel.VideoSavedUrl = await cloudStorageService.UploadFileAsync(videoFile, currentModel.VideoName);
@@ -842,6 +862,8 @@ namespace IBS.Services.MSAP
 
         public async Task<ServiceResult> VoidTicketAsync(int id, string reason, string username, CancellationToken cancellationToken, IFormFile? authorizationFile = null)
         {
+            string? uploadedAttachment = null;
+            var committed = false;
             try
             {
                 if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
@@ -849,137 +871,192 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("Please provide a valid reason for voiding this ticket (minimum 5 characters).", ServiceResultStatus.ValidationError);
                 }
 
-                var model = await unitOfWork.DispatchTicket.GetAsync(dt => dt.DispatchTicketId == id, cancellationToken);
-                if (model == null)
+                if (authorizationFile is { Length: > 0 } && !await OtherTugChargeService.IsSupportedDocumentAsync(authorizationFile, cancellationToken))
                 {
-                    return ServiceResult.Failure("Ticket not found.", ServiceResultStatus.NotFound);
+                    return ServiceResult.Failure("Upload a valid PDF, PNG, or JPEG authorization document of up to 10 MB.", ServiceResultStatus.ValidationError);
                 }
 
-                if (model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
+                var precheck = await unitOfWork.DispatchTicket.GetAsync(dt => dt.DispatchTicketId == id, cancellationToken);
+                var precheckError = await ValidateVoidPreconditionsAsync(precheck, authorizationFile, cancellationToken);
+                if (precheckError != null)
                 {
-                    if (authorizationFile is not { Length: > 0 })
-                    {
-                        return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to void a finalized-period dispatch ticket.", ServiceResultStatus.ValidationError);
-                    }
-                }
-                else
-                {
-                    var guard = await GuardClosedPeriodAsync(model.Date, cancellationToken)
-                        ?? (model.DateLeft.HasValue ? await GuardClosedPeriodAsync(model.DateLeft.Value, cancellationToken) : null)
-                        ?? (model.DateArrived.HasValue ? await GuardClosedPeriodAsync(model.DateArrived.Value, cancellationToken) : null);
-                    if (guard != null)
-                    {
-                        return guard;
-                    }
+                    return precheckError;
                 }
 
-                string? uploadedAttachment = null;
                 if (authorizationFile is { Length: > 0 })
                 {
-                    if (!await OtherTugChargeService.IsSupportedDocumentAsync(authorizationFile, cancellationToken))
-                    {
-                        return ServiceResult.Failure("Upload a valid PDF, PNG, or JPEG authorization document of up to 10 MB.", ServiceResultStatus.ValidationError);
-                    }
-                    string extension = Path.GetExtension(authorizationFile.FileName).ToLowerInvariant();
+                    var extension = Path.GetExtension(authorizationFile.FileName).ToLowerInvariant();
                     uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
                     await cloudStorageService.UploadFileAsync(authorizationFile, uploadedAttachment);
                 }
 
-                if (model.Status == MsapConstants.DispatchTicketStatus.Billed)
+                var result = ServiceResult.Failure("Failed to void dispatch ticket.");
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    return ServiceResult.Failure("Cannot void a billed ticket. Reopen and revise the billing first.", ServiceResultStatus.ValidationError);
-                }
-
-                int? draftBillingId = model.BillingId;
-                if (draftBillingId.HasValue)
-                {
-                    var linkedBilling = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == draftBillingId.Value, cancellationToken);
-                    if (linkedBilling != null && linkedBilling.Status != MsapConstants.BillingStatus.ForPosting)
+                    var current = await unitOfWork.DispatchTicket.GetAsync(dt => dt.DispatchTicketId == id, cancellationToken);
+                    if (current == null)
                     {
-                        return ServiceResult.Failure("Cannot void a billed ticket. Reopen and revise the billing first.", ServiceResultStatus.ValidationError);
+                        result = ServiceResult.Failure("Ticket not found.", ServiceResultStatus.NotFound);
+                        return;
                     }
-                    model.BillingId = null;
-                    model.Billing = null;
-                }
 
-                if (model.OtherTugChargeLine?.Charge?.ConfirmedAt != null)
-                {
-                    return ServiceResult.Failure("Cannot void ticket: confirmed Other Tug Charge exists. Reopen the provider charge first.", ServiceResultStatus.ValidationError);
-                }
-
-                var priorStatus = model.Status;
-                model.Status = MsapConstants.DispatchTicketStatus.Deleted;
-                model.ApOtherTugs = 0m;
-                model.EditedBy = username;
-                model.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
-
-                if (model.CustomerOrderSlipId.HasValue)
-                {
-                    await RefreshSbmaAsync(model, cancellationToken);
-
-                    var schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == model.CustomerOrderSlipId.Value, cancellationToken);
-                    if (schedule != null)
+                    VesselSchedule? schedule = null;
+                    CustomerOrderSlip? job = null;
+                    if (current.CustomerOrderSlipId.HasValue)
                     {
-                        schedule = await unitOfWork.VesselSchedule.GetForUpdateAsync(schedule.VesselScheduleId, cancellationToken);
-                    }
-                    var job = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(model.CustomerOrderSlipId.Value, cancellationToken);
-                    if (schedule != null && job != null)
-                    {
-                        var cosTickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == model.CustomerOrderSlipId.Value, cancellationToken)).ToList();
-                        var activeTickets = cosTickets.Where(t => t.DispatchTicketId != model.DispatchTicketId && t.Status != MsapConstants.DispatchTicketStatus.Deleted).ToList();
-                        var allEntriesResolved = schedule.ServiceEntries.All(e =>
-                            e.CancelledAt.HasValue
-                            || e.VesselScheduleServiceEntryId == model.VesselScheduleServiceEntryId
-                            || cosTickets.Any(t => t.VesselScheduleServiceEntryId == e.VesselScheduleServiceEntryId && t.Status == MsapConstants.DispatchTicketStatus.Deleted));
-                        if (activeTickets.Count == 0 && allEntriesResolved)
+                        schedule = await unitOfWork.VesselSchedule.GetAsync(s => s.CustomerOrderSlipId == current.CustomerOrderSlipId.Value, cancellationToken);
+                        if (schedule != null)
                         {
-                            schedule.Status = MsapConstants.VesselScheduleStatus.Cancelled;
-                            schedule.EditedBy = username;
-                            schedule.EditedDate = model.EditedDate;
-                            job.Status = MsapConstants.CustomerOrderSlipStatus.Cancelled;
-                            job.EditedBy = username;
-                            job.EditedDate = model.EditedDate;
+                            schedule = await unitOfWork.VesselSchedule.GetForUpdateAsync(schedule.VesselScheduleId, cancellationToken);
+                        }
+                        job = await unitOfWork.CustomerOrderSlip.GetForUpdateAsync(current.CustomerOrderSlipId.Value, cancellationToken);
+                    }
+
+                    var model = await unitOfWork.DispatchTicket.GetAsync(dt => dt.DispatchTicketId == id, cancellationToken);
+                    var validationError = await ValidateVoidPreconditionsAsync(model, authorizationFile, cancellationToken);
+                    if (validationError != null)
+                    {
+                        result = validationError;
+                        return;
+                    }
+
+                    var draftBillingId = model!.BillingId;
+                    if (draftBillingId.HasValue)
+                    {
+                        model.BillingId = null;
+                        model.Billing = null;
+                    }
+
+                    var priorStatus = model.Status;
+                    model.Status = MsapConstants.DispatchTicketStatus.Deleted;
+                    model.ApOtherTugs = 0m;
+                    model.EditedBy = username;
+                    model.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
+
+                    if (model.CustomerOrderSlipId.HasValue)
+                    {
+                        await RefreshSbmaAsync(model, cancellationToken);
+
+                        if (schedule != null && job != null)
+                        {
+                            var cosTickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.CustomerOrderSlipId == model.CustomerOrderSlipId.Value, cancellationToken)).ToList();
+                            var activeTickets = cosTickets.Where(t => t.DispatchTicketId != model.DispatchTicketId && t.Status != MsapConstants.DispatchTicketStatus.Deleted).ToList();
+                            var allEntriesResolved = schedule.ServiceEntries.All(e =>
+                                e.CancelledAt.HasValue
+                                || e.VesselScheduleServiceEntryId == model.VesselScheduleServiceEntryId
+                                || cosTickets.Any(t => t.VesselScheduleServiceEntryId == e.VesselScheduleServiceEntryId && t.Status == MsapConstants.DispatchTicketStatus.Deleted));
+                            if (activeTickets.Count == 0 && allEntriesResolved)
+                            {
+                                schedule.Status = MsapConstants.VesselScheduleStatus.Cancelled;
+                                schedule.EditedBy = username;
+                                schedule.EditedDate = model.EditedDate;
+                                job.Status = MsapConstants.CustomerOrderSlipStatus.Cancelled;
+                                job.EditedBy = username;
+                                job.EditedDate = model.EditedDate;
+                            }
                         }
                     }
-                }
 
-                if (draftBillingId.HasValue)
-                {
-                    await SyncDraftBillingAmountsAsync(draftBillingId.Value, cancellationToken, username, model.DispatchTicketId);
-                }
-
-                if (model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
-                {
-                    var priorPeriodStatus = model.PeriodStatus;
-                    model.PeriodStatus = MsapPeriodStatus.Adjusted;
-                    var log = new MsapAdjustmentLog
+                    if (draftBillingId.HasValue)
                     {
-                        DocumentType = "DispatchTicket",
-                        RecordId = model.DispatchTicketId,
-                        ReferenceNumber = model.DispatchNumber,
-                        Reason = reason.Trim(),
-                        AttachmentUrl = uploadedAttachment,
-                        ChangesJson = System.Text.Json.JsonSerializer.Serialize(new[]
+                        await SyncDraftBillingAmountsAsync(draftBillingId.Value, cancellationToken, username, model.DispatchTicketId);
+                    }
+
+                    if (model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
+                    {
+                        var priorPeriodStatus = model.PeriodStatus;
+                        model.PeriodStatus = MsapPeriodStatus.Adjusted;
+                        var log = new MsapAdjustmentLog
                         {
-                            new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = priorPeriodStatus, After = MsapPeriodStatus.Adjusted },
-                            new MsapFieldChange { Field = "Status", Label = "Status", Before = priorStatus, After = MsapConstants.DispatchTicketStatus.Deleted }
-                        }),
-                        EditedBy = username,
-                        EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
-                    };
-                    await unitOfWork.MsapAdjustmentLog.AddAsync(log, cancellationToken);
-                }
+                            DocumentType = "DispatchTicket",
+                            RecordId = model.DispatchTicketId,
+                            ReferenceNumber = model.DispatchNumber,
+                            Reason = reason.Trim(),
+                            AttachmentUrl = uploadedAttachment,
+                            ChangesJson = JsonSerializer.Serialize(new[]
+                            {
+                                new MsapFieldChange { Field = "PeriodStatus", Label = "Period Status", Before = priorPeriodStatus, After = MsapPeriodStatus.Adjusted },
+                                new MsapFieldChange { Field = "Status", Label = "Status", Before = priorStatus, After = MsapConstants.DispatchTicketStatus.Deleted }
+                            }),
+                            EditedBy = username,
+                            EditedDate = DateTimeHelper.GetCurrentPhilippineTime()
+                        };
+                        await unitOfWork.MsapAdjustmentLog.AddAsync(log, cancellationToken);
+                    }
 
-                await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Voided dispatch ticket #{model.DispatchNumber}. Reason: {reason.Trim()}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
-                await unitOfWork.SaveAsync(cancellationToken);
+                    await unitOfWork.AuditTrail.AddAsync(new AuditTrail(username, $"Voided dispatch ticket #{model.DispatchNumber}. Reason: {reason.Trim()}", "Dispatch Ticket", model.DispatchTicketId, model.DispatchNumber), cancellationToken);
+                    await unitOfWork.SaveAsync(cancellationToken);
 
-                return ServiceResult.Success($"Dispatch Ticket #{model.DispatchNumber} voided successfully.");
+                    result = ServiceResult.Success($"Dispatch Ticket #{model.DispatchNumber} voided successfully.");
+                }, cancellationToken);
+
+                committed = result.IsSuccess;
+                return result;
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to void dispatch ticket {Id}", id);
                 return ServiceResult.Failure($"Failed to void ticket: {ExceptionHelper.GetErrorMessage(ex)}");
             }
+            finally
+            {
+                if (!committed && uploadedAttachment != null)
+                {
+                    await DeleteFilesAsync([uploadedAttachment]);
+                }
+            }
+        }
+
+        private async Task<ServiceResult?> ValidateVoidPreconditionsAsync(DispatchTicket? model, IFormFile? authorizationFile, CancellationToken cancellationToken)
+        {
+            if (model == null)
+            {
+                return ServiceResult.Failure("Ticket not found.", ServiceResultStatus.NotFound);
+            }
+
+            if (model.Status == MsapConstants.DispatchTicketStatus.Deleted)
+            {
+                return ServiceResult.Failure("This dispatch ticket is already voided.", ServiceResultStatus.ValidationError);
+            }
+
+            if (model.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
+            {
+                if (authorizationFile is not { Length: > 0 })
+                {
+                    return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to void a finalized-period dispatch ticket.", ServiceResultStatus.ValidationError);
+                }
+            }
+            else
+            {
+                var guard = await GuardClosedPeriodAsync(model.Date, cancellationToken)
+                    ?? (model.DateLeft.HasValue ? await GuardClosedPeriodAsync(model.DateLeft.Value, cancellationToken) : null)
+                    ?? (model.DateArrived.HasValue ? await GuardClosedPeriodAsync(model.DateArrived.Value, cancellationToken) : null);
+                if (guard != null)
+                {
+                    return guard;
+                }
+            }
+
+            if (model.Status == MsapConstants.DispatchTicketStatus.Billed)
+            {
+                return ServiceResult.Failure("Cannot void a billed ticket. Reopen and revise the billing first.", ServiceResultStatus.ValidationError);
+            }
+
+            if (model.BillingId.HasValue)
+            {
+                var linkedBilling = await unitOfWork.Billing.GetAsync(b => b.MsapBillingId == model.BillingId.Value, cancellationToken);
+                if (linkedBilling != null && linkedBilling.Status != MsapConstants.BillingStatus.ForPosting)
+                {
+                    return ServiceResult.Failure("Cannot void a billed ticket. Reopen and revise the billing first.", ServiceResultStatus.ValidationError);
+                }
+            }
+
+            if (model.OtherTugChargeLine?.Charge?.ConfirmedAt != null)
+            {
+                return ServiceResult.Failure("Cannot void ticket: confirmed Other Tug Charge exists. Reopen the provider charge first.", ServiceResultStatus.ValidationError);
+            }
+
+            return null;
         }
 
         public async Task<ServiceResult> RestoreTicketAsync(int id, string username, CancellationToken cancellationToken)
@@ -1320,6 +1397,75 @@ namespace IBS.Services.MSAP
             return (await GuardClosedPeriodAsync(model.DateArrived.Value, ct))?.Message
                 ?? (await GuardClosedPeriodAsync(model.DateLeft.Value, ct))?.Message
                 ?? (await GuardClosedPeriodAsync(model.Date, ct))?.Message;
+        }
+
+        public static async Task<bool> IsSupportedImageAsync(IFormFile file, CancellationToken ct)
+        {
+            const long maxImageBytes = 10 * 1024 * 1024;
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var contentTypeValid = extension switch
+            {
+                ".jpg" or ".jpeg" => string.Equals(file.ContentType, "image/jpeg", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(file.ContentType, "image/jpg", StringComparison.OrdinalIgnoreCase),
+                ".png" => string.Equals(file.ContentType, "image/png", StringComparison.OrdinalIgnoreCase),
+                ".gif" => string.Equals(file.ContentType, "image/gif", StringComparison.OrdinalIgnoreCase),
+                ".webp" => string.Equals(file.ContentType, "image/webp", StringComparison.OrdinalIgnoreCase),
+                _ => false
+            };
+
+            if (!contentTypeValid || file.Length is <= 0 or > maxImageBytes)
+            {
+                return false;
+            }
+
+            var header = new byte[12];
+            await using var stream = file.OpenReadStream();
+            var count = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct);
+            return extension switch
+            {
+                ".jpg" or ".jpeg" => count >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
+                ".png" => count >= 8 && header.AsSpan(0, 8).SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }),
+                ".gif" => count >= 6 && (header.AsSpan(0, 6).SequenceEqual("GIF87a"u8) || header.AsSpan(0, 6).SequenceEqual("GIF89a"u8)),
+                ".webp" => count >= 12 && header.AsSpan(0, 4).SequenceEqual("RIFF"u8) && header.AsSpan(8, 4).SequenceEqual("WEBP"u8),
+                _ => false
+            };
+        }
+
+        public static async Task<bool> IsSupportedVideoAsync(IFormFile file, CancellationToken ct)
+        {
+            const long maxVideoBytes = 50 * 1024 * 1024;
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var contentTypeValid = extension switch
+            {
+                ".mp4" => string.Equals(file.ContentType, "video/mp4", StringComparison.OrdinalIgnoreCase),
+                ".mov" => string.Equals(file.ContentType, "video/quicktime", StringComparison.OrdinalIgnoreCase),
+                ".webm" => string.Equals(file.ContentType, "video/webm", StringComparison.OrdinalIgnoreCase),
+                ".avi" => string.Equals(file.ContentType, "video/x-msvideo", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(file.ContentType, "video/avi", StringComparison.OrdinalIgnoreCase),
+                ".mkv" => string.Equals(file.ContentType, "video/x-matroska", StringComparison.OrdinalIgnoreCase),
+                _ => false
+            };
+
+            if (!contentTypeValid || file.Length is <= 0 or > maxVideoBytes)
+            {
+                return false;
+            }
+
+            var header = new byte[12];
+            await using var stream = file.OpenReadStream();
+            var count = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct);
+            return extension switch
+            {
+                ".mp4" => count >= 8 && header.AsSpan(4, 4).SequenceEqual("ftyp"u8),
+                ".mov" => count >= 8 && (header.AsSpan(4, 4).SequenceEqual("ftyp"u8)
+                    || header.AsSpan(4, 4).SequenceEqual("moov"u8)
+                    || header.AsSpan(4, 4).SequenceEqual("mdat"u8)
+                    || header.AsSpan(4, 4).SequenceEqual("wide"u8)
+                    || header.AsSpan(4, 4).SequenceEqual("free"u8)),
+                ".webm" or ".mkv" => count >= 4 && header.AsSpan(0, 4).SequenceEqual(new byte[] { 0x1A, 0x45, 0xDF, 0xA3 }),
+                ".avi" => count >= 12 && header.AsSpan(0, 4).SequenceEqual("RIFF"u8) && header.AsSpan(8, 4).SequenceEqual("AVI "u8),
+                _ => false
+            };
         }
 
         private async Task<ServiceResult?> GuardClosedPeriodAsync(DateOnly date, CancellationToken ct)

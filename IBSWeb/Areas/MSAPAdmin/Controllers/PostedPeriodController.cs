@@ -65,32 +65,36 @@ namespace IBSWeb.Areas.MSAPAdmin.Controllers
             try
             {
                 var username = User.Identity?.Name ?? "System";
-                var period = await unitOfWork.PostedPeriod.GetByYearMonthAsync(year, month, cancellationToken);
-                if (period == null)
+                await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    period = new MsapPostedPeriod
+                    var period = await unitOfWork.PostedPeriod.GetByYearMonthAsync(year, month, cancellationToken);
+                    if (period == null)
                     {
-                        Year = year,
-                        Month = month,
-                        IsClosed = true,
-                        ClosedBy = username,
-                        ClosedDate = DateTimeHelper.GetCurrentPhilippineTime()
-                    };
-                    await unitOfWork.PostedPeriod.AddAsync(period, cancellationToken);
-                }
-                else
-                {
-                    period.IsClosed = true;
-                    period.ClosedBy = username;
-                    period.ClosedDate = DateTimeHelper.GetCurrentPhilippineTime();
-                    await unitOfWork.PostedPeriod.UpdateAsync(period, cancellationToken);
-                }
+                        period = new MsapPostedPeriod
+                        {
+                            Year = year,
+                            Month = month,
+                            IsClosed = true,
+                            ClosedBy = username,
+                            ClosedDate = DateTimeHelper.GetCurrentPhilippineTime()
+                        };
+                        await unitOfWork.PostedPeriod.AddAsync(period, cancellationToken);
+                        await unitOfWork.SaveAsync(cancellationToken);
+                    }
+                    else
+                    {
+                        period.IsClosed = true;
+                        period.ClosedBy = username;
+                        period.ClosedDate = DateTimeHelper.GetCurrentPhilippineTime();
+                        await unitOfWork.PostedPeriod.UpdateAsync(period, cancellationToken);
+                    }
 
-                await unitOfWork.PostedPeriod.FinalizePeriodRecordsAsync(year, month, cancellationToken);
+                    await unitOfWork.PostedPeriod.FinalizePeriodRecordsAsync(year, month, cancellationToken);
 
-                var audit = new AuditTrail(username, $"Closed posting period {new DateOnly(year, month, 1):MMMM yyyy}", "Posting Period", period.Id);
-                await unitOfWork.AuditTrail.AddAsync(audit, cancellationToken);
-                await unitOfWork.SaveAsync(cancellationToken);
+                    var audit = new AuditTrail(username, $"Closed posting period {new DateOnly(year, month, 1):MMMM yyyy}", "Posting Period", period.Id);
+                    await unitOfWork.AuditTrail.AddAsync(audit, cancellationToken);
+                    await unitOfWork.SaveAsync(cancellationToken);
+                }, cancellationToken);
                 TempData["success"] = $"{new DateOnly(year, month, 1):MMMM yyyy} closed successfully.";
             }
             catch (Exception ex)

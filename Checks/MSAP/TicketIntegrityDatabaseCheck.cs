@@ -244,7 +244,12 @@ namespace Checks.MSAP
 
         private static IFormFile Image()
         {
-            return new FormFile(new MemoryStream([1, 2, 3]), 0, 3, "imageFile", "check.png");
+            byte[] pngHeader = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+            return new FormFile(new MemoryStream(pngHeader), 0, pngHeader.Length, "imageFile", "check.png")
+            {
+                Headers = new HeaderDictionary(),
+                ContentType = "image/png"
+            };
         }
 
         private static void Check(bool passed, string message)

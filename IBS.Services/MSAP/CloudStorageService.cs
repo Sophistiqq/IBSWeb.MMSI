@@ -17,8 +17,6 @@ namespace IBS.Services.MSAP
         Task DeleteFileAsync(string fileNameToDelete);
 
         Task<Stream> DownloadFileAsync(string fileNameToDownload);
-
-        Task<IFormFile?> GetFileAsFormFile(string fileName);
     }
 
     public class CloudStorageService(IOptions<GCSConfigOptions> options, ILogger<CloudStorageService> logger)
@@ -156,37 +154,6 @@ namespace IBS.Services.MSAP
             catch (Exception ex)
             {
                 logger.LogError(ex, "Error occurred while downloading file: {ExMessage}", ex.Message);
-                throw;
-            }
-        }
-
-        public async Task<IFormFile?> GetFileAsFormFile(string fileName)
-        {
-            if (string.IsNullOrEmpty(fileName))
-            {
-                throw new ArgumentNullException(nameof(fileName));
-            }
-
-            try
-            {
-                var fileStream = await DownloadFileAsync(fileName);
-
-                if (fileStream == null || fileStream.Length == 0)
-                {
-                    throw new FileNotFoundException("File not found.", fileName);
-                }
-
-                var formFile = new FormFile(fileStream, 0, fileStream.Length, "file", fileName)
-                {
-                    Headers = new HeaderDictionary(),
-                    ContentType = "application/octet-stream",
-                };
-
-                return formFile;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error processing file: {ExMessage}", ex.Message);
                 throw;
             }
         }

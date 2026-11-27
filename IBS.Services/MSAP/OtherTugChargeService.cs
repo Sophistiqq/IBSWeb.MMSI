@@ -428,11 +428,17 @@ namespace IBS.Services.MSAP
 
         public async Task<ServiceResult> ReopenConfirmedChargeAsync(int id, string reason, string userId, CancellationToken ct, IFormFile? authorizationFile = null)
         {
+            string? uploadedAttachment = null;
             try
             {
                 if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
                 {
                     return ServiceResult.Failure("Please provide a valid reason for reopening this charge (minimum 5 characters).");
+                }
+
+                if (authorizationFile is { Length: > 0 } && !await IsSupportedDocumentAsync(authorizationFile, ct))
+                {
+                    return ServiceResult.Failure("Upload a valid PDF, PNG, or JPEG authorization document of up to 10 MB.");
                 }
 
                 var actor = await _db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == userId && u.IsActive, ct);
@@ -453,25 +459,25 @@ namespace IBS.Services.MSAP
                     return ServiceResult.Failure("This provider charge is not confirmed.");
                 }
 
-                if (charge.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted && authorizationFile is not { Length: > 0 })
+                if (charge.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
                 {
-                    return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to reopen a finalized-period provider charge.");
-                }
-
-                string? uploadedAttachment = null;
-                if (authorizationFile is { Length: > 0 })
-                {
-                    if (!await IsSupportedDocumentAsync(authorizationFile, ct))
+                    if (authorizationFile is not { Length: > 0 })
                     {
-                        return ServiceResult.Failure("Upload a valid PDF, PNG, or JPEG authorization document of up to 10 MB.");
+                        return ServiceResult.Failure("An approved authorization document (PDF, PNG, or JPEG) is required to reopen a finalized-period provider charge.");
                     }
-                    string extension = Path.GetExtension(authorizationFile.FileName).ToLowerInvariant();
-                    uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
-                    await _storage.UploadFileAsync(authorizationFile, uploadedAttachment);
+                }
+                else
+                {
+                    var periodError = await GuardClosedPeriodAsync(charge.DocumentDate, ct);
+                    if (periodError != null)
+                    {
+                        return ServiceResult.Failure(periodError);
+                    }
                 }
 
                 // Check if an active (non-voided/non-canceled) Check Voucher payment exists in IBS AP
-                await using var accounting = await _accountingContextFactory.OpenAccountingContextAsync(_db, ct);
+                var (accounting, work) = await _accountingContextFactory.OpenAccountingScopeAsync(_db, ct);
+                await using var _ = accounting;
 
                 var activePayment = await accounting.FilprideTugboatPayments
                     .Include(p => p.Voucher)
@@ -486,18 +492,34 @@ namespace IBS.Services.MSAP
                 }
 
                 // Reverse recognized GL entries in FilprideGeneralLedgerBooks
-                var glRef = BuildGlReference(charge.ProviderReference);
+                var glRef = BuildGlReference(charge.OtherTugChargeId);
                 var glEntries = await accounting.FilprideGeneralLedgerBooks.IgnoreQueryFilters(["TugboatWorkspace"])
                     .Where(g => g.WorkspaceTugboatId == null && g.Reference == glRef
+                        && g.CounterpartyType == CounterpartyType.TugboatOwner
                         && g.CounterpartyId == charge.TugboatOwnerId)
                     .ToListAsync(ct);
                 if (glEntries.Count != 0)
                 {
+                    foreach (var glDate in glEntries.Select(g => g.Date).Distinct())
+                    {
+                        if (await work.IsPeriodPostedAsync(Module.ReceivingReport, glDate, ct))
+                        {
+                            return ServiceResult.Failure($"Cannot reopen charge: recognized GL entries dated {glDate:MMMM yyyy} are in a closed accounting period.");
+                        }
+                    }
+
                     accounting.FilprideGeneralLedgerBooks.RemoveRange(glEntries);
                     await accounting.SaveChangesAsync(ct);
                 }
 
-                int priorRevision = charge.Revision;
+                if (authorizationFile is { Length: > 0 })
+                {
+                    var extension = Path.GetExtension(authorizationFile.FileName).ToLowerInvariant();
+                    uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
+                    await _storage.UploadFileAsync(authorizationFile, uploadedAttachment);
+                }
+
+                var priorRevision = charge.Revision;
                 charge.ConfirmedAt = null;
                 charge.ConfirmedByUserId = null;
                 charge.ConfirmedByName = null;
@@ -505,7 +527,7 @@ namespace IBS.Services.MSAP
                 charge.UpdatedAt = DateTimeHelper.GetCurrentPhilippineTime();
 
                 // Clear AP amounts on tickets until re-confirmed
-                List<int> ids = charge.Lines.Select(l => l.DispatchTicketId).ToList();
+                var ids = charge.Lines.Select(l => l.DispatchTicketId).ToList();
                 var tickets = await _db.MsapDispatchTickets.Where(t => ids.Contains(t.DispatchTicketId)).ToListAsync(ct);
                 foreach (var ticket in tickets)
                 {
@@ -548,6 +570,7 @@ namespace IBS.Services.MSAP
 
                 await _db.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
+                uploadedAttachment = null;
 
                 return ServiceResult.Success($"Provider charge {charge.ProviderReference} reopened for revision successfully.");
             }
@@ -555,6 +578,20 @@ namespace IBS.Services.MSAP
             {
                 _logger.LogError(ex, "Failed to reopen provider charge {Id}", id);
                 return ServiceResult.Failure($"Failed to reopen provider charge: {ExceptionHelper.GetErrorMessage(ex)}");
+            }
+            finally
+            {
+                if (uploadedAttachment != null)
+                {
+                    try
+                    {
+                        await _storage.DeleteFileAsync(uploadedAttachment);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Could not remove unused authorization document {FileName}", uploadedAttachment);
+                    }
+                }
             }
         }
 
@@ -586,9 +623,10 @@ namespace IBS.Services.MSAP
                     recognitionDate = charge.DocumentDate >= minOpenDate ? charge.DocumentDate : recognitionDate;
                 }
             }
-            var glRef = BuildGlReference(charge.ProviderReference);
+            var glRef = BuildGlReference(charge.OtherTugChargeId);
             var existing = await accounting.FilprideGeneralLedgerBooks.IgnoreQueryFilters(["TugboatWorkspace"])
                 .AnyAsync(g => g.WorkspaceTugboatId == null && g.Reference == glRef
+                    && g.CounterpartyType == CounterpartyType.TugboatOwner
                     && g.CounterpartyId == owner.TugboatOwnerId, ct);
             if (existing)
             {
@@ -703,11 +741,9 @@ namespace IBS.Services.MSAP
             return charge;
         }
 
-        private static string BuildGlReference(string providerReference)
+        private static string BuildGlReference(int otherTugChargeId)
         {
-            return providerReference.Length <= 20
-                ? providerReference
-                : providerReference[..20];
+            return $"OTC-{otherTugChargeId}";
         }
 
         private static string Snapshot(OtherTugCharge charge)

@@ -394,7 +394,8 @@ namespace Checks.MSAP
                 Check(confirmed.IsSuccess, confirmed.Message ?? "Provider charge confirmation failed.");
                 Check(!await db.FilprideJournalVoucherHeaders.AnyAsync(j => j.References == confirmRef),
                     "Direct GL recognition should not create a synthetic Journal Voucher header.");
-                var jvGl = await db.FilprideGeneralLedgerBooks.AsNoTracking().Where(g => g.Reference == confirmRef).ToListAsync();
+                var expectedGlRef = $"OTC-{draftCharge.OtherTugChargeId}";
+                var jvGl = await db.FilprideGeneralLedgerBooks.AsNoTracking().Where(g => g.Reference == expectedGlRef).ToListAsync();
                 Check(jvGl.Count == 3
                     && jvGl.Single(g => g.AccountNo == OtherTugChargeService.ContraRevenueAccount).Debit == 1000m
                     && jvGl.Single(g => g.AccountNo == OtherTugChargeService.InputVatAccount).Debit == 120m
