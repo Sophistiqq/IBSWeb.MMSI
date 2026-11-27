@@ -57,6 +57,19 @@ namespace IBS.Services.MSAP
                         cancellationToken);
                     if (existingDraft != null)
                     {
+                        var lockIds = new[] { existingDraft.MsapBillingId, existingDraft.BafBilling?.MsapBillingId ?? existingDraft.MsapBillingId }
+                            .Distinct()
+                            .OrderBy(v => v);
+                        foreach (var lockId in lockIds)
+                        {
+                            _ = await unitOfWork.Billing.GetForUpdateAsync(lockId, cancellationToken)
+                                ?? throw new InvalidOperationException("This billing draft no longer exists.");
+                        }
+                        if (existingDraft.Status != MsapConstants.BillingStatus.ForPosting
+                            || (existingDraft.BafBilling != null && existingDraft.BafBilling.Status != MsapConstants.BillingStatus.ForPosting))
+                        {
+                            throw new InvalidOperationException($"Billing #{existingDraft.MsapBillingNumber} is no longer in For Posting status.");
+                        }
                         model.SeparateBaf = existingDraft.BafBilling != null;
                     }
                     var prepared = await PrepareBillingAsync(model, username, company, cancellationToken);
@@ -381,7 +394,10 @@ namespace IBS.Services.MSAP
             }
             var isAuthorizedRevision = existingDraft != null
                 && (existingDraft.UnpostedDate.HasValue || existingDraft.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted);
-            if (!isAuthorizedRevision)
+            var isSameDraftMonth = existingDraft != null
+                && model.Date.Year == existingDraft.Date.Year
+                && model.Date.Month == existingDraft.Date.Month;
+            if (!isAuthorizedRevision || !isSameDraftMonth)
             {
                 var guard = await GuardClosedPeriodAsync(model.Date, cancellationToken);
                 if (guard != null)
@@ -524,44 +540,9 @@ namespace IBS.Services.MSAP
                         continue;
                     }
 
-                    if (MsapConstants.IsWateringService(ticket.Service?.ServiceNumber) || ticket.DispatchChargeType == "Per ton")
+                    if (ApplyTicketBasisChange(ticket, basisInput.DispatchChargeType, basisInput.BAFChargeType, "Basic Basis", model.PendingBasisDiffs))
                     {
-                        continue;
-                    }
-
-                    var newDispatchType = basisInput.DispatchChargeType == "Per move" ? "Per move" : "Per hour";
-                    var newBafType = basisInput.BAFChargeType is "Per move" or "Lumpsum" or "Industry"
-                        ? basisInput.BAFChargeType
-                        : "Per hour";
-
-                    if (!string.Equals(ticket.DispatchChargeType, newDispatchType, StringComparison.Ordinal))
-                    {
-                        model.PendingBasisDiffs.Add(new MsapFieldChange
-                        {
-                            Field = $"Ticket_{ticket.DispatchTicketId}_DispatchBasis",
-                            Label = $"{ticket.DispatchNumber} Basic Basis",
-                            Before = ticket.DispatchChargeType ?? "Per hour",
-                            After = newDispatchType
-                        });
-                        ticket.DispatchChargeType = newDispatchType;
                         anyBasisChanged = true;
-                    }
-
-                    if (!string.Equals(ticket.BAFChargeType, newBafType, StringComparison.Ordinal))
-                    {
-                        model.PendingBasisDiffs.Add(new MsapFieldChange
-                        {
-                            Field = $"Ticket_{ticket.DispatchTicketId}_BafBasis",
-                            Label = $"{ticket.DispatchNumber} BAF Basis",
-                            Before = ticket.BAFChargeType ?? "Per hour",
-                            After = newBafType
-                        });
-                        ticket.BAFChargeType = newBafType;
-                        anyBasisChanged = true;
-                    }
-
-                    if (anyBasisChanged)
-                    {
                         ScheduledTicketCharges.ApplyDiscount(ticket, effectivePct, model.DiscountOnTariff, model.DiscountOnBaf);
                     }
                 }
@@ -608,13 +589,6 @@ namespace IBS.Services.MSAP
             model.CreatedDate = DateTimeHelper.GetCurrentPhilippineTime();
             model.PaidDispatchTickets = tickets;
             model.UniqueTugboats = tickets.Select(t => t.Tugboat.TugboatName).Distinct().ToList();
-            model.DispatchAmount = tickets.Sum(t => t.DispatchNetRevenue);
-            decimal baf = tickets.Sum(t => t.BAFNetRevenue);
-            decimal tariffDiscountAmt = tickets.Sum(t => t.DispatchBillingAmount - t.DispatchNetRevenue);
-            decimal bafDiscountAmt = tickets.Sum(t => t.BAFBillingAmount - t.BAFNetRevenue);
-            model.BAFAmount = model.SeparateBaf ? 0 : baf;
-            model.Discount = model.SeparateBaf ? tariffDiscountAmt : tariffDiscountAmt + bafDiscountAmt;
-            model.Amount = model.Balance = model.DispatchAmount + model.BAFAmount;
             model.IsPrincipal = model.PrincipalId.HasValue;
             var statements = new List<Billing> { model };
             if (model.SeparateBaf)
@@ -650,19 +624,16 @@ namespace IBS.Services.MSAP
                     IsUndocumented = model.IsUndocumented,
                     DiscountOnTariff = model.DiscountOnTariff,
                     DiscountOnBaf = model.DiscountOnBaf,
-                    Discount = bafDiscountAmt,
                     Company = company,
                     Status = model.Status,
                     CreatedBy = username,
                     CreatedDate = model.CreatedDate,
-                    BAFAmount = baf,
-                    Amount = baf,
-                    Balance = baf,
                     PaidDispatchTickets = tickets,
                     UniqueTugboats = model.UniqueTugboats
                 };
                 statements.Add(model.BafBilling);
             }
+            ApplyBillingTotals(model, model.BafBilling, tickets);
             await ApplyBillingCommissionsAsync(model, tickets, cancellationToken);
             foreach (var statement in statements)
             {
@@ -671,12 +642,138 @@ namespace IBS.Services.MSAP
             return ServiceResult<List<Billing>>.Success(statements);
         }
 
-        private async Task ApplyBillingCommissionsAsync(Billing model, IReadOnlyList<DispatchTicket> tickets, CancellationToken cancellationToken)
+        private sealed record CommissionOverride(string? Mode, string? Basis, decimal Rate);
+
+        private static bool IsWateringOrPerTon(DispatchTicket ticket)
+        {
+            return MsapConstants.IsWateringService(ticket.Service?.ServiceNumber)
+                || string.Equals(ticket.DispatchChargeType, "Per ton", StringComparison.Ordinal);
+        }
+
+        private static bool ApplyTicketBasisChange(
+            DispatchTicket ticket,
+            string? dispatchChargeType,
+            string? bafChargeType,
+            string dispatchLabelSuffix,
+            List<MsapFieldChange> fieldDiffs)
+        {
+            if (IsWateringOrPerTon(ticket))
+            {
+                return false;
+            }
+
+            var newDispatchType = dispatchChargeType == "Per move" ? "Per move" : "Per hour";
+            var newBafType = bafChargeType is "Per move" or "Lumpsum" or "Industry"
+                ? bafChargeType
+                : "Per hour";
+            var changed = false;
+
+            if (!string.Equals(ticket.DispatchChargeType, newDispatchType, StringComparison.Ordinal))
+            {
+                fieldDiffs.Add(new MsapFieldChange
+                {
+                    Field = $"Ticket_{ticket.DispatchTicketId}_DispatchBasis",
+                    Label = $"{ticket.DispatchNumber} {dispatchLabelSuffix}",
+                    Before = ticket.DispatchChargeType ?? "Per hour",
+                    After = newDispatchType
+                });
+                ticket.DispatchChargeType = newDispatchType;
+                changed = true;
+            }
+
+            if (!string.Equals(ticket.BAFChargeType, newBafType, StringComparison.Ordinal))
+            {
+                fieldDiffs.Add(new MsapFieldChange
+                {
+                    Field = $"Ticket_{ticket.DispatchTicketId}_BafBasis",
+                    Label = $"{ticket.DispatchNumber} BAF Basis",
+                    Before = ticket.BAFChargeType ?? "Per hour",
+                    After = newBafType
+                });
+                ticket.BAFChargeType = newBafType;
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        private static void ApplyBillingTotals(Billing primaryBill, Billing? bafBill, IReadOnlyList<DispatchTicket> tickets)
+        {
+            primaryBill.DispatchAmount = tickets.Sum(t => t.DispatchNetRevenue);
+            var totalBaf = tickets.Sum(t => t.BAFNetRevenue);
+            var tariffDiscountAmt = tickets.Sum(t => t.DispatchBillingAmount - t.DispatchNetRevenue);
+            var bafDiscountAmt = tickets.Sum(t => t.BAFBillingAmount - t.BAFNetRevenue);
+
+            if (bafBill != null)
+            {
+                primaryBill.BAFAmount = 0m;
+                primaryBill.Discount = tariffDiscountAmt;
+                primaryBill.Amount = primaryBill.Balance = primaryBill.DispatchAmount;
+                bafBill.BAFAmount = totalBaf;
+                bafBill.Discount = bafDiscountAmt;
+                bafBill.Amount = bafBill.Balance = totalBaf;
+            }
+            else
+            {
+                primaryBill.BAFAmount = totalBaf;
+                primaryBill.Discount = tariffDiscountAmt + bafDiscountAmt;
+                primaryBill.Amount = primaryBill.Balance = primaryBill.DispatchAmount + totalBaf;
+            }
+        }
+
+        private static string? ValidateCommissionOverride(string label, int? representativeId, string? mode, string? basis, decimal rate)
+        {
+            if (!representativeId.HasValue)
+            {
+                return null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(mode)
+                && !string.Equals(mode, CommissionCalculator.ModePercentage, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(mode, CommissionCalculator.ModeFlat, StringComparison.OrdinalIgnoreCase))
+            {
+                return $"{label} mode must be Percentage or Flat.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(basis)
+                && basis is not (CommissionCalculator.BaseNetOfDiscount
+                    or CommissionCalculator.BaseNetOfVat
+                    or CommissionCalculator.BaseGross
+                    or CommissionCalculator.BaseBasicOnly
+                    or CommissionCalculator.BaseBafOnly))
+            {
+                return $"{label} calculation base is invalid.";
+            }
+
+            if (rate < 0m)
+            {
+                return $"{label} rate cannot be negative.";
+            }
+
+            var isFlat = string.Equals(mode, CommissionCalculator.ModeFlat, StringComparison.OrdinalIgnoreCase);
+            if (!isFlat && rate > 100m)
+            {
+                return $"{label} percentage rate must be between 0% and 100%.";
+            }
+
+            return null;
+        }
+
+        private async Task ApplyBillingCommissionsAsync(
+            Billing model,
+            IReadOnlyList<DispatchTicket> tickets,
+            CancellationToken cancellationToken,
+            CommissionOverride? agencyOverride = null,
+            CommissionOverride? agentOverride = null,
+            List<MsapFieldChange>? fieldDiffs = null,
+            bool rejectInvalidRepresentative = false)
         {
             var basicGross = tickets.Sum(t => t.DispatchBillingAmount);
             var bafGross = tickets.Sum(t => t.BAFBillingAmount);
             var netOfDiscount = tickets.Sum(t => t.DispatchNetRevenue + t.BAFNetRevenue);
 
+            var prevIncName = model.AgencyIncentiveName ?? "None";
+            var prevIncAmount = model.AgencyIncentiveAmount;
             if (model.AgencyIncentiveRepresentativeId.HasValue)
             {
                 var rep = await unitOfWork.Representative.GetAsync(
@@ -684,12 +781,26 @@ namespace IBS.Services.MSAP
                     cancellationToken);
                 if (rep != null && rep.Category == CommissionCalculator.CategoryAgencyIncentive)
                 {
+                    var mode = !string.IsNullOrWhiteSpace(agencyOverride?.Mode) ? agencyOverride.Mode : rep.RateMode;
+                    var basis = !string.IsNullOrWhiteSpace(agencyOverride?.Basis) ? agencyOverride.Basis : rep.CalculationBase;
+                    var rate = agencyOverride != null ? agencyOverride.Rate : rep.RateValue;
+                    var rateError = ValidateCommissionOverride("Agency Incentive", rep.RepresentativeId, mode, basis, rate);
+                    if (rateError != null)
+                    {
+                        throw new InvalidOperationException(rateError);
+                    }
+
+                    model.AgencyIncentiveRepresentativeId = rep.RepresentativeId;
                     model.AgencyIncentiveName = rep.RepresentativeName;
-                    model.AgencyIncentiveMode = rep.RateMode;
-                    model.AgencyIncentiveBase = rep.CalculationBase;
-                    model.AgencyIncentiveRate = rep.RateValue;
+                    model.AgencyIncentiveMode = mode;
+                    model.AgencyIncentiveBase = basis;
+                    model.AgencyIncentiveRate = rate;
                     model.AgencyIncentiveAmount = CommissionCalculator.ComputeAmount(
-                        rep.RateMode, rep.CalculationBase, rep.RateValue, basicGross, bafGross, netOfDiscount, model.IsVatable);
+                        mode, basis, rate, basicGross, bafGross, netOfDiscount, model.IsVatable);
+                }
+                else if (rejectInvalidRepresentative)
+                {
+                    throw new InvalidOperationException("Selected Agency Incentive representative is inactive or invalid.");
                 }
                 else
                 {
@@ -701,6 +812,21 @@ namespace IBS.Services.MSAP
                 ClearAgencyIncentive(model);
             }
 
+            if (fieldDiffs != null)
+            {
+                var newIncName = model.AgencyIncentiveName ?? "None";
+                if (prevIncName != newIncName)
+                {
+                    fieldDiffs.Add(new MsapFieldChange { Field = "AgencyIncentiveName", Label = "Agency Incentive Representative", Before = prevIncName, After = newIncName });
+                }
+                if (prevIncAmount != model.AgencyIncentiveAmount)
+                {
+                    fieldDiffs.Add(new MsapFieldChange { Field = "AgencyIncentiveAmount", Label = "Agency Incentive Amount", Before = prevIncAmount.ToString("N2"), After = model.AgencyIncentiveAmount.ToString("N2") });
+                }
+            }
+
+            var prevComName = model.AgentCommissionName ?? "None";
+            var prevComAmount = model.AgentCommissionAmount;
             if (model.AgentCommissionRepresentativeId.HasValue)
             {
                 var rep = await unitOfWork.Representative.GetAsync(
@@ -708,12 +834,26 @@ namespace IBS.Services.MSAP
                     cancellationToken);
                 if (rep != null && rep.Category == CommissionCalculator.CategoryAgentCommission)
                 {
+                    var mode = !string.IsNullOrWhiteSpace(agentOverride?.Mode) ? agentOverride.Mode : rep.RateMode;
+                    var basis = !string.IsNullOrWhiteSpace(agentOverride?.Basis) ? agentOverride.Basis : rep.CalculationBase;
+                    var rate = agentOverride != null ? agentOverride.Rate : rep.RateValue;
+                    var rateError = ValidateCommissionOverride("Agent Commission", rep.RepresentativeId, mode, basis, rate);
+                    if (rateError != null)
+                    {
+                        throw new InvalidOperationException(rateError);
+                    }
+
+                    model.AgentCommissionRepresentativeId = rep.RepresentativeId;
                     model.AgentCommissionName = rep.RepresentativeName;
-                    model.AgentCommissionMode = rep.RateMode;
-                    model.AgentCommissionBase = rep.CalculationBase;
-                    model.AgentCommissionRate = rep.RateValue;
+                    model.AgentCommissionMode = mode;
+                    model.AgentCommissionBase = basis;
+                    model.AgentCommissionRate = rate;
                     model.AgentCommissionAmount = CommissionCalculator.ComputeAmount(
-                        rep.RateMode, rep.CalculationBase, rep.RateValue, basicGross, bafGross, netOfDiscount, model.IsVatable);
+                        mode, basis, rate, basicGross, bafGross, netOfDiscount, model.IsVatable);
+                }
+                else if (rejectInvalidRepresentative)
+                {
+                    throw new InvalidOperationException("Selected Agent Commission representative is inactive or invalid.");
                 }
                 else
                 {
@@ -723,6 +863,19 @@ namespace IBS.Services.MSAP
             else
             {
                 ClearAgentCommission(model);
+            }
+
+            if (fieldDiffs != null)
+            {
+                var newComName = model.AgentCommissionName ?? "None";
+                if (prevComName != newComName)
+                {
+                    fieldDiffs.Add(new MsapFieldChange { Field = "AgentCommissionName", Label = "Agent Commission Representative", Before = prevComName, After = newComName });
+                }
+                if (prevComAmount != model.AgentCommissionAmount)
+                {
+                    fieldDiffs.Add(new MsapFieldChange { Field = "AgentCommissionAmount", Label = "Agent Commission Amount", Before = prevComAmount.ToString("N2"), After = model.AgentCommissionAmount.ToString("N2") });
+                }
             }
 
             CommissionCalculator.AllocateAcrossTickets(tickets, model.AgencyIncentiveAmount, model.AgentCommissionAmount);
@@ -982,6 +1135,30 @@ namespace IBS.Services.MSAP
                 {
                     return ServiceResult.Failure("Flat discount amounts cannot be negative.", ServiceResultStatus.ValidationError);
                 }
+                if (model.Tickets.Any(t => t.DispatchRate < 0m || t.BAFRate < 0m))
+                {
+                    return ServiceResult.Failure("Ticket tariff and BAF rates cannot be negative.", ServiceResultStatus.ValidationError);
+                }
+                var agencyValidationError = ValidateCommissionOverride(
+                    "Agency Incentive",
+                    model.AgencyIncentiveRepresentativeId,
+                    model.AgencyIncentiveMode,
+                    model.AgencyIncentiveBase,
+                    model.AgencyIncentiveRate);
+                if (agencyValidationError != null)
+                {
+                    return ServiceResult.Failure(agencyValidationError, ServiceResultStatus.ValidationError);
+                }
+                var agentValidationError = ValidateCommissionOverride(
+                    "Agent Commission",
+                    model.AgentCommissionRepresentativeId,
+                    model.AgentCommissionMode,
+                    model.AgentCommissionBase,
+                    model.AgentCommissionRate);
+                if (agentValidationError != null)
+                {
+                    return ServiceResult.Failure(agentValidationError, ServiceResultStatus.ValidationError);
+                }
 
                 string extension = Path.GetExtension(model.AuthorizationFile.FileName).ToLowerInvariant();
                 string uploadedAttachment = $"adjustment-auth-{Guid.NewGuid():N}{extension}";
@@ -989,13 +1166,51 @@ namespace IBS.Services.MSAP
 
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
-                    int sourceId = billing.BasicBillingId ?? billing.MsapBillingId;
-                    var primaryBill = billing.BasicBillingId.HasValue
-                        ? await unitOfWork.Billing.GetForUpdateAsync(sourceId, cancellationToken) ?? throw new InvalidOperationException("Primary billing not found.")
-                        : await unitOfWork.Billing.GetForUpdateAsync(billing.MsapBillingId, cancellationToken) ?? throw new InvalidOperationException("Billing not found.");
-                    var bafBill = primaryBill.BafBilling != null
-                        ? await unitOfWork.Billing.GetForUpdateAsync(primaryBill.BafBilling.MsapBillingId, cancellationToken)
-                        : null;
+                    var sourceId = billing.BasicBillingId ?? billing.MsapBillingId;
+                    var bafId = billing.BasicBillingId.HasValue ? billing.MsapBillingId : billing.BafBilling?.MsapBillingId;
+                    var lockIds = bafId.HasValue && bafId.Value != sourceId
+                        ? new[] { sourceId, bafId.Value }.OrderBy(v => v).ToArray()
+                        : new[] { sourceId };
+                    Billing? primaryBill = null;
+                    Billing? bafBill = null;
+                    foreach (var lockId in lockIds)
+                    {
+                        var locked = await unitOfWork.Billing.GetForUpdateAsync(lockId, cancellationToken)
+                            ?? throw new InvalidOperationException("Billing not found.");
+                        if (lockId == sourceId)
+                        {
+                            primaryBill = locked;
+                        }
+                        else
+                        {
+                            bafBill = locked;
+                        }
+                    }
+                    if (primaryBill == null)
+                    {
+                        throw new InvalidOperationException("Primary billing not found.");
+                    }
+                    if (bafBill == null && primaryBill.BafBilling != null)
+                    {
+                        bafBill = await unitOfWork.Billing.GetForUpdateAsync(primaryBill.BafBilling.MsapBillingId, cancellationToken);
+                    }
+
+                    var targetBills = bafBill != null ? new[] { primaryBill, bafBill } : new[] { primaryBill };
+                    foreach (var targetBill in targetBills)
+                    {
+                        if (targetBill.Status != MsapConstants.BillingStatus.ForPosting)
+                        {
+                            throw new InvalidOperationException($"Billing #{targetBill.MsapBillingNumber} must be in For Posting status to adjust.");
+                        }
+                        if (targetBill.AmountPaid > 0 || targetBill.IsPaid || targetBill.CollectionId.HasValue)
+                        {
+                            throw new InvalidOperationException($"Cannot adjust billing #{targetBill.MsapBillingNumber}: collections exist.");
+                        }
+                    }
+                    if (!targetBills.Any(b => b.RejectedAt.HasValue || b.UnpostedDate.HasValue))
+                    {
+                        throw new InvalidOperationException("Adjust Billing is only unlocked after a Reviewer/Approver rejection or Finance Head reopening.");
+                    }
 
                     var lockedGuard = IsReopenedOrFinalized(primaryBill)
                         ? null
@@ -1108,23 +1323,12 @@ namespace IBS.Services.MSAP
                             continue;
                         }
 
-                        string newDispatchType = ticketInput.DispatchChargeType == "Per move" ? "Per move" : "Per hour";
-                        string newBafType = ticketInput.BAFChargeType is "Per move" or "Lumpsum" or "Industry"
-                            ? ticketInput.BAFChargeType
-                            : "Per hour";
+                        ApplyTicketBasisChange(ticket, ticketInput.DispatchChargeType, ticketInput.BAFChargeType, "Dispatch Basis", fieldDiffs);
 
-                        if (!string.Equals(ticket.DispatchChargeType, newDispatchType, StringComparison.Ordinal))
-                        {
-                            fieldDiffs.Add(new MsapFieldChange { Field = $"Ticket_{ticket.DispatchTicketId}_DispatchBasis", Label = $"{ticket.DispatchNumber} Dispatch Basis", Before = ticket.DispatchChargeType ?? "—", After = newDispatchType });
-                        }
                         if (ticket.DispatchRate != ticketInput.DispatchRate)
                         {
                             fieldDiffs.Add(new MsapFieldChange { Field = $"Ticket_{ticket.DispatchTicketId}_DispatchRate", Label = $"{ticket.DispatchNumber} Tariff Rate", Before = ticket.DispatchRate.ToString("N2"), After = ticketInput.DispatchRate.ToString("N2") });
                             ticket.IsManualTariffRate = true;
-                        }
-                        if (!string.Equals(ticket.BAFChargeType, newBafType, StringComparison.Ordinal))
-                        {
-                            fieldDiffs.Add(new MsapFieldChange { Field = $"Ticket_{ticket.DispatchTicketId}_BafBasis", Label = $"{ticket.DispatchNumber} BAF Basis", Before = ticket.BAFChargeType ?? "—", After = newBafType });
                         }
                         if (ticket.BAFRate != ticketInput.BAFRate)
                         {
@@ -1132,9 +1336,7 @@ namespace IBS.Services.MSAP
                             ticket.IsManualBafRate = true;
                         }
 
-                        ticket.DispatchChargeType = newDispatchType;
                         ticket.DispatchRate = ticketInput.DispatchRate;
-                        ticket.BAFChargeType = newBafType;
                         ticket.BAFRate = ticketInput.BAFRate;
                         ticket.EditedBy = username;
                         ticket.EditedDate = DateTimeHelper.GetCurrentPhilippineTime();
@@ -1176,15 +1378,13 @@ namespace IBS.Services.MSAP
                         }
                     }
 
-                    decimal oldTotal = primaryBill.Amount + (bafBill?.Amount ?? 0m);
-                    decimal oldDispatchAmount = primaryBill.DispatchAmount;
-                    decimal oldBafAmount = primaryBill.BAFAmount + (bafBill?.BAFAmount ?? 0m);
-                    decimal oldDiscountAmount = primaryBill.Discount + (bafBill?.Discount ?? 0m);
-                    primaryBill.DispatchAmount = tickets.Sum(t => t.DispatchNetRevenue);
-                    decimal totalBaf = tickets.Sum(t => t.BAFNetRevenue);
-                    decimal tariffDiscountAmt = tickets.Sum(t => t.DispatchBillingAmount - t.DispatchNetRevenue);
-                    decimal bafDiscountAmt = tickets.Sum(t => t.BAFBillingAmount - t.BAFNetRevenue);
-                    decimal newDiscountAmount = tariffDiscountAmt + bafDiscountAmt;
+                    var oldTotal = primaryBill.Amount + (bafBill?.Amount ?? 0m);
+                    var oldDispatchAmount = primaryBill.DispatchAmount;
+                    var oldBafAmount = primaryBill.BAFAmount + (bafBill?.BAFAmount ?? 0m);
+                    var oldDiscountAmount = primaryBill.Discount + (bafBill?.Discount ?? 0m);
+                    ApplyBillingTotals(primaryBill, bafBill, tickets);
+                    var totalBaf = primaryBill.BAFAmount + (bafBill?.BAFAmount ?? 0m);
+                    var newDiscountAmount = primaryBill.Discount + (bafBill?.Discount ?? 0m);
                     if (oldDiscountAmount != newDiscountAmount)
                     {
                         fieldDiffs.Add(new MsapFieldChange { Field = "DiscountAmount", Label = "Total Discount Applied", Before = oldDiscountAmount.ToString("N2"), After = newDiscountAmount.ToString("N2") });
@@ -1197,102 +1397,22 @@ namespace IBS.Services.MSAP
                     {
                         fieldDiffs.Add(new MsapFieldChange { Field = "BAFAmount", Label = "BAF Charges After Discount", Before = oldBafAmount.ToString("N2"), After = totalBaf.ToString("N2") });
                     }
-                    if (bafBill != null)
-                    {
-                        primaryBill.BAFAmount = 0m;
-                        primaryBill.Discount = tariffDiscountAmt;
-                        primaryBill.Amount = primaryBill.Balance = primaryBill.DispatchAmount;
-                        bafBill.BAFAmount = totalBaf;
-                        bafBill.Discount = bafDiscountAmt;
-                        bafBill.Amount = bafBill.Balance = totalBaf;
-                    }
-                    else
-                    {
-                        primaryBill.BAFAmount = totalBaf;
-                        primaryBill.Discount = tariffDiscountAmt + bafDiscountAmt;
-                        primaryBill.Amount = primaryBill.Balance = primaryBill.DispatchAmount + totalBaf;
-                    }
-                    decimal newTotal = primaryBill.Amount + (bafBill?.Amount ?? 0m);
+                    var newTotal = primaryBill.Amount + (bafBill?.Amount ?? 0m);
                     if (oldTotal != newTotal)
                     {
                         fieldDiffs.Add(new MsapFieldChange { Field = "Amount", Label = "Total Billing Amount", Before = oldTotal.ToString("N2"), After = newTotal.ToString("N2") });
                     }
 
-                    var basicGrossSum = tickets.Sum(t => t.DispatchBillingAmount);
-                    var bafGrossSum = tickets.Sum(t => t.BAFBillingAmount);
-                    var netSum = tickets.Sum(t => t.DispatchNetRevenue + t.BAFNetRevenue);
-
-                    var prevIncName = primaryBill.AgencyIncentiveName ?? "None";
-                    var prevIncAmount = primaryBill.AgencyIncentiveAmount;
-                    if (model.AgencyIncentiveRepresentativeId.HasValue)
-                    {
-                        var rep = await unitOfWork.Representative.GetAsync(r => r.RepresentativeId == model.AgencyIncentiveRepresentativeId.Value, cancellationToken);
-                        if (rep != null && rep.Category == CommissionCalculator.CategoryAgencyIncentive)
-                        {
-                            primaryBill.AgencyIncentiveRepresentativeId = rep.RepresentativeId;
-                            primaryBill.AgencyIncentiveName = rep.RepresentativeName;
-                            primaryBill.AgencyIncentiveMode = !string.IsNullOrWhiteSpace(model.AgencyIncentiveMode) ? model.AgencyIncentiveMode : rep.RateMode;
-                            primaryBill.AgencyIncentiveBase = !string.IsNullOrWhiteSpace(model.AgencyIncentiveBase) ? model.AgencyIncentiveBase : rep.CalculationBase;
-                            primaryBill.AgencyIncentiveRate = model.AgencyIncentiveRate;
-                            primaryBill.AgencyIncentiveAmount = CommissionCalculator.ComputeAmount(
-                                primaryBill.AgencyIncentiveMode, primaryBill.AgencyIncentiveBase, primaryBill.AgencyIncentiveRate,
-                                basicGrossSum, bafGrossSum, netSum, primaryBill.IsVatable);
-                        }
-                        else
-                        {
-                            ClearAgencyIncentive(primaryBill);
-                        }
-                    }
-                    else
-                    {
-                        ClearAgencyIncentive(primaryBill);
-                    }
-                    var newIncName = primaryBill.AgencyIncentiveName ?? "None";
-                    if (prevIncName != newIncName)
-                    {
-                        fieldDiffs.Add(new MsapFieldChange { Field = "AgencyIncentiveName", Label = "Agency Incentive Representative", Before = prevIncName, After = newIncName });
-                    }
-                    if (prevIncAmount != primaryBill.AgencyIncentiveAmount)
-                    {
-                        fieldDiffs.Add(new MsapFieldChange { Field = "AgencyIncentiveAmount", Label = "Agency Incentive Amount", Before = prevIncAmount.ToString("N2"), After = primaryBill.AgencyIncentiveAmount.ToString("N2") });
-                    }
-
-                    var prevComName = primaryBill.AgentCommissionName ?? "None";
-                    var prevComAmount = primaryBill.AgentCommissionAmount;
-                    if (model.AgentCommissionRepresentativeId.HasValue)
-                    {
-                        var rep = await unitOfWork.Representative.GetAsync(r => r.RepresentativeId == model.AgentCommissionRepresentativeId.Value, cancellationToken);
-                        if (rep != null && rep.Category == CommissionCalculator.CategoryAgentCommission)
-                        {
-                            primaryBill.AgentCommissionRepresentativeId = rep.RepresentativeId;
-                            primaryBill.AgentCommissionName = rep.RepresentativeName;
-                            primaryBill.AgentCommissionMode = !string.IsNullOrWhiteSpace(model.AgentCommissionMode) ? model.AgentCommissionMode : rep.RateMode;
-                            primaryBill.AgentCommissionBase = !string.IsNullOrWhiteSpace(model.AgentCommissionBase) ? model.AgentCommissionBase : rep.CalculationBase;
-                            primaryBill.AgentCommissionRate = model.AgentCommissionRate;
-                            primaryBill.AgentCommissionAmount = CommissionCalculator.ComputeAmount(
-                                primaryBill.AgentCommissionMode, primaryBill.AgentCommissionBase, primaryBill.AgentCommissionRate,
-                                basicGrossSum, bafGrossSum, netSum, primaryBill.IsVatable);
-                        }
-                        else
-                        {
-                            ClearAgentCommission(primaryBill);
-                        }
-                    }
-                    else
-                    {
-                        ClearAgentCommission(primaryBill);
-                    }
-                    var newComName = primaryBill.AgentCommissionName ?? "None";
-                    if (prevComName != newComName)
-                    {
-                        fieldDiffs.Add(new MsapFieldChange { Field = "AgentCommissionName", Label = "Agent Commission Representative", Before = prevComName, After = newComName });
-                    }
-                    if (prevComAmount != primaryBill.AgentCommissionAmount)
-                    {
-                        fieldDiffs.Add(new MsapFieldChange { Field = "AgentCommissionAmount", Label = "Agent Commission Amount", Before = prevComAmount.ToString("N2"), After = primaryBill.AgentCommissionAmount.ToString("N2") });
-                    }
-
-                    CommissionCalculator.AllocateAcrossTickets(tickets, primaryBill.AgencyIncentiveAmount, primaryBill.AgentCommissionAmount);
+                    primaryBill.AgencyIncentiveRepresentativeId = model.AgencyIncentiveRepresentativeId;
+                    primaryBill.AgentCommissionRepresentativeId = model.AgentCommissionRepresentativeId;
+                    await ApplyBillingCommissionsAsync(
+                        primaryBill,
+                        tickets,
+                        cancellationToken,
+                        new CommissionOverride(model.AgencyIncentiveMode, model.AgencyIncentiveBase, model.AgencyIncentiveRate),
+                        new CommissionOverride(model.AgentCommissionMode, model.AgentCommissionBase, model.AgentCommissionRate),
+                        fieldDiffs,
+                        rejectInvalidRepresentative: true);
 
                     var editedAt = DateTimeHelper.GetCurrentPhilippineTime();
                     foreach (var bill in new[] { primaryBill, bafBill }.Where(b => b != null))
@@ -1512,11 +1632,26 @@ namespace IBS.Services.MSAP
                 await unitOfWork.ExecuteInTransactionAsync(async () =>
                 {
                     var relatedInTx = billing.BasicBilling ?? billing.BafBilling;
-                    var targetBills = new[] { billing, relatedInTx }.Where(b => b != null).Distinct().ToList();
+                    var targetBills = new[] { billing, relatedInTx }
+                        .Where(b => b != null)
+                        .Cast<Billing>()
+                        .DistinctBy(b => b.MsapBillingId)
+                        .OrderBy(b => b.MsapBillingId)
+                        .ToList();
+
+                    for (var i = 0; i < targetBills.Count; i++)
+                    {
+                        targetBills[i] = await unitOfWork.Billing.GetForUpdateAsync(targetBills[i].MsapBillingId, cancellationToken)
+                            ?? throw new InvalidOperationException("This billing no longer exists.");
+                    }
 
                     foreach (var bill in targetBills)
                     {
-                        if (bill!.AmountPaid > 0 || bill.IsPaid || bill.CollectionId.HasValue)
+                        if (bill.Status != MsapConstants.BillingStatus.ForCollection)
+                        {
+                            throw new InvalidOperationException($"Cannot reopen billing #{bill.MsapBillingNumber}: status is {bill.Status}.");
+                        }
+                        if (bill.AmountPaid > 0 || bill.IsPaid || bill.CollectionId.HasValue)
                         {
                             throw new InvalidOperationException($"Cannot reopen billing #{bill.MsapBillingNumber}: collections exist.");
                         }
@@ -1526,9 +1661,18 @@ namespace IBS.Services.MSAP
                         {
                             throw new InvalidOperationException($"Cannot reopen billing #{bill.MsapBillingNumber}: active Check Voucher {activeCv} exists in IBS AP. Void or cancel the check voucher first.");
                         }
+                    }
 
-                        int priorRevision = bill.Revision;
-                        string priorStatus = bill.Status;
+                    if (targetBills.Any(b => b.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
+                        && string.IsNullOrEmpty(uploadedAttachment))
+                    {
+                        throw new InvalidOperationException("An approved authorization document (PDF, PNG, or JPEG) is required to reopen a finalized-period billing.");
+                    }
+
+                    foreach (var bill in targetBills)
+                    {
+                        var priorRevision = bill.Revision;
+                        var priorStatus = bill.Status;
 
                         bill.Revision += 1;
                         bill.Status = MsapConstants.BillingStatus.ForPosting;
@@ -1543,7 +1687,7 @@ namespace IBS.Services.MSAP
                         bill.ApprovedAt = null;
 
                         await unitOfWork.Billing.VoidSalesBookAsync(bill.MsapBillingId, priorRevision, username, reason.Trim(), cancellationToken);
-                        await unitOfWork.Billing.ReverseCommissionLiabilityAsync(bill, cancellationToken);
+                        await unitOfWork.Billing.ReverseCommissionLiabilityAsync(bill, cancellationToken, username);
 
                         if (bill.PeriodStatus is MsapPeriodStatus.Final or MsapPeriodStatus.Adjusted)
                         {
@@ -1640,12 +1784,25 @@ namespace IBS.Services.MSAP
                         {
                             throw new InvalidOperationException("Finalized-period bills cannot be discarded.");
                         }
+                        var billGuard = await GuardClosedPeriodAsync(bill.Date, cancellationToken);
+                        if (billGuard != null)
+                        {
+                            throw new InvalidOperationException(billGuard.Message);
+                        }
                     }
                     if ((await unitOfWork.Billing.GetBillingIdsWithSalesBookAsync(pair.Select(b => b.MsapBillingId).ToList(), cancellationToken)).Count > 0)
                     {
                         throw new InvalidOperationException("This preparation has Sales Book history and cannot be discarded. Approved bills must be retained.");
                     }
                     var tickets = (await unitOfWork.DispatchTicket.GetAllAsync(t => t.BillingId == basic.MsapBillingId, cancellationToken)).ToList();
+                    foreach (var ticketDate in tickets.Select(t => t.Date).Distinct())
+                    {
+                        var ticketGuard = await GuardClosedPeriodAsync(ticketDate, cancellationToken);
+                        if (ticketGuard != null)
+                        {
+                            throw new InvalidOperationException(ticketGuard.Message);
+                        }
+                    }
                     foreach (var ticket in tickets)
                     {
                         ticket.Billing = null;

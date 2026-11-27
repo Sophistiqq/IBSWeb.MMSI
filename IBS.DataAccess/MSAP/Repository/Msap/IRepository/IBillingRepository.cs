@@ -44,6 +44,6 @@ namespace IBS.DataAccess.MSAP.Repository.Msap.IRepository
 
         Task<string?> GetActiveCommissionVoucherNumberAsync(int billingId, CancellationToken ct = default);
 
-        Task ReverseCommissionLiabilityAsync(Billing billing, CancellationToken ct = default);
+        Task ReverseCommissionLiabilityAsync(Billing billing, CancellationToken ct = default, string? actor = null);
     }
 }

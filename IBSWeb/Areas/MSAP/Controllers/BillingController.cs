@@ -149,7 +149,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateBilling)]
         public async Task<IActionResult> PreviewPreparation(
-            [Bind("CustomerId,CustomerOrderSlipId,PrincipalId,BilledTo,MsapBillingNumber,Date,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,SbmaEnabled,Terms,Remarks,AgencyIncentiveRepresentativeId,AgentCommissionRepresentativeId,TicketBasisOverrides")] Billing model,
+            [Bind("CustomerId,CustomerOrderSlipId,PrincipalId,BilledTo,MsapBillingNumber,Date,SeparateBaf,BafBillingNumber,IsUndocumented,CosDiscountPercent,SkipCosDiscount,DiscountOnTariff,DiscountOnBaf,SbmaEnabled,Terms,Remarks,AgencyIncentiveRepresentativeId,AgentCommissionRepresentativeId,TicketBasisOverrides")] Billing model,
             CancellationToken cancellationToken)
         {
             if (ModelState.Any(entry => (entry.Key is nameof(Billing.CosDiscountPercent) or nameof(Billing.SkipCosDiscount) or nameof(Billing.SbmaEnabled))
@@ -685,12 +685,11 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
                 var subTotal = billing.Amount;
                 var vatAmount = 0m;
-                var vatableSales = 0m;
+                var whtBase = billing.IsVatable ? Math.Round(subTotal / 1.12m, 2) : subTotal;
 
                 if (billing.IsVatable)
                 {
-                    vatableSales = subTotal / 1.12m;
-                    vatAmount = subTotal - vatableSales;
+                    vatAmount = Math.Round(subTotal - whtBase, 2);
                 }
 
                 if (printDiscount)
@@ -728,7 +727,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
                 if (billing.PrintWht)
                 {
-                    var whtAmount = vatableSales * 0.02m;
+                    var whtAmount = Math.Round(whtBase * 0.02m, 2);
                     worksheet.Cells[row, 4].Value = "LESS 2% WHT";
                     worksheet.Cells[row, 5].Value = whtAmount;
                     worksheet.Cells[row, 5].Style.Numberformat.Format = "(#,##0.00)";
@@ -737,7 +736,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     // 5% WVAT is removed from invoice statement per BIR & meeting rule (settled at collection via 2306)
 
                     worksheet.Cells[row, 4].Value = "NET AMOUNT DUE";
-                    worksheet.Cells[row, 5].Value = subTotal - whtAmount;
+                    worksheet.Cells[row, 5].Value = Math.Round(subTotal - whtAmount, 2);
                     worksheet.Cells[row, 5].Style.Numberformat.Format = "#,##0.00";
                     worksheet.Cells[row, 5].Style.Font.Bold = true;
                 }

@@ -9,7 +9,7 @@ namespace IBS.Services.MSAP
     {
         public static SalesBook Create(Billing bill, DateTime approvedAt, string actor, string actorId)
         {
-            decimal amount = Math.Round(bill.Amount - bill.Discount, 2);
+            var amount = Math.Round(bill.Amount, 2);
             if (amount < 0)
             {
                 throw new InvalidOperationException("The approved billing amount cannot be negative.");

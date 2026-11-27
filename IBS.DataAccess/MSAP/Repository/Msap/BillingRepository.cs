@@ -520,15 +520,24 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                     throw new InvalidOperationException(profileError);
                 }
 
-                var marker = $"({billing.MsapBillingNumber} - {item.CategoryLabel})";
-                var alreadyRecognized = await accounting.FilprideGeneralLedgerBooks
+                var billingIdTag = $"[BillId:{billing.MsapBillingId}]";
+                var legacyMarker = $"({billing.MsapBillingNumber} - {item.CategoryLabel})";
+                var marker = $"{legacyMarker} {billingIdTag}";
+                var existingEntries = await accounting.FilprideGeneralLedgerBooks
                     .IgnoreQueryFilters(["TugboatWorkspace"])
-                    .AnyAsync(g => g.WorkspaceTugboatId == null
+                    .Where(g => g.WorkspaceTugboatId == null
                         && g.Reference == glRef
                         && g.CounterpartyType == CounterpartyType.Representative
                         && g.CounterpartyId == rep.RepresentativeId
-                        && g.Description.Contains(marker), ct);
-                if (alreadyRecognized)
+                        && (g.Description.Contains(marker)
+                            || (!g.Description.Contains("[BillId:")
+                                && g.Description.Contains(legacyMarker)
+                                && g.Date.Year == billing.Date.Year)))
+                    .ToListAsync(ct);
+                var netRecognizedAp = existingEntries
+                    .Where(g => g.AccountId == apAccount.AccountId)
+                    .Sum(g => g.Credit - g.Debit);
+                if (netRecognizedAp > 0m)
                 {
                     continue;
                 }
@@ -637,23 +646,116 @@ namespace IBS.DataAccess.MSAP.Repository.Msap
                 .FirstOrDefaultAsync(ct);
         }
 
-        public async Task ReverseCommissionLiabilityAsync(Billing billing, CancellationToken ct = default)
+        public async Task ReverseCommissionLiabilityAsync(Billing billing, CancellationToken ct = default, string? actor = null)
         {
             var glRef = billing.MsapBillingNumber.Length <= 20
                 ? billing.MsapBillingNumber
                 : billing.MsapBillingNumber[..20];
+            var billingIdTag = $"[BillId:{billing.MsapBillingId}]";
 
-            await using var accounting = await _accountingContextFactory.OpenAccountingContextAsync(_db, ct);
+            var (accounting, work) = await _accountingContextFactory.OpenAccountingScopeAsync(_db, ct);
+            await using var _ = accounting;
             var glEntries = await accounting.FilprideGeneralLedgerBooks
                 .IgnoreQueryFilters(["TugboatWorkspace"])
                 .Where(g => g.WorkspaceTugboatId == null
                     && g.Reference == glRef
-                    && g.CounterpartyType == CounterpartyType.Representative)
+                    && g.CounterpartyType == CounterpartyType.Representative
+                    && (g.Description.Contains(billingIdTag)
+                        || (!g.Description.Contains("[BillId:") && g.Date.Year == billing.Date.Year)))
                 .ToListAsync(ct);
 
-            if (glEntries.Count > 0)
+            if (glEntries.Count == 0)
+            {
+                return;
+            }
+
+            var hasClosedPeriodEntry = false;
+            foreach (var date in glEntries.Select(g => g.Date).Distinct())
+            {
+                if (await work.IsPeriodPostedAsync(Module.ReceivingReport, date, ct))
+                {
+                    hasClosedPeriodEntry = true;
+                    break;
+                }
+            }
+
+            if (!hasClosedPeriodEntry)
             {
                 accounting.FilprideGeneralLedgerBooks.RemoveRange(glEntries);
+                await accounting.SaveChangesAsync(ct);
+                return;
+            }
+
+            var now = IBS.Utility.MSAP.Helpers.DateTimeHelper.GetCurrentPhilippineTime();
+            var today = DateOnly.FromDateTime(now);
+            var minOpenDate = DateOnly.FromDateTime(await work.GetMinimumPeriodBasedOnThePostedPeriods(Module.ReceivingReport, ct));
+            var reversalDate = today >= minOpenDate ? today : minOpenDate;
+            var reversalActor = string.IsNullOrWhiteSpace(actor) ? "System" : actor.Trim();
+            var reversals = new List<FilprideGeneralLedgerBook>();
+
+            static string ExtractCategoryLabel(string description)
+            {
+                if (description.Contains("Agency Incentive", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "Agency Incentive";
+                }
+                if (description.Contains("Agent Commission", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "Agent Commission";
+                }
+                return "Commission";
+            }
+
+            foreach (var group in glEntries.GroupBy(g => new
+            {
+                g.AccountId,
+                g.AccountNo,
+                g.AccountTitle,
+                g.CounterpartyType,
+                g.CounterpartyId,
+                g.CounterpartyName,
+                CategoryLabel = ExtractCategoryLabel(g.Description)
+            }))
+            {
+                var netDebit = group.Sum(g => g.Debit - g.Credit);
+                if (netDebit == 0m)
+                {
+                    continue;
+                }
+
+                var marker = $"({billing.MsapBillingNumber} - {group.Key.CategoryLabel}) {billingIdTag}";
+                var particulars = $"REVERSAL OF SET UP A/P {group.Key.CategoryLabel.ToUpperInvariant()} - {group.Key.CounterpartyName} {marker} (BILLING DATE {billing.Date:MMM dd, yyyy})";
+
+                reversals.Add(new FilprideGeneralLedgerBook
+                {
+                    WorkspaceTugboatId = null,
+                    Date = reversalDate,
+                    Reference = glRef,
+                    Description = particulars,
+                    AccountId = group.Key.AccountId,
+                    AccountNo = group.Key.AccountNo,
+                    AccountTitle = group.Key.AccountTitle,
+                    Debit = netDebit < 0m ? -netDebit : 0m,
+                    Credit = netDebit > 0m ? netDebit : 0m,
+                    CreatedBy = reversalActor,
+                    CreatedDate = now,
+                    IsPosted = true,
+                    ModuleType = nameof(ModuleType.Purchase),
+                    CounterpartyType = group.Key.CounterpartyType,
+                    CounterpartyId = group.Key.CounterpartyId,
+                    CounterpartyName = group.Key.CounterpartyName
+                });
+            }
+
+            if (reversals.Count > 0)
+            {
+                await accounting.FilprideGeneralLedgerBooks.AddRangeAsync(reversals, ct);
+                await accounting.FilprideAuditTrails.AddAsync(
+                    new IBS.Models.Filpride.Books.FilprideAuditTrail(
+                        reversalActor,
+                        $"Posted reversing MSAP representative commission/incentive GL entries for {billing.MsapBillingNumber} {billingIdTag}",
+                        "Billing"),
+                    ct);
                 await accounting.SaveChangesAsync(ct);
             }
         }
