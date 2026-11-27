@@ -1,6 +1,5 @@
 (() => {
     let busy = false;
-    const escape = text => $('<div>').text(text).html();
     document.addEventListener('click', async event => {
         const button = event.target.closest('[data-collection-banking]');
         if (!button) return;
@@ -15,7 +14,7 @@
             let postUrl;
             const review = await ModernAlert.confirm({
                 title: button.dataset.collectionBanking,
-                text: html,
+                html: html,
                 confirmText: 'Save',
                 didOpen: popup => {
                     ModernSelect.init('#collectionBankingForm .js-modern-select');
@@ -72,7 +71,7 @@
             if (!result.success) throw new Error(result.message || 'Collection update failed.');
             window.location.reload();
         } catch (error) {
-            ModernAlert.error(escape(error.message));
+            ModernAlert.error(error.message);
         } finally {
             busy = false;
         }
