@@ -39,6 +39,7 @@ namespace IBSWeb.MSAP
             services.AddScoped<BillingService>();
             services.AddScoped<DashboardService>();
             services.AddScoped<CollectionService>();
+            services.AddScoped<IMaritimeReportService, MaritimeReportService>();
             services.AddScoped<IMaritimeServiceService, MaritimeServiceService>();
             services.AddScoped<IPortService, PortService>();
             services.AddScoped<IPrincipalService, PrincipalService>();

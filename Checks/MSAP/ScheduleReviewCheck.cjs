@@ -47,7 +47,7 @@ async function scenario(confirmations, results) {
     assert.equal(declined.requests.length, 1, 'Declining the final acknowledgement must not retry approval.');
     const stale = await scenario([true], [{success: false, message: '<Booking changed>'}]);
     assert.equal(stale.window.location.href, '');
-    assert.equal(stale.errors[0], '&lt;Booking changed>');
+    assert.equal(stale.errors[0], '<Booking changed>');
     const manual = await scenario([true, true], [{
         rateAcknowledgement: 'reviewed-state',
         message: 'Unpublished rates'

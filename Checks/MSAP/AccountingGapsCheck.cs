@@ -54,10 +54,10 @@ namespace Checks.MSAP
             var book = BillingBookEntries.Create(bill, new DateTime(2026, 5, 2), "Name", "actor-id");
             Check(book.TransactionDate == new DateOnly(2026, 5, 2) && book.BillingDate == bill.Date && book.NetSales == 1000m
                 && book.VatAmount == 120m && book.DocumentId == 4 && book.BillingRevision == 1, "Approval period, VAT or source linkage is incorrect.");
-            bill.Discount = 112m;
+            bill.Amount = 1008m; bill.Discount = 112m;
             book = BillingBookEntries.Create(bill, new DateTime(2026, 5, 2), "Name", "actor-id");
             Check(book.Amount == 1008m && book.NetSales == 900m, "Sales Book deducted discount twice.");
-            bill.Discount = 0; bill.IsVatable = false; bill.Customer.VatType = MsapConstants.VatType_Exempt;
+            bill.Amount = 1120m; bill.Discount = 0; bill.IsVatable = false; bill.Customer.VatType = MsapConstants.VatType_Exempt;
             Check(BillingBookEntries.Create(bill, DateTime.Now, "Name", "id").VatExemptSales == 1120m, "Exempt sales were classified as zero rated.");
             bill.Principal = new Principal { PrincipalName = "Principal", TIN = "Principal TIN", Address = "Principal address" };
             Check(BillingBookEntries.Create(bill, DateTime.Now, "Name", "id").SoldTo == "Principal", "Principal billing used the customer as billed party.");
