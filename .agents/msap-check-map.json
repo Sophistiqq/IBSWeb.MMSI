@@ -1,0 +1,250 @@
+{
+  "description": "Maps MSAP modules and file paths to deterministic Checks/MSAP commands, Guided Hands playbooks, and proof-verify routes.",
+  "checkProject": "Checks/MSAP/Check.csproj",
+  "modules": {
+    "schedule": {
+      "match": [
+        "VesselSchedule",
+        "Schedule"
+      ],
+      "routes": [
+        "/MSAP/VesselSchedule/Index",
+        "/MSAP/VesselSchedule/Create"
+      ],
+      "checks": [
+        "dotnet run --project Checks/MSAP/Check.csproj -- --schedule-render-only",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --calendar-render-only",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --urgent-entry-only",
+        "node Checks/MSAP/ScheduleFormCheck.cjs",
+        "node Checks/MSAP/ScheduleReviewCheck.cjs"
+      ],
+      "playbooks": [
+        "schedule/create",
+        "schedule/approve",
+        "schedule/revise",
+        "schedule/cancel"
+      ],
+      "presets": [
+        "to-cos",
+        "schedule-revise-flow"
+      ]
+    },
+    "cos": {
+      "match": [
+        "CustomerOrderSlip",
+        "DispatchTicket",
+        "Cos"
+      ],
+      "routes": [
+        "/MSAP/CustomerOrderSlip/Index",
+        "/MSAP/DispatchTicket/Index"
+      ],
+      "checks": [
+        "dotnet run --project Checks/MSAP/Check.csproj -- --ticket-integrity-database",
+        "node Checks/MSAP/JobProgressNavigationCheck.cjs"
+      ],
+      "playbooks": [
+        "cos/record-tickets",
+        "cos/cancel-service"
+      ],
+      "presets": [
+        "to-tickets"
+      ]
+    },
+    "billing": {
+      "match": [
+        "Billing"
+      ],
+      "routes": [
+        "/MSAP/Billing/Index"
+      ],
+      "checks": [
+        "dotnet run --project Checks/MSAP/Check.csproj -- --billing-integrity-database",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --workflow-access-only",
+        "node Checks/MSAP/BillingCommercialCheck.cjs"
+      ],
+      "playbooks": [
+        "billing/create",
+        "billing/endorse",
+        "billing/approve",
+        "billing/reject",
+        "billing/adjust",
+        "billing/reopen"
+      ],
+      "presets": [
+        "to-billing",
+        "to-billing-approved",
+        "billing-reject-flow",
+        "billing-reopen-flow"
+      ]
+    },
+    "collection": {
+      "match": [
+        "Collection"
+      ],
+      "routes": [
+        "/MSAP/Collection/Index"
+      ],
+      "checks": [
+        "dotnet run --project Checks/MSAP/Check.csproj -- --collection-only",
+        "node Checks/MSAP/CollectionAllocationCheck.cjs",
+        "node Checks/MSAP/CollectionBankingCheck.cjs",
+        "node Checks/MSAP/CollectionFormCheck.cjs",
+        "node Checks/MSAP/CollectionSelectCheck.cjs"
+      ],
+      "playbooks": [
+        "collection/create",
+        "collection/deposit",
+        "collection/clear",
+        "collection/return-check",
+        "collection/redeposit"
+      ],
+      "presets": [
+        "full-cleared",
+        "collection-returned-flow"
+      ]
+    },
+    "rates": {
+      "match": [
+        "TariffRate",
+        "RateUpload",
+        "Rate"
+      ],
+      "routes": [
+        "/MSAP/TariffRate/Index",
+        "/MSAP/RateUpload/Index"
+      ],
+      "checks": [
+        "dotnet run --project Checks/MSAP/Check.csproj -- --schedule-rates-only",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --operational-rates-database",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --rate-access-only",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --rate-export-only",
+        "node Checks/MSAP/ScheduleRateFormCheck.cjs"
+      ],
+      "playbooks": [
+        "rates/approve"
+      ],
+      "presets": [
+        "to-cos"
+      ]
+    },
+    "other-tug": {
+      "match": [
+        "OtherTugCharge",
+        "OtherTug"
+      ],
+      "routes": [
+        "/MSAP/OtherTugCharge/Index"
+      ],
+      "checks": [
+        "dotnet run --project Checks/MSAP/Check.csproj -- --other-tugs-only",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --other-tug-progress-database",
+        "node Checks/MSAP/OtherTugChargeFormCheck.cjs"
+      ],
+      "playbooks": [],
+      "presets": []
+    },
+    "master-files": {
+      "match": [
+        "MasterFile",
+        "MsapImport",
+        "CustomerController",
+        "VesselController",
+        "PortController",
+        "TerminalController",
+        "TugboatController",
+        "TugboatOwner",
+        "TugMaster",
+        "Principal",
+        "Representative",
+        "PaymentTerms",
+        "MaritimeService",
+        "BankAccount"
+      ],
+      "routes": [
+        "/MSAP/MasterFile/Index"
+      ],
+      "checks": [
+        "dotnet run --project Checks/MSAP/Check.csproj -- --master-render-only",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --master-import-only",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --master-access-database",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --customer-code-only",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --tugboat-owner-database"
+      ],
+      "playbooks": [],
+      "presets": []
+    },
+    "reports-accounting": {
+      "match": [
+        "MaritimeReport",
+        "PostedPeriod",
+        "PeriodFinalization",
+        "ArMonitoring",
+        "SalesReport"
+      ],
+      "routes": [
+        "/MSAP/MaritimeReport/Index",
+        "/MSAP/PostedPeriod/Index"
+      ],
+      "checks": [
+        "dotnet run --project Checks/MSAP/Check.csproj -- --ar-monitoring-only",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --sales-report-database",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --accounting-gaps-only"
+      ],
+      "playbooks": [],
+      "presets": []
+    },
+    "audit-access": {
+      "match": [
+        "AuditTrail",
+        "UserAccess",
+        "AppRole",
+        "AccessControl"
+      ],
+      "routes": [
+        "/MSAP/AuditTrail/Index",
+        "/MSAP/UserAccess/Index"
+      ],
+      "checks": [
+        "dotnet run --project Checks/MSAP/Check.csproj -- --workflow-access-only",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --workflow-gaps-only",
+        "node Checks/MSAP/AuditTraceCheck.cjs"
+      ],
+      "playbooks": [
+        "admin/grant-user-access"
+      ],
+      "presets": []
+    },
+    "tugboat-workspace": {
+      "match": [
+        "TugboatWorkspace",
+        "TugboatPayment",
+        "MsapCommissionPayment"
+      ],
+      "routes": [],
+      "checks": [
+        "dotnet run --project Checks/MSAP/Check.csproj -- --workspace-only",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --workspace-database",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --tugboat-payment-database",
+        "dotnet run --project Checks/MSAP/Check.csproj -- --msap-commission-payment-database"
+      ],
+      "playbooks": [],
+      "presets": []
+    },
+    "ui-shared": {
+      "match": [
+        "wwwroot/msap/",
+        "Areas/MSAP/Views/Shared/"
+      ],
+      "routes": [
+        "/MSAP/Home/Index"
+      ],
+      "checks": [
+        "node Checks/MSAP/TableRenderingCheck.cjs",
+        "node .agents/skills/proof-verify/scripts/proof-verify.mjs --skip-ai"
+      ],
+      "playbooks": [],
+      "presets": []
+    }
+  }
+}

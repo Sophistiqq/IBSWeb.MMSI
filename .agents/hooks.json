@@ -1,0 +1,25 @@
+{
+  "msap-ui-guard": {
+    "PreToolUse": [
+      {
+        "matcher": "edit_file|write_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/msap-ui-guard.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "msap-stop-gate": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "node ./hooks/msap-stop-gate.mjs",
+        "timeout": 15
+      }
+    ]
+  }
+}

@@ -305,3 +305,11 @@ Before completing any task touching MSAP views:
 - [ ] Cards, headers, inputs, and buttons use MSAP classes (`.modern-card`, `.modern-btn-primary`, etc.).
 - [ ] Material icons use `<span class="material-symbols-outlined">...</span>`.
 - [ ] Dark and light theme compatibility is preserved by avoiding hardcoded hex colors where theme variables apply.
+
+---
+
+## 8. MSAP Editor Workflow, Hooks & Check Map
+
+* **Implementation Skill:** Use `.agents/skills/msap-editor/SKILL.md` for structured MSAP edits (context → brief → minimal edit → targeted checks + `proof-verify`), either directly or via a fresh-context implementer subagent.
+* **Check & Playbook Routing Map:** Consult `.agents/msap-check-map.json` to map modified MSAP modules (`Billing`, `Collection`, `VesselSchedule`, `CustomerOrderSlip`, `TariffRate`, `MasterFile`, `MaritimeReport`, `AuditTrail`, `TugboatWorkspace`, etc.) to their exact `Checks/MSAP` commands, `proof-verify` routes, and `guided-hands.mjs` playbooks.
+* **Deterministic Lifecycle Hooks:** `.agents/hooks.json` automatically guards MSAP UI edits (`IBSWeb/Areas/MSAP/**` and `IBSWeb/wwwroot/msap/**`) against prohibited native/raw widget calls (`PreToolUse`) and reminds agents to run `proof-verify` Stage 1 before finishing unverified MSAP code changes (`Stop`). Edits outside MSAP are not blocked.
