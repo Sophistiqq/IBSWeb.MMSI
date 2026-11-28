@@ -26,6 +26,7 @@
     var addedTugboatIds = ViewBag.AddedTugboatIds as HashSet<int> ?? new HashSet<int>();
     var addedEntryIds = ViewBag.AddedServiceEntryIds as HashSet<int> ?? new HashSet<int>();
     var hasRevisionChanges = pending && reapproval && revisionChanges.Count > 0;
+    var backUrl = ViewBag.ReturnUrl as string ?? Url.Action("Index", new { status = pending ? MsapConstants.VesselScheduleStatus.Tentative : null, date = Model.PlannedStart.ToString("yyyy-MM-dd") });
 }
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/workflow-ui.css" asp-append-version="true" />
@@ -59,7 +60,7 @@
                 {
                     <a asp-action="Revisions" asp-route-id="@Model.VesselScheduleId" class="modern-btn-secondary ui-page-action">Revision history</a>
                 }
-                <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
+                <a href="@backUrl" class="modern-btn-secondary ui-page-action" data-ui-back>Back</a>
             </div>
             <p class="ui-body ui-muted ui-page-description">@(canViewRates ? (pending ? "Review the booking, service rates and commercial terms before approval." : "Booking details, service requirements and commercial terms.") : "Booking details, assigned tugboats and expected services.")</p>
             <div class="schedule-status-banner ui-page-description">
@@ -325,7 +326,7 @@
                         {
                             <div class="schedule-action-item ui-stack">
                                 <h3 class="ui-label">Adjust the booking</h3><p class="ui-body ui-muted">Editing the schedule returns it to Tentative for review and reapproval while preserving the COS. Bookings with actual tickets or billing cannot be revised.</p>
-                                <a asp-action="Edit" asp-route-id="@Model.VesselScheduleId" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">edit_calendar</span> Revise Schedule</a>
+                                <a asp-action="Edit" asp-route-id="@Model.VesselScheduleId" asp-route-returnUrl="@(ViewBag.ReturnUrl as string)" class="modern-btn-secondary"><span class="material-symbols-outlined" aria-hidden="true">edit_calendar</span> Revise Schedule</a>
                             </div>
                         }
                         <div class="schedule-action-item schedule-action-cancel">
@@ -360,7 +361,7 @@
                 <input type="hidden" name="allowConflicts" value="false" />
                 <span class="ui-caption ui-muted">@(Model.Revision > 1 ? $"Approval applies to Revision {Model.Revision} of this booking." : "Approval applies to this booking.")</span>
                 <div class="schedule-action-buttons">
-                    <a asp-action="Index" asp-route-status="@(pending ? MsapConstants.VesselScheduleStatus.Tentative : null)" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary" data-ui-back>Back</a>
+                    <a href="@backUrl" class="modern-btn-secondary" data-ui-back>Back</a>
                     <button type="submit" class="modern-btn-primary"><span class="material-symbols-outlined" aria-hidden="true">check_circle</span> @(reapproval ? "Reapprove schedule" : "Approve schedule")</button>
                 </div>
             </form>

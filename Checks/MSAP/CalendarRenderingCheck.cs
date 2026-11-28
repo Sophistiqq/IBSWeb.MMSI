@@ -76,6 +76,9 @@ namespace Checks.MSAP
                 string thisMonth = Regex.Match(html, "<a[^>]+href=\"([^\"]+)\"[^>]*>This month</a>").Groups[1].Value;
                 Check(!thisMonth.Contains("month=", StringComparison.Ordinal) && !thisMonth.Contains("date=", StringComparison.Ordinal), "Month navigation mutated shared filter values.");
                 Check(html.Contains("id=\"dayAgenda\"", StringComparison.Ordinal) == showPanel, "Day panel does not follow the selected date.");
+                Check(html.Contains("id=\"scheduleCalendarModal\"", StringComparison.Ordinal), "Full-screen calendar range modal is missing.");
+                Check(html.Contains("VS-1", StringComparison.Ordinal), "Canonical Vessel Schedule reference VS-1 is missing.");
+                Check(html.Contains("data-triage-filter=\"overlaps\"", StringComparison.Ordinal), "Operational triage filter bar is missing.");
                 if (previewDirectory != null)
                 {
                     Directory.CreateDirectory(previewDirectory);

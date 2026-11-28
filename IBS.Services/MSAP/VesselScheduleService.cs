@@ -40,7 +40,12 @@ namespace IBS.Services.MSAP
             {
                 terminalId = null;
             }
-            var viewMode = string.Equals(filters.ViewMode, "list", StringComparison.OrdinalIgnoreCase) ? "list" : "calendar";
+            var viewMode = filters.ViewMode?.ToLowerInvariant() switch
+            {
+                "list" => "list",
+                "tugboats" => "tugboats",
+                _ => "calendar"
+            };
             var board = new VesselScheduleBoardViewModel
             {
                 Date = filters.Date,
@@ -51,6 +56,7 @@ namespace IBS.Services.MSAP
                 Search = search?.Trim(),
                 Status = status,
                 ViewMode = viewMode,
+                Triage = filters.Triage?.Trim().ToLowerInvariant(),
                 Schedules = schedules,
                 Tugboats = (await unitOfWork.Tugboat.GetAllAsync(null, ct)).OrderBy(t => t.TugboatName).ToList(),
                 Ports = ports.Select(p => new SelectListItem(p.PortName, p.PortId.ToString())).ToList(),
@@ -72,6 +78,10 @@ namespace IBS.Services.MSAP
                     .Include(s => s.Vessel)
                     .Include(s => s.Port)
                     .Include(s => s.Terminal)
+                    .Include(s => s.ServiceEntries)
+                        .ThenInclude(e => e.Tugboat)
+                    .Include(s => s.ServiceEntries)
+                        .ThenInclude(e => e.Service)
                     .AsQueryable();
 
                 if (portId.HasValue)
@@ -107,7 +117,310 @@ namespace IBS.Services.MSAP
                 }
             }
 
+            await PopulateOperationalMetadataAsync(board, ct);
+            board.InitialDaySummaries = BuildDaySummaries(board.Schedules, board.ConflictsByDay, queryStart, queryEnd);
+
             return ServiceResult<VesselScheduleBoardViewModel>.Success(board);
+        }
+
+        public async Task<Dictionary<string, CalendarDaySummaryItem>> GetCalendarSummaryAsync(
+            DateTime from,
+            DateTime to,
+            int? portId = null,
+            int? terminalId = null,
+            string? status = null,
+            string? search = null,
+            CancellationToken ct = default)
+        {
+            var rangeStart = from.Date;
+            var rangeEnd = to.Date > rangeStart.AddDays(370) ? rangeStart.AddDays(370) : to.Date;
+            if (rangeEnd <= rangeStart)
+            {
+                rangeEnd = rangeStart.AddDays(1);
+            }
+
+            var trimmedSearch = search?.Trim();
+            var schedules = (await GetSchedulesAsync(rangeStart, rangeEnd, ct)).ToList();
+            var tugboats = (await unitOfWork.Tugboat.GetAllAsync(null, ct)).ToList();
+            var matchingTugIds = string.IsNullOrEmpty(trimmedSearch)
+                ? new HashSet<int>()
+                : tugboats.Where(t => t.TugboatName.Contains(trimmedSearch, StringComparison.OrdinalIgnoreCase)
+                    || t.TugboatNumber.Contains(trimmedSearch, StringComparison.OrdinalIgnoreCase))
+                    .Select(t => t.TugboatId)
+                    .ToHashSet();
+
+            var filtered = schedules
+                .Where(s => MatchesBoardFilters(s, portId, terminalId, status, trimmedSearch, matchingTugIds))
+                .ToList();
+
+            var tempBoard = new VesselScheduleBoardViewModel
+            {
+                Schedules = filtered,
+                Tugboats = tugboats
+            };
+            await MarkConflictsAsync(tempBoard, rangeStart, rangeEnd, ct);
+
+            return BuildDaySummaries(filtered, tempBoard.ConflictsByDay, rangeStart, rangeEnd);
+        }
+
+        private static Dictionary<string, CalendarDaySummaryItem> BuildDaySummaries(
+            IReadOnlyCollection<VesselSchedule> schedules,
+            IReadOnlyDictionary<DateTime, HashSet<int>> conflictsByDay,
+            DateTime from,
+            DateTime to)
+        {
+            var result = new Dictionary<string, CalendarDaySummaryItem>(StringComparer.Ordinal);
+            for (var day = from.Date; day < to.Date; day = day.AddDays(1))
+            {
+                var dayEntries = schedules.Where(s => s.PlannedStart < day.AddDays(1) && s.PlannedEnd > day).ToList();
+                var dayConflicts = conflictsByDay.GetValueOrDefault(day);
+                var overlapCount = dayConflicts == null
+                    ? 0
+                    : dayEntries.Count(s => dayConflicts.Contains(s.VesselScheduleId));
+
+                if (dayEntries.Count == 0 && overlapCount == 0)
+                {
+                    continue;
+                }
+
+                var shortTugs = dayEntries.Count(s =>
+                {
+                    if (s.Status == MsapConstants.VesselScheduleStatus.Cancelled)
+                    {
+                        return false;
+                    }
+                    var tugs = ParseTugboatIds(s.AssignedTugboatIds);
+                    return tugs.Count < s.RequiredTugCount;
+                });
+
+                var key = day.ToString("yyyy-MM-dd");
+                result[key] = new CalendarDaySummaryItem
+                {
+                    Date = key,
+                    Total = dayEntries.Count,
+                    Tentative = dayEntries.Count(s => s.Status == MsapConstants.VesselScheduleStatus.Tentative),
+                    Confirmed = dayEntries.Count(s => s.Status is MsapConstants.VesselScheduleStatus.Confirmed or MsapConstants.VesselScheduleStatus.InProgress),
+                    Completed = dayEntries.Count(s => s.Status == MsapConstants.VesselScheduleStatus.Completed),
+                    Overlaps = overlapCount,
+                    ShortTugs = shortTugs
+                };
+            }
+
+            return result;
+        }
+
+        private async Task PopulateOperationalMetadataAsync(VesselScheduleBoardViewModel board, CancellationToken ct)
+        {
+            var targetSchedules = board.Schedules
+                .Concat(board.AllMatchingSchedules)
+                .DistinctBy(s => s.VesselScheduleId)
+                .ToList();
+            if (targetSchedules.Count == 0)
+            {
+                return;
+            }
+
+            var now = DateTimeHelper.GetCurrentPhilippineTime();
+            var cosIds = targetSchedules
+                .Where(s => s.CustomerOrderSlipId.HasValue)
+                .Select(s => s.CustomerOrderSlipId!.Value)
+                .Distinct()
+                .ToList();
+            var entryIds = targetSchedules
+                .SelectMany(s => s.ServiceEntries ?? [])
+                .Select(e => e.VesselScheduleServiceEntryId)
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+
+            var ticketList = (cosIds.Count > 0 || entryIds.Count > 0)
+                ? await unitOfWork.DispatchTicket.GetAllQuery()
+                    .AsNoTracking()
+                    .Where(t => t.Status != MsapConstants.DispatchTicketStatus.Deleted
+                        && ((t.CustomerOrderSlipId.HasValue && cosIds.Contains(t.CustomerOrderSlipId.Value))
+                            || (t.VesselScheduleServiceEntryId.HasValue && entryIds.Contains(t.VesselScheduleServiceEntryId.Value))))
+                    .Select(t => new
+                    {
+                        t.DispatchTicketId,
+                        t.CustomerOrderSlipId,
+                        t.VesselScheduleServiceEntryId,
+                        t.DispatchNumber,
+                        t.TugBoatId,
+                        t.ServiceId,
+                        t.Status,
+                        t.DateLeft,
+                        t.TimeLeft,
+                        t.DateArrived,
+                        t.TimeArrived
+                    })
+                    .ToListAsync(ct)
+                : [];
+
+            var rateCandidates = targetSchedules
+                .Where(s => s.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+                    && s.CustomerId is > 0)
+                .ToList();
+            var custIds = rateCandidates.Select(s => s.CustomerId!.Value).Distinct().ToList();
+            var termIds = rateCandidates.Select(s => s.TerminalId).Distinct().ToList();
+            var svcIds = rateCandidates
+                .SelectMany(s => s.ServiceEntries ?? [])
+                .Where(e => !e.CancelledAt.HasValue && e.ManualTariffRate is not > 0)
+                .Select(e => e.ServiceId)
+                .Distinct()
+                .ToList();
+
+            var tariffRows = (custIds.Count > 0 && termIds.Count > 0 && svcIds.Count > 0)
+                ? await unitOfWork.TariffTable.GetAllQuery()
+                    .AsNoTracking()
+                    .Where(t => custIds.Contains(t.CustomerId)
+                        && termIds.Contains(t.TerminalId)
+                        && svcIds.Contains(t.ServiceId)
+                        && t.PortId == t.Terminal.PortId
+                        && t.ApprovedAt != null
+                        && t.Dispatch > 0)
+                    .Select(t => new { t.CustomerId, t.TerminalId, t.ServiceId, t.AsOfDate })
+                    .ToListAsync(ct)
+                : [];
+
+            foreach (var schedule in targetSchedules)
+            {
+                var assignedTugs = ParseTugboatIds(schedule.AssignedTugboatIds);
+                var activeEntries = (schedule.ServiceEntries ?? []).Where(e => !e.CancelledAt.HasValue).ToList();
+                var activeEntryIdSet = activeEntries.Select(e => e.VesselScheduleServiceEntryId).ToHashSet();
+
+                var matchingTickets = ticketList
+                    .Where(t => (schedule.CustomerOrderSlipId.HasValue && t.CustomerOrderSlipId == schedule.CustomerOrderSlipId.Value)
+                        || (t.VesselScheduleServiceEntryId.HasValue && activeEntryIdSet.Contains(t.VesselScheduleServiceEntryId.Value)))
+                    .ToList();
+
+                var ticketBriefs = matchingTickets.Select(t => new ScheduleTicketBrief
+                {
+                    EntryId = t.VesselScheduleServiceEntryId,
+                    TugboatId = t.TugBoatId,
+                    ServiceId = t.ServiceId,
+                    DispatchNumber = t.DispatchNumber,
+                    Status = t.Status,
+                    IsComplete = t.DateLeft.HasValue && t.TimeLeft.HasValue && t.DateArrived.HasValue && t.TimeArrived.HasValue
+                        && t.DateArrived.Value.ToDateTime(t.TimeArrived.Value) > t.DateLeft.Value.ToDateTime(t.TimeLeft.Value)
+                }).ToList();
+
+                var hasMissingRates = false;
+                if (schedule.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+                    && schedule.CustomerId is > 0 && activeEntries.Count > 0)
+                {
+                    var plannedDate = DateOnly.FromDateTime(schedule.PlannedStart);
+                    foreach (var entry in activeEntries)
+                    {
+                        if (entry.ManualTariffRate is > 0)
+                        {
+                            continue;
+                        }
+                        var hasTableRate = tariffRows.Any(r => r.CustomerId == schedule.CustomerId.Value
+                            && r.TerminalId == schedule.TerminalId
+                            && r.ServiceId == entry.ServiceId
+                            && r.AsOfDate <= plannedDate);
+                        if (!hasTableRate)
+                        {
+                            hasMissingRates = true;
+                            break;
+                        }
+                    }
+                }
+
+                var hasOverlap = board.ConflictReasonsBySchedule.TryGetValue(schedule.VesselScheduleId, out var reasons) && reasons.Count > 0;
+                var isPendingReview = schedule.Status == MsapConstants.VesselScheduleStatus.Tentative
+                    || !schedule.CustomerOrderSlipId.HasValue
+                    || schedule.ApprovedRevision != schedule.Revision;
+                var isReapproval = isPendingReview && schedule.ApprovedRevision.HasValue;
+                var needsTugs = schedule.Status != MsapConstants.VesselScheduleStatus.Cancelled
+                    && assignedTugs.Count < schedule.RequiredTugCount;
+                var loggedCount = ticketBriefs.Count(t => t.IsComplete);
+                var expectedCount = activeEntries.Count;
+                var hasMissingTickets = schedule.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+                    && schedule.CustomerOrderSlipId.HasValue
+                    && schedule.ApprovedRevision == schedule.Revision
+                    && schedule.PlannedStart <= now
+                    && expectedCount > 0
+                    && loggedCount < expectedCount;
+
+                string stageKey;
+                string stageLabel;
+                string stageBadgeClass;
+
+                if (schedule.Status == MsapConstants.VesselScheduleStatus.Cancelled)
+                {
+                    stageKey = "cancelled";
+                    stageLabel = "Cancelled";
+                    stageBadgeClass = "status-closed";
+                }
+                else if (schedule.Status == MsapConstants.VesselScheduleStatus.Completed)
+                {
+                    stageKey = "completed";
+                    stageLabel = MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status);
+                    stageBadgeClass = "status-open";
+                }
+                else if (needsTugs)
+                {
+                    stageKey = "needs-tugs";
+                    stageLabel = "Needs Tugs";
+                    stageBadgeClass = "status-approval";
+                }
+                else if (isPendingReview)
+                {
+                    stageKey = hasMissingRates ? "rate-missing" : (isReapproval ? "pending-reapproval" : "pending-review");
+                    stageLabel = hasMissingRates ? "Rate Missing" : (isReapproval ? "Pending Reapproval" : "Pending Review");
+                    stageBadgeClass = hasMissingRates ? "status-error" : "status-tariff";
+                }
+                else if (hasMissingTickets)
+                {
+                    stageKey = "missing-tickets";
+                    stageLabel = $"Missing Tickets ({loggedCount}/{expectedCount})";
+                    stageBadgeClass = "status-approval";
+                }
+                else if (schedule.Status == MsapConstants.VesselScheduleStatus.InProgress)
+                {
+                    stageKey = "scheduled";
+                    stageLabel = "In Progress";
+                    stageBadgeClass = "status-confirmed";
+                }
+                else
+                {
+                    stageKey = "scheduled";
+                    stageLabel = "Scheduled";
+                    stageBadgeClass = "status-confirmed";
+                }
+
+                board.OpsMetaBySchedule[schedule.VesselScheduleId] = new VesselScheduleOpsMeta
+                {
+                    StageKey = stageKey,
+                    StageLabel = stageLabel,
+                    StageBadgeClass = stageBadgeClass,
+                    AssignedTugCount = assignedTugs.Count,
+                    RequiredTugCount = schedule.RequiredTugCount,
+                    ActiveServiceCount = expectedCount,
+                    LoggedTicketCount = loggedCount,
+                    HasMissingTickets = hasMissingTickets,
+                    HasMissingRates = hasMissingRates,
+                    HasOverlap = hasOverlap,
+                    TicketSummaries = ticketBriefs
+                };
+            }
+        }
+
+        private static List<int> ParseTugboatIds(string? assignedTugboatIds)
+        {
+            if (string.IsNullOrWhiteSpace(assignedTugboatIds))
+            {
+                return [];
+            }
+            try
+            {
+                return (JsonSerializer.Deserialize<List<int>>(assignedTugboatIds) ?? []).Distinct().ToList();
+            }
+            catch (JsonException)
+            {
+                return [];
+            }
         }
 
         private static bool MatchesBoardFilters(
@@ -165,6 +478,23 @@ namespace IBS.Services.MSAP
                 var conflicts = await CheckConflictsAsync(schedule, ct, board.Schedules, names);
                 foreach (var conflict in conflicts)
                 {
+                    if (!board.ConflictReasonsBySchedule.TryGetValue(schedule.VesselScheduleId, out var reasons))
+                    {
+                        board.ConflictReasonsBySchedule[schedule.VesselScheduleId] = reasons = [];
+                    }
+
+                    var shortReason = conflict.Type switch
+                    {
+                        "Tugboat" => $"Tug clash · VS-{conflict.ConflictingScheduleId} ({conflict.ConflictingVessel})",
+                        "Terminal" => $"Terminal clash · VS-{conflict.ConflictingScheduleId} ({conflict.ConflictingVessel})",
+                        "Vessel" => $"Vessel duplicate · VS-{conflict.ConflictingScheduleId}",
+                        _ => conflict.Message
+                    };
+                    if (!reasons.Contains(shortReason, StringComparer.Ordinal))
+                    {
+                        reasons.Add(shortReason);
+                    }
+
                     var start = new[] { schedule.PlannedStart, conflict.ConflictStart, from }.Max();
                     var end = new[] { schedule.PlannedEnd, conflict.ConflictEnd, to }.Min();
                     for (var day = start.Date; day < end; day = day.AddDays(1))

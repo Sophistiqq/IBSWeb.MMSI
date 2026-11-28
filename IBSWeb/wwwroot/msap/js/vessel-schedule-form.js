@@ -209,10 +209,12 @@
             if (servicesContainer) {
                 [...servicesContainer.querySelectorAll('.schedule-tug-card')].forEach(updateTugOverlap);
             }
+            renderTugAvailabilityPanel();
             return;
         }
         bookingState = 'loading';
         servicesContainer.querySelectorAll('.schedule-tug-card').forEach(updateTugOverlap);
+        renderTugAvailabilityPanel();
         const request = bookingRequest = new AbortController();
         const query = new URLSearchParams({
             start: start.value,
@@ -234,12 +236,126 @@
             if (servicesContainer) {
                 [...servicesContainer.querySelectorAll('.schedule-tug-card')].forEach(updateTugOverlap);
             }
+            renderTugAvailabilityPanel();
         } catch (error) {
             if (error.name === 'AbortError') return;
             bookingState = 'unchecked';
             servicesContainer.querySelectorAll('.schedule-tug-card').forEach(updateTugOverlap);
+            renderTugAvailabilityPanel();
         }
     }
+
+    const tugMetaEl = document.getElementById('formTugboatMeta');
+    const tugAvailList = document.getElementById('formTugAvailabilityList');
+    const tugAvailStatus = document.getElementById('formTugAvailabilityStatus');
+    let allTugMeta = [];
+    try {
+        allTugMeta = tugMetaEl ? JSON.parse(tugMetaEl.textContent || '[]') : [];
+    } catch {}
+
+    function getAssignedTugIdSet() {
+        if (!servicesContainer) return new Set();
+        return new Set([...servicesContainer.querySelectorAll('.js-tug-select')].map(s => String(s.value || '')).filter(Boolean));
+    }
+
+    function renderTugAvailabilityPanel() {
+        if (!tugAvailList || !tugAvailStatus) return;
+        if (bookingState === 'loading') {
+            tugAvailStatus.textContent = 'Checking window…';
+            return;
+        }
+        if (bookingState !== 'ready') {
+            tugAvailStatus.textContent = 'Set valid start/end';
+            tugAvailList.replaceChildren();
+            const p = document.createElement('p');
+            p.className = 'ui-caption ui-muted';
+            p.textContent = 'Enter planned start and end to check tugboats.';
+            tugAvailList.appendChild(p);
+            return;
+        }
+
+        const assigned = getAssignedTugIdSet();
+        const freeTugs = allTugMeta.filter(t => !cachedBookings.has(String(t.id)));
+        const busyTugs = allTugMeta.filter(t => cachedBookings.has(String(t.id)));
+        tugAvailStatus.textContent = `${freeTugs.length} free · ${busyTugs.length} busy`;
+
+        tugAvailList.replaceChildren();
+        const ordered = [
+            ...freeTugs.filter(t => t.isCompanyOwned),
+            ...freeTugs.filter(t => !t.isCompanyOwned),
+            ...busyTugs
+        ];
+
+        ordered.slice(0, 14).forEach(tug => {
+            const idStr = String(tug.id);
+            const bookings = cachedBookings.get(idStr) || [];
+            const isAssigned = assigned.has(idStr);
+            const row = document.createElement('div');
+            row.className = 'schedule-form-tug-item';
+
+            const info = document.createElement('div');
+            info.className = 'schedule-form-tug-info';
+            const title = document.createElement('strong');
+            title.textContent = tug.name;
+            const sub = document.createElement('span');
+            sub.className = 'ui-caption ' + (bookings.length > 0 ? 'schedule-tug-overlap-warning' : 'ui-muted');
+            sub.textContent = bookings.length > 0
+                ? `Busy: ${bookings[0].vessel}`
+                : (tug.isCompanyOwned ? 'Company · Free' : 'Subcon · Free');
+            info.append(title, sub);
+            row.appendChild(info);
+
+            if (bookings.length === 0 && !isAssigned) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'schedule-form-assign-btn';
+                btn.dataset.assignTugId = idStr;
+                btn.textContent = '+ Assign';
+                row.appendChild(btn);
+            } else if (isAssigned) {
+                const tag = document.createElement('span');
+                tag.className = 'schedule-pill-badge';
+                tag.textContent = 'Assigned';
+                row.appendChild(tag);
+            }
+            tugAvailList.appendChild(row);
+        });
+    }
+
+    if (tugAvailList) {
+        tugAvailList.addEventListener('click', event => {
+            const btn = event.target.closest('[data-assign-tug-id]');
+            if (!btn || !servicesContainer) return;
+            const tugId = btn.dataset.assignTugId;
+            if (!tugId) return;
+
+            let targetCard = [...servicesContainer.querySelectorAll('.schedule-tug-card')]
+                .find(card => !card.querySelector('.js-tug-select')?.value);
+            if (!targetCard && addTugboatBtn) {
+                addTugboatBtn.click();
+                targetCard = servicesContainer.querySelector('.schedule-tug-card:last-child');
+            }
+            const select = targetCard?.querySelector('.js-tug-select');
+            if (select) {
+                $(select).val(tugId).trigger('change');
+            }
+        });
+    }
+
+    document.querySelectorAll('[data-duration-hours]').forEach(pill => {
+        pill.addEventListener('click', () => {
+            if (!start?.value || !end) return;
+            const hours = Number(pill.dataset.durationHours);
+            const dt = new Date(start.value);
+            if (isNaN(dt.getTime()) || !hours) return;
+            dt.setHours(dt.getHours() + hours);
+            const pad = n => String(n).padStart(2, '0');
+            end.value = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+            validateTime();
+            updateSummary();
+            refreshTugBookings();
+        });
+    });
 
     function removeAssignment(element) {
         $(element).find('.js-modern-select').each(function () {
@@ -319,6 +435,7 @@
                 updateTugBadge(card, newTugId, selectedOption);
                 updateTugOverlap(card);
                 updateSummary();
+                renderTugAvailabilityPanel();
                 return;
             }
 
@@ -347,6 +464,7 @@
                 e.preventDefault();
                 const card = removeTugBtn.closest('.schedule-tug-card');
                 removeAssignment(card);
+                renderTugAvailabilityPanel();
                 return;
             }
 
@@ -355,6 +473,7 @@
                 e.preventDefault();
                 const row = removeSrvBtn.closest('[data-service-row]');
                 removeAssignment(row);
+                renderTugAvailabilityPanel();
                 return;
             }
         });
@@ -414,4 +533,11 @@
     // Initialize summary metrics and bookings check
     loadCustomerDiscount();
     refreshTugBookings();
+
+    if (form.dataset.isNew === 'true'
+        && new URLSearchParams(window.location.search).get('prefill') === '1'
+        && servicesContainer && !servicesContainer.querySelector('.schedule-tug-card')
+        && addTugboatBtn) {
+        addTugboatBtn.click();
+    }
 })();

@@ -1,0 +1,104 @@
+@model VesselScheduleBoardViewModel
+@{
+    var today = DateTimeHelper.GetCurrentPhilippineTime().Date;
+    var rangeStart = (Model.SelectedDate ?? today).Date;
+    var rangeEnd = (Model.SelectedEndDate ?? rangeStart).Date;
+}
+<dialog id="scheduleCalendarModal"
+        class="schedule-cal-modal"
+        closedby="any"
+        aria-labelledby="calendarModalTitle"
+        data-summary-url="@Url.Action("GetCalendarSummary")"
+        data-today="@today.ToString("yyyy-MM-dd")"
+        data-initial-start="@rangeStart.ToString("yyyy-MM-dd")"
+        data-initial-end="@rangeEnd.ToString("yyyy-MM-dd")">
+    <div class="schedule-cal-modal-shell">
+        <header class="schedule-cal-modal-header">
+            <div class="schedule-cal-modal-top-bar">
+                <div class="schedule-cal-nav-group">
+                    <button type="button" class="schedule-cal-step" id="modalPrevBtn" aria-label="Previous period">
+                        <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+                    </button>
+                    <div class="schedule-month-picker-wrap">
+                        <button type="button" class="schedule-month-btn" id="modalMonthJumpBtn" aria-label="Jump to month and year">
+                            <span id="modalPeriodLabel">@Model.Date.ToString("MMMM yyyy")</span>
+                            <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+                        </button>
+                        <input type="month" id="calendarModalMonthJump" class="schedule-month-native" aria-label="Jump to month" min="1900-01" max="9998-12" value="@Model.Date.ToString("yyyy-MM")" />
+                    </div>
+                    <button type="button" class="schedule-cal-step" id="modalNextBtn" aria-label="Next period">
+                        <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+                    </button>
+                </div>
+
+                <h1 id="calendarModalTitle" class="visually-hidden">Select date or range</h1>
+
+                <div class="schedule-cal-top-right">
+                    <div class="schedule-mode-pills" role="group" aria-label="Calendar view mode">
+                        <button type="button" class="schedule-mode-pill active" data-modal-grid-mode="1d" aria-pressed="true">1 Day</button>
+                        <button type="button" class="schedule-mode-pill" data-modal-grid-mode="1m" aria-pressed="false">1M</button>
+                        <button type="button" class="schedule-mode-pill" data-modal-grid-mode="3m" aria-pressed="false">3M</button>
+                        <button type="button" class="schedule-mode-pill" data-modal-grid-mode="6m" aria-pressed="false">6M</button>
+                        <button type="button" class="schedule-mode-pill" data-modal-grid-mode="1y" aria-pressed="false">1Y</button>
+                    </div>
+                    <button type="button" class="schedule-cal-modal-close" id="closeCalendarModalBtn" aria-label="Close calendar">
+                        <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="schedule-cal-presets" role="group" aria-label="Quick date presets">
+                <button type="button" class="schedule-preset-pill" data-modal-preset="today">Today</button>
+                <button type="button" class="schedule-preset-pill" data-modal-preset="tomorrow">Tomorrow</button>
+                <button type="button" class="schedule-preset-pill" data-modal-preset="next7">Next 7d</button>
+                <button type="button" class="schedule-preset-pill" data-modal-preset="next15">Next 15d</button>
+                <button type="button" class="schedule-preset-pill" data-modal-preset="week">This week</button>
+                <button type="button" class="schedule-preset-pill" data-modal-preset="month">This month</button>
+                <button type="button" class="schedule-preset-pill" data-modal-preset="next30">Next 30d</button>
+            </div>
+
+            <div class="schedule-cal-range-bar" id="modalRangeBar" hidden>
+                <button type="button" class="schedule-range-field is-start active" id="modalStartField" aria-pressed="true">
+                    <span class="schedule-range-field-label">Start</span>
+                    <strong id="modalStartFieldValue">—</strong>
+                </button>
+                <span class="schedule-range-sep" aria-hidden="true">–</span>
+                <button type="button" class="schedule-range-field is-end" id="modalEndField" aria-pressed="false">
+                    <span class="schedule-range-field-label">End</span>
+                    <strong id="modalEndFieldValue">Pick end</strong>
+                </button>
+            </div>
+        </header>
+
+        <div class="schedule-cal-scroll-area">
+            <div class="schedule-modal-sticky-weekdays" id="modalStickyWeekdays" aria-hidden="true">
+                <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+            </div>
+            <div class="schedule-cal-loading-wrap" id="modalLoadingBadge" hidden>
+                <span class="schedule-cal-loading">Loading…</span>
+            </div>
+            <div class="schedule-cal-modal-body" id="calendarModalMonths" aria-live="polite"></div>
+        </div>
+
+        <footer class="schedule-cal-modal-footer">
+            <div class="schedule-cal-footer-left">
+                <div class="schedule-cal-selection-summary">
+                    <strong id="calendarModalSelectionText"></strong>
+                    <span class="schedule-muted" id="calendarModalSelectionMeta"></span>
+                </div>
+                <div class="schedule-cal-legend" aria-label="Calendar color legend">
+                    <span class="schedule-legend-item"><i class="schedule-legend-swatch is-start"></i>Start</span>
+                    <span class="schedule-legend-item"><i class="schedule-legend-swatch is-end"></i>End</span>
+                    <span class="schedule-legend-item"><i class="schedule-legend-swatch is-in-range"></i>Range</span>
+                    <span class="schedule-legend-item"><i class="schedule-legend-swatch is-today"></i>Today</span>
+                    <span class="schedule-legend-item"><i class="schedule-legend-swatch is-scheduled"></i>Scheduled</span>
+                    <span class="schedule-legend-item"><i class="schedule-legend-swatch is-overlap"></i>Overlap</span>
+                </div>
+            </div>
+            <div class="schedule-cal-modal-actions">
+                <button type="button" class="modern-btn-secondary" id="cancelCalendarModalBtn">Cancel</button>
+                <button type="button" class="modern-btn-primary" id="applyCalendarRangeBtn">Apply</button>
+            </div>
+        </footer>
+    </div>
+</dialog>

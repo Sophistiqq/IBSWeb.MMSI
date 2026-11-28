@@ -1,10 +1,12 @@
 @using System.Text.Json
 @model VesselScheduleBoardViewModel
 @{
-    var rangeStart = (Model.SelectedDate ?? DateTimeHelper.GetCurrentPhilippineTime().Date).Date;
+    var today = DateTimeHelper.GetCurrentPhilippineTime().Date;
+    var rangeStart = (Model.SelectedDate ?? today).Date;
     var rangeEnd = (Model.SelectedEndDate ?? rangeStart).Date;
     var isRange = rangeEnd > rangeStart;
     var rangeDays = (rangeEnd - rangeStart).Days + 1;
+    var isTugView = string.Equals(Model.ViewMode, "tugboats", StringComparison.OrdinalIgnoreCase);
 
     var schedules = Model.Schedules
         .Where(s => s.PlannedStart < rangeEnd.AddDays(1) && s.PlannedEnd > rangeStart)
@@ -27,158 +29,588 @@
         }
     }
 
-    var bookedTugCount = Model.Tugboats.Count(t => bookings.Any(b => assignments[b.VesselScheduleId].Contains(t.TugboatId)));
-    var filters = new Dictionary<string, string>
+    var currentBoardUrl = Url.Action("Index", "VesselSchedule", new
     {
-        ["month"] = Model.Date.ToString("yyyy-MM"),
-        ["portId"] = Model.PortId?.ToString() ?? "",
-        ["terminalId"] = Model.TerminalId?.ToString() ?? "",
-        ["search"] = Model.Search ?? "",
-        ["status"] = Model.Status ?? ""
-    };
+        area = "MSAP",
+        month = Model.Date.ToString("yyyy-MM"),
+        date = rangeStart.ToString("yyyy-MM-dd"),
+        endDate = isRange ? rangeEnd.ToString("yyyy-MM-dd") : null,
+        portId = Model.PortId,
+        terminalId = Model.TerminalId,
+        search = Model.Search,
+        status = Model.Status,
+        view = Model.ViewMode,
+        triage = Model.Triage
+    });
 
-    string rangeHeading;
-    if (!isRange)
-    {
-        rangeHeading = rangeStart.ToString("dddd, d MMMM yyyy");
-    }
-    else if (rangeStart.Year == rangeEnd.Year && rangeStart.Month == rangeEnd.Month)
-    {
-        rangeHeading = $"{rangeStart.Day} – {rangeEnd:d MMMM yyyy}";
-    }
-    else
-    {
-        rangeHeading = $"{rangeStart:d MMM} – {rangeEnd:d MMM yyyy}";
-    }
+    var activeTriage = (Model.Triage ?? "all").ToLowerInvariant();
+    int overlapCount = schedules.Count(s => conflicts.Contains(s.VesselScheduleId) || (Model.OpsMetaBySchedule.GetValueOrDefault(s.VesselScheduleId)?.HasOverlap ?? false));
+    int needsTugsCount = schedules.Count(s => s.Status != MsapConstants.VesselScheduleStatus.Cancelled && assignments[s.VesselScheduleId].Count < s.RequiredTugCount);
+    int pendingReviewCount = schedules.Count(s => s.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+        && (s.Status == MsapConstants.VesselScheduleStatus.Tentative || !s.CustomerOrderSlipId.HasValue || s.ApprovedRevision != s.Revision));
+    int missingTicketsCount = schedules.Count(s => Model.OpsMetaBySchedule.GetValueOrDefault(s.VesselScheduleId)?.HasMissingTickets ?? false);
+
+    var companyTugs = Model.Tugboats.Where(t => t.IsCompanyOwned).ToList();
+    var subconTugs = Model.Tugboats.Where(t => !t.IsCompanyOwned).ToList();
+
+    var agendaId = Model.SelectedDate.HasValue ? "dayAgenda" : "scheduleAgendaFallback";
+    var useDayColumns = rangeDays <= 15;
 }
-<aside class="modern-card schedule-day-panel" aria-labelledby="selectedDayHeading">
-    <div class="schedule-day-panel-header">
-        <div class="schedule-day-panel-title">
-            <div class="schedule-day-heading-row">
-                <h2 id="selectedDayHeading">@rangeHeading</h2>
-                @if (isRange)
+
+<div class="schedule-ops-board" data-active-triage="@activeTriage">
+    <section id="@agendaId" class="schedule-ops-main" role="tabpanel" aria-labelledby="agendaTab" hidden="@(isTugView)">
+        <div class="schedule-triage-bar" role="group" aria-label="Operational triage filters">
+            <button type="button" class="schedule-triage-pill @(activeTriage is "all" or "" ? "active" : "")" data-triage-filter="all">
+                All <span class="schedule-triage-count">@schedules.Count</span>
+            </button>
+            <button type="button" class="schedule-triage-pill @(activeTriage == "overlaps" ? "active" : "") @(overlapCount > 0 ? "has-alert" : "")" data-triage-filter="overlaps">
+                <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+                Conflicts <span class="schedule-triage-count">@overlapCount</span>
+            </button>
+            <button type="button" class="schedule-triage-pill @(activeTriage == "needs-tugs" ? "active" : "") @(needsTugsCount > 0 ? "has-warn" : "")" data-triage-filter="needs-tugs">
+                Needs Tugs <span class="schedule-triage-count">@needsTugsCount</span>
+            </button>
+            <button type="button" class="schedule-triage-pill @(activeTriage == "pending-review" ? "active" : "")" data-triage-filter="pending-review">
+                Pending Review <span class="schedule-triage-count">@pendingReviewCount</span>
+            </button>
+            <button type="button" class="schedule-triage-pill @(activeTriage == "missing-tickets" ? "active" : "") @(missingTicketsCount > 0 ? "has-warn" : "")" data-triage-filter="missing-tickets">
+                Missing Tickets <span class="schedule-triage-count">@missingTicketsCount</span>
+            </button>
+        </div>
+
+        @if (useDayColumns)
+        {
+            <div class="schedule-day-columns @(rangeDays == 1 ? "is-single-day" : "")" id="scheduleDayGroups" data-board-layout="columns">
+                @for (var d = rangeStart; d <= rangeEnd; d = d.AddDays(1))
                 {
-                    <span class="schedule-range-pill">@rangeDays days</span>
-                    <a asp-action="Index" asp-all-route-data="@(new Dictionary<string, string>(filters))" asp-route-date="@rangeStart.ToString("yyyy-MM-dd")" class="schedule-range-reset">1 day</a>
+                    var daySchedules = schedules
+                        .Where(s => s.PlannedStart < d.AddDays(1) && s.PlannedEnd > d)
+                        .OrderBy(s => s.PlannedStart)
+                        .ToList();
+                    var isEmptyDay = daySchedules.Count == 0;
+                    <section class="schedule-day-column @(isEmptyDay ? "is-empty-day" : "") @(d == today ? "is-today" : "")"
+                             data-day-group="@d.ToString("yyyy-MM-dd")"
+                             data-empty-day="@(isEmptyDay ? "true" : "false")">
+                        <header class="schedule-day-column-header @(d == today ? "is-today" : "")">
+                            <span class="schedule-day-column-dow">@d.ToString("dddd")</span>
+                            <div class="schedule-day-column-date" title="@d.ToString("dddd, d MMM yyyy")">
+                                @if (d == today)
+                                {
+                                    <strong class="schedule-day-column-today">Today</strong>
+                                }
+                                else
+                                {
+                                    <strong>@d.ToString("d MMM")</strong>
+                                }
+                            </div>
+                            <span class="schedule-day-group-count" data-day-group-count>@daySchedules.Count</span>
+                        </header>
+
+                        <div class="schedule-day-column-body">
+                            @if (isEmptyDay)
+                            {
+                                <div class="schedule-day-column-empty">No schedules</div>
+                            }
+                            else
+                            {
+                                @for (var idx = 0; idx < daySchedules.Count; idx++)
+                                {
+                                    var schedule = daySchedules[idx];
+                                    var ids = assignments[schedule.VesselScheduleId];
+                                    var meta = Model.OpsMetaBySchedule.GetValueOrDefault(schedule.VesselScheduleId);
+                                    var reasons = Model.ConflictReasonsBySchedule.GetValueOrDefault(schedule.VesselScheduleId) ?? [];
+                                    var hasConflict = conflicts.Contains(schedule.VesselScheduleId) || (meta?.HasOverlap ?? false);
+                                    var prevSchedule = idx > 0 ? daySchedules[idx - 1] : null;
+                                    var prevHasConflict = prevSchedule != null && (conflicts.Contains(prevSchedule.VesselScheduleId) || (Model.OpsMetaBySchedule.GetValueOrDefault(prevSchedule.VesselScheduleId)?.HasOverlap ?? false));
+                                    var showConflictBetween = prevSchedule != null && prevHasConflict && hasConflict
+                                        && prevSchedule.PlannedStart < schedule.PlannedEnd && prevSchedule.PlannedEnd > schedule.PlannedStart;
+                                    var isNeedsTugs = schedule.Status != MsapConstants.VesselScheduleStatus.Cancelled && ids.Count < schedule.RequiredTugCount;
+                                    var isPendingReview = schedule.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+                                        && (schedule.Status == MsapConstants.VesselScheduleStatus.Tentative || !schedule.CustomerOrderSlipId.HasValue || schedule.ApprovedRevision != schedule.Revision);
+                                    var isMissingTickets = meta?.HasMissingTickets ?? false;
+
+                                    var activeEntries = (schedule.ServiceEntries ?? []).Where(e => !e.CancelledAt.HasValue).ToList();
+                                    var tugServiceParts = ids.Select(id =>
+                                    {
+                                        var tugName = names.GetValueOrDefault(id, $"Tug #{id}");
+                                        var svcs = activeEntries.Where(e => e.TugboatId == id).Select(e => e.Service?.ServiceName ?? "Service").ToList();
+                                        return svcs.Count > 0 ? $"{tugName} ({string.Join(", ", svcs)})" : tugName;
+                                    }).ToList();
+
+                                    var sameDay = schedule.PlannedStart.Date == schedule.PlannedEnd.Date;
+                                    var timeText = sameDay
+                                        ? $"{schedule.PlannedStart:HH:mm}–{schedule.PlannedEnd:HH:mm}"
+                                        : $"{schedule.PlannedStart:d MMM HH:mm}–{schedule.PlannedEnd:d MMM HH:mm}";
+                                    var isContinued = schedule.PlannedStart.Date < d;
+
+                                    var rowHiddenByTriage = activeTriage switch
+                                    {
+                                        "overlaps" => !hasConflict,
+                                        "needs-tugs" => !isNeedsTugs,
+                                        "pending-review" => !isPendingReview,
+                                        "missing-tickets" => !isMissingTickets,
+                                        _ => false
+                                    };
+
+                                    if (showConflictBetween)
+                                    {
+                                        <div class="schedule-conflict-divider" data-conflict-divider role="status" title="@(reasons.Count > 0 ? string.Join("; ", reasons) : "Schedule conflict")" hidden="@rowHiddenByTriage">
+                                            <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+                                            <span>Schedule Conflict</span>
+                                        </div>
+                                    }
+
+                                    <article class="schedule-column-card @(schedule.Status == MsapConstants.VesselScheduleStatus.Cancelled ? "schedule-cancelled" : "")"
+                                             role="button"
+                                             tabindex="0"
+                                             data-schedule-row
+                                             data-schedule-id="@schedule.VesselScheduleId"
+                                             data-open-schedule-modal="@schedule.VesselScheduleId"
+                                             data-triage-overlap="@(hasConflict ? "true" : "false")"
+                                             data-triage-needs-tugs="@(isNeedsTugs ? "true" : "false")"
+                                             data-triage-pending-review="@(isPendingReview ? "true" : "false")"
+                                             data-triage-missing-tickets="@(isMissingTickets ? "true" : "false")"
+                                             aria-label="Open details for @schedule.Vessel.VesselName VS-@schedule.VesselScheduleId"
+                                             hidden="@rowHiddenByTriage">
+                                        <div class="schedule-col-card-top">
+                                            <span class="schedule-col-card-time">
+                                                <strong>@timeText</strong>
+                                                @if (isContinued)
+                                                {
+                                                    <span class="schedule-cont-tag">cont.</span>
+                                                }
+                                            </span>
+                                            @if (meta != null)
+                                            {
+                                                <span class="modern-badge-sm @meta.StageBadgeClass">@meta.StageLabel</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="schedule-status" data-status="@schedule.Status">@MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status)</span>
+                                            }
+                                        </div>
+
+                                        <div class="schedule-col-card-vessel">
+                                            <strong class="schedule-row-vessel">@schedule.Vessel.VesselName</strong>
+                                            <div class="schedule-col-card-refs">
+                                                <span class="schedule-row-ref">VS-@schedule.VesselScheduleId</span>
+                                                @if (!string.IsNullOrWhiteSpace(schedule.VoyageNumber))
+                                                {
+                                                    <span class="schedule-row-voyage">Voy. @schedule.VoyageNumber</span>
+                                                }
+                                            </div>
+                                        </div>
+
+                                        <div class="schedule-col-card-meta" title="@schedule.Port.PortName • @schedule.Terminal.TerminalName · @(schedule.Customer?.CustomerName ?? "Customer pending")">
+                                            <div>@schedule.Port.PortName • @schedule.Terminal.TerminalName</div>
+                                            <div class="schedule-row-customer">@(schedule.Customer?.CustomerName ?? "Customer pending")</div>
+                                        </div>
+
+                                        <div class="schedule-col-card-tugs" title="@(tugServiceParts.Count > 0 ? string.Join(" · ", tugServiceParts) : "No tugboats assigned")">
+                                            <span class="schedule-tug-count @(isNeedsTugs ? "is-short" : "")">@ids.Count/@schedule.RequiredTugCount</span>
+                                            <span class="schedule-row-tug-text">@(tugServiceParts.Count > 0 ? string.Join(" · ", tugServiceParts) : "Unassigned")</span>
+                                        </div>
+
+                                        <div class="schedule-col-card-footer">
+                                            <div class="schedule-row-cos">
+                                                @if (schedule.CustomerOrderSlip != null)
+                                                {
+                                                    <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@schedule.CustomerOrderSlipId" class="schedule-event-cos">@schedule.CustomerOrderSlip.CustomerOrderSlipNumber</a>
+                                                    if (meta != null && meta.ActiveServiceCount > 0)
+                                                    {
+                                                        <span class="schedule-ticket-progress @(meta.HasMissingTickets ? "is-pending" : "")">@meta.LoggedTicketCount/@meta.ActiveServiceCount tix</span>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <span class="schedule-muted">No COS</span>
+                                                }
+                                            </div>
+                                        </div>
+                                    </article>
+                                }
+                            }
+                        </div>
+                    </section>
                 }
             </div>
-            <p class="schedule-muted">@Model.LocationHeading · @schedules.Count schedule@(schedules.Count == 1 ? "" : "s")</p>
-        </div>
-    </div>
-
-    <div class="schedule-panel-tabs" role="tablist" aria-label="Day views">
-        <button type="button" id="agendaTab" role="tab" aria-controls="dayAgenda" aria-selected="true" data-panel-tab>Schedules (@schedules.Count)</button>
-        <button type="button" id="tugTab" role="tab" aria-controls="dayTugs" aria-selected="false" tabindex="-1" data-panel-tab>Tug bookings (@bookedTugCount/@Model.Tugboats.Count)</button>
-    </div>
-
-    <section id="dayAgenda" role="tabpanel" aria-labelledby="agendaTab">
-        @if (schedules.Any(s => s.Status != MsapConstants.VesselScheduleStatus.Cancelled && assignments[s.VesselScheduleId].Count < s.RequiredTugCount))
-        {
-            <p class="schedule-panel-warning">Some bookings still need tug assignments.</p>
+            <div id="triageEmptyNotice" class="modern-card schedule-empty-card" hidden>
+                <span class="material-symbols-outlined" aria-hidden="true">filter_alt</span>
+                <p>No schedules in this date range match the selected triage filter.</p>
+            </div>
         }
-        @if (schedules.Any(s => conflicts.Contains(s.VesselScheduleId)))
+        else
         {
-            <p class="schedule-panel-warning">Overlaps need review; conflicting bookings may be outside these filters.</p>
-        }
-
-        <div class="schedule-event-list">
-            @foreach (var schedule in schedules)
-            {
-                var ids = assignments[schedule.VesselScheduleId];
-                var hasConflict = conflicts.Contains(schedule.VesselScheduleId);
-                var sameDay = schedule.PlannedStart.Date == schedule.PlannedEnd.Date;
-                var timeLabel = sameDay
-                    ? (isRange
-                        ? $"{schedule.PlannedStart:ddd d MMM, HH:mm} – {schedule.PlannedEnd:HH:mm}"
-                        : $"{schedule.PlannedStart:HH:mm} – {schedule.PlannedEnd:HH:mm}")
-                    : $"{schedule.PlannedStart:d MMM HH:mm} – {schedule.PlannedEnd:d MMM HH:mm}";
-                <article class="schedule-event-card @(schedule.Status == MsapConstants.VesselScheduleStatus.Cancelled ? "schedule-cancelled" : "")">
-                    <div class="schedule-event-top">
-                        <div class="schedule-event-vessel-group">
-                            <a asp-action="Details"
-                               asp-route-id="@schedule.VesselScheduleId"
-                               data-preview-id="schedule-preview-@schedule.VesselScheduleId"
-                               class="schedule-event-vessel">@schedule.Vessel.VesselName</a>
-                            @if (!string.IsNullOrWhiteSpace(schedule.VoyageNumber))
-                            {
-                                <span class="schedule-event-voyage">Voy. @schedule.VoyageNumber</span>
-                            }
-                        </div>
-                        <div class="schedule-event-badges">
-                            @if (hasConflict)
-                            {
-                                <span class="schedule-conflict-count" title="Overlap needs review">⚠ Overlap</span>
-                            }
-                            <span class="schedule-status" data-status="@schedule.Status">@MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status)</span>
-                        </div>
+            <div class="schedule-day-groups" id="scheduleDayGroups" data-board-layout="list">
+                @if (schedules.Count == 0)
+                {
+                    <div class="modern-card schedule-empty-card">
+                        <span class="material-symbols-outlined" aria-hidden="true">event_busy</span>
+                        <p>No vessel schedules match these filters for @(isRange ? "this date range" : "this day").</p>
                     </div>
-
-                    <div class="schedule-event-meta">
-                        <span class="schedule-event-time">
-                            <span class="material-symbols-outlined" aria-hidden="true">schedule</span>
-                            @timeLabel
-                        </span>
-                        <span class="schedule-event-loc">
-                            <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
-                            @schedule.Port.PortName / @schedule.Terminal.TerminalName
-                        </span>
-                    </div>
-
-                    <div class="schedule-event-customer">
-                        <span>@(schedule.Customer?.CustomerName ?? "Customer pending")</span>
-                        @if (schedule.CustomerOrderSlip != null)
-                        {
-                            <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@schedule.CustomerOrderSlipId" class="schedule-event-cos">@schedule.CustomerOrderSlip.CustomerOrderSlipNumber</a>
-                        }
-                        else
-                        {
-                            <span class="schedule-muted">No COS yet</span>
-                        }
-                    </div>
-
-                    <div class="schedule-event-footer">
-                        <div class="schedule-event-tugs">
-                            <span class="schedule-tug-count @(ids.Count < schedule.RequiredTugCount && schedule.Status != MsapConstants.VesselScheduleStatus.Cancelled ? "is-short" : "")">@ids.Count/@schedule.RequiredTugCount tugs</span>
-                            <span class="schedule-tug-names">@(ids.Count == 0 ? "Unassigned" : string.Join(", ", ids.Select(id => names.GetValueOrDefault(id, $"Tug #{id}"))))</span>
-                        </div>
-                        <a asp-action="Details" asp-route-id="@schedule.VesselScheduleId" class="schedule-event-open">Open →</a>
-                    </div>
-                </article>
-            }
-        </div>
-
-        @if (schedules.Count == 0)
-        {
-            <p class="schedule-empty">No schedules match these filters for @(isRange ? "this date range" : "this day").</p>
-        }
-    </section>
-
-    <section id="dayTugs" role="tabpanel" aria-labelledby="tugTab" hidden>
-        <p class="schedule-muted">Active tugboat bookings across all locations for <strong>@rangeHeading</strong>.</p>
-        <div class="schedule-tug-filters">
-            <label for="tugSearch">Find tugboat<input type="search" id="tugSearch" class="modern-input" placeholder="Tug name or number" /></label>
-            <label for="tugScope">Show<select id="tugScope" class="js-modern-select" data-searchable="false"><option value="booked">Booked</option><option value="all">All tugs</option><option value="unbooked">Unbooked</option></select></label>
-        </div>
-        <div class="schedule-event-list">
-            @foreach (var tug in Model.Tugboats)
-            {
-                var tugBookings = bookings.Where(s => assignments[s.VesselScheduleId].Contains(tug.TugboatId)).ToList();
-                <article class="schedule-panel-record" data-calendar-tug data-booked="@(tugBookings.Count > 0 ? "true" : "false")" data-search="@tug.TugboatName @tug.TugboatNumber" hidden="@(tugBookings.Count == 0)">
-                    <div class="schedule-panel-heading">
-                        <strong>@tug.TugboatName</strong>
-                        <span class="schedule-tug-count">@(tugBookings.Count == 0 ? "Free" : $"{tugBookings.Count} booking{(tugBookings.Count == 1 ? "" : "s")}")</span>
-                    </div>
-                    @foreach (var booking in tugBookings)
+                }
+                else
+                {
+                    for (var d = rangeStart; d <= rangeEnd; d = d.AddDays(1))
                     {
-                        <a class="schedule-tug-booking" asp-action="Details" asp-route-id="@booking.VesselScheduleId">
-                            <strong>@booking.Vessel.VesselName</strong>
-                            <span>@booking.PlannedStart.ToString("MMM d HH:mm") – @booking.PlannedEnd.ToString("MMM d HH:mm") · @booking.Port.PortName / @booking.Terminal.TerminalName</span>
-                        </a>
+                        var daySchedules = schedules
+                            .Where(s => s.PlannedStart < d.AddDays(1) && s.PlannedEnd > d)
+                            .OrderBy(s => s.PlannedStart)
+                            .ToList();
+                        if (daySchedules.Count == 0)
+                        {
+                            continue;
+                        }
+                        <section class="schedule-day-group" data-day-group="@d.ToString("yyyy-MM-dd")">
+                            <header class="schedule-day-group-header @(d == today ? "is-today" : "")">
+                                <div class="schedule-day-group-title">
+                                    <strong>@d.ToString("ddd, d MMM yyyy")</strong>
+                                    @if (d == today)
+                                    {
+                                        <span class="schedule-today-chip">Today</span>
+                                    }
+                                </div>
+                                <span class="schedule-day-group-count" data-day-group-count>@daySchedules.Count schedule@(daySchedules.Count == 1 ? "" : "s")</span>
+                            </header>
+
+                            <div class="schedule-compact-list">
+                                @for (var idx = 0; idx < daySchedules.Count; idx++)
+                                {
+                                    var schedule = daySchedules[idx];
+                                    var ids = assignments[schedule.VesselScheduleId];
+                                    var meta = Model.OpsMetaBySchedule.GetValueOrDefault(schedule.VesselScheduleId);
+                                    var reasons = Model.ConflictReasonsBySchedule.GetValueOrDefault(schedule.VesselScheduleId) ?? [];
+                                    var hasConflict = conflicts.Contains(schedule.VesselScheduleId) || (meta?.HasOverlap ?? false);
+                                    var prevSchedule = idx > 0 ? daySchedules[idx - 1] : null;
+                                    var prevHasConflict = prevSchedule != null && (conflicts.Contains(prevSchedule.VesselScheduleId) || (Model.OpsMetaBySchedule.GetValueOrDefault(prevSchedule.VesselScheduleId)?.HasOverlap ?? false));
+                                    var showConflictBetween = prevSchedule != null && prevHasConflict && hasConflict
+                                        && prevSchedule.PlannedStart < schedule.PlannedEnd && prevSchedule.PlannedEnd > schedule.PlannedStart;
+                                    var isNeedsTugs = schedule.Status != MsapConstants.VesselScheduleStatus.Cancelled && ids.Count < schedule.RequiredTugCount;
+                                    var isPendingReview = schedule.Status is not (MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
+                                        && (schedule.Status == MsapConstants.VesselScheduleStatus.Tentative || !schedule.CustomerOrderSlipId.HasValue || schedule.ApprovedRevision != schedule.Revision);
+                                    var isMissingTickets = meta?.HasMissingTickets ?? false;
+
+                                    var activeEntries = (schedule.ServiceEntries ?? []).Where(e => !e.CancelledAt.HasValue).ToList();
+                                    var tugServiceParts = ids.Select(id =>
+                                    {
+                                        var tugName = names.GetValueOrDefault(id, $"Tug #{id}");
+                                        var svcs = activeEntries.Where(e => e.TugboatId == id).Select(e => e.Service?.ServiceName ?? "Service").ToList();
+                                        return svcs.Count > 0 ? $"{tugName} ({string.Join(", ", svcs)})" : tugName;
+                                    }).ToList();
+
+                                    var sameDay = schedule.PlannedStart.Date == schedule.PlannedEnd.Date;
+                                    var timeText = sameDay
+                                        ? $"{schedule.PlannedStart:HH:mm}–{schedule.PlannedEnd:HH:mm}"
+                                        : $"{schedule.PlannedStart:d MMM HH:mm}–{schedule.PlannedEnd:d MMM HH:mm}";
+                                    var isContinued = schedule.PlannedStart.Date < d;
+
+                                    var rowHiddenByTriage = activeTriage switch
+                                    {
+                                        "overlaps" => !hasConflict,
+                                        "needs-tugs" => !isNeedsTugs,
+                                        "pending-review" => !isPendingReview,
+                                        "missing-tickets" => !isMissingTickets,
+                                        _ => false
+                                    };
+
+                                    if (showConflictBetween)
+                                    {
+                                        <div class="schedule-conflict-divider" data-conflict-divider role="status" title="@(reasons.Count > 0 ? string.Join("; ", reasons) : "Schedule conflict")" hidden="@rowHiddenByTriage">
+                                            <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+                                            <span>Schedule Conflict</span>
+                                        </div>
+                                    }
+
+                                    <article class="schedule-compact-row is-clickable @(schedule.Status == MsapConstants.VesselScheduleStatus.Cancelled ? "schedule-cancelled" : "")"
+                                             role="button"
+                                             tabindex="0"
+                                             data-schedule-row
+                                             data-schedule-id="@schedule.VesselScheduleId"
+                                             data-open-schedule-modal="@schedule.VesselScheduleId"
+                                             data-triage-overlap="@(hasConflict ? "true" : "false")"
+                                             data-triage-needs-tugs="@(isNeedsTugs ? "true" : "false")"
+                                             data-triage-pending-review="@(isPendingReview ? "true" : "false")"
+                                             data-triage-missing-tickets="@(isMissingTickets ? "true" : "false")"
+                                             aria-label="Open details for @schedule.Vessel.VesselName VS-@schedule.VesselScheduleId"
+                                             hidden="@rowHiddenByTriage">
+                                        <div class="schedule-row-time">
+                                            <strong>@timeText</strong>
+                                            @if (isContinued)
+                                            {
+                                                <span class="schedule-cont-tag">cont.</span>
+                                            }
+                                        </div>
+
+                                        <div class="schedule-row-primary">
+                                            <div class="schedule-row-vessel-line">
+                                                <strong class="schedule-row-vessel">@schedule.Vessel.VesselName</strong>
+                                                <span class="schedule-row-ref">VS-@schedule.VesselScheduleId</span>
+                                                @if (!string.IsNullOrWhiteSpace(schedule.VoyageNumber))
+                                                {
+                                                    <span class="schedule-row-voyage">Voy. @schedule.VoyageNumber</span>
+                                                }
+                                            </div>
+                                            <div class="schedule-row-sub">
+                                                <span>@schedule.Port.PortName • @schedule.Terminal.TerminalName</span>
+                                                <span aria-hidden="true">·</span>
+                                                <span class="schedule-row-customer">@(schedule.Customer?.CustomerName ?? "Customer pending")</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="schedule-row-ops">
+                                            <div class="schedule-row-tugs" title="@(tugServiceParts.Count > 0 ? string.Join(" · ", tugServiceParts) : "No tugboats assigned")">
+                                                <span class="schedule-tug-count @(isNeedsTugs ? "is-short" : "")">@ids.Count/@schedule.RequiredTugCount</span>
+                                                <span class="schedule-row-tug-text">@(tugServiceParts.Count > 0 ? string.Join(" · ", tugServiceParts) : "Unassigned")</span>
+                                            </div>
+                                            <div class="schedule-row-cos">
+                                                @if (schedule.CustomerOrderSlip != null)
+                                                {
+                                                    <a asp-controller="CustomerOrderSlip" asp-action="Details" asp-route-id="@schedule.CustomerOrderSlipId" class="schedule-event-cos">@schedule.CustomerOrderSlip.CustomerOrderSlipNumber</a>
+                                                    if (meta != null && meta.ActiveServiceCount > 0)
+                                                    {
+                                                        <span class="schedule-ticket-progress @(meta.HasMissingTickets ? "is-pending" : "")">@meta.LoggedTicketCount/@meta.ActiveServiceCount tix</span>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <span class="schedule-muted">No COS</span>
+                                                }
+                                            </div>
+                                        </div>
+
+                                        <div class="schedule-row-status">
+                                            @if (meta != null)
+                                            {
+                                                <span class="modern-badge-sm @meta.StageBadgeClass">@meta.StageLabel</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="schedule-status" data-status="@schedule.Status">@MsapConstants.VesselScheduleStatus.GetDisplayName(schedule.Status)</span>
+                                            }
+                                        </div>
+                                    </article>
+                                }
+                            </div>
+                        </section>
                     }
-                </article>
-            }
-        </div>
-        <p id="noCalendarTugs" class="schedule-empty" hidden>No tugboats match this view.</p>
-        <p class="schedule-muted">Unbooked means no active planned booking in this @(isRange ? "range" : "day"). Confirm operational availability before assigning.</p>
+                    <div id="triageEmptyNotice" class="modern-card schedule-empty-card" hidden>
+                        <span class="material-symbols-outlined" aria-hidden="true">filter_alt</span>
+                        <p>No schedules in this date range match the selected triage filter.</p>
+                    </div>
+                }
+            </div>
+        }
     </section>
-</aside>
+
+    <section id="dayTugs" class="schedule-tug-workspace" role="tabpanel" aria-labelledby="tugTab" hidden="@(!isTugView)">
+        <div class="schedule-tug-controls">
+            <div class="schedule-tug-pills" role="group" aria-label="Filter tugboats">
+                <button type="button" class="schedule-triage-pill active" data-tug-scope="all">
+                    All <span class="schedule-triage-count">@Model.Tugboats.Count</span>
+                </button>
+                <button type="button" class="schedule-triage-pill" data-tug-scope="booked">
+                    Booked <span class="schedule-triage-count">@Model.Tugboats.Count(t => bookings.Any(b => assignments[b.VesselScheduleId].Contains(t.TugboatId)))</span>
+                </button>
+                <button type="button" class="schedule-triage-pill" data-tug-scope="unbooked">
+                    Free <span class="schedule-triage-count">@Model.Tugboats.Count(t => !bookings.Any(b => assignments[b.VesselScheduleId].Contains(t.TugboatId)))</span>
+                </button>
+                <span class="schedule-tug-pill-sep" aria-hidden="true"></span>
+                <button type="button" class="schedule-triage-pill" data-tug-owner="company">
+                    Company <span class="schedule-triage-count">@companyTugs.Count</span>
+                </button>
+                @if (subconTugs.Count > 0)
+                {
+                    <button type="button" class="schedule-triage-pill" data-tug-owner="subcontractor">
+                        Subcon <span class="schedule-triage-count">@subconTugs.Count</span>
+                    </button>
+                }
+            </div>
+
+            <div class="schedule-tug-search-wrap">
+                <div class="schedule-toolbar-search">
+                    <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                    <input type="search" id="tugSearch" class="modern-input" placeholder="Find tugboat..." aria-label="Find tugboat" />
+                </div>
+            </div>
+        </div>
+
+        @foreach (var group in new[] { (Title: "Company-Owned Tugboats", Key: "company", Tugs: companyTugs), (Title: "Subcontractor Tugboats", Key: "subcontractor", Tugs: subconTugs) })
+        {
+            if (group.Tugs.Count == 0) { continue; }
+            <section class="schedule-tug-group" data-tug-group="@group.Key">
+                <header class="schedule-tug-group-header">
+                    <h2>@group.Title</h2>
+                    <span class="schedule-muted">@group.Tugs.Count tugboat@(group.Tugs.Count == 1 ? "" : "s")</span>
+                </header>
+
+                @if (useDayColumns)
+                {
+                    <div class="schedule-fleet-matrix-scroll" data-fleet-matrix-scroll>
+                        <div class="schedule-fleet-matrix" style="--matrix-days: @rangeDays;">
+                            <div class="schedule-matrix-head">
+                                <div class="schedule-matrix-sticky-col schedule-matrix-head-label">Tugboat</div>
+                                @for (var d = rangeStart; d <= rangeEnd; d = d.AddDays(1))
+                                {
+                                    <div class="schedule-matrix-day-head @(d == today ? "is-today" : "")" title="@d.ToString("dddd, d MMM yyyy")">
+                                        @if (d == today)
+                                        {
+                                            <strong>Today</strong>
+                                        }
+                                        else
+                                        {
+                                            <span class="schedule-day-column-dow">@d.ToString("ddd")</span>
+                                            <strong>@d.ToString("d MMM")</strong>
+                                        }
+                                    </div>
+                                }
+                            </div>
+
+                            @foreach (var tug in group.Tugs)
+                            {
+                                var tugBookings = bookings
+                                    .Where(s => assignments[s.VesselScheduleId].Contains(tug.TugboatId))
+                                    .OrderBy(s => s.PlannedStart)
+                                    .ToList();
+                                var hasTugClash = tugBookings.Any(b => conflicts.Contains(b.VesselScheduleId));
+
+                                <div class="schedule-matrix-row @(hasTugClash ? "has-clash" : "")"
+                                     data-calendar-tug
+                                     data-booked="@(tugBookings.Count > 0 ? "true" : "false")"
+                                     data-ownership="@group.Key"
+                                     data-search="@tug.TugboatName @tug.TugboatNumber">
+                                    <div class="schedule-matrix-sticky-col schedule-matrix-tug-cell">
+                                        <div class="schedule-matrix-tug-name">
+                                            <strong>@tug.TugboatName</strong>
+                                            <span class="schedule-muted">#@tug.TugboatNumber</span>
+                                        </div>
+                                        <div class="schedule-fleet-tug-badges">
+                                            <span class="schedule-tug-count @(tugBookings.Count == 0 ? "is-free" : "")">
+                                                @(tugBookings.Count == 0 ? "Free" : $"{tugBookings.Count} sched")
+                                            </span>
+                                            @if (hasTugClash)
+                                            {
+                                                <span class="schedule-conflict-count">⚠ Conflict</span>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    @for (var d = rangeStart; d <= rangeEnd; d = d.AddDays(1))
+                                    {
+                                        var dayTugBookings = tugBookings
+                                            .Where(b => b.PlannedStart < d.AddDays(1) && b.PlannedEnd > d)
+                                            .OrderBy(b => b.PlannedStart)
+                                            .ToList();
+                                        <div class="schedule-matrix-cell @(d == today ? "is-today" : "")">
+                                            @foreach (var booking in dayTugBookings)
+                                            {
+                                                var svcs = (booking.ServiceEntries ?? []).Where(e => !e.CancelledAt.HasValue && e.TugboatId == tug.TugboatId)
+                                                    .Select(e => e.Service?.ServiceName ?? "Service").ToList();
+                                                var isOverlap = conflicts.Contains(booking.VesselScheduleId);
+                                                var detailsUrl = Url.Action("Details", "VesselSchedule", new { area = "MSAP", id = booking.VesselScheduleId, returnUrl = currentBoardUrl });
+                                                <button type="button"
+                                                        class="schedule-matrix-item @(isOverlap ? "is-overlap" : "")"
+                                                        data-status="@booking.Status"
+                                                        data-open-schedule-modal="@booking.VesselScheduleId"
+                                                        data-fallback-href="@detailsUrl"
+                                                        title="@booking.Vessel.VesselName (@booking.PlannedStart:HH:mm–@booking.PlannedEnd:HH:mm) • @booking.Port.PortName • @booking.Terminal.TerminalName@(svcs.Count > 0 ? $" • {string.Join(", ", svcs)}" : "")">
+                                                    <span class="schedule-matrix-item-time">
+                                                        @booking.PlannedStart.ToString("HH:mm")–@booking.PlannedEnd.ToString("HH:mm")
+                                                        @if (isOverlap)
+                                                        {
+                                                            <span class="schedule-matrix-warn" aria-label="Schedule conflict">⚠</span>
+                                                        }
+                                                    </span>
+                                                    <strong class="schedule-matrix-item-vessel">@booking.Vessel.VesselName</strong>
+                                                    <span class="schedule-matrix-item-sub">@(svcs.Count > 0 ? string.Join(", ", svcs) : booking.Terminal.TerminalName)</span>
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <div class="schedule-fleet-mobile-list @(useDayColumns ? "is-mobile-only" : "")">
+                    @foreach (var tug in group.Tugs)
+                    {
+                        var tugBookings = bookings
+                            .Where(s => assignments[s.VesselScheduleId].Contains(tug.TugboatId))
+                            .OrderBy(s => s.PlannedStart)
+                            .ToList();
+                        var hasTugClash = tugBookings.Any(b => conflicts.Contains(b.VesselScheduleId));
+
+                        <article class="schedule-fleet-card"
+                                 data-calendar-tug
+                                 data-booked="@(tugBookings.Count > 0 ? "true" : "false")"
+                                 data-ownership="@group.Key"
+                                 data-search="@tug.TugboatName @tug.TugboatNumber">
+                            <header class="schedule-fleet-card-head">
+                                <div class="schedule-fleet-tug-title">
+                                    <strong>@tug.TugboatName</strong>
+                                    <span class="schedule-muted">#@tug.TugboatNumber</span>
+                                </div>
+                                <div class="schedule-fleet-tug-badges">
+                                    @if (hasTugClash)
+                                    {
+                                        <span class="schedule-conflict-count">⚠ Conflict</span>
+                                    }
+                                    <span class="schedule-tug-count @(tugBookings.Count == 0 ? "is-free" : "")">
+                                        @(tugBookings.Count == 0 ? "Free" : $"{tugBookings.Count} sched")
+                                    </span>
+                                </div>
+                            </header>
+
+                            @if (tugBookings.Count == 0)
+                            {
+                                <div class="schedule-fleet-free-row">Available across selected range</div>
+                            }
+                            else
+                            {
+                                <div class="schedule-fleet-assign-list">
+                                    @foreach (var booking in tugBookings)
+                                    {
+                                        var svcs = (booking.ServiceEntries ?? []).Where(e => !e.CancelledAt.HasValue && e.TugboatId == tug.TugboatId)
+                                            .Select(e => e.Service?.ServiceName ?? "Service").ToList();
+                                        var isOverlap = conflicts.Contains(booking.VesselScheduleId);
+                                        var detailsUrl = Url.Action("Details", "VesselSchedule", new { area = "MSAP", id = booking.VesselScheduleId, returnUrl = currentBoardUrl });
+                                        <button type="button"
+                                                class="schedule-fleet-assign-row @(isOverlap ? "is-overlap" : "")"
+                                                data-open-schedule-modal="@booking.VesselScheduleId"
+                                                data-fallback-href="@detailsUrl">
+                                            <div class="schedule-fleet-assign-top">
+                                                <span class="schedule-fleet-assign-time">@booking.PlannedStart.ToString("d MMM") • @booking.PlannedStart.ToString("HH:mm")–@booking.PlannedEnd.ToString("HH:mm")</span>
+                                                @if (isOverlap)
+                                                {
+                                                    <span class="schedule-conflict-count">⚠ Conflict</span>
+                                                }
+                                            </div>
+                                            <strong class="schedule-fleet-assign-vessel">@booking.Vessel.VesselName</strong>
+                                            <div class="schedule-fleet-assign-meta">
+                                                @booking.Terminal.TerminalName@(svcs.Count > 0 ? $" • {string.Join(", ", svcs)}" : "")
+                                            </div>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </article>
+                    }
+                </div>
+            </section>
+        }
+        <p id="noCalendarTugs" class="schedule-empty" hidden>No tugboats match this filter.</p>
+    </section>
+</div>
+
+<dialog id="scheduleDetailModal" class="schedule-detail-modal" closedby="any" aria-labelledby="scheduleDetailModalTitle">
+    <div class="schedule-detail-modal-sheet">
+        <header class="schedule-detail-modal-header">
+            <h2 id="scheduleDetailModalTitle">Schedule Details</h2>
+            <button type="button" class="schedule-cal-modal-close" id="closeScheduleDetailBtn" aria-label="Close schedule details">
+                <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+        </header>
+        <div id="scheduleDetailModalBody" class="schedule-detail-modal-body"></div>
+    </div>
+</dialog>

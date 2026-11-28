@@ -27,7 +27,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
         [HttpGet]
         [RequireAccess(ProcedureEnum.ViewOperations)]
         public async Task<IActionResult> Index(DateTime? month, CancellationToken ct, DateTime? date = null,
-            DateTime? endDate = null, int? portId = null, int? terminalId = null, string? search = null, string? status = null, string? view = null)
+            DateTime? endDate = null, int? portId = null, int? terminalId = null, string? search = null, string? status = null, string? view = null, string? triage = null)
         {
             if (!ModelState.IsValid || search?.Length > 120)
             {
@@ -48,7 +48,12 @@ namespace IBSWeb.Areas.MSAP.Controllers
             var selectedDate = date?.Date;
             var selectedEndDate = endDate?.Date;
 
-            if (!selectedDate.HasValue)
+            if (!month.HasValue && !selectedDate.HasValue && !selectedEndDate.HasValue)
+            {
+                selectedDate = today;
+                selectedEndDate = today.AddDays(6);
+            }
+            else if (!selectedDate.HasValue)
             {
                 selectedDate = start.Year == today.Year && start.Month == today.Month ? today : start;
             }
@@ -64,9 +69,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     (selectedDate, selectedEndDate) = (selectedEndDate, selectedDate);
                 }
 
-                if ((selectedEndDate.Value - selectedDate.Value).TotalDays > 62)
+                if ((selectedEndDate.Value - selectedDate.Value).TotalDays > 365)
                 {
-                    selectedEndDate = selectedDate.Value.AddDays(62);
+                    selectedEndDate = selectedDate.Value.AddDays(365);
                 }
 
                 if (selectedEndDate.Value == selectedDate.Value)
@@ -84,9 +89,26 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 TerminalId = terminalId,
                 Search = search,
                 Status = status,
-                ViewMode = view ?? "calendar"
+                ViewMode = view ?? "calendar",
+                Triage = triage
             }, ct);
             return result.IsSuccess ? View(result.Data) : BadRequest(result.Message);
+        }
+
+        [HttpGet]
+        [RequireAccess(ProcedureEnum.ViewOperations)]
+        public async Task<IActionResult> GetCalendarSummary(DateTime? start, DateTime? end, int? portId = null,
+            int? terminalId = null, string? status = null, string? search = null, CancellationToken ct = default)
+        {
+            if (!ModelState.IsValid || search?.Length > 120 || !start.HasValue || !end.HasValue
+                || start.Value.Year < 1900 || end.Value.Year > 9998 || end.Value.Date < start.Value.Date)
+            {
+                return BadRequest(new { message = "Choose a valid date range." });
+            }
+
+            var days = await scheduleService.GetCalendarSummaryAsync(start.Value.Date, end.Value.Date.AddDays(1),
+                portId, terminalId, status, search, ct);
+            return Json(new { days });
         }
 
         [HttpGet]
@@ -109,7 +131,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
 
         [HttpGet]
         [RequireAccess(ProcedureEnum.CreateCustomerOrderSlip)]
-        public async Task<IActionResult> Create(DateTime? date, CancellationToken ct)
+        public async Task<IActionResult> Create(DateTime? date, CancellationToken ct, int? portId = null, int? terminalId = null, string? returnUrl = null)
         {
             if (!ModelState.IsValid || date.HasValue && (date.Value.Year < 1900 || date.Value.Year > 9998))
             {
@@ -117,16 +139,23 @@ namespace IBSWeb.Areas.MSAP.Controllers
             }
 
             var start = date?.Date.AddHours(8) ?? DateTimeHelper.GetCurrentPhilippineTime();
-            var vm = new VesselScheduleViewModel { PlannedStart = start, PlannedEnd = start.AddHours(2) };
+            var vm = new VesselScheduleViewModel
+            {
+                PlannedStart = start,
+                PlannedEnd = start.AddHours(2),
+                PortId = portId.GetValueOrDefault(),
+                TerminalId = terminalId.GetValueOrDefault()
+            };
 
-            await PopulateDropdownsAsync(vm, ct);
+            await PopulateDropdownsAsync(vm, ct, vm.PortId > 0 ? vm.PortId : null);
+            ViewBag.ReturnUrl = NormalizeBoardReturnUrl(returnUrl);
             return View(vm);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.CreateCustomerOrderSlip)]
-        public async Task<IActionResult> Create(VesselScheduleViewModel vm, CancellationToken ct)
+        public async Task<IActionResult> Create(VesselScheduleViewModel vm, CancellationToken ct, string? returnUrl = null)
         {
             if (ModelState.IsValid)
             {
@@ -136,19 +165,20 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 if (result.IsSuccess)
                 {
                     TempData["success"] = "Schedule created successfully.";
-                    return RedirectToAction(nameof(Details), new { id = result.Data });
+                    return RedirectToAction(nameof(Details), new { id = result.Data, returnUrl = NormalizeBoardReturnUrl(returnUrl) });
                 }
 
                 ModelState.AddModelError("", result.Message ?? "Failed to create schedule.");
             }
 
             await PopulateDropdownsAsync(vm, ct);
+            ViewBag.ReturnUrl = NormalizeBoardReturnUrl(returnUrl);
             return View(vm);
         }
 
         [HttpGet]
         [RequireAccess(ProcedureEnum.EditCustomerOrderSlip)]
-        public async Task<IActionResult> Edit(int id, CancellationToken ct)
+        public async Task<IActionResult> Edit(int id, CancellationToken ct, string? returnUrl = null)
         {
             var entity = await scheduleService.GetByIdAsync(id, ct);
             if (entity == null)
@@ -159,7 +189,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
             if (entity.Status is MsapConstants.VesselScheduleStatus.Completed or MsapConstants.VesselScheduleStatus.Cancelled)
             {
                 TempData["error"] = "Completed and cancelled schedules are read-only.";
-                return RedirectToAction(nameof(Details), new { id });
+                return RedirectToAction(nameof(Details), new { id, returnUrl = NormalizeBoardReturnUrl(returnUrl) });
             }
 
             var hasTickets = (entity.CustomerOrderSlipId.HasValue && await unitOfWork.DispatchTicket.GetAsync(t => t.CustomerOrderSlipId == entity.CustomerOrderSlipId.Value, ct) != null)
@@ -168,18 +198,19 @@ namespace IBSWeb.Areas.MSAP.Controllers
             if (hasTickets || hasBilling)
             {
                 TempData["error"] = "Cannot edit schedule once actual tickets or billing exist.";
-                return RedirectToAction(nameof(Details), new { id });
+                return RedirectToAction(nameof(Details), new { id, returnUrl = NormalizeBoardReturnUrl(returnUrl) });
             }
 
             var vm = MapToViewModel(entity);
             await PopulateDropdownsAsync(vm, ct, entity.PortId);
+            ViewBag.ReturnUrl = NormalizeBoardReturnUrl(returnUrl);
             return View(vm);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequireAccess(ProcedureEnum.EditCustomerOrderSlip)]
-        public async Task<IActionResult> Edit(VesselScheduleViewModel vm, CancellationToken ct)
+        public async Task<IActionResult> Edit(VesselScheduleViewModel vm, CancellationToken ct, string? returnUrl = null)
         {
             if (ModelState.IsValid)
             {
@@ -191,7 +222,7 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 if (result.IsSuccess)
                 {
                     TempData["success"] = result.Message;
-                    return RedirectToAction(nameof(Details), new { id = vm.VesselScheduleId });
+                    return RedirectToAction(nameof(Details), new { id = vm.VesselScheduleId, returnUrl = NormalizeBoardReturnUrl(returnUrl) });
                 }
 
                 ModelState.AddModelError("", result.Message ?? "Failed to update schedule.");
@@ -203,13 +234,15 @@ namespace IBSWeb.Areas.MSAP.Controllers
             vm.ApprovedRevision = existing?.ApprovedRevision;
             ModelState.Remove(nameof(vm.Status));
             await PopulateDropdownsAsync(vm, ct);
+            ViewBag.ReturnUrl = NormalizeBoardReturnUrl(returnUrl);
             return View(vm);
         }
 
         [HttpGet]
         [RequireAccess(ProcedureEnum.ViewOperations)]
-        public async Task<IActionResult> Details(int id, CancellationToken ct)
+        public async Task<IActionResult> Details(int id, CancellationToken ct, string? returnUrl = null)
         {
+            ViewBag.ReturnUrl = NormalizeBoardReturnUrl(returnUrl);
             var schedule = await LoadDetailsAsync(id, ct);
             if (schedule == null)
             {
@@ -894,6 +927,9 @@ namespace IBSWeb.Areas.MSAP.Controllers
                 .Select(t => new SelectListItem { Value = t.TugboatId.ToString(), Text = $"{t.TugboatName} (#{t.TugboatNumber})" })
                 .ToList();
             ViewBag.TugboatOwnerMap = allTugboats.ToDictionary(t => t.TugboatId, t => t.IsCompanyOwned);
+            ViewBag.AllTugboatMeta = allTugboats
+                .Select(t => new { id = t.TugboatId, name = t.TugboatName, number = t.TugboatNumber, isCompanyOwned = t.IsCompanyOwned })
+                .ToList();
             vm.Services = await unitOfWork.Service.GetAllQuery()
                 .OrderBy(s => s.ServiceName)
                 .Select(s => new SelectListItem { Value = s.ServiceId.ToString(), Text = s.ServiceName })
@@ -986,6 +1022,22 @@ namespace IBSWeb.Areas.MSAP.Controllers
                     ManualBafRate = e.ManualBafRate
                 }).ToList() ?? []
             };
+        }
+        private string? NormalizeBoardReturnUrl(string? returnUrl)
+        {
+            if (string.IsNullOrWhiteSpace(returnUrl))
+            {
+                return null;
+            }
+
+            var trimmed = returnUrl.Trim();
+            var isLocal = Url != null
+                ? Url.IsLocalUrl(trimmed)
+                : trimmed.StartsWith("/", StringComparison.Ordinal) && !trimmed.StartsWith("//", StringComparison.Ordinal);
+
+            return isLocal && trimmed.StartsWith("/MSAP/VesselSchedule", StringComparison.OrdinalIgnoreCase)
+                ? trimmed
+                : null;
         }
     }
 }

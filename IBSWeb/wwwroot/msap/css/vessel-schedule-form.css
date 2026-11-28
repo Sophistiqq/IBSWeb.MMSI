@@ -493,3 +493,83 @@
         gap: var(--ui-space-3);
     }
 }
+
+.schedule-end-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.schedule-duration-pills {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.schedule-duration-pill {
+    padding: 2px 7px;
+    border: 1px solid var(--outline-variant);
+    border-radius: 999px;
+    background: var(--surface-container-lowest);
+    color: var(--on-surface-variant);
+    font-size: .7rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+}
+
+.schedule-duration-pill:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.schedule-form-tug-list {
+    display: grid;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.schedule-form-tug-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--outline-variant);
+    border-radius: 6px;
+    background: var(--surface-container-low);
+}
+
+.schedule-form-tug-info {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+}
+
+.schedule-form-tug-info strong {
+    font-size: .78rem;
+    color: var(--on-surface);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.schedule-form-assign-btn {
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border: 1px solid var(--primary);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--primary);
+    font-size: .7rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.schedule-form-assign-btn:hover {
+    background: var(--primary);
+    color: var(--on-primary);
+}

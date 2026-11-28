@@ -7,6 +7,7 @@ namespace IBS.Services.MSAP
     public interface IVesselScheduleService
     {
         Task<ServiceResult<VesselScheduleBoardViewModel>> GetCalendarAsync(VesselScheduleBoardViewModel filters, CancellationToken ct = default);
+        Task<Dictionary<string, CalendarDaySummaryItem>> GetCalendarSummaryAsync(DateTime from, DateTime to, int? portId = null, int? terminalId = null, string? status = null, string? search = null, CancellationToken ct = default);
         Task<ServiceResult<int>> CreateAsync(VesselSchedule model, string username, CancellationToken ct = default, bool allowConflicts = false);
         Task<ServiceResult> UpdateAsync(VesselSchedule model, string username, CancellationToken ct = default, bool allowConflicts = false);
         Task<ServiceResult> DeleteAsync(int id, string username, CancellationToken ct = default);

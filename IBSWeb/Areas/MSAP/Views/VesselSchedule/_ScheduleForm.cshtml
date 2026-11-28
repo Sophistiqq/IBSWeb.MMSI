@@ -1,10 +1,16 @@
+@using System.Text.Json
 @using IBS.Models.MSAP.Enums
 @model VesselScheduleViewModel
 @{
     var tugOwnerMap = ViewBag.TugboatOwnerMap as Dictionary<int, bool> ?? new Dictionary<int, bool>();
     var terminalIocMap = ViewBag.TerminalIocMap as Dictionary<int, bool> ?? new Dictionary<int, bool>();
+    var allTugboatMetaJson = JsonSerializer.Serialize(ViewBag.AllTugboatMeta ?? Array.Empty<object>());
     var isNew = Model.VesselScheduleId == 0;
     var selectedTugs = Model.SelectedTugboatIds?.Distinct().ToList() ?? new List<int>();
+    var returnUrl = ViewBag.ReturnUrl as string;
+    var backUrl = !string.IsNullOrWhiteSpace(returnUrl)
+        ? returnUrl
+        : Url.Action("Index", new { date = Model.PlannedStart.ToString("yyyy-MM-dd") });
 }
 <link rel="stylesheet" href="~/msap/css/vessel-schedule.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/msap/css/vessel-schedule-form.css" asp-append-version="true" />
@@ -33,7 +39,7 @@
                 </ol>
             </nav>
             <h1 class="schedule-page-title ui-page-title" data-page-header>@(isNew ? "Create schedule" : "Edit schedule")</h1>
-            <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary schedule-calendar-btn ui-page-action" data-ui-back>
+            <a href="@backUrl" class="modern-btn-secondary schedule-calendar-btn ui-page-action" data-ui-back>
                 Back
             </a>
             <p class="schedule-page-subtitle ui-body ui-muted ui-page-description">Plan the booking and add each tugboat's services.</p>
@@ -46,6 +52,7 @@
         <form method="post" id="scheduleForm" class="ui-stack" data-is-new="@isNew.ToString().ToLowerInvariant()" data-terminals-url="@Url.Action("GetTerminalsByPort")" data-bookings-url="@Url.Action("GetTugboatBookings")" data-details-url="@Url.Action("Details")" data-discount-url="@Url.Action("GetCustomerDiscount")" data-rate-url="@Url.Action("GetTariffRate")">
             @Html.AntiForgeryToken()
             <input asp-for="VesselScheduleId" type="hidden" />
+            <input type="hidden" name="returnUrl" value="@returnUrl" />
             <input type="hidden" id="AllowConflicts" name="AllowConflicts" value="false" />
             <div id="scheduleSaveErrors" hidden>
                 @foreach (var error in ViewData.ModelState.Values.SelectMany(state => state.Errors))
@@ -111,7 +118,16 @@
                             <span asp-validation-for="PlannedStart" class="text-error ui-caption"></span>
                         </div>
                         <div class="schedule-field ui-field">
-                            <label asp-for="PlannedEnd" class="schedule-field-label ui-label">Planned end *</label>
+                            <div class="schedule-end-label-row">
+                                <label asp-for="PlannedEnd" class="schedule-field-label ui-label">Planned end *</label>
+                                <div class="schedule-duration-pills" role="group" aria-label="Quick duration from start">
+                                    <button type="button" class="schedule-duration-pill" data-duration-hours="1">+1h</button>
+                                    <button type="button" class="schedule-duration-pill" data-duration-hours="2">+2h</button>
+                                    <button type="button" class="schedule-duration-pill" data-duration-hours="3">+3h</button>
+                                    <button type="button" class="schedule-duration-pill" data-duration-hours="4">+4h</button>
+                                    <button type="button" class="schedule-duration-pill" data-duration-hours="6">+6h</button>
+                                </div>
+                            </div>
                             <input asp-for="PlannedEnd" type="datetime-local" asp-format="{0:yyyy-MM-ddTHH:mm}" class="modern-input" id="PlannedEnd" min="1900-01-01T00:00" max="9998-12-31T23:59" required />
                             <span asp-validation-for="PlannedEnd" class="text-error ui-caption"></span>
                         </div>
@@ -252,7 +268,19 @@
                 </div>
             </div>
 
-            <!-- Card 2: Before you save -->
+            <!-- Card 2: Live Tugboat Availability -->
+            <div class="schedule-summary-card ui-panel ui-stack" id="formTugAvailabilityPanel">
+                <div class="schedule-summary-header">
+                    <h3 class="schedule-card-title ui-section-title">Tugboat availability</h3>
+                    <span class="ui-caption ui-muted" id="formTugAvailabilityStatus">Checking window…</span>
+                </div>
+                <div id="formTugAvailabilityList" class="schedule-form-tug-list">
+                    <p class="ui-caption ui-muted">Enter planned start and end to check tugboats.</p>
+                </div>
+            </div>
+            <script type="application/json" id="formTugboatMeta">@Html.Raw(allTugboatMetaJson)</script>
+
+            <!-- Card 3: Before you save -->
             <div class="schedule-summary-card ui-panel ui-stack">
                 <h3 class="schedule-card-title ui-section-title">Before you save</h3>
                 <ul class="schedule-guidance-list ui-body ui-muted">
@@ -266,7 +294,7 @@
         <div class="schedule-bottom-bar">
             <span class="schedule-save-notice ui-body ui-muted">Saving sends this booking for review.</span>
             <div class="schedule-action-buttons">
-                <a asp-action="Index" asp-route-date="@Model.PlannedStart.ToString("yyyy-MM-dd")" class="modern-btn-secondary">Cancel</a>
+                <a href="@backUrl" class="modern-btn-secondary">Cancel</a>
                 <button type="submit" form="scheduleForm" class="ui-button ui-button--primary"><span class="material-symbols-outlined">save</span> Save for reviewing</button>
             </div>
         </div>
